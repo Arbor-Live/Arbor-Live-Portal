@@ -4192,7 +4192,7 @@ export const getEventSeriesStateByEventId = query({
     return {
       seriesId: series._id,
       title: series.title,
-      intervalWeeks: series.intervalWeeks,
+      intervalWeeks: series.intervalWeeks ?? 1,
       occurrenceCount: occurrences.length,
       occurrenceTitles: occurrences.map((row) => row.title),
       occurrenceIds: occurrences.map((row) => row._id),

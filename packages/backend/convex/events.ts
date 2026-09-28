@@ -355,7 +355,7 @@ export const get = query({
                 _id: series._id,
                 title: series.title,
                 status: series.status,
-                intervalWeeks: series.intervalWeeks,
+                intervalWeeks: series.intervalWeeks ?? 1,
                 totalOccurrences: series.occurrenceCount ?? siblings.length,
                 occurrenceIndex: event.occurrenceIndex,
                 seriesDetached: event.seriesDetached ?? false,

@@ -29,7 +29,8 @@ import { EventSeriesShiftEditor } from "@/components/events/event-series-shift-e
 import { EventSeriesPositionEditor } from "@/components/events/event-series-position-editor";
 import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
 
-function intervalLabel(weeks: number) {
+function intervalLabel(weeks: number | undefined) {
+  if (weeks === undefined) return "Recurring";
   if (weeks === 1) return "Weekly";
   return `Every ${weeks} weeks`;
 }

@@ -767,7 +767,8 @@ export default defineSchema({
     kind: v.optional(eventGroupKindValue),
     anchorStartAt: v.number(),
     anchorEndAt: v.number(),
-    intervalWeeks: v.number(),
+    /** Recurring groups only; multi-day groups carry explicit days. */
+    intervalWeeks: v.optional(v.number()),
     occurrenceCount: v.optional(v.number()),
     seriesEndAt: v.optional(v.number()),
     timezone: v.string(),

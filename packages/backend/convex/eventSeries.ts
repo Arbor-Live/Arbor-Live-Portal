@@ -17,6 +17,7 @@ import {
   replaceEmptyShiftsFromTemplates,
   replaceScheduleBlocksFromTemplates,
   resolveDefaultCrewHourlyRateUsd,
+  seriesIntervalWeeks,
   shiftsToTemplates,
   shouldApplySeriesUpdate,
   type SeriesEditScope,
@@ -623,18 +624,19 @@ export const addOccurrences = mutation({
     const lastIndex = existing.length > 0 ? (existing[existing.length - 1]!.occurrenceIndex ?? 0) : -1;
 
     let newStarts: number[] = [];
+    const intervalWeeks = seriesIntervalWeeks(series);
     if (args.additionalCount !== undefined) {
       newStarts = Array.from({ length: args.additionalCount }, (_, offset) =>
-        occurrenceStartAt(series.anchorStartAt, lastIndex + 1 + offset, series.intervalWeeks),
+        occurrenceStartAt(series.anchorStartAt, lastIndex + 1 + offset, intervalWeeks),
       );
     } else if (args.newSeriesEndAt !== undefined) {
       newStarts = computeOccurrenceStarts({
         anchorStartAt: occurrenceStartAt(
           series.anchorStartAt,
           lastIndex + 1,
-          series.intervalWeeks,
+          intervalWeeks,
         ),
-        intervalWeeks: series.intervalWeeks,
+        intervalWeeks,
         seriesEndAt: args.newSeriesEndAt,
       });
     } else {
@@ -704,7 +706,7 @@ export const reattachOccurrence = mutation({
     const startAt = occurrenceStartAt(
       series.anchorStartAt,
       occurrenceIndex,
-      series.intervalWeeks,
+      seriesIntervalWeeks(series),
     );
     const patch = buildEventPatchFromSeriesTemplate(series, startAt);
     await ctx.db.patch(args.eventId, {

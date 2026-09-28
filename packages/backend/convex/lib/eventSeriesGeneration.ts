@@ -21,6 +21,14 @@ import type { ScheduleBlockType } from "./scheduleBlockTypes";
 
 export const EVENT_TIMEZONE = PORTAL_TIMEZONE;
 
+/**
+ * Recurring cadence. Multi-day groups have no interval; the placeholder only
+ * ever feeds code paths that are never reached for them.
+ */
+export function seriesIntervalWeeks(series: Doc<"eventSeries">) {
+  return series.intervalWeeks ?? 1;
+}
+
 export type EventSeriesBlockTemplate = {
   blockType: ScheduleBlockType;
   label: string;
@@ -615,7 +623,7 @@ export async function propagateOverviewToSeriesOccurrences(
     const startAt = occurrenceStartAt(
       series.anchorStartAt,
       occurrenceIndex,
-      series.intervalWeeks,
+      seriesIntervalWeeks(series),
     );
     const patch = buildEventPatchFromSeriesTemplate(series, startAt);
     await ctx.db.patch(occurrence._id, { ...patch, ...overrides, updatedAt: now });

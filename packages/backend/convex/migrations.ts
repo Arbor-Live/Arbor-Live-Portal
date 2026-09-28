@@ -1,4 +1,5 @@
 import { Migrations } from "@convex-dev/migrations";
+import { pacificDayIndexFromAnchor } from "@arbor/format";
 import { components, internal } from "./_generated/api";
 import type { DataModel, Doc, Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
@@ -7,6 +8,9 @@ import { resolveContactNameParts } from "./lib/contactName";
 import { resolveGlobalRoleForUser } from "./lib/globalRole";
 import { normalizeHostOrgName } from "./lib/hostOrgIdentity";
 import { upsertInvoicePerson } from "./lib/invoicePeople";
+import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import { blocksToTemplates, shiftsToTemplates } from "./lib/eventSeriesGeneration";
+import { positionTemplateFromSlot } from "./lib/eventSeriesPositions";
 import {
   allocateBandPaymentConfirmationToken,
   allocateInvoiceNumber,
@@ -23,7 +27,7 @@ import {
 } from "./lib/eventTeams";
 import { consolidatePackageIntoOneIncludedUnit } from "./lib/packageContentMigration";
 import { normalizeCrewLineLabel } from "./lib/normalizeCrewLineLabel";
-import { syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
+import { isActBlock, syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
 import { ensureActPosition } from "./lib/actPositions";
 
 /**
@@ -781,6 +785,116 @@ export const unsetLegacyPendingInviteEmailFlags = migrations.define({
 });
 
 /**
+ * Group multi-day bookings: an invoice whose primary events number ≥ 2 and
+ * aren't a single recurring series becomes a `multi_day` group. The group
+ * carries the booking's shared fields and templates derived from Day 1; its
+ * events link via `groupId` (not `seriesId`, so recurring logic stays out).
+ */
+export const groupMultiDayBookings = migrations.define({
+  table: "invoices",
+  migrateOne: async (ctx, invoice) => {
+    const events = await listEventsByInvoiceId(ctx, invoice._id);
+    if (events.length < 2) return;
+    // Already grouped, or a recurring series is the group.
+    if (events.some((event) => event.groupId || event.seriesId)) return;
+
+    const first = events[0]!;
+    const now = Date.now();
+
+    const blocks = (
+      await ctx.db
+        .query("eventScheduleBlocks")
+        .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", first._id))
+        .take(500)
+    ).filter((block) => !isActBlock(block));
+    const blockTemplates = blocksToTemplates(
+      blocks.map((block) => ({
+        blockType: block.blockType,
+        label: block.label,
+        dayIndex: block.dayIndex,
+        startsAt: block.startsAt,
+        endsAt: block.endsAt,
+        notes: block.notes,
+      })),
+      first.startAt,
+    );
+
+    const shifts = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", first._id))
+      .take(500);
+    const shiftTemplates = shiftsToTemplates(
+      shifts.map((shift) => ({
+        role: shift.role,
+        scheduleBlockId: shift.scheduleBlockId,
+        userId: shift.userId,
+        startsAt: shift.startsAt,
+        endsAt: shift.endsAt,
+        estimatedHourlyRateUsd: shift.estimatedHourlyRateUsd,
+        notes: shift.notes,
+      })),
+      blocks.map((block) => ({ _id: block._id, startsAt: block.startsAt })),
+      blockTemplates,
+      first.startAt,
+    );
+
+    const positions = await ctx.db
+      .query("eventArtistNeeds")
+      .withIndex("by_eventId", (q) => q.eq("eventId", first._id))
+      .take(100);
+    const positionTemplates = positions
+      .slice()
+      .sort(
+        (a, b) =>
+          (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt) || a.createdAt - b.createdAt,
+      )
+      .map((slot) =>
+        positionTemplateFromSlot(slot, first.startAt, (timeMs) =>
+          pacificDayIndexFromAnchor(first.startAt, timeMs),
+        ),
+      );
+
+    const groupId = await ctx.db.insert("eventSeries", {
+      title: first.title,
+      status: "active",
+      kind: "multi_day",
+      anchorStartAt: first.startAt,
+      anchorEndAt: first.endAt,
+      timezone: first.timezone,
+      requiresShowWindow: first.requiresShowWindow,
+      venueId: first.venueId,
+      venueName: first.venueName,
+      eventType: first.eventType,
+      teamsInterested: first.teamsInterested,
+      category: first.category,
+      hostGroupId: first.hostGroupId,
+      host: first.host,
+      additionalHostGroupIds: first.additionalHostGroupIds,
+      expectedTurnout: first.expectedTurnout,
+      budgetUsd: first.budgetUsd,
+      occurrenceBandsCostUsd: first.bandsCostUsd,
+      occurrenceExternalRentalsCostUsd: first.externalRentalsCostUsd,
+      occurrenceOtherCostUsd: first.otherCostUsd,
+      occurrenceBudgetCrewCostUsd: first.crewCostUsd,
+      dayOfLeadUserId: first.dayOfLeadUserId,
+      eventManagerUserId: first.eventManagerUserId,
+      rentalFulfillmentMode: first.rentalFulfillmentMode,
+      notes: first.notes,
+      blockTemplates: blockTemplates.length > 0 ? blockTemplates : undefined,
+      shiftTemplates: shiftTemplates.length > 0 ? shiftTemplates : undefined,
+      positionTemplates: positionTemplates.length > 0 ? positionTemplates : undefined,
+      invoiceId: invoice._id,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    for (const event of events) {
+      await ctx.db.patch(event._id, { groupId, updatedAt: now });
+    }
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -819,6 +933,7 @@ const MIGRATION_SERIES = [
   internal.migrations.unsetLegacyPendingInviteEmailFlags,
   internal.migrations.backfillEventSeriesKind,
   internal.migrations.backfillEventGroupLinks,
+  internal.migrations.groupMultiDayBookings,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);
