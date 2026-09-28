@@ -87,6 +87,7 @@ function EventArtistBillPanel({
   const dismissInquiry = useMutation(api.eventArtistNeeds.dismissInquiry);
   const updateSlotLineup = useMutation(api.eventArtistNeeds.updateSlotLineup);
   const updateParticipationLineup = useMutation(api.eventBands.updateParticipationLineup);
+  const cancelPayment = useMutation(api.bandPayments.cancelPayment);
   const { confirm } = useAppDialog();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -303,6 +304,19 @@ function EventArtistBillPanel({
               }),
         "Times saved.",
       ),
+    removePayout: async (performer) => {
+      const payment = performer.payment;
+      if (!payment) return false;
+      const ok = await confirm({
+        title: `Remove ${performer.bandName}'s payout?`,
+        description:
+          "Use this when Arbor isn't paying this act (for example, someone else pays them directly). The act stays on the bill, and you can add a payout again later.",
+        destructive: true,
+        confirmLabel: "Remove payout",
+      });
+      if (!ok) return false;
+      return attempt(() => cancelPayment({ paymentId: payment._id }), "Payout removed.");
+    },
     dismissInquiry: (inquiryId) => attempt(() => dismissInquiry({ inquiryId }), "Inquiry dismissed."),
   };
 

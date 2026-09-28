@@ -57,6 +57,8 @@ export type PositionSheetHandlers = {
   removeAct: (performer: PerformerRow) => Promise<unknown>;
   /** Set/soundcheck times for the row's act, or its position when no platform act fills it. */
   saveTimes: (row: BillRow, times: ActTimesPatch) => Promise<unknown>;
+  /** Cancels the act's unpaid payout (e.g. someone else pays them directly); the act stays. */
+  removePayout: (performer: PerformerRow) => Promise<unknown>;
   /** Resolves true once the row is gone; false if cancelled or it failed. */
   removePosition: (row: BillRow) => Promise<boolean>;
   dismissInquiry: (inquiryId: Id<"eventArtistInquiries">) => Promise<unknown>;
@@ -263,6 +265,8 @@ function PositionSheetBody({
             eventId={eventId}
             editingPayout={editingPayout}
             onEditPayout={setEditingPayout}
+            busy={busy}
+            onRemovePayout={() => void run(() => handlers.removePayout(performer))}
             invoiceLine={invoiceLine}
             invoiceDefaultsReady={invoiceDefaultsReady}
           />
@@ -372,6 +376,8 @@ function PlatformAct({
   eventId,
   editingPayout,
   onEditPayout,
+  busy,
+  onRemovePayout,
   invoiceLine,
   invoiceDefaultsReady,
 }: {
@@ -380,6 +386,8 @@ function PlatformAct({
   eventId: Id<"events">;
   editingPayout: boolean;
   onEditPayout: (editing: boolean) => void;
+  busy: boolean;
+  onRemovePayout: () => void;
   invoiceLine: InvoiceArtistSuggestion | null;
   invoiceDefaultsReady: boolean;
 }) {
@@ -441,9 +449,16 @@ function PlatformAct({
           />
         </div>
       ) : (
-        <Button type="button" size="sm" variant="outline" onClick={() => onEditPayout(true)}>
-          {performer.payment ? "Edit payout" : "Add payout"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={() => onEditPayout(true)}>
+            {performer.payment ? "Edit payout" : "Add payout"}
+          </Button>
+          {performer.payment ? (
+            <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={onRemovePayout}>
+              Remove payout
+            </Button>
+          ) : null}
+        </div>
       )}
     </div>
   );
