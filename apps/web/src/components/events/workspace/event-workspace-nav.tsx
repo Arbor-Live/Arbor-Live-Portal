@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   CalendarDotsIcon,
   MegaphoneIcon,
@@ -16,7 +15,7 @@ import {
   getEventEditorTabPath,
   type EventEditorTabId,
 } from "@/lib/event-editor-tabs";
-import { cn } from "@/lib/utils";
+import { PageTabs } from "@/components/page-header";
 import type { DraftSection } from "@/components/events/workspace/event-draft";
 import { useEventWorkspace } from "@/components/events/workspace/event-workspace-provider";
 
@@ -63,42 +62,19 @@ export function EventWorkspaceNav() {
   }
 
   return (
-    <nav
-      aria-label="Event sections"
-      className="sticky top-0 z-30 -mx-6 border-b bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/80"
-    >
-      <div className="-mb-px flex gap-1 overflow-x-auto">
-        {visibleTabs.map((tab) => {
-          const TabIcon = TAB_ICONS[tab];
-          const active = tab === activeTab;
-          const section = TAB_DIRTY_SECTION[tab];
-          const isDirty = section ? dirty.has(section) : false;
-          return (
-            <Link
-              key={tab}
-              href={getEventEditorTabPath(eventId, tab)}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "relative inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
-                active
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
-              )}
-            >
-              <TabIcon className="size-4" weight={active ? "fill" : "regular"} />
-              {EVENT_EDITOR_TAB_LABELS[tab]}
-              {badgeFor(tab)}
-              {isDirty ? (
-                <span
-                  className="size-1.5 rounded-full bg-primary"
-                  aria-label="Unsaved changes"
-                  title="Unsaved changes"
-                />
-              ) : null}
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
+    <PageTabs
+      label="Event sections"
+      tabs={visibleTabs.map((tab) => {
+        const section = TAB_DIRTY_SECTION[tab];
+        return {
+          href: getEventEditorTabPath(eventId, tab),
+          label: EVENT_EDITOR_TAB_LABELS[tab],
+          icon: TAB_ICONS[tab],
+          active: tab === activeTab,
+          badge: badgeFor(tab),
+          dirty: section ? dirty.has(section) : false,
+        };
+      })}
+    />
   );
 }
