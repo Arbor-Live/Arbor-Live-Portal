@@ -55,6 +55,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -521,42 +522,30 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="item-rotation">Rotation</Label>
-                    <Input
+                    <NumberInput
                       id="item-rotation"
-                      type="number"
                       step={15}
                       disabled={readOnly}
                       value={selectedItem.rotation}
-                      onChange={(event) => {
-                        const rotation = Number(event.target.value);
-                        if (!Number.isFinite(rotation)) return;
-                        patchContent((content) =>
-                          updateItem(content, selectedItem.id, {
-                            rotation: ((rotation % 360) + 360) % 360,
-                          }),
-                        );
-                      }}
+                      normalize={(rotation) => ((rotation % 360) + 360) % 360}
+                      onValueChange={(rotation) =>
+                        patchContent((content) => updateItem(content, selectedItem.id, { rotation }))
+                      }
                     />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="item-scale">Scale</Label>
-                    <Input
+                    <NumberInput
                       id="item-scale"
-                      type="number"
                       step={0.1}
                       min={0.5}
                       max={2}
+                      fallback={1}
                       disabled={readOnly}
                       value={selectedItem.scale}
-                      onChange={(event) => {
-                        const scale = Number(event.target.value);
-                        if (!Number.isFinite(scale)) return;
-                        patchContent((content) =>
-                          updateItem(content, selectedItem.id, {
-                            scale: Math.min(2, Math.max(0.5, scale)),
-                          }),
-                        );
-                      }}
+                      onValueChange={(scale) =>
+                        patchContent((content) => updateItem(content, selectedItem.id, { scale }))
+                      }
                     />
                   </div>
                 </div>
@@ -1101,18 +1090,14 @@ function MixesSection({
                     </select>
                   </td>
                   <td className="py-1.5 pr-2">
-                    <input
-                      type="number"
+                    <NumberInput
                       min={0}
                       max={8}
                       className={fieldClass}
+                      aria-label="Sends"
                       disabled={readOnly || mix.type === "iem"}
                       value={mix.sends}
-                      onChange={(event) => {
-                        const sends = Number(event.target.value);
-                        if (!Number.isFinite(sends)) return;
-                        patch(mix.id, { sends: Math.max(0, Math.min(8, sends)) });
-                      }}
+                      onValueChange={(sends) => patch(mix.id, { sends })}
                     />
                   </td>
                   <td className="py-1.5 pr-2">
@@ -1236,20 +1221,14 @@ function BacklineSection({
                     />
                   </td>
                   <td className="py-1.5 pr-2">
-                    <input
-                      type="number"
+                    <NumberInput
                       min={1}
                       max={20}
                       className={fieldClass}
+                      aria-label="Quantity"
                       disabled={readOnly}
                       value={item.quantity}
-                      onChange={(event) => {
-                        const quantity = Number(event.target.value);
-                        if (!Number.isFinite(quantity)) return;
-                        patch(item.id, {
-                          quantity: Math.max(1, Math.min(20, quantity)),
-                        });
-                      }}
+                      onValueChange={(quantity) => patch(item.id, { quantity })}
                     />
                   </td>
                   <td className="py-1.5 pr-2">

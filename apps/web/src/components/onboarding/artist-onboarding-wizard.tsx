@@ -9,6 +9,7 @@ import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { MarketingLinksEditor } from "@/components/marketing/marketing-links-editor";
 import {
@@ -965,14 +966,11 @@ export function BandOnboardingWizard() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="band-rate">Rate per person per hour (USD)</Label>
-                    <Input
+                    <NumberInput
                       id="band-rate"
-                      type="number"
                       min={0}
                       value={form.performerHourlyRateUsd}
-                      onChange={(event) =>
-                        patch({ performerHourlyRateUsd: Number(event.target.value) || 0 })
-                      }
+                      onValueChange={(performerHourlyRateUsd) => patch({ performerHourlyRateUsd })}
                       autoFocus
                     />
                   </div>
