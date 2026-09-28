@@ -492,7 +492,12 @@ export function FinancialHubBandPayoutsClient() {
           <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              // A selection made under another search could hide rows that are
+              // still checked; start over so a batch only covers what's shown.
+              setChecked(new Set());
+            }}
             placeholder="Search artist, event, payee, ID…"
             aria-label="Search payouts"
             className="pl-9"
