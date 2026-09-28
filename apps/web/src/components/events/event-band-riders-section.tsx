@@ -10,7 +10,7 @@ import { nightRiderPlan } from "@/lib/night-rider-plan";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { StagePlotCanvas } from "@/components/riders/stage-plot-canvas";
 import { RiderPdfDownloadButton } from "@/components/riders/rider-pdf-download-button";
-import { EventShowFileDownloadButton } from "@/components/events/event-show-file-download-button";
+import { EventShowFilePanel } from "@/components/events/event-show-file-panel";
 import { EventNightRiderDownloadButton } from "@/components/events/event-night-rider-download-button";
 import { StageBoxPatchDiffViews } from "@/components/events/stage-box-patch-diff-views";
 import { SnakePlanControls } from "@/components/events/snake-plan-controls";
@@ -53,20 +53,12 @@ function EventBandRidersPanel({ eventId }: { eventId: Id<"events"> }) {
             <MoonStarsIcon className="size-4 text-muted-foreground" />
             Night rider
           </CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <EventNightRiderDownloadButton
-              eventId={eventId}
-              disabled={!patchPlan}
-            />
-            <EventShowFileDownloadButton
-              eventId={eventId}
-              disabled={!patchPlan}
-            />
-          </div>
+          <EventNightRiderDownloadButton eventId={eventId} disabled={!patchPlan} />
         </CardHeader>
         <CardContent className="space-y-4">
           <SnakePlanControls eventId={eventId} plan={plan} />
           {patchPlan ? <StageBoxPatchDiffViews plan={patchPlan} /> : null}
+          {patchPlan ? <EventShowFilePanel eventId={eventId} /> : null}
           <NightRiderChangeoverList changeovers={changeovers} />
         </CardContent>
       </Card>

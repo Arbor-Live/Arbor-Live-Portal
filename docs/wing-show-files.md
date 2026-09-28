@@ -179,7 +179,36 @@ This only matters for a refinement we have not built (dropping IN/HA to
 belt-and-brace the head amp, or per-parameter scoping like "recall mutes, never
 touch my EQ"). Gain protection does not depend on it.
 
-## Still to verify on a desk
+## Other consoles (X32 / M32, X Air / XR18)
+
+The same allocation also renders for the two smaller desks. The **Show file**
+panel on the Night rider card picks the desk and shows a pre-download report —
+a summary line, any losses, and a channel-by-channel preview (span, name,
+target socket, stereo/48V flags, bands using it) — before the download. The
+report is the same build as the archive, run with `archive: false`
+(`previewByEventId`); the download packs `-show.zip`, `-x32.zip` or
+`-xr18.zip`. Code: `packages/show-file/src/x32.ts` and `xair.ts`, with
+colour/icon translation in `palette.ts`; UI in
+`apps/web/src/components/events/event-show-file-panel.tsx`.
+
+- **X32 / M32** — the rig is already AES50 A, so a channel maps straight to its
+  socket: Snake A ports 1–16 → channels 1–16, Snake B → 17–32, fed by
+  `/config/routing/IN A1-8 A9-16 A17-24 A25-32 AUX1-6`. The X32 has no stereo
+  channel, so a Keys or OH pair becomes two hard-panned mono channels linked in
+  `/config/chlink` (only odd-aligned pairs link), and 48V moves to the
+  `/headamp/NNN` node. Scenes open with `#4.0#`, LF line endings.
+  Band scenes are **sparse**: they carry only the `/ch/NN/mix` lines whose mute
+  changed, so the night baseline’s `/ch/NN/preamp` (gain) is never recalled over
+  a gained kit — the same protection the Wing gets from `source` being out of
+  scope. Mute and fader share that node on an X32, so unmuting recalls unity
+  fader.
+- **X Air / XR18** — no AES50, so the snake becomes the mixer’s **local**
+  channels: Snake A port *n* → `Innn` on channel *n*. The second snake has
+  nowhere to land and is named in the warnings. X AIR Edit will not load a
+  partial scene, so every scene carries the complete node set (channels, buses,
+  FX, routing, headamps) and per-band recall is a full scene. **Unlike the Wing
+  and X32, an XR18 band scene therefore recalls gain and faders** — set channel
+  safes on the desk if you need those protected.
 
 Nothing here has been through a real show. Worth confirming once: load a
 generated package, recall `Default`, gain the kit, then step the band scenes and

@@ -235,6 +235,7 @@ import type * as publicMedia from "../publicMedia.js";
 import type * as r2Assets from "../r2Assets.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as retention from "../retention.js";
+import type * as seedSecondBand from "../seedSecondBand.js";
 import type * as shortLinks from "../shortLinks.js";
 import type * as storageLocations from "../storageLocations.js";
 import type * as timecards from "../timecards.js";
@@ -477,6 +478,7 @@ declare const fullApi: ApiFromModules<{
   r2Assets: typeof r2Assets;
   rateLimit: typeof rateLimit;
   retention: typeof retention;
+  seedSecondBand: typeof seedSecondBand;
   shortLinks: typeof shortLinks;
   storageLocations: typeof storageLocations;
   timecards: typeof timecards;
