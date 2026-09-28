@@ -19,8 +19,9 @@ files before building; copy their structure, don't reinvent it.
 | Piece | File |
 |---|---|
 | Page shell (header, tabs, panels, save bar) | `apps/web/src/components/events/workspace/event-workspace.tsx` |
-| Header (back link, status pill, editable title, meta line, `⋯` menu) | `components/events/workspace/event-workspace-header.tsx` |
-| Sticky tab nav with badges and unsaved dots | `components/events/workspace/event-workspace-nav.tsx` |
+| **Shared header, pills, meta, tabs** (use these) | `apps/web/src/components/page-header.tsx` |
+| Header built on it (the working example) | `components/events/workspace/event-workspace-header.tsx` |
+| Tabs built on it | `components/events/workspace/event-workspace-nav.tsx` |
 | Page state: draft, dirty sections, save all | `components/events/workspace/event-workspace-provider.tsx` |
 | Main + aside grid | `components/events/workspace/tabs/overview-tab.tsx` |
 | List rows + side panel (the model for any list) | `components/events/event-artist-bill-section.tsx`, `components/events/lineup/position-sheet.tsx` |
@@ -33,35 +34,60 @@ files before building; copy their structure, don't reinvent it.
 **Page shell** (top to bottom, `space-y-4 pb-24`, and the `pb-24` leaves room
 for the save bar):
 
-1. **Header.** Not a `Card`. See below.
+1. **Header:** `<PageHeader>`, never a `Card`. See below.
 2. Read-only `Alert`, if the viewer can't edit.
-3. **Sticky tab nav**, when the page has more than one area.
+3. **`<PageTabs>`**, when the page has more than one area.
 4. The active tab's panel.
 5. `FormSaveBar tier="C"` for pages with unsaved drafts.
 
-**Header** (`<header className="space-y-3">`):
-- Row 1: a ghost `Button` back link on the left (`-ml-2 text-muted-foreground`,
-  arrow + parent name), and the page's actions on the right. That's usually one
-  or two buttons plus a `⋯` `DropdownMenu` (`DotsThreeIcon`, `align="end"`) for
-  secondary and destructive actions.
-- Row 2: status pills (`h-7 border px-2.5 text-xs font-semibold`, a coloured
-  dot plus a label; the status pill is itself a dropdown when it's editable).
-- Title: `text-2xl font-semibold tracking-tight`. For an editable title, use a
-  borderless input with the same type that shows a border on hover and focus.
-- Meta line: `flex flex-wrap gap-x-5 gap-y-1.5 text-sm` of `MetaItem`s, each a
-  muted `size-4` Phosphor icon plus text (date range, venue, type, host,
-  manager). A meta item can open a Sheet (e.g. the venue).
+**Header: use `PageHeader`** (`components/page-header.tsx`). Don't build
+headers by hand, and never use a `Card` as a page title. The event header is
+built on it (`event-workspace-header.tsx`), so it's the working example.
 
-**Tabs:**
-- Each tab is a real route (`/dashboard/<thing>/<id>/<tab>`), so deep links
-  and back/forward work. Keep the tab ids and labels in a `lib/*-tabs.ts`
-  module.
-- Style: `sticky top-0 z-30 border-b bg-background/95 backdrop-blur`. Each link
-  is `border-b-2 px-3 py-2.5 text-sm font-medium`; the active one gets
-  `border-primary`, and its icon uses `weight="fill"`.
-- A tab can show a small badge: an amber warning count for things that need
-  attention (open crew slots), a muted count for size (pull list). It shows a
-  `size-1.5 rounded-full bg-primary` dot when that section has unsaved changes.
+```tsx
+import { MetaItem, PageHeader, StatusPill } from "@/components/page-header";
+
+<PageHeader
+  back={{ href: "/dashboard/financial-hub/requests", label: "Requests" }}
+  actions={<Button size="sm">Create quote</Button>}
+  menu={
+    <>
+      <DropdownMenuItem onSelect={markActionRequired}>Mark action required</DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem variant="destructive" onSelect={decline}>Decline</DropdownMenuItem>
+    </>
+  }
+  pills={<StatusPill tone="amber">Action required</StatusPill>}
+  title={`${request.firstName} ${request.lastName}`}
+  meta={
+    <>
+      <MetaItem icon={CalendarBlankIcon}>{formatDate(request.eventDate)}</MetaItem>
+      <MetaItem icon={MapPinIcon}>{request.venueName}</MetaItem>
+    </>
+  }
+/>
+```
+
+- `back`: the parent list. `actions`: one or two buttons. `menu`: the `⋯`
+  items, secondary first, then a separator, then destructive.
+- `pills`: `StatusPill` for a read-only status, `StatusPillSelect` (with
+  `options: { value, label, tone }[]`) when the status is editable from the
+  header, plus links like "Recurring · View series".
+- `title`: a string renders the `h1`. For renamable things pass
+  `<EditablePageTitle value onChange label />`.
+- `meta`: `MetaItem`s (icon + text; pass `onClick` to open a Sheet).
+- `children`: anything under the meta line (a day switcher, a notice).
+- Tones: `neutral | blue | emerald | amber | rose`. Map your domain's statuses
+  to tones in one function next to the status labels (see
+  `eventStatusBadgeTone` in `lib/event-status.ts`).
+
+**Tabs: use `PageTabs`** for a page with more than one area:
+`<PageTabs label="Event sections" tabs={[{ href, label, icon, active, badge?, dirty? }]} />`.
+Each tab is a real route (`/dashboard/<thing>/<id>/<tab>`), so deep links and
+back/forward work. Keep the ids, labels and icons in a `lib/*-tabs.ts` module
+(see `lib/event-editor-tabs.ts`). Use `badge` for an amber warning count
+(things needing attention) or a muted count (size), and `dirty` for the
+unsaved dot.
 
 **Panel grid:** a main column plus an aside, via
 `grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]`. Always `min-w-0` on both
@@ -168,18 +194,108 @@ uppercase type chip per row (`TypeChip` and `RAIL_STYLES` in
   exists in `app/globals.css`.
 - **Numbers** (times, money, counts) are `tabular-nums` and right-aligned in
   fixed-width columns.
-- **Icons:** Phosphor, `size-4`, muted, next to titles and meta; filled weight
-  for the active or selected state.
+- **Icons:** see [Icons](#icons).
 - **Copy:** sentence case, plain words, and what the user can do next ("No run
   of show yet. Build it from the lineup, or quick-add the sections crew work
   in."). Don't label times with a timezone (see app-context).
 
+## Icons
+
+**Library:** Phosphor only (`@phosphor-icons/react`), about 120 imports and no
+other icon set. In server components (e.g. public `(site)` pages), import from
+`@phosphor-icons/react/dist/ssr`. Always use the `…Icon` export names
+(`MapPinIcon`, not `MapPin`), and type icon props and maps with
+`import { type Icon } from "@phosphor-icons/react"`.
+
+**Where icons go:** icons label *things* (a card title, a meta item, a tab, a
+row type) and *actions* (buttons). Don't sprinkle them into body text, and
+don't put an icon on every button: a row's primary action is usually just a
+word.
+
+**Sizes** (in order of how often the app uses them):
+
+| Size | Use |
+|---|---|
+| `size-4` (default) | Card titles, meta items, tab links, row type icons, standalone status icons |
+| `size-3.5` | Inside compact chips and badges, and inline flags like `WarningIcon` next to a count |
+| `size-3` | Tiny affordances: a caret in a pill, `ArrowSquareOutIcon` after an external link, a check inside a small chip |
+| `size-5` | The empty-state illustration box, and the `⋯` `DotsThreeIcon` in the page header |
+
+**Inside a `Button`, don't set a size.** `Button` sizes its SVG per button
+size (`[&_svg:not([class*='size-'])]:size-…`) and already sets
+`shrink-0 pointer-events-none`. Add a size class only to deliberately break
+that.
+
+**Colour:** decorative icons are `text-muted-foreground` next to
+`text-foreground` text (card titles, meta). Status icons take the status colour
+of their meaning (`text-status-amber-700` for a warning, `text-destructive`
+for errors). Never colour an icon just for decoration.
+
+**Weight:**
+- `regular` is the default.
+- `fill` is for the **active / selected** state: the active tab
+  (`weight={active ? "fill" : "regular"}`), a selected option, a filled-in
+  warning badge (`WarningIcon weight="fill"`).
+- `bold` only for small glyphs that would otherwise look thin: `CheckIcon` in
+  chips, `DotsThreeIcon`, `PlusIcon` in tight buttons.
+- No `duotone` or `thin` in the dashboard.
+
+**Accessibility:**
+- Icons next to visible text are decorative: give them `aria-hidden` so screen
+  readers don't announce a stray graphic (the Run of Show rails and moment
+  icons do this).
+- **Icon-only buttons** (`size="icon" | "icon-sm" | "icon-xs" | "icon-lg"`)
+  must have an `aria-label` naming the action and the target ("Move The Larks
+  earlier", "Clear set time", "More for this position"), and a `title` when the
+  meaning isn't obvious.
+- A status conveyed by an icon also needs text or a `title` (the tab badge's
+  `title="3 open crew slots"`).
+
+**One icon per concept.** Reuse what the app already uses; don't pick a new
+glyph for an existing idea. Keep domain mappings in a `Record` next to their
+labels (`TAB_ICONS` in `event-workspace-nav.tsx`, `MOMENT_ICONS` in
+`run-of-show-styles.tsx`) instead of inline.
+
+| Concept | Icon |
+|---|---|
+| Event / date | `CalendarDotsIcon` (nav, Run of Show tab), `CalendarBlankIcon` (a date in a meta line) |
+| Venue / location | `MapPinIcon` |
+| Host / organization | `BuildingsIcon` |
+| A person (manager, owner) | `UserCircleIcon`; a single user avatar placeholder `UserIcon` |
+| Crew / a group of people | `UsersThreeIcon` (crew counts); `UsersIcon` is the Users *nav* item only |
+| Artist / act | `MicrophoneStageIcon` (Lineup tab, sets); `GuitarIcon` is the Artists *nav* item only |
+| Soundcheck · doors · changeover | `SpeakerHighIcon` · `DoorOpenIcon` · `ArrowsLeftRightIcon` |
+| Equipment | `PackageIcon` |
+| Billing / quote / invoice | `ReceiptIcon`; money totals `CurrencyDollarIcon` |
+| Promo / marketing | `MegaphoneIcon` |
+| Overview | `SquaresFourIcon` |
+| Event type | the `EVENT_TYPE_ICONS` map in `components/events/workspace/event-draft.ts` (don't hand-pick per page) |
+| Recurring series | `RepeatIcon` |
+| Visibility | `GlobeIcon` (public), `LockSimpleIcon` (internal), `InfoIcon` (informational) |
+| Add · edit · delete | `PlusIcon` · `PencilSimpleIcon` · `TrashIcon` |
+| Close / clear / remove from a list | `XIcon` |
+| More actions | `DotsThreeIcon` (`weight="bold"`) |
+| Open a dropdown | `CaretDownIcon` (`size-3`/`size-3.5`, after the label) |
+| Back | `ArrowLeftIcon` (header back link) |
+| Opens elsewhere / new tab | `ArrowSquareOutIcon` (`size-3`, after the label) |
+| Copy | `CopyIcon` |
+| Email / invite | `EnvelopeSimpleIcon` |
+| Search | `MagnifyingGlassIcon` (inside the input: `pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground`, input gets `pl-9`) |
+| Needs attention (inline, with a count) | `WarningIcon` |
+| Error / blocking alert | `WarningCircleIcon` (in `Alert`s) |
+| Done / confirmed | `CheckIcon` |
+| Magic / auto-build | `MagicWandIcon` (Build run of show); quick fill `LightningIcon` |
+
+If a concept isn't in the table, search the codebase for how it's already
+drawn (`rg "<.*Icon" -g "*.tsx"`) before choosing, and add new mappings to this
+table in the same PR.
+
 ## Checklist for a new or redesigned page
 
-- [ ] Header is a `<header>`, not a `Card`. It has a back link, actions plus
-      a `⋯` menu, status pills, the title, and the meta line.
-- [ ] Multi-area pages have route-based sticky tabs with badges and unsaved
-      dots.
+- [ ] The header is `<PageHeader>` (not a `Card`), with a back link, actions
+      plus a `⋯` menu, pills, the title and the meta line as they apply.
+- [ ] Multi-area pages use `<PageTabs>` with route-based tabs, badges and
+      unsaved dots.
 - [ ] Lists are rows with a summary line, ordered by a stated rule, with one
       primary action per row and a `⋯` menu for the rest.
 - [ ] Details open in a keyed `Sheet` with uppercase section headings, a
@@ -187,6 +303,8 @@ uppercase type chip per row (`TypeChip` and `RAIL_STYLES` in
 - [ ] Every destructive action confirms, with a specific title and verb.
 - [ ] Only design-system controls; labels wired to inputs; dropdowns don't
       shift the layout.
+- [ ] Icons follow [Icons](#icons): Phosphor, the concept table, no size
+      class inside `Button`, `aria-label` on icon-only buttons.
 - [ ] Empty, loading and read-only states are designed, not blank.
 - [ ] Checked in light and dark mode, and at a narrow width (right-hand
       columns drop with `hidden md:block`).
