@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
@@ -176,24 +177,22 @@ export function BuildRunOfShowDialog({
             </div>
             <div className="space-y-1">
               <Label htmlFor="ros-changeover">Changeover (min)</Label>
-              <Input
+              <NumberInput
                 id="ros-changeover"
-                type="number"
                 min={0}
                 step={5}
                 value={changeoverMinutes}
-                onChange={(event) => setChangeoverMinutes(Math.max(0, Number(event.target.value) || 0))}
+                onValueChange={setChangeoverMinutes}
               />
             </div>
             <div className="space-y-1">
               <Label htmlFor="ros-soundcheck">Soundcheck (min each)</Label>
-              <Input
+              <NumberInput
                 id="ros-soundcheck"
-                type="number"
                 min={5}
                 step={5}
                 value={soundcheckMinutes}
-                onChange={(event) => setSoundcheckMinutes(Math.max(5, Number(event.target.value) || 5))}
+                onValueChange={setSoundcheckMinutes}
               />
             </div>
           </div>
@@ -255,20 +254,15 @@ export function BuildRunOfShowDialog({
                         </span>
                       ) : null}
                     </span>
-                    <Input
-                      type="number"
+                    <NumberInput
                       min={5}
                       step={5}
                       aria-label={`${row.act.name} set length in minutes`}
                       className="h-8 w-20"
                       value={row.setMinutes}
-                      onChange={(event) =>
+                      onValueChange={(setMinutes) =>
                         setRows((prev) =>
-                          prev.map((candidate, i) =>
-                            i === index
-                              ? { ...candidate, setMinutes: Math.max(5, Number(event.target.value) || 5) }
-                              : candidate,
-                          ),
+                          prev.map((candidate, i) => (i === index ? { ...candidate, setMinutes } : candidate)),
                         )
                       }
                     />

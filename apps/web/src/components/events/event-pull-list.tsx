@@ -8,6 +8,7 @@ import { FormSaveBar } from "@/components/forms";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import {
   InventoryPackageSearchSelect,
@@ -585,11 +586,13 @@ export function EventPullList({
                     {item.lineKind === "package" ? "Package · " : ""}
                     {displayName(item)}
                   </span>
-                  <Input
+                  <NumberInput
                     className="h-8 w-20"
-                    value={String(item.quantityRequired)}
-                    onChange={(e) => updateQuantityAt(index, Number(e.target.value) || 1)}
+                    min={1}
+                    value={item.quantityRequired}
+                    onValueChange={(quantity) => updateQuantityAt(index, quantity)}
                     inputMode="numeric"
+                    aria-label={`Quantity of ${displayName(item)}`}
                   />
                   <Button
                     type="button"

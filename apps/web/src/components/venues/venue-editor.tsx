@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Form } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
@@ -492,29 +493,27 @@ export function VenueEditor({
                         form.setValue("circuits", next, { shouldDirty: true });
                       }}
                     />
-                    <Input
-                      type="number"
+                    <NumberInput
                       placeholder="V"
+                      aria-label="Voltage"
+                      min={1}
+                      fallback={120}
                       value={circuit.voltage}
-                      onChange={(e) => {
+                      onValueChange={(voltage) => {
                         const next = [...circuits];
-                        next[index] = {
-                          ...next[index]!,
-                          voltage: Number(e.target.value) || 120,
-                        };
+                        next[index] = { ...next[index]!, voltage };
                         form.setValue("circuits", next, { shouldDirty: true });
                       }}
                     />
-                    <Input
-                      type="number"
+                    <NumberInput
                       placeholder="A"
+                      aria-label="Amperage"
+                      min={1}
+                      fallback={20}
                       value={circuit.amperage}
-                      onChange={(e) => {
+                      onValueChange={(amperage) => {
                         const next = [...circuits];
-                        next[index] = {
-                          ...next[index]!,
-                          amperage: Number(e.target.value) || 20,
-                        };
+                        next[index] = { ...next[index]!, amperage };
                         form.setValue("circuits", next, { shouldDirty: true });
                       }}
                     />
