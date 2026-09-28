@@ -61,8 +61,11 @@ test.describe("event series edit scope", () => {
     await expect(page.getByText("Series schedule template")).toBeVisible({ timeout: 30_000 });
 
     // --- Step 1: apply blocks to all 3 occurrences via Quick Add + scope "all" ---
-    await page.getByRole("button", { name: /Quick Add/ }).click();
-    await expect(page.getByRole("button", { name: "Remove" })).toHaveCount(3, { timeout: 15_000 });
+    // The schedule template is the first Run of Show editor on the series page
+    // (the crew template below shows the same blocks read-only).
+    const templateBlocks = page.getByTestId("run-of-show").first();
+    await templateBlocks.getByRole("button", { name: /Quick Add/ }).click();
+    await expect(templateBlocks.getByRole("button", { name: /^Remove / })).toHaveCount(3, { timeout: 15_000 });
 
     await page.getByRole("button", { name: /Save template.*apply blocks/ }).first().click();
 
@@ -75,9 +78,9 @@ test.describe("event series edit scope", () => {
     }
 
     // --- Step 2: edit with "this occurrence only" scope ---
-    await expect(page.getByRole("button", { name: "Remove" })).toHaveCount(3, { timeout: 15_000 });
-    await page.getByRole("button", { name: "Remove" }).nth(2).click();
-    await expect(page.getByRole("button", { name: "Remove" })).toHaveCount(2, { timeout: 10_000 });
+    await expect(templateBlocks.getByRole("button", { name: /^Remove / })).toHaveCount(3, { timeout: 15_000 });
+    await templateBlocks.getByRole("button", { name: /^Remove / }).nth(2).click();
+    await expect(templateBlocks.getByRole("button", { name: /^Remove / })).toHaveCount(2, { timeout: 10_000 });
 
     const scheduleGrid = page
       .locator("div.grid")

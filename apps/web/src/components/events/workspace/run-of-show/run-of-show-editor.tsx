@@ -83,7 +83,8 @@ export function RunOfShowEditor({
   acts: RunOfShowAct[];
   actName: (block: TimelineBlockDraft) => string | undefined;
   swaps: SwapLookup;
-  crewFor: (block: TimelineBlockDraft) => RunOfShowCrewCount;
+  /** Crew on a section; omit where crew aren't edited alongside (series template). */
+  crewFor?: (block: TimelineBlockDraft) => RunOfShowCrewCount;
   quickAdd: { label: string; disabled: boolean; run: () => void };
   /**
    * False where saves don't write act times back to the lineup (the invoice):
@@ -272,7 +273,7 @@ export function RunOfShowEditor({
                     key={refOf(entry.section.block)}
                     section={entry.section}
                     moments={entry.moments}
-                    crew={crewFor(entry.section.block)}
+                    crew={crewFor?.(entry.section.block)}
                     renderMoment={(moment) => (
                       <MomentRow
                         key={refOf(moment.block)}
@@ -402,7 +403,7 @@ function SectionCard({
 }: RowHandlers & {
   section: TimedBlock;
   moments: TimedBlock[];
-  crew: RunOfShowCrewCount;
+  crew?: RunOfShowCrewCount;
   renderMoment: (moment: TimedBlock) => React.ReactNode;
 }) {
   const { block, start, end } = section;
@@ -429,19 +430,21 @@ function SectionCard({
             />
           )}
         </div>
-        <span
-          className={cn(
-            "flex shrink-0 items-center gap-1 text-xs tabular-nums",
-            crew.total === 0
-              ? "text-muted-foreground"
-              : crew.filled < crew.total
-                ? "text-status-amber-700"
-                : "text-status-emerald-700",
-          )}
-        >
-          <UsersThreeIcon className="size-3.5" />
-          {crew.total === 0 ? "No crew" : `${crew.filled}/${crew.total} crew`}
-        </span>
+        {crew ? (
+          <span
+            className={cn(
+              "flex shrink-0 items-center gap-1 text-xs tabular-nums",
+              crew.total === 0
+                ? "text-muted-foreground"
+                : crew.filled < crew.total
+                  ? "text-status-amber-700"
+                  : "text-status-emerald-700",
+            )}
+          >
+            <UsersThreeIcon className="size-3.5" />
+            {crew.total === 0 ? "No crew" : `${crew.filled}/${crew.total} crew`}
+          </span>
+        ) : null}
         <RowControls
           block={block}
           readOnly={readOnly}
