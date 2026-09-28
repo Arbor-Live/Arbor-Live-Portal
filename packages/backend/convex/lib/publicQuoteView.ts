@@ -3,7 +3,6 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { syncBookingRequestStatusFromInvoice } from "./bookingRequestStatus";
 import { syncLinkedEventStatusFromInvoice } from "./eventStatus";
 import { listEventsLinkedToInvoice } from "./invoiceEvents";
-import { artistLineAppliesToEvent, isSingleSeriesBooking } from "./invoiceArtistDays";
 import { getEventArtists } from "./eventArtists";
 import { toDocumentLineItem, recomputeInvoiceTotalsFromDocumentLines } from "./invoiceDocumentBuild";
 import { resolveBillableOccurrenceCount } from "./invoiceSeries";
@@ -101,20 +100,6 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
     };
   });
   const eventIds = linkedEvents.map((event) => event._id);
-  const isSeriesBooking = isSingleSeriesBooking(linkedEvents);
-  const tbdArtistLines = lineItems.filter((row) => row.section === "artist" && !row.organizationId);
-  /** TBD artist slots that belong to a given day: explicit `eventId` wins.
-   * Unscoped lines fall back to the first day (as the backfill migration does),
-   * except on recurring series, where an unscoped line applies to every day. */
-  const tbdArtistSlotsForEvent = (eventId: Id<"events">) =>
-    tbdArtistLines.filter((row) =>
-      artistLineAppliesToEvent({
-        lineEventId: row.eventId,
-        eventId,
-        firstLinkedEventId: linkedEvents[0]?._id,
-        isSeriesBooking,
-      }),
-    ).length;
   const eventScheduleBlocks = linkedEvent
     ? (
         await Promise.all(
@@ -215,7 +200,6 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
         // files; neither belongs behind a forwardable quote token.
         crewRoster,
         artists: await getEventArtists(ctx, event._id),
-        tbdArtistSlots: tbdArtistSlotsForEvent(event._id),
       };
     }),
   );
@@ -255,7 +239,6 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
     termsAndConditionsMarkdown: combinedTermsMarkdown,
     termsVersion: globalTermsVersion,
     /** Total artist invoice lines without an assigned band — see each event's per-day count. */
-    tbdArtistSlots: tbdArtistLines.length,
     event: events[0] ?? null,
     events,
     paymentProof,

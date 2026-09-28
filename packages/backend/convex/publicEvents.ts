@@ -22,7 +22,9 @@ const publicEventLinkValue = v.object({
 });
 
 const publicEventArtistValue = v.object({
-  organizationId: v.string(),
+  key: v.string(),
+  kind: v.union(v.literal("act"), v.literal("outside"), v.literal("tba")),
+  organizationId: v.optional(v.string()),
   name: v.string(),
   role: v.union(v.literal("headliner"), v.literal("support"), v.literal("other")),
   slug: v.optional(v.string()),
@@ -36,6 +38,8 @@ const publicEventArtistValue = v.object({
   oneLiner: v.optional(v.string()),
   imageUrl: v.optional(v.string()),
   links: v.array(publicEventLinkValue),
+  setStartsAt: v.optional(v.number()),
+  setEndsAt: v.optional(v.number()),
 });
 
 const publicEventCardValue = v.object({
@@ -74,7 +78,7 @@ async function mapPublicEventCard(
   const publicEventUrl = buildPublicEventUrl(String(event._id), SITE_URL);
   const hostDisplay = await loadEventHostDisplay(ctx, event);
   const openMicSignupUrl = isOpenMicSignupOpen(event, Date.now())
-    ? `${SITE_URL}/open-mic`
+    ? `${SITE_URL}/open-mic?event=${event._id}`
     : undefined;
   return {
     eventId: event._id,

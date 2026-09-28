@@ -3,10 +3,14 @@ import { ArrowSquareOutIcon, MagnifyingGlassIcon } from "@phosphor-icons/react/d
 import { Card } from "@/components/ui/card";
 import { OptimizedRemoteImage } from "@/components/media/optimized-remote-image";
 import { ArtistTypeBadge } from "@/components/public/artist-type-badge";
+import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export type PublicEventArtist = {
-  organizationId: string;
+  key: string;
+  /** `act`: on the platform. `outside`: named on its position. `tba`: open position. */
+  kind: "act" | "outside" | "tba";
+  organizationId?: string;
   name: string;
   role: "headliner" | "support" | "other";
   slug?: string;
@@ -15,7 +19,16 @@ export type PublicEventArtist = {
   oneLiner?: string;
   imageUrl?: string;
   links: { label: string; url: string }[];
+  setStartsAt?: number;
+  setEndsAt?: number;
 };
+
+function setTimeLabel(artist: Pick<PublicEventArtist, "setStartsAt" | "setEndsAt">) {
+  if (artist.setStartsAt == null) return null;
+  return artist.setEndsAt != null
+    ? `${formatTime(artist.setStartsAt)} – ${formatTime(artist.setEndsAt)}`
+    : formatTime(artist.setStartsAt);
+}
 
 const ROLE_LABELS: Record<PublicEventArtist["role"], string> = {
   headliner: "Headliner",
@@ -69,11 +82,18 @@ export function PublicArtistCard({
                 artist.name
               )}
             </span>
-            <span className="border border-border px-2 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
-              {ROLE_LABELS[artist.role]}
-            </span>
-            <ArtistTypeBadge organizationType={artist.organizationType} />
+            {artist.kind === "act" ? (
+              <span className="border border-border px-2 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
+                {ROLE_LABELS[artist.role]}
+              </span>
+            ) : null}
+            {artist.kind === "act" || artist.organizationType !== "other" ? (
+              <ArtistTypeBadge organizationType={artist.organizationType} />
+            ) : null}
           </div>
+          {setTimeLabel(artist) ? (
+            <p className="text-sm text-muted-foreground tabular-nums">{setTimeLabel(artist)}</p>
+          ) : null}
           {artist.genres.length ? (
             <div className="flex flex-wrap gap-1.5">
               {artist.genres.map((genre) => (
@@ -112,33 +132,43 @@ export function PublicArtistCard({
   );
 }
 
+/** The bill in show order: platform acts, outside acts, and positions still to be announced. */
 export function PublicEventArtists({
   artists,
-  tbdSlots = 0,
   title = "Artists",
   className,
 }: {
   artists: PublicEventArtist[];
-  /** Count of artist slots still to be assigned (invoice artist lines with no band). */
-  tbdSlots?: number;
   title?: string;
   className?: string;
 }) {
-  if (!artists.length && tbdSlots <= 0) return null;
+  if (!artists.length) return null;
   return (
     <div className={cn("space-y-3", className)}>
       <h2 className="font-heading text-sm font-medium text-muted-foreground">{title}</h2>
       <div className="space-y-3">
-        {artists.map((artist) => (
-          <PublicArtistCard key={artist.organizationId} artist={artist} />
-        ))}
-        {tbdSlots > 0 ? <PublicArtistTbd /> : null}
+        {artists.map((artist) =>
+          artist.kind === "tba" ? (
+            <PublicArtistTbd key={artist.key} artist={artist} />
+          ) : (
+            <PublicArtistCard key={artist.key} artist={artist} />
+          ),
+        )}
       </div>
     </div>
   );
 }
 
-export function PublicArtistTbd({ className }: { className?: string }) {
+/** An open position: named by its label ("Opener") when it has one, with its set time. */
+export function PublicArtistTbd({
+  artist,
+  className,
+}: {
+  artist?: Pick<PublicEventArtist, "name" | "setStartsAt" | "setEndsAt">;
+  className?: string;
+}) {
+  const time = artist ? setTimeLabel(artist) : null;
+  const label = artist && artist.name !== "To be announced" ? artist.name : null;
   return (
     <Card className={cn("px-4 py-3", className)}>
       <div className="flex items-start gap-3">
@@ -147,10 +177,13 @@ export function PublicArtistTbd({ className }: { className?: string }) {
         </span>
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-heading text-sm font-medium">Artist to be determined</span>
+            <span className="font-heading text-sm font-medium">
+              {label ? `${label} · to be announced` : "Artist to be determined"}
+            </span>
           </div>
+          {time ? <p className="text-sm text-muted-foreground tabular-nums">{time}</p> : null}
           <p className="text-sm/relaxed text-muted-foreground">
-            We&apos;re currently searching for a band to fill this slot — we&apos;ll keep you
+            We&apos;re currently searching for an act to fill this slot — we&apos;ll keep you
             updated.
           </p>
         </div>
