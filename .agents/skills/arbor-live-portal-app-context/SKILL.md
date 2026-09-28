@@ -131,9 +131,16 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 
 Cursor rule: `.cursor/rules/portal-timezone.mdc` (always applied).
 
+## Dashboard UI
+- The event page is the reference design. For any new or redesigned dashboard
+  page (headers, tabs, lists + side panels, save flows, confirms), follow the
+  **dashboard-design** skill (`.agents/skills/dashboard-design/SKILL.md`).
+
 ## Date/Time UX Conventions
 - Avoid native `datetime-local` picker popovers for core event UX.
 - Use themed app picker component: `apps/web/src/components/ui/date-time-picker.tsx`.
+- When the date is implied (an act's set on the event's day), ask for times only
+  (`Input type="time"`) and derive the date; see the dashboard-design skill.
 - Enforce 15-minute increments in picker configuration.
 - Prevent input layout shift from focus/popup styling.
 
