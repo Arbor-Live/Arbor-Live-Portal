@@ -1,4 +1,4 @@
-import { TEMPLATE_SLOTS, aes50PortFor } from "./slots";
+import { BOX_CAPACITY, FAMILY_STYLE, aes50PortFor } from "./slots";
 import { wingColToX32, wingIconToX32 } from "./palette";
 import type {
   EventPatchAllocation,
@@ -60,6 +60,11 @@ function panTok(pan: number): string {
 
 function sceneName(name: string): string {
   return `"${String(name || "Show").replace(/"/g, "").slice(0, 12)}"`;
+}
+
+/** A channel/input name is literal — a slot nothing patches stays blank. */
+function channelName(name: string): string {
+  return `"${name.replace(/"/g, "").slice(0, 12)}"`;
 }
 
 /** The show name is the only place an X32 scene carries it. */
@@ -151,20 +156,27 @@ function buildChannels(
   const channels = new Map<number, X32Channel>();
   for (const snake of allocation.snakes) {
     const offset = snake === "B" ? 16 : 0;
-    for (const slot of TEMPLATE_SLOTS) {
-      if (slot.strip === null) continue;
-      const port = byKey.get(`${snake}:${slot.port}`);
-      if (!port) continue;
-      const socket = aes50PortFor(snake, slot.port);
+    // Every box socket has an entry; a stereo right half rides the left's strip.
+    for (let portNumber = 1; portNumber <= BOX_CAPACITY; portNumber++) {
+      const port = byKey.get(`${snake}:${portNumber}`);
+      if (!port || port.strip === null) continue;
+      const socket = aes50PortFor(snake, portNumber);
       const sock = template.ae_data.io.in.A?.[String(socket)];
-      channels.set(offset + slot.port, {
-        ch: offset + slot.port,
+      // A live input wears its family's colour/icon; an empty socket keeps the
+      // template's positional swatch, the same way the WING baseline does.
+      const style = FAMILY_STYLE[port.family];
+      channels.set(offset + portNumber, {
+        ch: offset + portNumber,
         width: port.stereo ? 2 : 1,
         name: port.label,
         used: port.used,
         muted: fileStem === null ? true : !port.bandLabels[fileStem],
-        color: wingColToX32(sock?.col as number | undefined),
-        icon: wingIconToX32(sock?.icon as number | undefined),
+        color: port.used
+          ? wingColToX32(style.col)
+          : wingColToX32(sock?.col as number | undefined),
+        icon: port.used
+          ? wingIconToX32(style.icon)
+          : wingIconToX32(sock?.icon as number | undefined),
         socket,
         phantom: port.phantom,
       });
@@ -179,7 +191,7 @@ function channelLines(c: X32Channel, full: boolean): string[] {
     const n = c.ch + k;
     const id = pad2(n);
     if (full) {
-      lines.push(`/ch/${id}/config ${sceneName(stereoName(c, k))} ${c.icon} ${c.color} ${n}`);
+      lines.push(`/ch/${id}/config ${channelName(stereoName(c, k))} ${c.icon} ${c.color} ${n}`);
       lines.push(`/ch/${id}/preamp +0.0 OFF ${EQ_DEFAULT_HPF}`);
     }
     lines.push(...mixLine(n, c, k));

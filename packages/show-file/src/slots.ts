@@ -116,3 +116,27 @@ export const SNAKE_GROUP_LABEL: Record<SnakeGroup, string> = {
 
 // DCA grouping and per-channel tags live in `groups.ts` — they are derived from
 // the sources actually on the bill, not from a fixed family table.
+
+/**
+ * WING colour + icon per family, so a channel keeps its colour wherever it
+ * lands. The blueprint's colours are positional (socket 1 is vox, 11 is kick),
+ * which is wrong once we pack by family — a Kick can sit on strip 4. These are
+ * the same swatches the blueprint uses for each family, applied by family.
+ *
+ * Colours are WING palette indexes; the X32/X Air translation reads them
+ * (`palette.ts`). Icons are the WING's own instrument glyphs.
+ */
+export const FAMILY_STYLE: Record<
+  SlotFamily,
+  { col: number; icon: number }
+> = {
+  vox: { col: 14, icon: 101 },
+  guitar: { col: 9, icon: 306 },
+  bass: { col: 9, icon: 300 },
+  keys: { col: 5, icon: 402 },
+  flex: { col: 7, icon: 103 },
+  kick: { col: 11, icon: 200 },
+  snare: { col: 11, icon: 202 },
+  tom: { col: 11, icon: 210 },
+  oh: { col: 11, icon: 205 },
+};

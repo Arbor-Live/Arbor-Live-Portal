@@ -1,5 +1,6 @@
 import {
   AES50_GROUP,
+  FAMILY_STYLE,
   TALKBACK_LOCAL_INPUT,
   TALKBACK_STRIP,
   aes50PortFor,
@@ -102,11 +103,14 @@ function applyAllocation(
   clearStrayBusInserts(snap);
 
   for (const port of allocation.ports) {
+    const style = FAMILY_STYLE[port.family];
     const socket = socketFor(snap, port);
     if (socket) {
       if (port.used) {
         socket.name = port.label;
         socket.mode = port.stereo ? "ST" : "M";
+        socket.col = style.col;
+        socket.icon = style.icon;
         // Hard rule: phantom only on OH ports.
         socket.vph = port.family === "oh" && port.phantom;
       } else {
@@ -139,6 +143,8 @@ function applyAllocation(
       altin: 1,
     };
     strip.name = port.label;
+    strip.col = style.col;
+    strip.icon = style.icon;
     // Keep the group's DCA/mute subscription even though the patch moved.
     strip.tags = port.tags;
     strip.mute = fileStem === null ? true : !port.bandLabels[fileStem];

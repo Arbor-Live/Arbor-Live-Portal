@@ -1,4 +1,4 @@
-import { TEMPLATE_SLOTS } from "./slots";
+import { BOX_CAPACITY, FAMILY_STYLE } from "./slots";
 import { wingColToXAir } from "./palette";
 import type {
   EventPatchAllocation,
@@ -179,18 +179,20 @@ function buildChannels(
 
   const channels = new Map<number, XAirChannel>();
   // Only Snake A exists locally; a second snake has nowhere to land.
-  for (const slot of TEMPLATE_SLOTS) {
-    if (slot.strip === null) continue;
-    const port = byKey.get(`A:${slot.port}`);
-    if (!port) continue;
-    const sock = template.ae_data.io.in.A?.[String(slot.port)];
-    channels.set(slot.port, {
-      ch: slot.port,
+  for (let portNumber = 1; portNumber <= BOX_CAPACITY; portNumber++) {
+    const port = byKey.get(`A:${portNumber}`);
+    if (!port || port.strip === null) continue;
+    const sock = template.ae_data.io.in.A?.[String(portNumber)];
+    const style = FAMILY_STYLE[port.family];
+    channels.set(portNumber, {
+      ch: portNumber,
       width: port.stereo ? 2 : 1,
       name: port.label,
       used: port.used,
       muted: fileStem === null ? true : !port.bandLabels[fileStem],
-      color: wingColToXAir(sock?.col as number | undefined),
+      color: port.used
+        ? wingColToXAir(style.col)
+        : wingColToXAir(sock?.col as number | undefined),
       phantom: port.phantom,
     });
   }
