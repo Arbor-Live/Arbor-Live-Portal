@@ -536,12 +536,6 @@ export function RiderPages({
   );
 }
 
-const PATCH_REGIONS: Array<{ key: "vox" | "mid" | "drums"; label: string }> = [
-  { key: "vox", label: "Vox" },
-  { key: "mid", label: "Mid" },
-  { key: "drums", label: "Drums" },
-];
-
 /** Every act's stage plot, one act per landscape page. */
 export function BriefPlotPages({ plots }: { plots: EventBriefPlot[] }) {
   return (
@@ -568,8 +562,10 @@ export function BriefPlotPages({ plots }: { plots: EventBriefPlot[] }) {
 }
 
 /**
- * The night snake faceplate: what plugs in where, in Default.snap order. A table
- * rather than the web card so it stays legible on a printed brief.
+ * The night snake faceplate: what plugs in where, in the allocator's order. A
+ * table rather than the web card so it stays legible on a printed brief. There
+ * are no fixed vox/mid/drums bands — each row prints its own socket, so the
+ * printed patch reads straight off the box.
  */
 export function PatchFaceplate({ patch }: { patch: EventBriefPatch }) {
   const tag = (port: EventBriefPatchPort) =>
@@ -591,34 +587,24 @@ export function PatchFaceplate({ patch }: { patch: EventBriefPatch }) {
           {patch.snakes.length > 1 ? (
             <Text style={styles.changeoverTitle}>{box.label}</Text>
           ) : null}
-          {PATCH_REGIONS.map((region) => {
-            const ports = box.ports.filter((port) => port.region === region.key);
-            if (ports.length === 0) return null;
-            return (
-              <View key={region.key}>
-                <View style={styles.tableHeader}>
-                  <Text style={[styles.headerCell, { width: 56 }]}>{region.label.toUpperCase()}</Text>
-                  <Text style={[styles.headerCell, { width: 52 }]}>PORT</Text>
-                  <Text style={[styles.headerCell, { width: 44 }]}>CH</Text>
-                  <Text style={[styles.headerCell, { width: 108 }]}>NAME</Text>
-                  <Text style={[styles.headerCell, { width: 58 }]}>TAGS</Text>
-                  <Text style={[styles.headerCell, { flexGrow: 1 }]}>USED BY</Text>
-                </View>
-                {ports.map((port) => (
-                  <View key={port.port} style={styles.row} wrap={false}>
-                    <Text style={[styles.cell, { width: 56 }]}>{region.label}</Text>
-                    <Text style={[styles.cell, { width: 52, fontFamily: "Courier" }]}>{port.portLabel}</Text>
-                    <Text style={[styles.cell, { width: 44 }]}>
-                      {port.strip === null ? "—" : `Ch ${port.strip}`}
-                    </Text>
-                    <Text style={[styles.cell, { width: 108 }]}>{port.label}</Text>
-                    <Text style={[styles.cell, { width: 58 }]}>{tag(port) || "—"}</Text>
-                    <Text style={[styles.cell, { flexGrow: 1 }]}>{port.usedBy.join(", ")}</Text>
-                  </View>
-                ))}
-              </View>
-            );
-          })}
+          <View style={styles.tableHeader}>
+            <Text style={[styles.headerCell, { width: 52 }]}>PORT</Text>
+            <Text style={[styles.headerCell, { width: 44 }]}>CH</Text>
+            <Text style={[styles.headerCell, { width: 108 }]}>NAME</Text>
+            <Text style={[styles.headerCell, { width: 58 }]}>TAGS</Text>
+            <Text style={[styles.headerCell, { flexGrow: 1 }]}>USED BY</Text>
+          </View>
+          {box.ports.map((port) => (
+            <View key={port.port} style={styles.row} wrap={false}>
+              <Text style={[styles.cell, { width: 52, fontFamily: "Courier" }]}>{port.portLabel}</Text>
+              <Text style={[styles.cell, { width: 44 }]}>
+                {port.strip === null ? "—" : `Ch ${port.strip}`}
+              </Text>
+              <Text style={[styles.cell, { width: 108 }]}>{port.label}</Text>
+              <Text style={[styles.cell, { width: 58 }]}>{tag(port) || "—"}</Text>
+              <Text style={[styles.cell, { flexGrow: 1 }]}>{port.usedBy.join(", ")}</Text>
+            </View>
+          ))}
         </View>
       ))}
 

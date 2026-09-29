@@ -89,7 +89,7 @@ export type EventBriefPlot = {
   items: RiderStageItem[];
 };
 
-/** A patched socket on a snake faceplate, in Default.snap layout order. */
+/** A patched socket on a snake faceplate, in the night patch's own order. */
 export type EventBriefPatchPort = {
   snake: "A" | "B";
   port: number;
@@ -98,7 +98,6 @@ export type EventBriefPatchPort = {
   /** Console strip, or null for the right half of a stereo pair. */
   strip: number | null;
   label: string;
-  region: "vox" | "mid" | "drums";
   stereo: boolean;
   phantom: boolean;
   di: boolean;

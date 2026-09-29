@@ -7,7 +7,6 @@ import {
   buildNightRiderDocument,
   buildStageBoxDiagramModel,
   fileStem,
-  regionForPort,
   sortBandsForShow,
   type ShowBandInput,
 } from "@arbor/show-file";
@@ -205,7 +204,6 @@ export const getBriefSource = internalQuery({
                 portLabel: port.portLabel,
                 strip: port.strip,
                 label: port.label,
-                region: regionForPort(port.port),
                 stereo: port.stereo,
                 phantom: port.phantom,
                 di: port.di,

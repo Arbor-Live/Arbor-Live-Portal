@@ -81,13 +81,6 @@ export function portLabel(snake: SnakeId, port: number): string {
   return socket === port ? String(port) : `${port} (${socket})`;
 }
 
-/** Region a box-relative port sits in, for faceplate grouping. */
-export function regionForPort(port: number): "vox" | "mid" | "drums" {
-  if (port <= 4) return "vox";
-  if (port <= 10) return "mid";
-  return "drums";
-}
-
 /**
  * Keyboard/desk groups for DCA tags and the snake-split UI. Families roll up
  * one-to-one with the template's DCA groups: Vox, Drums, Keys, and the melodic
