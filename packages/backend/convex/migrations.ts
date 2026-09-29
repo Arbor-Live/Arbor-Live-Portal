@@ -684,7 +684,7 @@ export const backfillEventSeriesKind = migrations.define({
   table: "eventSeries",
   migrateOne: async (_ctx, series) => {
     if (series.kind) return;
-    return { kind: "recurring" as const, updatedAt: Date.now() };
+    return { kind: "recurring" as const };
   },
 });
 
@@ -693,7 +693,9 @@ export const backfillEventGroupLinks = migrations.define({
   table: "events",
   migrateOne: async (_ctx, event) => {
     if (!event.seriesId || event.groupId) return;
-    return { groupId: event.seriesId, updatedAt: Date.now() };
+    // Leave `updatedAt` alone: it drives the public calendar LAST-MODIFIED and
+    // print freshness, so a backfill must not look like an edit.
+    return { groupId: event.seriesId };
   },
 });
 
