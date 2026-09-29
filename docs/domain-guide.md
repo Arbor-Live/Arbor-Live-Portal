@@ -301,7 +301,9 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   occurrence as `eventArtistNeeds` rows tagged with a `templateKey`. Applying
   adds/moves/removes open template positions and never touches a position that
   is filled, named as an outside act, or carrying inquiries; re-applying is
-  idempotent.
+  idempotent. A hand-added position with the same name as a template position
+  is adopted (keyed) rather than duplicated, and importing from an occurrence
+  keys that occurrence's positions.
 - Band participation in events is tracked in `eventBandParticipations`
   (headliner/support/other). That row is the canonical **assignment**: staff
   manage it from the event workspace **Lineup** tab (not Promo).

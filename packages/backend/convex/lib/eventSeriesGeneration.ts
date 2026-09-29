@@ -368,6 +368,7 @@ export async function applyPositionTemplates(
     slots.map((slot) => ({
       _id: slot._id,
       templateKey: slot.templateKey,
+      label: slot.label,
       locked:
         filledIds.has(slot._id) ||
         Boolean(slot.externalArtistName?.trim()) ||
@@ -380,11 +381,15 @@ export async function applyPositionTemplates(
   for (const needId of plan.removeIds) {
     await removePositionRow(ctx, needId);
   }
+  for (const { needId, templateKey } of plan.stampKeys) {
+    await ctx.db.patch(needId, { templateKey, updatedAt: now });
+  }
 
   for (const action of plan.actions) {
     const template = action.template;
     const window = positionWindowFromTemplate(template, occurrenceStartAt);
     const fields = {
+      templateKey: template.templateKey,
       sortOrder: orderByKey.get(template.templateKey) ?? 0,
       label: template.label.trim() || undefined,
       artistType: template.artistType,
@@ -394,7 +399,6 @@ export async function applyPositionTemplates(
     if (action.kind === "insert") {
       const needId = await ctx.db.insert("eventArtistNeeds", {
         eventId,
-        templateKey: template.templateKey,
         status: "open",
         ...fields,
         createdAt: now,
@@ -417,7 +421,7 @@ export async function applyPositionTemplates(
     await syncNeedBlocks(ctx, action.needId);
   }
 
-  return plan.actions.length + plan.removeIds.length;
+  return plan.actions.length + plan.removeIds.length + plan.stampKeys.length;
 }
 
 export async function materializeOccurrence(

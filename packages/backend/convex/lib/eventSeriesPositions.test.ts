@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Id } from "../_generated/dataModel";
 import {
+  assertUniqueTemplateKeys,
   planPositionTemplateApplication,
   positionTemplateFromSlot,
   positionWindowFromTemplate,
@@ -136,5 +137,50 @@ describe("positionTemplateFromSlot", () => {
       () => 0,
     );
     expect(exported.templateKey).toBe("key-headliner");
+  });
+});
+
+describe("planPositionTemplateApplication adoption", () => {
+  it("adopts a hand-added open position with the same name instead of inserting", () => {
+    const existing = [slot({ _id: needId("hand"), label: " headliner " })];
+    const plan = planPositionTemplateApplication(existing, [template()]);
+
+    expect(plan.actions).toEqual([
+      { kind: "update", template: template(), needId: needId("hand") },
+    ]);
+    expect(plan.stampKeys).toEqual([]);
+  });
+
+  it("stamps the key on a filled hand-added position without touching it", () => {
+    const existing = [slot({ _id: needId("booked"), label: "Headliner", locked: true })];
+    const plan = planPositionTemplateApplication(existing, [template()]);
+
+    expect(plan.actions).toEqual([]);
+    expect(plan.stampKeys).toEqual([{ needId: needId("booked"), templateKey: "key-headliner" }]);
+    // Re-applying after the stamp is a no-op (still locked, now keyed).
+    const again = planPositionTemplateApplication(
+      [slot({ _id: needId("booked"), templateKey: "key-headliner", locked: true })],
+      [template()],
+    );
+    expect(again).toEqual({ actions: [], removeIds: [], stampKeys: [] });
+  });
+
+  it("never adopts one hand-added position for two templates", () => {
+    const existing = [slot({ _id: needId("hand"), label: "Opener" })];
+    const templates = [
+      template({ templateKey: "a", label: "Opener" }),
+      template({ templateKey: "b", label: "Opener" }),
+    ];
+    const plan = planPositionTemplateApplication(existing, templates);
+    expect(plan.actions.map((action) => action.kind)).toEqual(["update", "insert"]);
+  });
+});
+
+describe("assertUniqueTemplateKeys", () => {
+  it("rejects duplicate keys", () => {
+    expect(() => assertUniqueTemplateKeys([template(), template()])).toThrow(/unique/);
+    expect(() =>
+      assertUniqueTemplateKeys([template(), template({ templateKey: "other" })]),
+    ).not.toThrow();
   });
 });

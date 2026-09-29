@@ -73,6 +73,8 @@ export type ExistingPositionSlot = {
   _id: Id<"eventArtistNeeds">;
   /** Absent on positions staff added by hand (not from the template). */
   templateKey?: string;
+  /** Used to adopt a hand-added position that matches a template by name. */
+  label?: string;
   /**
    * Not ours to move or remove: a platform act fills it, an outside act is named
    * on it, or it has inquiries (`status !== "open"`). Applying carries these
@@ -89,13 +91,38 @@ export type PositionTemplatePlan = {
   actions: PositionTemplateAction[];
   /** Open template positions whose template is gone. Filled positions are kept. */
   removeIds: Id<"eventArtistNeeds">[];
+  /**
+   * Locked hand-added positions adopted by a template (matched by name): only
+   * their `templateKey` is stamped so later applies recognize them.
+   */
+  stampKeys: Array<{ needId: Id<"eventArtistNeeds">; templateKey: string }>;
 };
+
+function normalizeLabel(label: string | undefined) {
+  return label?.trim().toLowerCase() ?? "";
+}
+
+/** Throws when two templates share a key (each key is one position per occurrence). */
+export function assertUniqueTemplateKeys(templates: readonly EventSeriesPositionTemplate[]) {
+  const seen = new Set<string>();
+  for (const template of templates) {
+    if (!template.templateKey.trim()) throw new Error("Every template position needs a key.");
+    if (seen.has(template.templateKey)) {
+      throw new Error("Template positions must have unique keys.");
+    }
+    seen.add(template.templateKey);
+  }
+}
 
 /**
  * Decide what applying `templates` does to an occurrence's existing positions.
  * Re-applying with unchanged templates plans the same updates (never a second
  * insert), and a locked position (filled, named outside act, or inquiring) is
  * never updated or removed.
+ *
+ * A template with no keyed match adopts a hand-added position with the same
+ * name, so applying to an occurrence that was set up by hand does not add a
+ * second "Headliner" next to the booked one.
  */
 export function planPositionTemplateApplication(
   existing: readonly ExistingPositionSlot[],
@@ -106,15 +133,30 @@ export function planPositionTemplateApplication(
     if (!slot.templateKey || byKey.has(slot.templateKey)) continue;
     byKey.set(slot.templateKey, slot);
   }
+  const unkeyed = existing.filter((slot) => !slot.templateKey);
+  const adopted = new Set<Id<"eventArtistNeeds">>();
 
   const actions: PositionTemplateAction[] = [];
+  const stampKeys: PositionTemplatePlan["stampKeys"] = [];
   for (const template of templates) {
-    const match = byKey.get(template.templateKey);
+    let match = byKey.get(template.templateKey);
+    if (!match) {
+      const label = normalizeLabel(template.label);
+      match = label
+        ? unkeyed.find((slot) => !adopted.has(slot._id) && normalizeLabel(slot.label) === label)
+        : undefined;
+      if (match) adopted.add(match._id);
+    }
     if (!match) {
       actions.push({ kind: "insert", template });
       continue;
     }
-    if (match.locked) continue;
+    if (match.locked) {
+      if (!match.templateKey) {
+        stampKeys.push({ needId: match._id, templateKey: template.templateKey });
+      }
+      continue;
+    }
     actions.push({ kind: "update", template, needId: match._id });
   }
 
@@ -125,7 +167,7 @@ export function planPositionTemplateApplication(
         slot.templateKey !== undefined && !wanted.has(slot.templateKey) && !slot.locked,
     )
     .map((slot) => slot._id);
-  return { actions, removeIds };
+  return { actions, removeIds, stampKeys };
 }
 
 /** Capture an occurrence's position as a template, relative to the event start. */

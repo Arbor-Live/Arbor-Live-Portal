@@ -23,6 +23,7 @@ import {
   type SeriesEditScope,
 } from "./lib/eventSeriesGeneration";
 import {
+  assertUniqueTemplateKeys,
   eventSeriesPositionTemplateValue,
   positionTemplateFromSlot,
 } from "./lib/eventSeriesPositions";
@@ -210,6 +211,7 @@ export const create = mutation({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     if (args.endAt <= args.startAt) throw new Error("Event end time must be after start time.");
+    assertUniqueTemplateKeys(args.positionTemplates ?? []);
     const occurrenceStarts = computeOccurrenceStarts({
       anchorStartAt: args.startAt,
       intervalWeeks: args.intervalWeeks,
@@ -547,6 +549,7 @@ export const regenerateFuturePositions = mutation({
       throw new Error("Occurrence index must be a non-negative integer.");
     }
     const templates = args.positionTemplates ?? series.positionTemplates ?? [];
+    assertUniqueTemplateKeys(templates);
     const now = Date.now();
     if (args.positionTemplates !== undefined) {
       await ctx.db.patch(args.id, { positionTemplates: args.positionTemplates, updatedAt: now });
@@ -591,18 +594,32 @@ export const importPositionsFromOccurrence = mutation({
     if (slots.length === 0) {
       throw new Error("Selected occurrence has no positions to import.");
     }
-    const templates = slots
+    const now = Date.now();
+    const seenKeys = new Set<string>();
+    const templates = [];
+    for (const slot of slots
       .slice()
       .sort(
         (a, b) =>
           (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt) || a.createdAt - b.createdAt,
-      )
-      .map((slot) =>
-        positionTemplateFromSlot(slot, event.startAt, (timeMs) =>
-          pacificDayIndexFromAnchor(event.startAt, timeMs),
-        ),
+      )) {
+      // A duplicated key (hand-copied row) becomes its own template.
+      const template = positionTemplateFromSlot(
+        slot.templateKey && seenKeys.has(slot.templateKey)
+          ? { ...slot, templateKey: undefined }
+          : slot,
+        event.startAt,
+        (timeMs) => pacificDayIndexFromAnchor(event.startAt, timeMs),
       );
-    await ctx.db.patch(args.id, { positionTemplates: templates, updatedAt: Date.now() });
+      seenKeys.add(template.templateKey);
+      templates.push(template);
+      // Stamp the key on the source position so applying the template back to
+      // this occurrence updates it instead of adding a duplicate.
+      if (slot.templateKey !== template.templateKey) {
+        await ctx.db.patch(slot._id, { templateKey: template.templateKey, updatedAt: now });
+      }
+    }
+    await ctx.db.patch(args.id, { positionTemplates: templates, updatedAt: now });
     return { templateCount: templates.length };
   },
 });
