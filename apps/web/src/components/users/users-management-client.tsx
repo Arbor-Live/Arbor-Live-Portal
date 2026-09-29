@@ -212,8 +212,7 @@ function userValuesFromRow(user: AdminUser, resolvedOrgId: string): UserAdminRow
     requiresOnboarding: user.requiresOnboarding ?? true,
     includeInTimecards: user.includeInTimecards ?? true,
     assignableAsCrew: user.assignableAsCrew ?? true,
-    weeklyDigest: user.weeklyDigest ?? true,
-    damageReportEmails: user.damageReportEmails ?? true,
+    emailOptOuts: [],
     showOnPublicCrewPage: user.showOnPublicCrewPage ?? false,
     publicCrewDescription: user.publicCrewDescription ?? "",
     title: user.title || "",
@@ -947,6 +946,30 @@ function UserAdminRow({
     form.reset(userValuesFromRow(user, resolvedOrgId));
   }, [user, resolvedOrgId, form]);
 
+  // Notification preferences are fetched on demand when the row is expanded.
+  const emailPreferences = useQuery(
+    api.users.getUserEmailPreferences,
+    expanded ? { userId: user.id } : "skip",
+  );
+  useEffect(() => {
+    if (!emailPreferences) return;
+    if (form.formState.dirtyFields.emailOptOuts) return;
+    form.setValue(
+      "emailOptOuts",
+      emailPreferences.filter((entry) => !entry.enabled).map((entry) => entry.template),
+      { shouldDirty: false },
+    );
+  }, [emailPreferences, user, form]);
+
+  function setEmailPreference(template: string, enabled: boolean) {
+    const disabled = new Set(form.getValues("emailOptOuts"));
+    if (enabled) disabled.delete(template);
+    else disabled.add(template);
+    form.setValue("emailOptOuts", [...disabled], { shouldDirty: true });
+  }
+
+  const emailOptOuts = form.watch("emailOptOuts");
+
   const persist = async (values: UserAdminRowFormValues) => {
     await updateUser({
       userId: user.id,
@@ -956,8 +979,11 @@ function UserAdminRow({
       requiresOnboarding: values.requiresOnboarding,
       includeInTimecards: values.includeInTimecards,
       assignableAsCrew: values.assignableAsCrew,
-      weeklyDigest: values.weeklyDigest,
-      damageReportEmails: values.damageReportEmails,
+      // Only touch preferences we actually loaded (or the admin changed); a
+      // collapsed row must never wipe opt-outs the editor never displayed.
+      ...(emailPreferences !== undefined || form.formState.dirtyFields.emailOptOuts
+        ? { emailOptOuts: values.emailOptOuts }
+        : {}),
       showOnPublicCrewPage: values.showOnPublicCrewPage,
       publicCrewDescription: values.publicCrewDescription || undefined,
       title: values.title || undefined,
@@ -1314,27 +1340,51 @@ function UserAdminRow({
                     />
                     Assignable as crew
                   </label>
-                  <label className="flex items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={form.watch("weeklyDigest")}
-                      onChange={(e) =>
-                        form.setValue("weeklyDigest", e.target.checked, { shouldDirty: true })
-                      }
-                    />
-                    Weekly pending-activity digest
-                  </label>
-                  <label className="flex items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={form.watch("damageReportEmails")}
-                      onChange={(e) =>
-                        form.setValue("damageReportEmails", e.target.checked, { shouldDirty: true })
-                      }
-                    />
-                    Damage report emails
-                  </label>
                 </div>
+              </div>
+              <div className="rounded-md border p-2 md:col-span-2">
+                <p className="mb-2 text-xs font-medium">Email notifications</p>
+                {emailPreferences === undefined ? (
+                  <p className="text-xs text-muted-foreground">Loading…</p>
+                ) : emailPreferences.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No email notifications apply to this user.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {[
+                      ...emailPreferences.reduce((groups, entry) => {
+                        const list = groups.get(entry.group) ?? [];
+                        list.push(entry);
+                        groups.set(entry.group, list);
+                        return groups;
+                      }, new Map<string, typeof emailPreferences>()),
+                    ].map(([group, entries]) => (
+                      <div key={group}>
+                        <p className="mb-1 text-2xs font-medium text-muted-foreground">
+                          {group}
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {entries.map((entry) => (
+                            <label
+                              key={entry.template}
+                              className="flex items-center gap-2 text-xs"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!emailOptOuts.includes(entry.template)}
+                                onChange={(e) =>
+                                  setEmailPreference(entry.template, e.target.checked)
+                                }
+                              />
+                              {entry.label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="rounded-md border p-2 md:col-span-2">
                 <p className="mb-2 text-xs font-medium">Show publicly</p>

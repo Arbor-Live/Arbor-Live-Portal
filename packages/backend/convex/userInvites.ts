@@ -14,6 +14,7 @@ import {
   type UserVertical,
 } from "./lib/userVerticals";
 import { resolveParticipationFlags } from "./lib/userParticipation";
+import { emailOptOutsForInviteKind } from "./lib/emailPreferences";
 import { isArtistOrganizationType } from "./lib/organizationType";
 import { resolveGlobalRoleForOrganization } from "./lib/globalRole";
 import { clearUserBan } from "./lib/userAccess";
@@ -50,7 +51,7 @@ async function ensureUserProfileDefaults(
     includeInTimecards?: boolean;
     assignableAsCrew?: boolean;
     showOnPublicCrewPage?: boolean;
-    damageReportEmails?: boolean;
+    emailOptOuts?: string[];
   },
 ) {
   const now = Date.now();
@@ -80,10 +81,8 @@ async function ensureUserProfileDefaults(
         args.showOnPublicCrewPage !== undefined
           ? args.showOnPublicCrewPage
           : existing.showOnPublicCrewPage,
-      damageReportEmails:
-        args.damageReportEmails !== undefined
-          ? args.damageReportEmails
-          : existing.damageReportEmails,
+      emailOptOuts:
+        args.emailOptOuts !== undefined ? args.emailOptOuts : existing.emailOptOuts,
       updatedAt: now,
     });
     return;
@@ -100,7 +99,7 @@ async function ensureUserProfileDefaults(
     includeInTimecards: args.includeInTimecards,
     assignableAsCrew: args.assignableAsCrew,
     showOnPublicCrewPage: args.showOnPublicCrewPage,
-    damageReportEmails: args.damageReportEmails,
+    emailOptOuts: args.emailOptOuts,
     createdAt: now,
     updatedAt: now,
   });
@@ -288,7 +287,7 @@ export const acceptInviteWithPassword = mutation({
       includeInTimecards: pending.includeInTimecards,
       assignableAsCrew: pending.assignableAsCrew,
       showOnPublicCrewPage: pending.showOnPublicCrewPage,
-      damageReportEmails: pending.damageReportEmails,
+      emailOptOuts: emailOptOutsForInviteKind(pending.inviteKind),
     });
     await clearUserBan(ctx, userId);
     await upsertOrgMembership(ctx, {

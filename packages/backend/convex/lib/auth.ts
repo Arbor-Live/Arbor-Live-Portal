@@ -24,10 +24,6 @@ import {
   resolveProfileMembership,
   type UserVertical,
 } from "./userVerticals";
-import {
-  resolveParticipationFlags,
-  type UserParticipationFlags,
-} from "./userParticipation";
 
 export type AuthUser = {
   _id?: string;
@@ -77,6 +73,20 @@ export async function findAuthUserById(
     })) as AuthUser | null;
   }
   return user;
+}
+
+/** Point-lookup a Better Auth user by email (used for recipient preferences). */
+export async function findAuthUserByEmail(
+  ctx: AuthCtx,
+  email: string | undefined | null,
+): Promise<AuthUser | null> {
+  const value = email?.trim().toLowerCase();
+  if (!value) return null;
+  const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: "user",
+    where: [{ field: "email", value }],
+  })) as AuthUser | null;
+  return user ?? null;
 }
 
 /**
@@ -497,9 +507,6 @@ export async function listPortalAdminEmails(ctx: AuthCtx): Promise<string[]> {
 export async function listAdminEmailsForVertical(
   ctx: AuthCtx,
   vertical: UserVertical,
-  options?: {
-    participation?: (flags: UserParticipationFlags) => boolean;
-  },
 ): Promise<string[]> {
   const emails = new Set<string>();
   for (const user of await listPortalAdminUsers(ctx)) {
@@ -507,9 +514,6 @@ export async function listAdminEmailsForVertical(
     const profile = await getUserAdminProfile(ctx, userId);
     const { verticals } = resolveProfileMembership(profile ?? {});
     if (!hasVertical(verticals, vertical)) continue;
-    if (options?.participation && !options.participation(resolveParticipationFlags(profile))) {
-      continue;
-    }
     if (user.email) emails.add(user.email.trim().toLowerCase());
   }
   return [...emails];

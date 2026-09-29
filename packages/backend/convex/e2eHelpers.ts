@@ -723,6 +723,7 @@ export const enqueueSmokeEmail = mutation({
         recipientEmail: to,
       },
     });
+    if (!notificationId) throw new Error("Failed to queue smoke email.");
     return { notificationId };
   },
 });

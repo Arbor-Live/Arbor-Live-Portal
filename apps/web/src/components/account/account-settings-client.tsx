@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   addPasskeySchema,
@@ -27,6 +28,7 @@ import {
 import { formatDate } from "@/lib/format";
 import { UserAvatarUploadPreview } from "@/components/account/user-avatar";
 import {
+  BellIcon,
   FingerprintIcon,
   KeyIcon,
   ShieldCheckIcon,
@@ -50,6 +52,110 @@ function formatPasskeyDate(value: string | Date | null | undefined) {
 
 function authErrorMessage(error: { message?: unknown }, fallback: string) {
   return typeof error.message === "string" ? error.message : fallback;
+}
+
+type EmailPreference = {
+  template: string;
+  label: string;
+  group: string;
+  enabled: boolean;
+};
+
+function EmailNotificationPreferences() {
+  const preferences = useQuery(api.account.getMyEmailPreferences, {});
+  const updatePreferences = useMutation(api.account.updateMyEmailPreferences);
+  // Optimistic per-template overrides; the reactive query becomes the source of
+  // truth once it catches up.
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  const [busyTemplate, setBusyTemplate] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (preferences === undefined) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BellIcon className="size-5" />
+            Email notifications
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">Loading email notifications…</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (preferences.length === 0) return null;
+
+  const entries = preferences.map((entry) => ({
+    ...entry,
+    enabled: overrides[entry.template] ?? entry.enabled,
+  }));
+
+  const groups = new Map<string, EmailPreference[]>();
+  for (const entry of entries) {
+    const list = groups.get(entry.group) ?? [];
+    list.push(entry);
+    groups.set(entry.group, list);
+  }
+
+  async function onToggle(template: string, enabled: boolean) {
+    setOverrides((previous) => ({ ...previous, [template]: enabled }));
+    setBusyTemplate(template);
+    setError(null);
+    const disabledTemplates = entries
+      .filter((entry) => (entry.template === template ? !enabled : !entry.enabled))
+      .map((entry) => entry.template);
+    try {
+      await updatePreferences({ disabledTemplates });
+    } catch (toggleError) {
+      setOverrides((previous) => ({ ...previous, [template]: !enabled }));
+      setError(
+        toggleError instanceof Error
+          ? toggleError.message
+          : "Unable to save your email preferences.",
+      );
+    } finally {
+      setBusyTemplate(null);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <BellIcon className="size-5" />
+          Email notifications
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {[...groups.entries()].map(([group, groupEntries]) => (
+          <div key={group} className="space-y-3">
+            <p className="text-xs font-medium text-muted-foreground">{group}</p>
+            {groupEntries.map((entry) => (
+              <div key={entry.template} className="flex items-center justify-between gap-4">
+                <Label htmlFor={`email-pref-${entry.template}`} className="font-normal">
+                  {entry.label}
+                </Label>
+                <Switch
+                  id={`email-pref-${entry.template}`}
+                  checked={entry.enabled}
+                  disabled={busyTemplate === entry.template}
+                  onCheckedChange={(checked) => void onToggle(entry.template, checked)}
+                />
+              </div>
+            ))}
+          </div>
+        ))}
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
 }
 
 export function AccountSettingsClient() {
@@ -440,6 +546,8 @@ export function AccountSettingsClient() {
           </Form>
         </CardContent>
       </Card>
+
+      <EmailNotificationPreferences />
 
       <Card>
         <CardHeader>

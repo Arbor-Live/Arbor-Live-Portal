@@ -11,9 +11,9 @@ const SCOPE_LABELS: Record<string, string> = {
   some_children: "Some contained items",
 };
 
-/** Alert Operations admins when crew file a damage report batch.
- * Recipients can opt out with the `damageReportEmails` Participation flag
- * (Advisor invite preset is off).
+/**
+ * Alert Operations admins when crew file a damage report batch. Recipients who
+ * opted out are dropped centrally in `enqueueEmail`.
  */
 export async function scheduleDamageReportAdminEmails(
   ctx: MutationCtx,
@@ -27,9 +27,7 @@ export async function scheduleDamageReportAdminEmails(
   const subject = subjectForTemplate("damage_report_admin", args.itemLabel);
   const batchKey = args.report.batchId ?? args.report._id;
 
-  for (const to of await listAdminEmailsForVertical(ctx, "Operations", {
-    participation: (flags) => flags.damageReportEmails,
-  })) {
+  for (const to of await listAdminEmailsForVertical(ctx, "Operations")) {
     await enqueueEmail(ctx, {
       template: "damage_report_admin",
       to,

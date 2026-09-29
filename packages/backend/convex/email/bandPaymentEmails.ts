@@ -62,6 +62,10 @@ export async function scheduleBandPaymentConfirmationEmail(
     },
   });
 
+  if (!notificationId) {
+    throw new Error("Failed to queue band payment confirmation email.");
+  }
+
   await ctx.scheduler.runAfter(0, internal.bandPayments.markConfirmationEmailSent, {
     paymentId: payment._id,
     notificationId,
