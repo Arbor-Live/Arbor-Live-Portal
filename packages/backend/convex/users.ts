@@ -63,6 +63,18 @@ import {
   type UserInviteKind,
   type UserParticipationFlags,
 } from "./lib/userParticipation";
+import {
+  emailOptOutsForInviteKind,
+  isConfigurableEmailTemplate,
+  resolveDisabledEmailTemplates,
+} from "./lib/emailPreferences";
+import { listUserEmailPreferences } from "./lib/emailPreferenceViewer";
+import {
+  isAlumniStatus,
+  resolveUserStatus,
+  userStatusValue,
+  type UserStatus,
+} from "./lib/userStatus";
 import { ensureOnboardingForOrgMembership, ensureOrganizationOnboarding, resolveMyOnboardingStatus } from "./onboarding";
 import {
   applyPayrollMethodToProfile,
@@ -75,6 +87,9 @@ import {
   type UserCompensationRateMode,
 } from "./lib/crewCompensation";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
+import { assertUsernameAvailable, normalizeUsername } from "./lib/username";
+import { clearUserBan, setAuthUserBanState } from "./lib/userAccess";
+import { loadAllAdminProfiles } from "./lib/userProfiles";
 import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
 import { returnActTimesToPosition } from "./lib/actPositions";
 
@@ -360,7 +375,7 @@ export async function ensureUserProfileDefaults(
   {
     title,
     phone,
-    active = true,
+    status,
     verticals = [],
     disciplines = [],
     showOnPublicCrewPage,
@@ -368,15 +383,14 @@ export async function ensureUserProfileDefaults(
     requiresOnboarding,
     includeInTimecards,
     assignableAsCrew,
-    weeklyDigest,
-    damageReportEmails,
+    emailOptOuts,
     payrollMethod,
     defaultOrganizationId,
     gradYear,
   }: {
     title?: string;
     phone?: string;
-    active?: boolean;
+    status?: UserStatus;
     verticals?: UserVertical[];
     disciplines?: UserDiscipline[];
     showOnPublicCrewPage?: boolean;
@@ -384,8 +398,7 @@ export async function ensureUserProfileDefaults(
     requiresOnboarding?: boolean;
     includeInTimecards?: boolean;
     assignableAsCrew?: boolean;
-    weeklyDigest?: boolean;
-    damageReportEmails?: boolean;
+    emailOptOuts?: string[];
     payrollMethod?: PayrollMethod;
     defaultOrganizationId?: string;
     gradYear?: number;
@@ -401,7 +414,7 @@ export async function ensureUserProfileDefaults(
     await ctx.db.patch(existing._id, {
       title: title ?? existing.title,
       phone: phone ?? existing.phone,
-      active,
+      status: status ?? existing.status,
       verticals,
       disciplines,
       showOnPublicCrewPage:
@@ -414,10 +427,8 @@ export async function ensureUserProfileDefaults(
         includeInTimecards !== undefined ? includeInTimecards : existing.includeInTimecards,
       assignableAsCrew:
         assignableAsCrew !== undefined ? assignableAsCrew : existing.assignableAsCrew,
-      weeklyDigest:
-        weeklyDigest !== undefined ? weeklyDigest : existing.weeklyDigest,
-      damageReportEmails:
-        damageReportEmails !== undefined ? damageReportEmails : existing.damageReportEmails,
+      emailOptOuts:
+        emailOptOuts !== undefined ? emailOptOuts : existing.emailOptOuts,
       payrollMethod: payrollMethod ?? existing.payrollMethod,
       defaultOrganizationId: defaultOrganizationId ?? existing.defaultOrganizationId,
       gradYear: gradYear ?? existing.gradYear,
@@ -429,7 +440,7 @@ export async function ensureUserProfileDefaults(
     userId,
     title,
     phone,
-    active,
+    status: status ?? "active",
     verticals,
     disciplines,
     showOnPublicCrewPage,
@@ -437,8 +448,7 @@ export async function ensureUserProfileDefaults(
     requiresOnboarding,
     includeInTimecards,
     assignableAsCrew,
-    weeklyDigest,
-    damageReportEmails,
+    emailOptOuts,
     payrollMethod,
     defaultOrganizationId,
     gradYear,
@@ -959,14 +969,14 @@ async function deactivateOrgMembers(
       .query("userAdminProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .unique();
-    if (existingProfile?.active !== false) {
+    if (resolveUserStatus(existingProfile) !== "alumni") {
       const existingMembership = existingProfile
         ? resolveProfileMembership(existingProfile)
         : { verticals: [], disciplines: [] };
       await ensureUserProfileDefaults(ctx, userId, {
         title: existingProfile?.title,
         phone: existingProfile?.phone,
-        active: false,
+        status: "alumni",
         verticals: existingMembership.verticals,
         disciplines: existingMembership.disciplines,
         showOnPublicCrewPage: existingProfile?.showOnPublicCrewPage,
@@ -1293,6 +1303,7 @@ export const getSessionShell = query({
         role: v.optional(v.string()),
         isAdmin: v.boolean(),
         isCrewOnly: v.boolean(),
+        status: userStatusValue,
         verticals: v.array(userVerticalValue),
         disciplines: v.array(userDisciplineValue),
       }),
@@ -1430,6 +1441,7 @@ export const getSessionShell = query({
         role: user.role ?? undefined,
         isAdmin: isAdmin(user),
         isCrewOnly: !isAdmin(user) && orgContext?.organizationType === "arbor_internal",
+        status: resolveUserStatus(profile),
         verticals: membership.verticals,
         disciplines: membership.disciplines,
       },
@@ -1532,7 +1544,7 @@ export const listWithRates = query({
         },
       ]),
     );
-    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
+    const profiles = await loadAllAdminProfiles(ctx);
     const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
     return users
       .map((user) => {
@@ -1577,7 +1589,7 @@ export const listUsersForAdmin = query({
         },
       ]),
     );
-    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
+    const profiles = await loadAllAdminProfiles(ctx);
     const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
     const orgMemberships = await ctx.db.query("userOrganizationMemberships").withIndex("by_userId").take(5000);
     const membershipsByUserId = new Map<string, typeof orgMemberships>();
@@ -1610,7 +1622,8 @@ export const listUsersForAdmin = query({
           email: user.email ?? "",
           role: user.role ?? "member",
           banned: Boolean(user.banned),
-          active: profile?.active ?? true,
+          status: resolveUserStatus(profile),
+          username: profile?.username ?? "",
           phone: profile?.phone ?? "",
           title: profile?.title ?? "",
           verticals: membership.verticals,
@@ -1620,8 +1633,6 @@ export const listUsersForAdmin = query({
           requiresOnboarding: participation.requiresOnboarding,
           includeInTimecards: participation.includeInTimecards,
           assignableAsCrew: participation.assignableAsCrew,
-          weeklyDigest: participation.weeklyDigest,
-          damageReportEmails: participation.damageReportEmails,
           defaultOrganizationId: profile?.defaultOrganizationId ?? "",
           organizationMemberships: memberships,
           rateMode: rate?.rateMode ?? null,
@@ -1632,10 +1643,13 @@ export const listUsersForAdmin = query({
       })
       .filter((user) => {
         if (!user.id) return false;
-        if (args.activeOnly && !user.active) return false;
+        if (args.activeOnly && user.status !== "active") return false;
         if (args.organizationId) {
+          // Match any membership row, not only `active` ones. Access is governed
+          // by `status`; an inactive membership must never hide a person from the
+          // admin list entirely (that is what made removed users vanish).
           const inOrg = user.organizationMemberships.some(
-            (membership) => membership.organizationId === args.organizationId && membership.active,
+            (membership) => membership.organizationId === args.organizationId,
           );
           if (!inOrg) return false;
         }
@@ -1654,6 +1668,23 @@ export const listUsersForAdmin = query({
         return haystack.includes(search);
       })
       .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+/** Applicable email notification toggles for a user, for the admin editor. */
+export const getUserEmailPreferences = query({
+  args: { userId: v.string() },
+  returns: v.array(
+    v.object({
+      template: v.string(),
+      label: v.string(),
+      group: v.string(),
+      enabled: v.boolean(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    return await listUserEmailPreferences(ctx, args.userId);
   },
 });
 
@@ -1792,7 +1823,7 @@ export const inviteUserAdmin = mutation({
     const existingUserId = existingUser ? getUserId(existingUser) : "";
     if (existingUserId) {
       await ensureUserProfileDefaults(ctx, existingUserId, {
-        active: true,
+        status: "active",
         verticals: args.verticals ?? [],
         disciplines: args.disciplines ?? [],
         defaultOrganizationId: args.organizationId,
@@ -1804,9 +1835,8 @@ export const inviteUserAdmin = mutation({
         includeInTimecards: participation?.includeInTimecards,
         assignableAsCrew: participation?.assignableAsCrew,
         showOnPublicCrewPage: participation?.showOnPublicCrewPage,
-        weeklyDigest: participation?.weeklyDigest,
-        damageReportEmails: participation?.damageReportEmails,
       });
+      await clearUserBan(ctx, existingUserId);
       await upsertOrgMembership(ctx, {
         userId: existingUserId,
         organizationId: args.organizationId,
@@ -1855,7 +1885,6 @@ export const inviteUserAdmin = mutation({
       includeInTimecards: participation?.includeInTimecards,
       assignableAsCrew: participation?.assignableAsCrew,
       showOnPublicCrewPage: participation?.showOnPublicCrewPage,
-      damageReportEmails: participation?.damageReportEmails,
       isExistingUser: Boolean(existingUserId),
     });
 
@@ -1906,7 +1935,6 @@ export const resendInviteAdmin = mutation({
       includeInTimecards: pending?.includeInTimecards,
       assignableAsCrew: pending?.assignableAsCrew,
       showOnPublicCrewPage: pending?.showOnPublicCrewPage,
-      damageReportEmails: pending?.damageReportEmails,
       isExistingUser: await userExistsForInvite(ctx, invite.email),
       resendKey: String(now),
     });
@@ -2196,7 +2224,7 @@ export const createUserAdmin = mutation({
     await ensureUserProfileDefaults(ctx, userId, {
       title: args.title?.trim() || undefined,
       phone: args.phone?.trim() || undefined,
-      active: true,
+      status: "active",
       verticals: args.verticals ?? [],
       disciplines: args.disciplines ?? [],
       defaultOrganizationId: args.organizationId,
@@ -2208,9 +2236,13 @@ export const createUserAdmin = mutation({
       includeInTimecards: participation?.includeInTimecards,
       assignableAsCrew: participation?.assignableAsCrew,
       showOnPublicCrewPage: participation?.showOnPublicCrewPage,
-      weeklyDigest: participation?.weeklyDigest,
-      damageReportEmails: participation?.damageReportEmails,
+      // Seed advisor opt-outs only on a fresh profile; never reset an existing
+      // user's preferences when an admin re-creates their account.
+      emailOptOuts: existing
+        ? undefined
+        : emailOptOutsForInviteKind(crewInvite.isArbor ? crewInvite.inviteKind : undefined),
     });
+    await clearUserBan(ctx, userId);
     await upsertOrgMembership(ctx, {
       userId,
       organizationId: args.organizationId,
@@ -2241,8 +2273,6 @@ export const createUserAdmin = mutation({
   },
 });
 
-const REMOVED_BY_ADMIN_BAN_REASON = "Removed by admin";
-
 function assertCanChangeUserAccess(
   adminUser: AuthUser,
   target: AuthUser,
@@ -2266,31 +2296,12 @@ function assertCanChangeUserAccess(
   }
 }
 
-async function setAuthUserBanState(
-  ctx: MutationCtx,
-  email: string,
-  banned: boolean,
-  now: number,
-) {
-  await ctx.runMutation(components.betterAuth.adapter.updateOne, {
-    input: {
-      model: "user",
-      where: [{ field: "email", value: email }],
-      update: {
-        banned,
-        banReason: banned ? REMOVED_BY_ADMIN_BAN_REASON : null,
-        banExpires: null,
-        updatedAt: now,
-      },
-    },
-  });
-}
-
 export const updateUserAdmin = mutation({
   args: {
     userId: v.string(),
     role: v.optional(v.string()),
-    active: v.optional(v.boolean()),
+    name: v.optional(v.string()),
+    username: v.optional(v.string()),
     phone: v.optional(v.string()),
     title: v.optional(v.string()),
     verticals: v.optional(v.array(userVerticalValue)),
@@ -2300,8 +2311,8 @@ export const updateUserAdmin = mutation({
     requiresOnboarding: v.optional(v.boolean()),
     includeInTimecards: v.optional(v.boolean()),
     assignableAsCrew: v.optional(v.boolean()),
-    weeklyDigest: v.optional(v.boolean()),
-    damageReportEmails: v.optional(v.boolean()),
+    /** Full opt-out list; the editor sends every applicable template's state. */
+    emailOptOuts: v.optional(v.array(v.string())),
     defaultOrganizationId: v.optional(v.string()),
     rateMode: v.optional(userCompensationRateModeValue),
     customHourlyRateUsd: v.optional(v.number()),
@@ -2312,7 +2323,6 @@ export const updateUserAdmin = mutation({
         v.object({
           organizationId: v.string(),
           role: v.union(v.string(), externalOrgRoleValue),
-          active: v.boolean(),
         }),
       ),
     ),
@@ -2335,16 +2345,25 @@ export const updateUserAdmin = mutation({
         },
       });
     }
+    if (args.name !== undefined) {
+      const name = args.name.trim();
+      if (!name) throw new Error("Name is required.");
+      await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+        input: {
+          model: "user",
+          where: [{ field: "email", value: target.email }],
+          update: {
+            name,
+            updatedAt: now,
+          },
+        },
+      });
+    }
 
     const existingProfile = await ctx.db
       .query("userAdminProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .unique();
-    const nextActive = args.active ?? existingProfile?.active ?? true;
-    if (args.active !== undefined && args.active !== (existingProfile?.active ?? true)) {
-      assertCanChangeUserAccess(adminUser, target, users, !args.active);
-      await setAuthUserBanState(ctx, target.email, !args.active, now);
-    }
     const existingMembership = existingProfile
       ? resolveProfileMembership(existingProfile)
       : { verticals: [], disciplines: [] };
@@ -2354,10 +2373,21 @@ export const updateUserAdmin = mutation({
         args.disciplines ?? existingMembership.disciplines,
       );
     }
+    if (args.emailOptOuts !== undefined) {
+      const unknown = args.emailOptOuts.filter(
+        (template) => !isConfigurableEmailTemplate(template),
+      );
+      if (unknown.length > 0) {
+        throw new Error(`Unknown email preference: ${unknown.join(", ")}`);
+      }
+    }
+    const disabledTemplates =
+      args.emailOptOuts !== undefined
+        ? new Set(args.emailOptOuts)
+        : resolveDisabledEmailTemplates(existingProfile);
     await ensureUserProfileDefaults(ctx, args.userId, {
       title: args.title?.trim() ?? existingProfile?.title,
       phone: args.phone ?? existingProfile?.phone,
-      active: nextActive,
       verticals: args.verticals ?? existingMembership.verticals,
       disciplines: args.disciplines ?? existingMembership.disciplines,
       showOnPublicCrewPage:
@@ -2380,17 +2410,24 @@ export const updateUserAdmin = mutation({
         args.assignableAsCrew !== undefined
           ? args.assignableAsCrew
           : existingProfile?.assignableAsCrew,
-      weeklyDigest:
-        args.weeklyDigest !== undefined
-          ? args.weeklyDigest
-          : existingProfile?.weeklyDigest,
-      damageReportEmails:
-        args.damageReportEmails !== undefined
-          ? args.damageReportEmails
-          : existingProfile?.damageReportEmails,
+      emailOptOuts: [...disabledTemplates],
       payrollMethod: args.payrollMethod ?? existingProfile?.payrollMethod,
       defaultOrganizationId: args.defaultOrganizationId ?? existingProfile?.defaultOrganizationId,
     });
+
+    // Usernames live on the profile row, which may not have existed until the
+    // call above; patch it now so a username set while creating isn't dropped.
+    if (args.username !== undefined) {
+      const username = normalizeUsername(args.username);
+      if (username) await assertUsernameAvailable(ctx, username, args.userId);
+      const profileRow = await ctx.db
+        .query("userAdminProfiles")
+        .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+        .unique();
+      if (profileRow) {
+        await ctx.db.patch(profileRow._id, { username, updatedAt: now });
+      }
+    }
 
     const nextFlags = resolveParticipationFlags({
       requiresOnboarding:
@@ -2409,14 +2446,6 @@ export const updateUserAdmin = mutation({
         args.showOnPublicCrewPage !== undefined
           ? args.showOnPublicCrewPage
           : existingProfile?.showOnPublicCrewPage,
-      weeklyDigest:
-        args.weeklyDigest !== undefined
-          ? args.weeklyDigest
-          : existingProfile?.weeklyDigest,
-      damageReportEmails:
-        args.damageReportEmails !== undefined
-          ? args.damageReportEmails
-          : existingProfile?.damageReportEmails,
     });
     if (!nextFlags.requiresOnboarding) {
       const defaultOrgId =
@@ -2448,11 +2477,19 @@ export const updateUserAdmin = mutation({
           membership.organizationId,
           membership.role,
         );
+        // Access is governed by `status`; a normal profile save must never
+        // deactivate an org membership. Preserve the existing flag.
+        const existingMembershipRow = await ctx.db
+          .query("userOrganizationMemberships")
+          .withIndex("by_userId_and_organizationId", (q) =>
+            q.eq("userId", args.userId).eq("organizationId", membership.organizationId),
+          )
+          .unique();
         await upsertOrgMembership(ctx, {
           userId: args.userId,
           organizationId: membership.organizationId,
           role: membershipRole,
-          active: membership.active,
+          active: existingMembershipRow?.active ?? true,
         });
       }
       // An explicit `role` wins; otherwise keep the global role in step with the
@@ -2465,10 +2502,10 @@ export const updateUserAdmin = mutation({
   },
 });
 
-export const setUserAccessAdmin = mutation({
+export const setUserStatusAdmin = mutation({
   args: {
     userId: v.string(),
-    removed: v.boolean(),
+    status: userStatusValue,
   },
   returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
@@ -2477,22 +2514,26 @@ export const setUserAccessAdmin = mutation({
     const target = users.find((user) => getUserId(user) === args.userId);
     if (!target?.email) throw new Error("User not found.");
 
-    assertCanChangeUserAccess(adminUser, target, users, args.removed);
-
-    const now = Date.now();
-    await setAuthUserBanState(ctx, target.email, args.removed, now);
-
     const existingProfile = await ctx.db
       .query("userAdminProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .unique();
+    const previousStatus = resolveUserStatus(existingProfile);
+
+    if (args.status === "alumni" && previousStatus !== "alumni") {
+      assertCanChangeUserAccess(adminUser, target, users, true);
+    }
+
+    const now = Date.now();
+    await setAuthUserBanState(ctx, target.email, isAlumniStatus(args.status), now);
+
     const existingMembership = existingProfile
       ? resolveProfileMembership(existingProfile)
       : { verticals: [], disciplines: [] };
     await ensureUserProfileDefaults(ctx, args.userId, {
       title: existingProfile?.title,
       phone: existingProfile?.phone,
-      active: !args.removed,
+      status: args.status,
       verticals: existingMembership.verticals,
       disciplines: existingMembership.disciplines,
       showOnPublicCrewPage: existingProfile?.showOnPublicCrewPage,
@@ -2501,6 +2542,38 @@ export const setUserAccessAdmin = mutation({
     });
 
     return { ok: true };
+  },
+});
+
+/** Inactive crew can bring themselves back the next time they sign in. */
+export const reactivateMyAccount = mutation({
+  args: {},
+  returns: v.object({ ok: v.boolean(), status: userStatusValue }),
+  handler: async (ctx) => {
+    const user = await requireAuth(ctx);
+    const userId = getUserId(user);
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    const status = resolveUserStatus(profile);
+    if (status === "alumni") {
+      throw new Error("This account was closed. Ask an admin to reactivate it.");
+    }
+    if (status === "inactive") {
+      const membership = resolveProfileMembership(profile ?? {});
+      await ensureUserProfileDefaults(ctx, userId, {
+        title: profile?.title,
+        phone: profile?.phone,
+        status: "active",
+        verticals: membership.verticals,
+        disciplines: membership.disciplines,
+        showOnPublicCrewPage: profile?.showOnPublicCrewPage,
+        publicCrewDescription: profile?.publicCrewDescription,
+        defaultOrganizationId: profile?.defaultOrganizationId,
+      });
+    }
+    return { ok: true, status: "active" as const };
   },
 });
 
@@ -2793,7 +2866,7 @@ export const listMembersForActiveOrganization = query({
     const context = await requireBandContext(ctx);
     const allUsers = await getAllAuthUsers(ctx);
     const usersById = new Map(allUsers.map((user) => [getUserId(user), user]));
-    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
+    const profiles = await loadAllAdminProfiles(ctx);
     const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
     const memberships = await ctx.db
       .query("userOrganizationMemberships")
@@ -2817,6 +2890,7 @@ export const listMembersForActiveOrganization = query({
           bandRole: membership.bandRole ?? "",
           role: membership.role,
           active: membership.active,
+          status: resolveUserStatus(profile),
           avatarUrl: imageByUserId.get(membership.userId),
           image: user?.image ?? undefined,
         };
@@ -3065,7 +3139,6 @@ export const backfillUserAdminDefaults = mutation({
       if (!userId) continue;
       await ensureUserProfileDefaults(ctx, userId, {
         title: undefined,
-        active: true,
         verticals: [],
         disciplines: [],
         defaultOrganizationId: defaultOrg.id,

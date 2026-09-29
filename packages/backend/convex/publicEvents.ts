@@ -11,6 +11,11 @@ import {
   isWithinDays,
 } from "./lib/publicEvents";
 import { isPublicSiteListableVisibility } from "./lib/eventVisibility";
+import {
+  isWebsiteVisibleDesign,
+  latestWebsiteVisibleDesign,
+  MAX_DESIGNS_PER_EVENT,
+} from "./lib/marketingDesigns";
 import { SITE_URL } from "./email/constants";
 import { loadEventHostDisplay } from "./lib/hostOrgs";
 import { getEventArtists, type EventArtist } from "./lib/eventArtists";
@@ -97,10 +102,6 @@ async function mapPublicEventCard(
     openMicSignupUrl,
     artists,
   };
-}
-
-function isWebsiteVisibleDesign(design: DesignDoc) {
-  return design.status === "published" || design.status === "ready";
 }
 
 async function loadWebsiteVisibleDesignsByEventId(ctx: QueryCtx) {
@@ -240,13 +241,11 @@ export const getByEventId = query({
     if (!isPublicSiteListableVisibility(event.visibility) || !isPublicListableEventStatus(event.status)) {
       return null;
     }
-    const design = await ctx.db
+    const designs = await ctx.db
       .query("eventMarketingDesigns")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(20);
-    const visible = design
-      .filter((row) => isWebsiteVisibleDesign(row))
-      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      .take(MAX_DESIGNS_PER_EVENT);
+    const visible = latestWebsiteVisibleDesign(designs);
 
     let venueAddress: string | undefined;
     let googleMapsUrl: string | undefined;

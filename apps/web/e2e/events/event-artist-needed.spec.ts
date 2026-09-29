@@ -10,8 +10,10 @@ test.describe("event artist needed", () => {
   }) => {
     test.setTimeout(120_000);
 
+    const caption = `E2E caption ${Date.now()}`;
     const seeded = runConvex("e2eHelpers:seedCrewedEventWithSchedule", {
       title: `E2E Artist Need ${Date.now()}`,
+      marketingCaption: caption,
     }) as { path: string; title: string };
 
     await page.goto(`${seeded.path}/artists`);
@@ -28,17 +30,31 @@ test.describe("event artist needed", () => {
     const bandContext = await browser.newContext({ storageState: bandAuthFile });
     const bandPage = await bandContext.newPage();
     await bandPage.goto("/dashboard/opportunities");
-    await expect(bandPage.getByText("Open artist needs")).toBeVisible({ timeout: 30_000 });
+    await expect(bandPage.getByRole("heading", { name: "Opportunities" })).toBeVisible({
+      timeout: 30_000,
+    });
 
-    const row = bandPage.locator("li").filter({ hasText: seeded.title }).first();
+    const row = bandPage
+      .getByTestId("opportunity-row")
+      .filter({ hasText: seeded.title })
+      .first();
     await expect(row).toBeVisible({ timeout: 20_000 });
-    await row.getByRole("button", { name: "Request to perform" }).click();
-    await bandPage.locator("textarea").fill("We would love to play this show.");
-    await bandPage.getByRole("button", { name: "Send request" }).click();
+    // The website-visible design's caption shows on the row and in the panel.
+    await expect(row).toContainText(caption);
+    await row.getByRole("button", { name: "Inquire" }).click();
+
+    const sheet = bandPage.getByTestId("opportunity-sheet");
+    await expect(sheet).toBeVisible({ timeout: 20_000 });
+    await expect(sheet.getByText(caption)).toBeVisible();
+    // A tentative event has no public page, so there is no link to it.
+    await expect(sheet.getByRole("link", { name: /View event page/ })).toHaveCount(0);
+
+    await sheet.getByLabel("Note to Operations (optional)").fill("We would love to play this show.");
+    await sheet.getByRole("button", { name: "Send inquiry" }).click();
 
     await expect(row.getByText("Requested")).toBeVisible({ timeout: 20_000 });
-    await expect(bandPage.getByText("My requests")).toBeVisible();
-    await expect(bandPage.getByText("Submitted")).toBeVisible({ timeout: 20_000 });
+    await expect(bandPage.getByRole("heading", { name: "My requests" })).toBeVisible();
+    await expect(bandPage.getByText(/submitted/i).first()).toBeVisible({ timeout: 20_000 });
 
     await page.reload();
     await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 30_000 });
@@ -50,6 +66,39 @@ test.describe("event artist needed", () => {
     await expect(page.getByText("We would love to play this show.")).toBeVisible({
       timeout: 20_000,
     });
+
+    await bandContext.close();
+  });
+
+  test("a listable show links the opportunity to its public event page", async ({ browser }) => {
+    test.setTimeout(120_000);
+
+    const caption = `E2E public caption ${Date.now()}`;
+    const posterUrl = `${process.env.E2E_BASE_URL ?? "http://localhost:3000"}/promo/coho.jpg`;
+    const seeded = runConvex("e2eHelpers:seedCrewedEventWithSchedule", {
+      title: `E2E Public Need ${Date.now()}`,
+      status: "ready",
+      marketingCaption: caption,
+      marketingImageUrl: posterUrl,
+      openPosition: true,
+    }) as { eventId: string; path: string; title: string };
+
+    const bandContext = await browser.newContext({ storageState: bandAuthFile });
+    const bandPage = await bandContext.newPage();
+    await bandPage.goto("/dashboard/opportunities");
+    const row = bandPage
+      .getByTestId("opportunity-row")
+      .filter({ hasText: seeded.title })
+      .first();
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    // The poster comes from the event's website-visible marketing design.
+    await expect(row.locator("img")).toHaveAttribute("src", posterUrl, { timeout: 20_000 });
+    await row.getByRole("button", { name: "Inquire" }).click();
+
+    const sheet = bandPage.getByTestId("opportunity-sheet");
+    const link = sheet.getByRole("link", { name: /View event page/ });
+    await expect(link).toBeVisible({ timeout: 20_000 });
+    await expect(link).toHaveAttribute("href", new RegExp(`/events/${seeded.eventId}$`));
 
     await bandContext.close();
   });

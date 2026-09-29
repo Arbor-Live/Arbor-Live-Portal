@@ -207,12 +207,12 @@ function getRoleOptionsForOrg(orgOptions: OrgOption[], orgId: string) {
 function userValuesFromRow(user: AdminUser, resolvedOrgId: string): UserAdminRowFormValues {
   return {
     role: user.role || "member",
-    active: user.active,
+    name: user.name,
+    username: user.username ?? "",
     requiresOnboarding: user.requiresOnboarding ?? true,
     includeInTimecards: user.includeInTimecards ?? true,
     assignableAsCrew: user.assignableAsCrew ?? true,
-    weeklyDigest: user.weeklyDigest ?? true,
-    damageReportEmails: user.damageReportEmails ?? true,
+    emailOptOuts: [],
     showOnPublicCrewPage: user.showOnPublicCrewPage ?? false,
     publicCrewDescription: user.publicCrewDescription ?? "",
     title: user.title || "",
@@ -281,7 +281,7 @@ export function UsersManagementClient({
   const cancelInvite = useMutation(api.users.cancelInviteAdmin);
   const createUser = useMutation(api.users.createUserAdmin);
   const sendPasswordReset = useMutation(api.users.sendPasswordResetAdmin);
-  const setUserAccess = useMutation(api.users.setUserAccessAdmin);
+  const setUserStatus = useMutation(api.users.setUserStatusAdmin);
   const backfillDefaults = useMutation(api.users.backfillUserAdminDefaults);
   const archiveBandOrganization = useMutation(api.users.archiveBandOrganizationAdmin);
   const unarchiveBandOrganization = useMutation(api.users.unarchiveBandOrganizationAdmin);
@@ -293,7 +293,7 @@ export function UsersManagementClient({
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [expandedUserIds, setExpandedUserIds] = useState<Record<string, boolean>>({});
   const [onboardingFilter, setOnboardingFilter] = useState<"all" | "incomplete">("all");
-  const [accessFilter, setAccessFilter] = useState<"active" | "removed" | "all">("active");
+  const [accessFilter, setAccessFilter] = useState<"active" | "inactive" | "alumni" | "all">("all");
   const showOrganizations = view === "all" || view === "organizations";
   const showAccess = view === "all" || view === "access";
   const showRates = view === "all";
@@ -308,10 +308,8 @@ export function UsersManagementClient({
 
   const filteredUsers = useMemo(() => {
     let list = users ?? [];
-    if (accessFilter === "active") {
-      list = list.filter((user) => user.active && !user.banned);
-    } else if (accessFilter === "removed") {
-      list = list.filter((user) => !user.active || user.banned);
+    if (accessFilter !== "all") {
+      list = list.filter((user) => user.status === accessFilter);
     }
     if (onboardingFilter !== "incomplete") return list;
     return list.filter((user) => {
@@ -368,9 +366,9 @@ export function UsersManagementClient({
           enableSorting: false,
           header: "Onboarding",
         }),
-        userColumnHelper.accessor("active", {
-          id: "active",
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Active" />,
+        userColumnHelper.accessor("status", {
+          id: "status",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
         }),
         userColumnHelper.display({
           id: "options",
@@ -496,20 +494,38 @@ export function UsersManagementClient({
     }
   }
 
-  async function onSetUserAccess(user: AdminUser, removed: boolean) {
-    const action = removed ? "Remove access for" : "Reactivate";
-    if (
-      !(await confirm({
-        title: `${action} ${user.name}?`,
-        confirmLabel: removed ? "Remove access" : "Reactivate",
-        destructive: removed,
-      }))
-    ) {
-      return;
-    }
+  async function onSetUserStatus(user: AdminUser, status: AdminUser["status"]) {
+    const copy: Record<AdminUser["status"], { title: string; description?: string; confirmLabel: string; destructive?: boolean }> = {
+      active: {
+        title: `Activate ${user.name}?`,
+        description: "They will be counted for availability and get weekly emails again.",
+        confirmLabel: "Activate",
+      },
+      inactive: {
+        title: `Mark ${user.name} inactive?`,
+        description:
+          "They keep their account and can reactivate on sign-in, but they won't be counted for availability or get weekly emails.",
+        confirmLabel: "Mark inactive",
+      },
+      alumni: {
+        title: `Close access for ${user.name}?`,
+        description:
+          "They lose dashboard access and can only be brought back by an admin. They are hidden from all pickers.",
+        confirmLabel: "Mark alumni",
+        destructive: true,
+      },
+    };
+    const { title, description, confirmLabel, destructive } = copy[status];
+    if (!(await confirm({ title, description, confirmLabel, destructive }))) return;
     try {
-      await setUserAccess({ userId: user.id, removed });
-      notify.success(removed ? `Removed access for ${user.name}.` : `Reactivated ${user.name}.`);
+      await setUserStatus({ userId: user.id, status });
+      notify.success(
+        status === "active"
+          ? `Activated ${user.name}.`
+          : status === "inactive"
+            ? `Marked ${user.name} inactive.`
+            : `Marked ${user.name} as alumni.`,
+      );
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
     }
@@ -702,15 +718,18 @@ export function UsersManagementClient({
                 <Label>Access</Label>
                 <Select
                   value={accessFilter}
-                  onValueChange={(value) => setAccessFilter(value as "active" | "removed" | "all")}
+                  onValueChange={(value) =>
+                    setAccessFilter(value as "active" | "inactive" | "alumni" | "all")
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="removed">Removed</SelectItem>
                     <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="alumni">Alumni</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -749,7 +768,7 @@ export function UsersManagementClient({
                       setExpandedUserIds((prev) => ({ ...prev, [user.id]: !prev[user.id] }))
                     }
                     onPasswordReset={() => void onUserPasswordReset(user)}
-                    onSetAccess={(removed) => void onSetUserAccess(user, removed)}
+                    onSetStatus={(status) => void onSetUserStatus(user, status)}
                     onWaiveOnboarding={async () => {
                       try {
                         await waiveOnboarding({ userId: user.id });
@@ -877,8 +896,10 @@ function SaveStatusIcon({ saveStatus, saveError }: { saveStatus: string; saveErr
   return null;
 }
 
-function isUserRemoved(user: AdminUser) {
-  return !user.active || user.banned;
+function userStatusLabel(status: AdminUser["status"]) {
+  if (status === "active") return "Active";
+  if (status === "inactive") return "Inactive";
+  return "Alumni";
 }
 
 function UserAdminRow({
@@ -889,7 +910,7 @@ function UserAdminRow({
   expanded,
   onToggleExpanded,
   onPasswordReset,
-  onSetAccess,
+  onSetStatus,
   onWaiveOnboarding,
   onMessage,
 }: {
@@ -900,7 +921,7 @@ function UserAdminRow({
   expanded: boolean;
   onToggleExpanded: () => void;
   onPasswordReset: () => void;
-  onSetAccess: (removed: boolean) => void;
+  onSetStatus: (status: AdminUser["status"]) => void;
   onWaiveOnboarding: () => Promise<void>;
   onMessage: (message: string) => void;
 }) {
@@ -908,7 +929,7 @@ function UserAdminRow({
   const updateUser = useMutation(api.users.updateUserAdmin);
   const addMembership = useMutation(api.users.addUserOrganizationMembershipAdmin);
   const removeMembership = useMutation(api.users.removeUserOrganizationMembershipAdmin);
-  const removed = isUserRemoved(user);
+  const removed = user.status !== "active";
   const [membershipDraft, setMembershipDraft] = useState<MembershipDraft>({
     organizationId: "",
     role: "org_member",
@@ -925,16 +946,44 @@ function UserAdminRow({
     form.reset(userValuesFromRow(user, resolvedOrgId));
   }, [user, resolvedOrgId, form]);
 
+  // Notification preferences are fetched on demand when the row is expanded.
+  const emailPreferences = useQuery(
+    api.users.getUserEmailPreferences,
+    expanded ? { userId: user.id } : "skip",
+  );
+  useEffect(() => {
+    if (!emailPreferences) return;
+    if (form.formState.dirtyFields.emailOptOuts) return;
+    form.setValue(
+      "emailOptOuts",
+      emailPreferences.filter((entry) => !entry.enabled).map((entry) => entry.template),
+      { shouldDirty: false },
+    );
+  }, [emailPreferences, user, form]);
+
+  function setEmailPreference(template: string, enabled: boolean) {
+    const disabled = new Set(form.getValues("emailOptOuts"));
+    if (enabled) disabled.delete(template);
+    else disabled.add(template);
+    form.setValue("emailOptOuts", [...disabled], { shouldDirty: true });
+  }
+
+  const emailOptOuts = form.watch("emailOptOuts");
+
   const persist = async (values: UserAdminRowFormValues) => {
     await updateUser({
       userId: user.id,
       role: values.role,
-      active: values.active,
+      name: values.name,
+      username: values.username,
       requiresOnboarding: values.requiresOnboarding,
       includeInTimecards: values.includeInTimecards,
       assignableAsCrew: values.assignableAsCrew,
-      weeklyDigest: values.weeklyDigest,
-      damageReportEmails: values.damageReportEmails,
+      // Only touch preferences we actually loaded (or the admin changed); a
+      // collapsed row must never wipe opt-outs the editor never displayed.
+      ...(emailPreferences !== undefined || form.formState.dirtyFields.emailOptOuts
+        ? { emailOptOuts: values.emailOptOuts }
+        : {}),
       showOnPublicCrewPage: values.showOnPublicCrewPage,
       publicCrewDescription: values.publicCrewDescription || undefined,
       title: values.title || undefined,
@@ -950,7 +999,6 @@ function UserAdminRow({
             {
               organizationId: values.defaultOrganizationId,
               role: values.role,
-              active: values.active,
             },
           ]
         : undefined,
@@ -1015,7 +1063,13 @@ function UserAdminRow({
         data-testid={`user-row-${user.id}`}
         className={`border-b align-top ${removed ? "text-muted-foreground" : ""}`}
       >
-        <td className="px-3 py-2">{user.name}</td>
+        <td className="px-3 py-2">
+          <Input
+            aria-label={`Name for ${user.email}`}
+            value={form.watch("name")}
+            onChange={(e) => form.setValue("name", e.target.value, { shouldDirty: true })}
+          />
+        </td>
         <td className="px-3 py-2">{user.email}</td>
         <td className="px-3 py-2">
           <Select
@@ -1044,17 +1098,19 @@ function UserAdminRow({
           )}
         </td>
         <td className="px-3 py-2">
-          <div className="space-y-1">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={form.watch("active")}
-                onChange={(e) => form.setValue("active", e.target.checked, { shouldDirty: true })}
-              />
-              Active
-            </label>
-            {removed ? <p className="text-xs text-muted-foreground">Removed</p> : null}
-          </div>
+          <Select
+            value={user.status}
+            onValueChange={(value) => onSetStatus(value as AdminUser["status"])}
+          >
+            <SelectTrigger aria-label={`Status for ${user.email}`} className="min-w-28">
+              <SelectValue>{userStatusLabel(user.status)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="alumni">Alumni</SelectItem>
+            </SelectContent>
+          </Select>
         </td>
         <td className="px-3 py-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -1074,8 +1130,6 @@ function UserAdminRow({
                 if (action === "reset") onPasswordReset();
                 if (action === "toggle_details") onToggleExpanded();
                 if (action === "waive") void onWaiveOnboarding();
-                if (action === "remove_access") onSetAccess(true);
-                if (action === "reactivate") onSetAccess(false);
               }}
             >
               <SelectTrigger className="min-w-35">
@@ -1088,11 +1142,6 @@ function UserAdminRow({
                 (onboarding.status === "not_started" || onboarding.status === "in_progress") ? (
                   <SelectItem value="waive">Waive onboarding</SelectItem>
                 ) : null}
-                {removed ? (
-                  <SelectItem value="reactivate">Reactivate</SelectItem>
-                ) : (
-                  <SelectItem value="remove_access">Remove access</SelectItem>
-                )}
               </SelectContent>
             </Select>
             <SaveStatusIcon saveStatus={form.saveStatus} saveError={form.saveError} />
@@ -1116,6 +1165,14 @@ function UserAdminRow({
                 <Input
                   value={form.watch("phone")}
                   onChange={(e) => form.setValue("phone", e.target.value, { shouldDirty: true })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Username</Label>
+                <Input
+                  value={form.watch("username")}
+                  placeholder="mention handle"
+                  onChange={(e) => form.setValue("username", e.target.value, { shouldDirty: true })}
                 />
               </div>
               <div data-testid={`user-rate-${user.id}`} className="space-y-1">
@@ -1150,6 +1207,9 @@ function UserAdminRow({
                     ${user.hourlyRateUsd ?? 0}/hr (synced)
                   </p>
                 )}
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Payment method</Label>
                 <Select
                   value={form.watch("payrollMethod")}
                   onValueChange={(value) =>
@@ -1280,27 +1340,51 @@ function UserAdminRow({
                     />
                     Assignable as crew
                   </label>
-                  <label className="flex items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={form.watch("weeklyDigest")}
-                      onChange={(e) =>
-                        form.setValue("weeklyDigest", e.target.checked, { shouldDirty: true })
-                      }
-                    />
-                    Weekly pending-activity digest
-                  </label>
-                  <label className="flex items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={form.watch("damageReportEmails")}
-                      onChange={(e) =>
-                        form.setValue("damageReportEmails", e.target.checked, { shouldDirty: true })
-                      }
-                    />
-                    Damage report emails
-                  </label>
                 </div>
+              </div>
+              <div className="rounded-md border p-2 md:col-span-2">
+                <p className="mb-2 text-xs font-medium">Email notifications</p>
+                {emailPreferences === undefined ? (
+                  <p className="text-xs text-muted-foreground">Loading…</p>
+                ) : emailPreferences.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No email notifications apply to this user.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {[
+                      ...emailPreferences.reduce((groups, entry) => {
+                        const list = groups.get(entry.group) ?? [];
+                        list.push(entry);
+                        groups.set(entry.group, list);
+                        return groups;
+                      }, new Map<string, typeof emailPreferences>()),
+                    ].map(([group, entries]) => (
+                      <div key={group}>
+                        <p className="mb-1 text-2xs font-medium text-muted-foreground">
+                          {group}
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {entries.map((entry) => (
+                            <label
+                              key={entry.template}
+                              className="flex items-center gap-2 text-xs"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!emailOptOuts.includes(entry.template)}
+                                onChange={(e) =>
+                                  setEmailPreference(entry.template, e.target.checked)
+                                }
+                              />
+                              {entry.label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="rounded-md border p-2 md:col-span-2">
                 <p className="mb-2 text-xs font-medium">Show publicly</p>

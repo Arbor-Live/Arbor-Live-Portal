@@ -61,12 +61,12 @@ export type AdminTeamOption = z.infer<typeof adminTeamOptionSchema>;
 export const userAdminRowSchema = z
   .object({
     role: z.string(),
-    active: z.boolean(),
+    name: z.string().min(1, "Name is required"),
+    username: z.string(),
     requiresOnboarding: z.boolean(),
     includeInTimecards: z.boolean(),
     assignableAsCrew: z.boolean(),
-    weeklyDigest: z.boolean(),
-    damageReportEmails: z.boolean(),
+    emailOptOuts: z.array(z.string()),
     showOnPublicCrewPage: z.boolean(),
     publicCrewDescription: z.string(),
     title: z.string(),

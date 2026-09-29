@@ -2,6 +2,11 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx } from "../_generated/server";
+import { findAuthUserByEmail, getUserId } from "../lib/auth";
+import {
+  isConfigurableEmailTemplate,
+  isEmailTemplateEnabled,
+} from "../lib/emailPreferences";
 import type { EmailTemplate } from "./constants";
 
 /** Coalesce rapid schedule/crew edits into one email per recipient. */
@@ -71,9 +76,38 @@ type EnqueueEmailArgs = {
   eventId?: Id<"events">;
   idempotencyKey: string;
   payload: unknown;
+  /**
+   * Explicit recipient when `to` is not their account email (e.g. a calendar
+   * invite override), so their notification preferences still apply.
+   */
+  recipientUserId?: string;
 };
 
+/**
+ * True when the recipient opted out of this template. Configurable templates are
+ * resolved to the recipient's admin profile by explicit userId, else by email.
+ * Unknown addresses (external clients, shared inboxes) are never suppressed.
+ */
+async function isRecipientOptedOut(
+  ctx: MutationCtx,
+  args: EnqueueEmailArgs,
+): Promise<boolean> {
+  if (!isConfigurableEmailTemplate(args.template)) return false;
+  let userId = args.recipientUserId?.trim();
+  if (!userId) {
+    const user = await findAuthUserByEmail(ctx, args.to);
+    userId = user ? getUserId(user) : undefined;
+  }
+  if (!userId) return false;
+  const profile = await ctx.db
+    .query("userAdminProfiles")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .unique();
+  return !isEmailTemplateEnabled(profile, args.template);
+}
+
 export async function enqueueEmail(ctx: MutationCtx, args: EnqueueEmailArgs) {
+  if (await isRecipientOptedOut(ctx, args)) return null;
   const existing = await ctx.db
     .query("emailNotifications")
     .withIndex("by_idempotencyKey", (q) => q.eq("idempotencyKey", args.idempotencyKey))
@@ -131,6 +165,8 @@ export async function enqueueDebouncedEmail(
     debounceMs?: number;
   },
 ) {
+  if (await isRecipientOptedOut(ctx, args)) return null;
+
   const debounceMs = args.debounceMs ?? EMAIL_DEBOUNCE_MS;
   const now = Date.now();
   const readyAt = now + debounceMs;

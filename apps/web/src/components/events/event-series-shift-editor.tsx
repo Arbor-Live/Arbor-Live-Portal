@@ -51,6 +51,8 @@ type EventSeriesShiftEditorProps = {
   shiftTemplates?: SeriesShiftTemplate[];
   occurrences: Array<{ _id: Id<"events">; occurrenceIndex?: number; startAt: number }>;
   onMessage: (message: string) => void;
+  /** Drop the card chrome when nested inside another section (the invoice Crew group). */
+  embedded?: boolean;
   onShiftDraftsChange?: (drafts: SeriesShiftTemplateDraft[]) => void;
   title?: string;
   description?: string;
@@ -84,6 +86,9 @@ function blocksFromTemplates(
   }));
 }
 
+const EMBEDDED_CARD =
+  "gap-3 bg-transparent py-0 ring-0 *:data-[slot=card-content]:px-0 *:data-[slot=card-header]:px-0";
+
 export function EventSeriesShiftEditor({
   seriesId,
   anchorStartAt,
@@ -96,7 +101,9 @@ export function EventSeriesShiftEditor({
   title = "Series crew shift template",
   description = "Define empty shifts once for cost estimation. Applying syncs schedule blocks and replaces unassigned shifts on selected occurrences; staffed shifts are kept.",
   billableOccurrenceCount = 1,
+  embedded = false,
 }: EventSeriesShiftEditorProps) {
+  const cardClassName = embedded ? EMBEDDED_CARD : undefined;
   const invoiceSettings = useQuery(api.invoiceSettings.get, {});
   const regenerateShifts = useMutation(api.eventSeries.regenerateFutureShifts);
   const importShifts = useMutation(api.eventSeries.importShiftsFromOccurrence);
@@ -269,7 +276,7 @@ export function EventSeriesShiftEditor({
 
   if (hideSchedule) {
     return (
-      <Card>
+      <Card className={cardClassName}>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
         </CardHeader>
@@ -284,7 +291,7 @@ export function EventSeriesShiftEditor({
 
   return (
     <>
-      <Card>
+      <Card className={cardClassName}>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
           <p className="text-sm text-muted-foreground">{description}</p>

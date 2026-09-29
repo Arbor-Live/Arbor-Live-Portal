@@ -99,17 +99,24 @@ function shiftsFromEventRows(
   }));
 }
 
+const EMBEDDED_CARD =
+  "gap-3 bg-transparent py-0 ring-0 *:data-[slot=card-content]:px-0 *:data-[slot=card-header]:px-0";
+
 export function InvoiceLinkedEventCrewSection({
   eventId,
   defaultCrewHourlyRateUsd,
   onEventCrewRowsChange,
   onMessage,
+  embedded = false,
 }: {
   eventId: Id<"events">;
   defaultCrewHourlyRateUsd: number;
   onEventCrewRowsChange: (rows: InvoiceCrewRow[]) => void;
   onMessage?: (message: string) => void;
+  /** Drop the card chrome when nested inside another section (the invoice Crew group). */
+  embedded?: boolean;
 }) {
+  const cardClassName = embedded ? EMBEDDED_CARD : undefined;
   const { confirm } = useAppDialog();
   const shell = useSessionShell();
   const viewer = useSessionViewer();
@@ -537,7 +544,7 @@ export function InvoiceLinkedEventCrewSection({
 
   if (eventData === undefined) {
     return (
-      <Card>
+      <Card className={cardClassName}>
         <CardHeader>
           <CardTitle>Crew Schedule</CardTitle>
         </CardHeader>
@@ -548,7 +555,7 @@ export function InvoiceLinkedEventCrewSection({
 
   if (!eventData) {
     return (
-      <Card>
+      <Card className={cardClassName}>
         <CardHeader>
           <CardTitle>Crew Schedule</CardTitle>
         </CardHeader>
@@ -562,7 +569,7 @@ export function InvoiceLinkedEventCrewSection({
 
   return (
     <>
-    <Card>
+    <Card className={cardClassName}>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle>Crew Schedule</CardTitle>

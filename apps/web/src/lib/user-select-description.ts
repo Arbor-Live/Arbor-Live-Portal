@@ -37,6 +37,7 @@ export type UserSelectSource = {
   name: string;
   email?: string | null;
   role?: string | null;
+  status?: "active" | "inactive" | "alumni" | null;
   pronouns?: string | null;
   gradYear?: number | null;
   rateMode?: "normal" | "lead" | "custom" | string | null;
@@ -53,6 +54,7 @@ export function toUserSelectOption(entry: UserSelectSource): UserSelectOption {
     avatarUrl: pickUserProfileImageUrl(entry.avatarUrl, entry.image),
     role: entry.role ?? undefined,
     email: entry.email ?? undefined,
+    status: entry.status ?? undefined,
   };
 }
 

@@ -8,6 +8,7 @@ import {
   isUpcomingEvent,
 } from "./publicEvents";
 import { isPublicSiteListableVisibility } from "./eventVisibility";
+import { isWebsiteVisibleDesign } from "./marketingDesigns";
 import { loadEventHostDisplay } from "./hostOrgs";
 import { resolveStoredR2AssetUrl } from "../inventoryR2";
 
@@ -55,10 +56,6 @@ export function isEventInNewsletterWindow(
   return startAt >= now && startAt < newsletterWindowEnd(now, days);
 }
 
-function websiteVisibleDesign(design: Doc<"eventMarketingDesigns">) {
-  return design.status === "published" || design.status === "ready";
-}
-
 async function loadVisibleDesignsByEventId(ctx: QueryCtx) {
   const [published, ready] = await Promise.all([
     ctx.db
@@ -72,7 +69,7 @@ async function loadVisibleDesignsByEventId(ctx: QueryCtx) {
   ]);
   const byEventId = new Map<string, Doc<"eventMarketingDesigns">>();
   for (const design of [...published, ...ready]) {
-    if (!websiteVisibleDesign(design)) continue;
+    if (!isWebsiteVisibleDesign(design)) continue;
     const existing = byEventId.get(design.eventId);
     if (!existing || design.updatedAt > existing.updatedAt) {
       byEventId.set(design.eventId, design);

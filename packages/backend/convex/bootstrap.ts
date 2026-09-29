@@ -241,14 +241,14 @@ export const setupFirstAdmin = mutation({
       .unique();
     if (existingUserProfile) {
       await ctx.db.patch(existingUserProfile._id, {
-        active: true,
+        status: "active",
         defaultOrganizationId: organizationId,
         updatedAt: now,
       });
     } else {
       await ctx.db.insert("userAdminProfiles", {
         userId,
-        active: true,
+        status: "active",
         verticals: [],
         disciplines: [],
         defaultOrganizationId: organizationId,

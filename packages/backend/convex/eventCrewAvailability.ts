@@ -22,6 +22,8 @@ import {
   resolveProfileMembership,
 } from "./lib/userVerticals";
 import { resolveParticipationFlags } from "./lib/userParticipation";
+import { resolveUserStatus } from "./lib/userStatus";
+import { loadAllAdminProfiles } from "./lib/userProfiles";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { loadEventHostDisplay } from "./lib/hostOrgs";
 import { isSectionBlockType } from "./lib/scheduleBlockTypes";
@@ -89,11 +91,11 @@ function toUserSummary(
 }
 
 async function getActiveCrewProfiles(ctx: QueryCtx) {
-  const profiles = await ctx.db
-    .query("userAdminProfiles")
-    .withIndex("by_active", (q) => q.eq("active", true))
-    .take(500);
+  // Filter by `resolveUserStatus` (not the `by_status` index) so a profile
+  // written before the status backfill still counts as active.
+  const profiles = await loadAllAdminProfiles(ctx);
   return profiles.filter((profile) => {
+    if (resolveUserStatus(profile) !== "active") return false;
     if (!resolveParticipationFlags(profile).assignableAsCrew) return false;
     return hasCrewSpecialty(resolveProfileMembership(profile).disciplines);
   });
@@ -375,6 +377,7 @@ export const listForCrewMember = query({
     const userId = getUserId(user);
 
     const profile = await getCurrentUserProfile(ctx, userId);
+    if (resolveUserStatus(profile) !== "active") return [];
     if (!profileHasCrewSpecialty(profile ?? {})) return [];
     const userDisciplines = getDisciplinesForEventMatching(
       resolveProfileMembership(profile ?? {}).disciplines,
@@ -601,6 +604,9 @@ export const submitResponse = mutation({
     }
 
     const profile = await getCurrentUserProfile(ctx, userId);
+    if (resolveUserStatus(profile) !== "active") {
+      throw new Error("Reactivate your account before responding to availability.");
+    }
     if (!profileHasCrewSpecialty(profile ?? {})) {
       throw new Error("Availability is limited to crew specialties.");
     }

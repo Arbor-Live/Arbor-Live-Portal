@@ -680,6 +680,87 @@ export const finalizeApprovedDraftInvoices = migrations.define({
 });
 
 /**
+ * Backfill `status` on userAdminProfiles from the legacy `active` boolean.
+ * `active: false` meant "removed" (banned) which is the new `alumni` state.
+ */
+export const backfillUserProfileStatus = migrations.define({
+  table: "userAdminProfiles",
+  migrateOne: async (_ctx, profile) => {
+    if (profile.status) return;
+    return {
+      status: profile.active === false ? ("alumni" as const) : ("active" as const),
+      updatedAt: Date.now(),
+    };
+  },
+});
+
+/**
+ * Consolidate the legacy `weeklyDigest` / `damageReportEmails` profile flags
+ * into the single `emailOptOuts` list. Idempotent: profiles that already carry
+ * an opt-out list are left alone.
+ *
+ * Reads the removed fields through a widened type so this keeps compiling after
+ * the schema narrowed; it is already complete on deployments that ran it.
+ */
+export const backfillUserEmailOptOuts = migrations.define({
+  table: "userAdminProfiles",
+  migrateOne: async (_ctx, profile) => {
+    if (profile.emailOptOuts !== undefined) return;
+    const legacy = profile as Doc<"userAdminProfiles"> & {
+      weeklyDigest?: boolean;
+      damageReportEmails?: boolean;
+    };
+    const emailOptOuts: string[] = [];
+    if (legacy.weeklyDigest === false) emailOptOuts.push("weekly_digest");
+    // Advisor presets historically omitted `damageReportEmails` while setting
+    // the three crew flags false; treat that as opted out of damage reports.
+    const damageReportOff =
+      legacy.damageReportEmails === false ||
+      (legacy.damageReportEmails === undefined &&
+        legacy.requiresOnboarding === false &&
+        legacy.includeInTimecards === false &&
+        legacy.assignableAsCrew === false);
+    if (damageReportOff) emailOptOuts.push("damage_report_admin");
+    return { emailOptOuts, updatedAt: Date.now() };
+  },
+});
+
+/**
+ * Widen → migrate → narrow, step 2: drop the deprecated profile flags now that
+ * `backfillUserEmailOptOuts` has copied them across. The fields are gone from
+ * the schema, so this reads/writes them through a widened type; it is already
+ * complete on deployments that ran it.
+ */
+export const unsetLegacyUserEmailFlags = migrations.define({
+  table: "userAdminProfiles",
+  migrateOne: async (_ctx, profile) => {
+    const legacy = profile as Doc<"userAdminProfiles"> & {
+      weeklyDigest?: boolean;
+      damageReportEmails?: boolean;
+    };
+    if (legacy.weeklyDigest === undefined && legacy.damageReportEmails === undefined) {
+      return;
+    }
+    return {
+      weeklyDigest: undefined,
+      damageReportEmails: undefined,
+    } as unknown as Partial<Doc<"userAdminProfiles">>;
+  },
+});
+
+/** Widen → migrate → narrow, step 2: drop the deprecated pending-invite flag. */
+export const unsetLegacyPendingInviteEmailFlags = migrations.define({
+  table: "pendingUserInvites",
+  migrateOne: async (_ctx, row) => {
+    const legacy = row as Doc<"pendingUserInvites"> & { damageReportEmails?: boolean };
+    if (legacy.damageReportEmails === undefined) return;
+    return { damageReportEmails: undefined } as unknown as Partial<
+      Doc<"pendingUserInvites">
+    >;
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -712,6 +793,10 @@ const MIGRATION_SERIES = [
   internal.migrations.backfillRunOfShowNeedBlocks,
   internal.migrations.giveEveryActAPosition,
   internal.migrations.finalizeApprovedDraftInvoices,
+  internal.migrations.backfillUserProfileStatus,
+  internal.migrations.backfillUserEmailOptOuts,
+  internal.migrations.unsetLegacyUserEmailFlags,
+  internal.migrations.unsetLegacyPendingInviteEmailFlags,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

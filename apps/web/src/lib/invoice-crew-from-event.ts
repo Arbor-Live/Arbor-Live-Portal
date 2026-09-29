@@ -17,7 +17,12 @@ export type CrewAssigneeRate = {
 
 export type InvoiceCrewRow = {
   label: string;
+  /** Billed person-hours. On hand-entered rows it's `hours × people`. */
   quantity: string;
+  /** Hand-entered rows: hours each person works (e.g. a 3-hr load-in). */
+  hours?: string;
+  /** Hand-entered rows: people on it (4 on load-in, 2 during, 4 on strike). */
+  people?: string;
   /** Billed $/hr for this row (assignee rate, open-slot default, or manual). */
   rateUsd?: string;
   source?: "event" | "manual";

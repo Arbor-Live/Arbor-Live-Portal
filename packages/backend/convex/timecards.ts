@@ -4,6 +4,8 @@ import { query } from "./_generated/server";
 import { findAuthUsersByIds, getUserId, requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { isStaffMember, resolveProfileMembership } from "./lib/userVerticals";
 import { resolveParticipationFlags } from "./lib/userParticipation";
+import { isAlumniStatus, resolveUserStatus } from "./lib/userStatus";
+import { loadAllAdminProfiles } from "./lib/userProfiles";
 import { buildTimecardPeriodSummaryForUser, buildUserTimecards } from "./lib/userTimecards";
 
 const timecardEventValue = v.object({
@@ -76,11 +78,11 @@ export const listCrewTimecardOverview = query({
     const periodIndex = Math.min(Math.max(args.periodIndex ?? 0, 0), periods.length - 1);
     const period = periods[periodIndex]!;
 
-    const profiles = await ctx.db
-      .query("userAdminProfiles")
-      .withIndex("by_active", (q) => q.eq("active", true))
-      .take(500);
+    const profiles = await loadAllAdminProfiles(ctx);
     const crewProfiles = profiles.filter((profile) => {
+      // Inactive crew stay (they can still be assigned and owe timecards);
+      // alumni are removed from every surface but the Users list.
+      if (isAlumniStatus(resolveUserStatus(profile))) return false;
       if (!resolveParticipationFlags(profile).includeInTimecards) return false;
       return isStaffMember(resolveProfileMembership(profile));
     });

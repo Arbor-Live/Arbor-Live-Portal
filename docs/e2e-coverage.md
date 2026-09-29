@@ -41,6 +41,7 @@ the URL looks like cloud.
 | **15** | [#248](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/248) | Warehouse print queue: `print-queue.spec.ts` seeds a printer and an event, drives the real enqueue→render path to `ready`, asserts the queue page shows the printer and job and that Reprint queues a second copy, then downloads the brief from the event editor. New seeds: `seedPrinter`, `enqueueBriefForEvent`, `getPrintQueueState`. |
 | **16** | [#255](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/255) | Event editor Brief menu: `View` downloads the brief PDF and `Print` queues it for the warehouse printer; `print-queue.spec.ts` covers both menu actions. Also fixes the print agent matching a bare `ipps` backend scheme instead of a real `ipp://` device URI. |
 | **17** | [#321](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/321) | The bill: one Artists-tab card where each position is either an open slot (name/type/vibe/status + inquiries) or a filled act (set + soundcheck windows, payout). `events/event-artist-needed.spec.ts` opens a position, has a band request to perform from `/dashboard/opportunities`, asserts it flips to inquiring with the message visible to staff, and asserts the band sees their set and soundcheck windows on "Your shows". Also covers the band-only guard on that page. Moved the bill and riders off Overview, so `event-band-riders.spec.ts` and `band-shows-home.spec.ts` now navigate to `/artists`. |
+| **18** | [#362](https://github.com/Arbor-Live/Arbor-Live-Portal/issues/362) | Opportunities redesign: `/dashboard/opportunities` is rows plus a side panel. `events/event-artist-needed.spec.ts` now inquires from the panel and asserts the event's marketing caption renders (tentative event has no public-page link); a second case seeds a public `ready` show and asserts the panel's "View event page" link points at `/events/<id>`. |
 
 ## Status legend
 
@@ -473,7 +474,7 @@ asserts sibling occurrences were not modified.
 `events/event-edit-dry-hire.spec.ts` ("quick-add delivery/return") and
 `quotes/invoice-finalize.spec.ts` each failed once in a 104-test local run and
 passed on a targeted re-run. Both die waiting for an element that a click should
-have produced instantly — `Add artist row` only appends to local state — so the
+have produced instantly — the editor's Add line → Artist only appends to local state — so the
 click landed before hydration. That is the dev-mode race
 [`scripts/e2e-run.mjs`](../scripts/e2e-run.mjs) documents when it explains why CI
 builds for production; CI's `retries: 2` absorbs it. Worth hardening if either

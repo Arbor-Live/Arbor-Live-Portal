@@ -9,6 +9,26 @@ import { expect, type Page } from "@playwright/test";
  * persisted state via `pollConvex` rather than counting saves.
  */
 
+/**
+ * The saved editor's title: the invoice number (`ALINV-…`). `/invoices/new`
+ * shows "Create invoice" until the first save.
+ */
+export function invoiceEditorHeading(page: Page) {
+  return page.getByRole("heading", { level: 1, name: /^ALINV-/ });
+}
+
+/** Add a line from the line-items card's Add menu, e.g. "Artist", "External rental", "Fee". */
+export async function addInvoiceLine(page: Page, kind: string) {
+  await page.getByTestId("invoice-add-line").click();
+  await page.getByRole("menuitem", { name: kind, exact: true }).click();
+}
+
+/** Run an item from the header's `⋯` menu, located by its test id. */
+export async function openInvoiceMenuItem(page: Page, testId: string) {
+  await page.getByRole("button", { name: "More invoice actions" }).click();
+  await page.getByTestId(testId).click();
+}
+
 /** Save the editor and wait for the sticky bar to settle. */
 export async function saveInvoiceEditor(page: Page) {
   const saveButton = page.getByRole("button", { name: "Save", exact: true });
@@ -32,10 +52,10 @@ export async function createDraftInvoiceWithArtistLine(
   options: { label: string; quantity?: string; rate?: string },
 ): Promise<string> {
   await page.goto("/dashboard/financial-hub/invoices/new");
-  await expect(page.getByText("Create Invoice").first()).toBeVisible({ timeout: 25_000 });
+  await expect(page.getByText("Create invoice").first()).toBeVisible({ timeout: 25_000 });
   await expect(page.getByText(/E2E Admin/i).first()).toBeVisible({ timeout: 25_000 });
 
-  await page.getByRole("button", { name: "Add artist row" }).click();
+  await addInvoiceLine(page, "Artist");
   const row = page.getByTestId("invoice-row-artist-0");
   await row.getByPlaceholder("Artist / role").fill(options.label);
   await row.getByPlaceholder("People").fill(options.quantity ?? "1");
@@ -56,7 +76,7 @@ export async function createDraftInvoiceWithArtistLine(
   // explicit load collapses that into a single hydration this helper can wait
   // out.
   await page.goto(`/dashboard/financial-hub/invoices/${invoiceId}`);
-  await expect(page.getByRole("heading", { name: "Edit Invoice" })).toBeVisible({
+  await expect(invoiceEditorHeading(page)).toBeVisible({
     timeout: 60_000,
   });
   await expect(
@@ -76,7 +96,7 @@ export async function createDraftInvoiceWithArtistLine(
  * full timeout even though the URL and the heading have already changed.
  */
 export async function waitForInvoiceEditorUrl(page: Page) {
-  await expect(page.getByRole("heading", { name: "Edit Invoice" })).toBeVisible({
+  await expect(invoiceEditorHeading(page)).toBeVisible({
     timeout: 60_000,
   });
   await expect

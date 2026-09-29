@@ -5,6 +5,8 @@ import { internalAction, mutation, query, type MutationCtx } from "./_generated/
 import { createAuth } from "./auth";
 import { SITE_URL } from "./email/constants";
 import { getUserId, requireAuth } from "./lib/auth";
+import { isConfigurableEmailTemplate } from "./lib/emailPreferences";
+import { listUserEmailPreferences } from "./lib/emailPreferenceViewer";
 import { assertUsernameAvailable, normalizeUsername } from "./lib/username";
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
@@ -54,6 +56,60 @@ export const getMyAccount = query({
       pronouns: profile?.pronouns,
       gradYear: profile?.gradYear,
     };
+  },
+});
+
+export const getMyEmailPreferences = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      template: v.string(),
+      label: v.string(),
+      group: v.string(),
+      enabled: v.boolean(),
+    }),
+  ),
+  handler: async (ctx) => {
+    const user = await requireAuth(ctx);
+    return await listUserEmailPreferences(ctx, getUserId(user));
+  },
+});
+
+export const updateMyEmailPreferences = mutation({
+  args: { disabledTemplates: v.array(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    const userId = getUserId(user);
+    const unknown = args.disabledTemplates.filter(
+      (template) => !isConfigurableEmailTemplate(template),
+    );
+    if (unknown.length > 0) {
+      throw new Error(`Unknown email preference: ${unknown.join(", ")}`);
+    }
+    const disabled = [...new Set(args.disabledTemplates)];
+    const now = Date.now();
+    const fields = {
+      emailOptOuts: disabled,
+      updatedAt: now,
+    };
+    const existing = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, fields);
+      return null;
+    }
+    await ctx.db.insert("userAdminProfiles", {
+      userId,
+      status: "active",
+      verticals: [],
+      disciplines: [],
+      createdAt: now,
+      ...fields,
+    });
+    return null;
   },
 });
 
@@ -121,7 +177,7 @@ export const setMyAvatar = mutation({
     } else {
       await ctx.db.insert("userAdminProfiles", {
         userId,
-        active: true,
+        status: "active",
         verticals: [],
         disciplines: [],
         avatarStorageId: args.storageId,
@@ -201,7 +257,7 @@ export const updateMyProfileDetails = mutation({
       ...(usernameProvided ? { username } : {}),
       pronouns,
       gradYear,
-      active: true,
+      status: "active",
       verticals: [],
       disciplines: [],
       createdAt: now,

@@ -192,6 +192,7 @@ export async function scheduleCrewScheduledEmails(
     await enqueueDebouncedEmail(ctx, {
       template: "crew_unscheduled",
       to: recipient.email,
+      recipientUserId: userId,
       subject: subjectForTemplate("crew_unscheduled", event.title),
       eventId,
       debounceKey: `crew_unscheduled:${eventId}:${userId}`,
@@ -313,6 +314,7 @@ export async function scheduleCrewScheduledEmails(
     await enqueueDebouncedEmail(ctx, {
       template: "crew_scheduled",
       to: recipient.email,
+      recipientUserId: userId,
       subject,
       eventId,
       debounceKey: `crew_scheduled:${eventId}:${userId}`,

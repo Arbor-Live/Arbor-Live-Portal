@@ -9,6 +9,7 @@ export type UserAdminState = {
   authRole: string;
   banned: boolean;
   active: boolean;
+  status: "active" | "inactive" | "alumni";
   title: string;
   phone: string;
   verticals: string[];
@@ -92,14 +93,15 @@ export async function openUserRow(page: Page, userId: string): Promise<Locator> 
 
 /**
  * Cells of a Users table row, by the column headers the table itself renders:
- * Name, Email, Role, Onboarding, Active, Options.
+ * Name, Email, Role, Onboarding, Status, Options.
  *
- * Title / Phone / Hourly Rate / Default Org live in the expanded details panel
- * (`user-details-{id}` / `user-rate-{id}`).
+ * Title / Phone / Username / Hourly Rate / Default Org live in the expanded
+ * details panel (`user-details-{id}` / `user-rate-{id}`).
  */
 export const userRowCell = {
+  name: (row: Locator) => row.locator("td").nth(0),
   role: (row: Locator) => row.locator("td").nth(2),
-  active: (row: Locator) => row.locator("td").nth(4),
+  status: (row: Locator) => row.locator("td").nth(4),
   options: (row: Locator) => row.locator("td").nth(5),
 };
 
@@ -117,10 +119,9 @@ export function userRowSave(row: Locator) {
 }
 
 /**
- * The row's "Select..." menu (reset password, show details, waive onboarding,
- * remove access / reactivate). Drive it with `chooseRowAction`, not
- * `pickSelectOption` — its value is pinned to `""`, so the trigger text never
- * changes.
+ * The row's "Select..." menu (reset password, show details, waive onboarding).
+ * Drive it with `chooseRowAction`, not `pickSelectOption` — its value is pinned
+ * to `""`, so the trigger text never changes.
  */
 export function userRowActionMenu(row: Locator) {
   return userRowCell.options(row).locator("[data-slot='select-trigger']");
@@ -131,7 +132,27 @@ export function userRowRoleSelect(row: Locator) {
   return userRowCell.role(row).locator("[data-slot='select-trigger']");
 }
 
-/** The "Access" filter above the Users table (Active / Removed / All). */
+/** The Status select (Active / Inactive / Alumni) in a Users table row. */
+export function userRowStatusSelect(row: Locator) {
+  return userRowCell.status(row).locator("[data-slot='select-trigger']");
+}
+
+/**
+ * Pick a status from the row's Status select. Changing status opens a confirm
+ * dialog, so this does NOT wait for the trigger text to change (the caller must
+ * accept the dialog, which is what commits the change).
+ */
+export async function chooseRowStatus(page: Page, row: Locator, statusName: string) {
+  await userRowStatusSelect(row).click();
+  const option = page.getByRole("option", { name: statusName, exact: true });
+  await expect(option).toBeVisible({ timeout: 20_000 });
+  await option.click();
+  await expect(page.getByRole("option", { name: statusName, exact: true })).toHaveCount(0, {
+    timeout: 20_000,
+  });
+}
+
+/** The "Access" filter above the Users table (All / Active / Inactive / Alumni). */
 export function accessFilterSelect(page: Page) {
   return page
     .locator("div.space-y-1")

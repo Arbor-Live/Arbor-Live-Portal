@@ -12,6 +12,7 @@ import {
   resolveUserCompensationHourlyRateUsd,
 } from "./lib/crewCompensation";
 import { resolveProfileMembership } from "./lib/userVerticals";
+import { resolveUserStatus } from "./lib/userStatus";
 import { assertE2eHelpersEnabled } from "./lib/e2eGuard";
 import { findAuthUsersByIds } from "./lib/auth";
 import {
@@ -30,6 +31,7 @@ import {
   allocateRequestNumber,
 } from "./lib/publicReferenceIds";
 import { listFulfillmentPackageBom } from "./lib/packageBom";
+import { eventStatusValue } from "./lib/eventStatus";
 
 const makeToken = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 24);
 const makeInvoiceSuffix = customAlphabet(
@@ -233,14 +235,14 @@ export const ensureAdmin = mutation({
       .unique();
     if (existingUserProfile) {
       await ctx.db.patch(existingUserProfile._id, {
-        active: true,
+        status: "active",
         defaultOrganizationId: organizationId,
         updatedAt: now,
       });
     } else {
       await ctx.db.insert("userAdminProfiles", {
         userId,
-        active: true,
+        status: "active",
         verticals: [],
         disciplines: [],
         defaultOrganizationId: organizationId,
@@ -721,6 +723,7 @@ export const enqueueSmokeEmail = mutation({
         recipientEmail: to,
       },
     });
+    if (!notificationId) throw new Error("Failed to queue smoke email.");
     return { notificationId };
   },
 });
@@ -768,7 +771,7 @@ async function ensureE2eContactUser(
   } else {
     await ctx.db.insert("userAdminProfiles", {
       userId,
-      active: true,
+      status: "active",
       phone: args.phone,
       createdAt: now,
       updatedAt: now,
@@ -785,6 +788,14 @@ export const seedCrewedEventWithSchedule = mutation({
      * `assertTraineeIntroReady` requires before a trainee can be assigned.
      */
     traineeReady: v.optional(v.boolean()),
+    /** Event lifecycle status; defaults to tentative (no public event page). */
+    status: v.optional(eventStatusValue),
+    /** Adds a published marketing design with this caption (website-visible). */
+    marketingCaption: v.optional(v.string()),
+    /** Poster for that design; an http(s) URL is stored as-is. */
+    marketingImageUrl: v.optional(v.string()),
+    /** Seeds one open artist position on the event. */
+    openPosition: v.optional(v.boolean()),
   },
   returns: v.object({
     eventId: v.id("events"),
@@ -800,7 +811,7 @@ export const seedCrewedEventWithSchedule = mutation({
     const title = args.title?.trim() || `E2E Seeded Event ${now}`;
     const eventId = await ctx.db.insert("events", {
       title,
-      status: "tentative",
+      status: args.status ?? "tentative",
       visibility: "public",
       publicToken: makeToken(),
       startAt,
@@ -841,6 +852,32 @@ export const seedCrewedEventWithSchedule = mutation({
         updatedAt: now,
       });
       blockIds.push(blockId);
+    }
+
+    if (args.marketingCaption) {
+      await ctx.db.insert("eventMarketingDesigns", {
+        eventId,
+        status: "published",
+        caption: args.marketingCaption,
+        imageUrl: args.marketingImageUrl,
+        createdByUserId: "e2e",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    if (args.openPosition) {
+      await ctx.db.insert("eventArtistNeeds", {
+        eventId,
+        sortOrder: now,
+        label: "Headliner",
+        artistType: "no_preference",
+        genres: "indie, jazz",
+        status: "open",
+        createdByUserId: "e2e",
+        createdAt: now,
+        updatedAt: now,
+      });
     }
 
     if (args.traineeReady) {
@@ -2029,7 +2066,7 @@ export const ensureCrewUser = mutation({
       .unique();
     if (existingUserProfile) {
       await ctx.db.patch(existingUserProfile._id, {
-        active: true,
+        status: "active",
         verticals: ["Crew"],
         disciplines: ["Sound"],
         defaultOrganizationId: organizationId,
@@ -2042,7 +2079,7 @@ export const ensureCrewUser = mutation({
     } else {
       await ctx.db.insert("userAdminProfiles", {
         userId,
-        active: true,
+        status: "active",
         verticals: ["Crew"],
         disciplines: ["Sound"],
         defaultOrganizationId: organizationId,
@@ -5243,6 +5280,7 @@ export const getUserAdminStateByEmail = query({
       authRole: v.string(),
       banned: v.boolean(),
       active: v.boolean(),
+      status: v.string(),
       title: v.string(),
       phone: v.string(),
       verticals: v.array(v.string()),
@@ -5302,7 +5340,8 @@ export const getUserAdminStateByEmail = query({
       email: user.email ?? email,
       authRole: user.role ?? "",
       banned: Boolean(user.banned),
-      active: profile?.active ?? true,
+      active: resolveUserStatus(profile) === "active",
+      status: resolveUserStatus(profile),
       title: profile?.title ?? "",
       phone: profile?.phone ?? "",
       verticals: membership.verticals as string[],
@@ -6505,7 +6544,7 @@ export const setUserAdminProfileFields = mutation({
         userId,
         title: args.title?.trim() || undefined,
         phone: args.phone?.trim() || undefined,
-        active: true,
+        status: "active",
         createdAt: now,
         updatedAt: now,
       });

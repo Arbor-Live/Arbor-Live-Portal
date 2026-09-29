@@ -14,8 +14,10 @@ import {
   type UserVertical,
 } from "./lib/userVerticals";
 import { resolveParticipationFlags } from "./lib/userParticipation";
+import { emailOptOutsForInviteKind } from "./lib/emailPreferences";
 import { isArtistOrganizationType } from "./lib/organizationType";
 import { resolveGlobalRoleForOrganization } from "./lib/globalRole";
+import { clearUserBan } from "./lib/userAccess";
 import { ensureOnboardingForOrgMembership } from "./onboarding";
 import {
   applyPayrollMethodToProfile,
@@ -49,7 +51,7 @@ async function ensureUserProfileDefaults(
     includeInTimecards?: boolean;
     assignableAsCrew?: boolean;
     showOnPublicCrewPage?: boolean;
-    damageReportEmails?: boolean;
+    emailOptOuts?: string[];
   },
 ) {
   const now = Date.now();
@@ -59,7 +61,7 @@ async function ensureUserProfileDefaults(
     .unique();
   if (existing) {
     await ctx.db.patch(existing._id, {
-      active: true,
+      status: "active",
       verticals: args.verticals ?? existing.verticals ?? [],
       disciplines: args.disciplines ?? existing.disciplines ?? [],
       defaultOrganizationId: args.defaultOrganizationId ?? existing.defaultOrganizationId,
@@ -79,17 +81,15 @@ async function ensureUserProfileDefaults(
         args.showOnPublicCrewPage !== undefined
           ? args.showOnPublicCrewPage
           : existing.showOnPublicCrewPage,
-      damageReportEmails:
-        args.damageReportEmails !== undefined
-          ? args.damageReportEmails
-          : existing.damageReportEmails,
+      emailOptOuts:
+        args.emailOptOuts !== undefined ? args.emailOptOuts : existing.emailOptOuts,
       updatedAt: now,
     });
     return;
   }
   await ctx.db.insert("userAdminProfiles", {
     userId,
-    active: true,
+    status: "active",
     verticals: args.verticals ?? [],
     disciplines: args.disciplines ?? [],
     defaultOrganizationId: args.defaultOrganizationId,
@@ -99,7 +99,7 @@ async function ensureUserProfileDefaults(
     includeInTimecards: args.includeInTimecards,
     assignableAsCrew: args.assignableAsCrew,
     showOnPublicCrewPage: args.showOnPublicCrewPage,
-    damageReportEmails: args.damageReportEmails,
+    emailOptOuts: args.emailOptOuts,
     createdAt: now,
     updatedAt: now,
   });
@@ -287,8 +287,9 @@ export const acceptInviteWithPassword = mutation({
       includeInTimecards: pending.includeInTimecards,
       assignableAsCrew: pending.assignableAsCrew,
       showOnPublicCrewPage: pending.showOnPublicCrewPage,
-      damageReportEmails: pending.damageReportEmails,
+      emailOptOuts: emailOptOutsForInviteKind(pending.inviteKind),
     });
+    await clearUserBan(ctx, userId);
     await upsertOrgMembership(ctx, {
       userId,
       organizationId: pending.organizationId,

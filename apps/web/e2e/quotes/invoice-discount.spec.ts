@@ -1,6 +1,11 @@
 import { test, expect } from "@playwright/test";
 import { pollConvex } from "../helpers/convex";
-import { createDraftInvoiceWithArtistLine, readTotal, saveInvoiceEditor } from "../helpers/invoice";
+import {
+  createDraftInvoiceWithArtistLine,
+  invoiceEditorHeading,
+  readTotal,
+  saveInvoiceEditor,
+} from "../helpers/invoice";
 
 type TotalsState = {
   discountType: string;
@@ -33,7 +38,7 @@ test.describe("invoice discounts", () => {
     });
 
     // 10% of $200 = $20 off, total $180.
-    await page.getByTestId("invoice-discount-type").selectOption("percent");
+    await page.getByTestId("invoice-discount-type").getByRole("radio", { name: "Percent" }).click();
     await page.getByTestId("invoice-discount-value").fill("10");
 
     await expect.poll(() => readTotal(page, "invoice-total-grand"), { timeout: 15_000 }).toBe(180);
@@ -57,7 +62,7 @@ test.describe("invoice discounts", () => {
 
     // A flat discount larger than the subtotal floors the total at $0 rather
     // than producing a negative invoice.
-    await page.getByTestId("invoice-discount-type").selectOption("amount");
+    await page.getByTestId("invoice-discount-type").getByRole("radio", { name: "Amount" }).click();
     await page.getByTestId("invoice-discount-value").fill("500");
 
     await expect.poll(() => readTotal(page, "invoice-total-grand"), { timeout: 15_000 }).toBe(0);
@@ -82,7 +87,7 @@ test.describe("invoice discounts", () => {
       rate: "200",
     });
 
-    await page.getByTestId("invoice-discount-type").selectOption("amount");
+    await page.getByTestId("invoice-discount-type").getByRole("radio", { name: "Amount" }).click();
     const discountInput = page.getByTestId("invoice-discount-value");
     await discountInput.fill("0.2");
     await discountInput.blur();
@@ -105,7 +110,7 @@ test.describe("invoice discounts", () => {
     expect(saved.totalUsd).toBeCloseTo(199.8, 2);
 
     await page.reload();
-    await expect(page.getByRole("heading", { name: "Edit Invoice" })).toBeVisible({
+    await expect(invoiceEditorHeading(page)).toBeVisible({
       timeout: 60_000,
     });
     await expect(page.getByTestId("invoice-discount-value")).toHaveValue("0.20", {

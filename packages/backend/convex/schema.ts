@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { riderContentFields, riderStatusValue } from "./lib/riderSchema";
 import { artistOrganizationTypeValue } from "./lib/organizationType";
 import { scheduleBlockTypeValue } from "./lib/scheduleBlockTypes";
+import { userStatusValue } from "./lib/userStatus";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -724,12 +725,19 @@ export default defineSchema({
      */
     needId: v.optional(v.id("eventArtistNeeds")),
     /**
-     * Artist lines: performers in the group. With `performanceHours` and `rateUsd`
-     * (per person per hour), `quantity` is person-hours (people × hours).
+     * Artist and crew lines: people on the line. With `performanceHours` and
+     * `rateUsd` (per person per hour), `quantity` is person-hours (people × hours).
      */
     memberCount: v.optional(v.number()),
-    /** Artist lines: hours the group is performing. */
+    /** Artist and crew lines: hours each person performs or works. */
     performanceHours: v.optional(v.number()),
+    /**
+     * Crew lines: "manual" marks hours added by hand on the quote, as opposed
+     * to lines generated from the linked Run of Show / series template. The
+     * editor restores manual lines on load; schedule lines are rebuilt from the
+     * schedule. Absent on older lines and on unlinked quotes.
+     */
+    crewSource: v.optional(v.literal("manual")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -947,7 +955,10 @@ export default defineSchema({
     title: v.optional(v.string()),
     phone: v.optional(v.string()),
     avatarStorageId: v.optional(v.id("_storage")),
-    active: v.boolean(),
+    /** @deprecated Use `status`. Retained only until the backfill migration runs. */
+    active: v.optional(v.boolean()),
+    /** Portal lifecycle. Optional while the `active` → `status` migration lands. */
+    status: v.optional(userStatusValue),
     /**
      * Short @handle for comment mentions (lowercase letters, digits, underscore).
      * Unique when set; omit/undefined when unset.
@@ -972,10 +983,8 @@ export default defineSchema({
     requiresOnboarding: v.optional(v.boolean()),
     includeInTimecards: v.optional(v.boolean()),
     assignableAsCrew: v.optional(v.boolean()),
-    /** When false, user is skipped by the weekly pending-activity digest email. */
-    weeklyDigest: v.optional(v.boolean()),
-    /** When false, user is skipped by Operations damage-report emails. */
-    damageReportEmails: v.optional(v.boolean()),
+    /** Email templates this user opted out of (keys from `email/constants.ts`). */
+    emailOptOuts: v.optional(v.array(v.string())),
     calendarInviteEmail: v.optional(v.string()),
     /** Missing/legacy ⇒ stanford payroll. */
     payrollMethod: v.optional(payrollMethodValue),
@@ -984,7 +993,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_userId", ["userId"])
-    .index("by_active", ["active"])
+    .index("by_defaultOrganizationId", ["defaultOrganizationId"])
     .index("by_username", ["username"]),
 
   userOrganizationMemberships: defineTable({
@@ -1457,7 +1466,6 @@ export default defineSchema({
     includeInTimecards: v.optional(v.boolean()),
     assignableAsCrew: v.optional(v.boolean()),
     showOnPublicCrewPage: v.optional(v.boolean()),
-    damageReportEmails: v.optional(v.boolean()),
     /** Arbor Live crew invites converted from a crew application, when present. */
     gradYear: v.optional(v.number()),
     expiresAt: v.number(),

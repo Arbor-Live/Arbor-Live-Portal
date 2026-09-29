@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { pollConvex, runConvex } from "../helpers/convex";
 import { formField, formTextarea } from "../helpers/form";
 import {
+  addInvoiceLine,
   invoiceIdFromUrl,
   saveInvoiceEditor,
   waitForInvoiceEditorUrl,
@@ -25,7 +26,7 @@ type ReviewState = {
 };
 
 /**
- * Terms templates (`/dashboard/financial-hub` "Terms Templates" card).
+ * Terms templates (`/dashboard/financial-hub/settings` "Terms Templates" card).
  *
  * The card is the source of the invoice editor's Terms checkboxes and, through
  * `loadInvoiceTerms`, of the terms block on the public quote page. The spec
@@ -51,7 +52,7 @@ test.describe("invoice terms templates", () => {
   });
 
   test("admin adds, edits, disables, and deletes a terms template", async ({ page }) => {
-    await page.goto("/dashboard/financial-hub");
+    await page.goto("/dashboard/financial-hub/settings");
     await expect(page.getByText("Terms Templates").first()).toBeVisible({ timeout: 25_000 });
 
     // Add via the card's form. These fields have real labels, so the form
@@ -121,7 +122,7 @@ test.describe("invoice terms templates", () => {
     const markdown = "Payment terms: net 14 days from invoice date.";
 
     // Create the template through the settings card, then drive the editor.
-    await page.goto("/dashboard/financial-hub");
+    await page.goto("/dashboard/financial-hub/settings");
     await expect(page.getByText("Terms Templates").first()).toBeVisible({ timeout: 25_000 });
     await formField(page, "Label").fill(integrationLabel);
     await formField(page, "Version").fill("v2");
@@ -135,7 +136,7 @@ test.describe("invoice terms templates", () => {
     );
 
     await page.goto("/dashboard/financial-hub/invoices/new");
-    await expect(page.getByText("Create Invoice").first()).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText("Create invoice").first()).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(/E2E Admin/i).first()).toBeVisible({ timeout: 25_000 });
 
     // The Terms card only loads its catalog after a hover/focus, and only shows
@@ -149,7 +150,7 @@ test.describe("invoice terms templates", () => {
     await termsCheckbox.check();
 
     // A line item is required to save.
-    await page.getByRole("button", { name: "Add artist row" }).click();
+    await addInvoiceLine(page, "Artist");
     const artistRow = page.getByTestId("invoice-row-artist-0");
     await artistRow.getByPlaceholder("Artist / role").fill(`E2E Terms Artist ${Date.now()}`);
     await artistRow.getByPlaceholder("People").fill("1");
