@@ -696,30 +696,51 @@ export const backfillUserProfileStatus = migrations.define({
 
 /**
  * Consolidate the legacy `weeklyDigest` / `damageReportEmails` profile flags
- * into the single `emailOptOuts` list. The widened type keeps this compiling
- * after the fields were dropped from the schema. Idempotent: profiles that
- * already carry an opt-out list are left alone.
+ * into the single `emailOptOuts` list. Idempotent: profiles that already carry
+ * an opt-out list are left alone.
  */
 export const backfillUserEmailOptOuts = migrations.define({
   table: "userAdminProfiles",
   migrateOne: async (_ctx, profile) => {
     if (profile.emailOptOuts !== undefined) return;
-    const legacy = profile as Doc<"userAdminProfiles"> & {
-      weeklyDigest?: boolean;
-      damageReportEmails?: boolean;
-    };
     const emailOptOuts: string[] = [];
-    if (legacy.weeklyDigest === false) emailOptOuts.push("weekly_digest");
+    if (profile.weeklyDigest === false) emailOptOuts.push("weekly_digest");
     // Advisor presets historically omitted `damageReportEmails` while setting
     // the three crew flags false; treat that as opted out of damage reports.
     const damageReportOff =
-      legacy.damageReportEmails === false ||
-      (legacy.damageReportEmails === undefined &&
-        legacy.requiresOnboarding === false &&
-        legacy.includeInTimecards === false &&
-        legacy.assignableAsCrew === false);
+      profile.damageReportEmails === false ||
+      (profile.damageReportEmails === undefined &&
+        profile.requiresOnboarding === false &&
+        profile.includeInTimecards === false &&
+        profile.assignableAsCrew === false);
     if (damageReportOff) emailOptOuts.push("damage_report_admin");
     return { emailOptOuts, updatedAt: Date.now() };
+  },
+});
+
+/**
+ * Widen → migrate → narrow, step 2: drop the deprecated profile flags now that
+ * `backfillUserEmailOptOuts` has copied them across. Must run before a later
+ * schema change removes the fields — Convex validates existing documents on
+ * push, so the fields cannot be deleted from the schema while rows still carry
+ * them.
+ */
+export const unsetLegacyUserEmailFlags = migrations.define({
+  table: "userAdminProfiles",
+  migrateOne: async (_ctx, profile) => {
+    if (profile.weeklyDigest === undefined && profile.damageReportEmails === undefined) {
+      return;
+    }
+    return { weeklyDigest: undefined, damageReportEmails: undefined };
+  },
+});
+
+/** Widen → migrate → narrow, step 2: drop the deprecated pending-invite flag. */
+export const unsetLegacyPendingInviteEmailFlags = migrations.define({
+  table: "pendingUserInvites",
+  migrateOne: async (_ctx, row) => {
+    if (row.damageReportEmails === undefined) return;
+    return { damageReportEmails: undefined };
   },
 });
 
@@ -758,6 +779,8 @@ const MIGRATION_SERIES = [
   internal.migrations.finalizeApprovedDraftInvoices,
   internal.migrations.backfillUserProfileStatus,
   internal.migrations.backfillUserEmailOptOuts,
+  internal.migrations.unsetLegacyUserEmailFlags,
+  internal.migrations.unsetLegacyPendingInviteEmailFlags,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);
