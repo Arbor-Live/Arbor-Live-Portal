@@ -6,7 +6,7 @@ import type { PatchPlan } from "@arbor/show-file";
 import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
-import { cn } from "@/lib/utils";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 /**
  * Which stage box each instrument group plugs into. Saved on the event, so the
@@ -36,76 +36,72 @@ export function SnakePlanControls({
     }
   };
 
-  const toggleSecondSnake = () => {
-    // One snake is not an option when the bill cannot fit — the toggle only
-    // ever turns the second box ON in that case.
-    if (plan.secondSnake && !fitsOneBox) return;
-    void save({ ...plan, secondSnake: !plan.secondSnake });
-  };
-
-  // One snake is only offered when the bill fits it. When it does not, the only
-  // control is turning the second box on (or dropping an input).
-  const oneSnakeOnly = fitsOneBox;
-  const showToggle = fitsOneBox || !plan.secondSnake;
-
   const scopeScenes = plan.scopeScenes ?? true;
 
   return (
-    <div className="space-y-2 rounded-md border p-3" data-testid="snake-plan-controls">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-sm font-medium">Snakes</p>
-          <p className="text-xs text-muted-foreground">
-            {!fitsOneBox
-              ? "This bill needs more than one stage box. Drop an input or use two snakes."
-              : plan.secondSnake
-                ? "Both stage boxes out — families pack box A, and anything that does not fit continues on box B."
-                : "One stage box (AES50 A). Turn on the second snake to split the stage."}
-          </p>
-        </div>
-        {showToggle ? (
-          <button
-            type="button"
-            onClick={toggleSecondSnake}
-            disabled={saving}
-            className={cn(
-              "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-              plan.secondSnake
-                ? "bg-foreground text-background"
-                : !oneSnakeOnly
-                  ? "bg-amber/10 text-amber/90 hover:bg-amber/20"
-                  : "bg-muted text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {!oneSnakeOnly
-              ? "Use two snakes"
-              : plan.secondSnake
-                ? "Two snakes"
-                : "One snake"}
-          </button>
-        ) : null}
-      </div>
+    <section className="space-y-3" data-testid="snake-plan-controls">
+      <h3 className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
+        Stage setup
+      </h3>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
-        <p className="text-xs text-muted-foreground">
-          {scopeScenes
-            ? "Band scenes only recall channels that change — the kit keeps its soundcheck gain and EQ all night."
-            : "Every band scene recalls the whole desk. Expect to re-gain between sets."}
-        </p>
-        <button
-          type="button"
-          onClick={() => void save({ ...plan, scopeScenes: !scopeScenes })}
-          disabled={saving}
-          className={cn(
-            "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-            scopeScenes
-              ? "bg-foreground text-background"
-              : "bg-muted text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {scopeScenes ? "Scene scoping on" : "Full recall"}
-        </button>
+      <div className="divide-y border">
+        <div className="flex flex-wrap items-start justify-between gap-3 p-3">
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium">Stage boxes</p>
+            <p className="text-xs text-muted-foreground">
+              {!fitsOneBox
+                ? "This bill needs more than one stage box. Drop an input or use two snakes."
+                : plan.secondSnake
+                  ? "Both stage boxes out — families pack box A, and anything that does not fit continues on box B."
+                  : "One stage box (AES50 A). Turn on the second snake to split the stage."}
+            </p>
+          </div>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            value={plan.secondSnake ? "two" : "one"}
+            onValueChange={(value) => {
+              if (!value) return;
+              void save({ ...plan, secondSnake: value === "two" });
+            }}
+            disabled={saving}
+            aria-label="Stage boxes"
+          >
+            {/* One snake is not an option when the bill cannot fit it. */}
+            <ToggleGroupItem value="one" disabled={!fitsOneBox}>
+              One snake
+            </ToggleGroupItem>
+            <ToggleGroupItem value="two">Two snakes</ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+
+        <div className="flex flex-wrap items-start justify-between gap-3 p-3">
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium">Scene recall</p>
+            <p className="text-xs text-muted-foreground">
+              {scopeScenes
+                ? "Band scenes only recall channels that change — the kit keeps its soundcheck gain and EQ all night."
+                : "Every band scene recalls the whole desk. Expect to re-gain between sets."}
+            </p>
+          </div>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            value={scopeScenes ? "scoped" : "full"}
+            onValueChange={(value) => {
+              if (!value) return;
+              void save({ ...plan, scopeScenes: value === "scoped" });
+            }}
+            disabled={saving}
+            aria-label="Scene recall"
+          >
+            <ToggleGroupItem value="scoped">Scene scoping</ToggleGroupItem>
+            <ToggleGroupItem value="full">Full recall</ToggleGroupItem>
+          </ToggleGroup>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
