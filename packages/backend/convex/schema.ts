@@ -985,6 +985,13 @@ export default defineSchema({
     assignableAsCrew: v.optional(v.boolean()),
     /** Email templates this user opted out of (keys from `email/constants.ts`). */
     emailOptOuts: v.optional(v.array(v.string())),
+    /**
+     * @deprecated Superseded by `emailOptOuts`. Retained only until
+     * `migrations:unsetLegacyUserEmailFlags` has run on every deployment.
+     */
+    weeklyDigest: v.optional(v.boolean()),
+    /** @deprecated Superseded by `emailOptOuts`. See `weeklyDigest`. */
+    damageReportEmails: v.optional(v.boolean()),
     calendarInviteEmail: v.optional(v.string()),
     /** Missing/legacy ⇒ stanford payroll. */
     payrollMethod: v.optional(payrollMethodValue),
@@ -1466,6 +1473,11 @@ export default defineSchema({
     includeInTimecards: v.optional(v.boolean()),
     assignableAsCrew: v.optional(v.boolean()),
     showOnPublicCrewPage: v.optional(v.boolean()),
+    /**
+     * @deprecated Superseded by the invite kind's email preset. Retained only
+     * until `migrations:unsetLegacyPendingInviteEmailFlags` has run everywhere.
+     */
+    damageReportEmails: v.optional(v.boolean()),
     /** Arbor Live crew invites converted from a crew application, when present. */
     gradYear: v.optional(v.number()),
     expiresAt: v.number(),
