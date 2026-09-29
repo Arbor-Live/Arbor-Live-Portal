@@ -6,6 +6,27 @@ import type {
   RiderStageItem,
 } from "@arbor/rider-document";
 
+/**
+ * Which console family a show package is built for.
+ * - `wing`  — Behringer WING `.show` + `.snap` (Arbor’s native rig).
+ * - `x32`   — Behringer X32 / Midas M32 `.scn` scene.
+ * - `xair`  — Behringer X Air / Midas MR `.scn` scene (XR12/16/18).
+ */
+export type ShowTarget = "wing" | "x32" | "xair";
+
+/** One channel as it lands on a target desk, for the pre-download report. */
+export type ConsolePreviewRow = {
+  /** Console channel, or “9+10” for a linked stereo pair. */
+  span: string;
+  name: string;
+  /** Target socket for the input, e.g. “A.9” (WING) · “A9” (X32) · “In09”. */
+  patch: string;
+  stereo: boolean;
+  phantom: boolean;
+  /** Bands that use this channel tonight. */
+  bands: string[];
+};
+
 /** One band’s rider inputs as consumed by show-file generation. */
 export type ShowBandInput = {
   bandName: string;

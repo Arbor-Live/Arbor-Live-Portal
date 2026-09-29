@@ -4,6 +4,7 @@
  */
 
 export type {
+  ConsolePreviewRow,
   EventPatchAllocation,
   PatchDiffPlan,
   PatchDiffStep,
@@ -11,6 +12,7 @@ export type {
   PortAssignment,
   ShowBandInput,
   ShowFileDocument,
+  ShowTarget,
   SlotFamily,
   SnakeGroup,
   SnakeId,
@@ -18,6 +20,10 @@ export type {
   StageBoxPort,
   WingSnap,
 } from "./types";
+export { SHOW_TARGETS, SHOW_TARGET_LABEL } from "./palette";
+export { buildX32Scene } from "./x32";
+export type { ConsoleScene } from "./x32";
+export { buildXAirScene } from "./xair";
 
 export {
   DEFAULT_PATCH_PLAN,
