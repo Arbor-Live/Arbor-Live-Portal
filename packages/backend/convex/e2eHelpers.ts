@@ -5702,6 +5702,7 @@ export const seedInventoryType = mutation({
     nonSubsidizedRentalPriceUsd: v.optional(v.number()),
     publicListing: v.optional(v.boolean()),
     publicProfile: v.optional(v.boolean()),
+    capabilities: v.optional(v.array(v.string())),
   },
   returns: v.object({ typeId: v.id("inventoryTypes"), name: v.string(), model: v.string() }),
   handler: async (ctx, args) => {
@@ -5719,7 +5720,7 @@ export const seedInventoryType = mutation({
       nonSubsidizedRentalPriceUsd: args.nonSubsidizedRentalPriceUsd,
       rentalPriceUsd: args.nonSubsidizedRentalPriceUsd,
       manualUrls: [],
-      capabilities: [],
+      capabilities: args.capabilities ?? [],
       publicListing: args.publicListing ?? false,
       publicProfile: args.publicProfile ?? false,
       createdAt: now,

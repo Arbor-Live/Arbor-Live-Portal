@@ -3,13 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
-import {
-  CaretDownIcon,
-  MagnifyingGlassIcon,
-  PackageIcon,
-  PlusIcon,
-  SlidersHorizontalIcon,
-} from "@phosphor-icons/react";
+import { CaretDownIcon, PackageIcon, PlusIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
+import { activeFilters, FilterBar, type FilterDefinition, type FilterState } from "@/components/filter-bar";
 import { MetaItem, PageHeader } from "@/components/page-header";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
@@ -17,39 +12,29 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import { toCategoryOptions } from "./constants";
-import { MultiSelectFilter } from "./multi-select-filter";
-import { SearchableSelect } from "./searchable-select";
 import { TYPE_VISIBILITY_LABELS, type InventoryTypeRow, type TypeVisibility } from "./type-form";
 import { TypeSettingsDialog, type TypeSettingsTab } from "./type-settings-dialog";
 import { TypeSheet } from "./type-sheet";
 import { TypesTable } from "./types-table";
 import { formatTypeDisplay } from "./package-section-utils";
 
-type VisibilityFilter = "all" | TypeVisibility;
+const VISIBILITY_OPTIONS = (Object.keys(TYPE_VISIBILITY_LABELS) as TypeVisibility[]).map((value) => ({
+  value,
+  label: TYPE_VISIBILITY_LABELS[value],
+}));
 
-const VISIBILITY_FILTER_LABELS: Record<VisibilityFilter, string> = {
-  all: "Any visibility",
-  ...TYPE_VISIBILITY_LABELS,
-};
-
-const VISIBILITY_FILTER_ARGS: Record<VisibilityFilter, { publicListing?: boolean; publicProfile?: boolean }> = {
-  all: {},
-  hidden: { publicListing: false },
-  listing: { publicListing: true, publicProfile: false },
-  profile: { publicListing: true, publicProfile: true },
-};
+const UNITS_OPTIONS = [
+  { value: "has", label: "Has units" },
+  { value: "none", label: "No units yet" },
+];
 
 /** `?type=<id>` opens that type's panel; `?type=new` opens an empty one. */
 const TYPE_PARAM = "type";
@@ -83,10 +68,7 @@ export function TypesManager() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<TypeSettingsTab>("categories");
   const [search, setSearch] = useState("");
-  const [categoryKeys, setCategoryKeys] = useState<string[]>([]);
-  const [visibility, setVisibility] = useState<VisibilityFilter>("all");
-  const [capability, setCapability] = useState("");
-  const [manufacturer, setManufacturer] = useState("");
+  const [filters, setFilters] = useState<FilterState>({});
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [bulkPending, setBulkPending] = useState(false);
 
@@ -94,14 +76,17 @@ export function TypesManager() {
   const capabilities = useQuery(api.capabilityDefinitions.list, { activeOnly: false });
   const manufacturers = useQuery(api.inventoryTypes.listManufacturers, {});
   const units = useQuery(api.inventoryTypes.unitCounts, {});
+  // Chips still being set up (no value yet) don't touch the query.
+  const applied = activeFilters(filters);
   const { results, status, loadMore } = usePaginatedQuery(
     api.inventoryTypes.list,
     {
       search: search.trim() || undefined,
-      category: categoryKeys.length === 1 ? categoryKeys[0] : undefined,
-      capability: capability || undefined,
-      manufacturer: manufacturer || undefined,
-      ...VISIBILITY_FILTER_ARGS[visibility],
+      category: applied.category,
+      capability: applied.capability,
+      manufacturer: applied.manufacturer,
+      visibility: applied.visibility,
+      units: applied.units,
     },
     { initialNumItems: 100 },
   );
@@ -118,11 +103,10 @@ export function TypesManager() {
   }, [categories, ensureDefaults]);
 
   // Pages arrive sorted one at a time; sort the whole list so rows never jump between pages.
-  const rows = useMemo(() => {
-    const filtered =
-      categoryKeys.length > 1 ? results.filter((row) => categoryKeys.includes(row.category)) : results;
-    return [...filtered].sort((a, b) => formatTypeDisplay(a).localeCompare(formatTypeDisplay(b)));
-  }, [categoryKeys, results]);
+  const rows = useMemo(
+    () => [...results].sort((a, b) => formatTypeDisplay(a).localeCompare(formatTypeDisplay(b))),
+    [results],
+  );
 
   const categoryOptions = useMemo(() => toCategoryOptions(categories), [categories]);
   const categoryLabels = useMemo(
@@ -139,6 +123,32 @@ export function TypesManager() {
   );
   const activeCapabilities = useMemo(() => (capabilities ?? []).filter((entry) => entry.active), [capabilities]);
 
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () => [
+      {
+        id: "category",
+        label: "Category",
+        options: categoryOptions.map((category) => ({ value: category.value, label: category.label })),
+      },
+      {
+        id: "capability",
+        label: "Capability",
+        options: (capabilities ?? []).map((entry) => ({
+          value: entry.key,
+          label: entry.label,
+          description: entry.active ? undefined : "Inactive",
+        })),
+      },
+      {
+        id: "manufacturer",
+        label: "Manufacturer",
+        options: (manufacturers ?? []).map((entry) => ({ value: entry, label: entry })),
+      },
+      { id: "visibility", label: "Visibility", options: VISIBILITY_OPTIONS },
+      { id: "units", label: "Units", options: UNITS_OPTIONS, single: true },
+    ],
+    [capabilities, categoryOptions, manufacturers],
+  );
   const panelIsNew = panel === "new";
   const panelId = panel && !panelIsNew ? panel : null;
   const loadedPanelRow = panelId ? rows.find((row) => row._id === panelId) : undefined;
@@ -149,12 +159,7 @@ export function TypesManager() {
   );
   const panelRow = loadedPanelRow ?? fetchedPanelRow ?? null;
 
-  const filterCount =
-    (search.trim() ? 1 : 0) +
-    (categoryKeys.length ? 1 : 0) +
-    (visibility !== "all" ? 1 : 0) +
-    (capability ? 1 : 0) +
-    (manufacturer ? 1 : 0);
+  const filterCount = (search.trim() ? 1 : 0) + Object.keys(applied).length;
   const selectedIds = rows.filter((row) => selected.has(row._id)).map((row) => row._id);
   const shownUnits = unitCounts ? rows.reduce((sum, row) => sum + (unitCounts.get(row._id) ?? 0), 0) : undefined;
   const listedCount = rows.filter((row) => row.publicListing).length;
@@ -180,10 +185,7 @@ export function TypesManager() {
 
   function clearFilters() {
     setSearch("");
-    setCategoryKeys([]);
-    setVisibility("all");
-    setCapability("");
-    setManufacturer("");
+    setFilters({});
     setSelected(new Set());
   }
 
@@ -268,78 +270,15 @@ export function TypesManager() {
         }
       />
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="relative w-full sm:max-w-xs">
-          <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(event) => withClearedSelection(setSearch)(event.target.value)}
-            placeholder="Search name, model, maker, capability, slug…"
-            aria-label="Search types"
-            className="pl-9"
-          />
-        </div>
-        <MultiSelectFilter
-          label="Category"
-          hideLabel
-          placeholder="Search categories…"
-          values={categoryKeys}
-          onChange={withClearedSelection(setCategoryKeys)}
-          options={categoryOptions.map((category) => ({ value: category.value, label: category.label }))}
-          emptyLabel="All categories"
-          className="w-full sm:w-48"
-        />
-        <div className="w-full sm:w-48" data-testid="types-capability-filter">
-          <SearchableSelect
-            value={capability}
-            onChange={withClearedSelection(setCapability)}
-            options={[
-              { value: "", label: "Any capability" },
-              ...(capabilities ?? []).map((entry) => ({ value: entry.key, label: entry.label })),
-            ]}
-            placeholder="Filter by capability…"
-            emptyLabel="Any capability"
-          />
-        </div>
-        <div className="w-full sm:w-48" data-testid="types-manufacturer-filter">
-          <SearchableSelect
-            value={manufacturer}
-            onChange={withClearedSelection(setManufacturer)}
-            options={[
-              { value: "", label: "Any manufacturer" },
-              ...(manufacturers ?? []).map((entry) => ({ value: entry, label: entry })),
-            ]}
-            placeholder="Filter by manufacturer…"
-            emptyLabel="Any manufacturer"
-          />
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" variant="outline" className="font-normal">
-              {VISIBILITY_FILTER_LABELS[visibility]}
-              <CaretDownIcon className="size-3" aria-hidden />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-48">
-            <DropdownMenuLabel>Public visibility</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              value={visibility}
-              onValueChange={(value) => withClearedSelection(setVisibility)(value as VisibilityFilter)}
-            >
-              {(Object.keys(VISIBILITY_FILTER_LABELS) as VisibilityFilter[]).map((key) => (
-                <DropdownMenuRadioItem key={key} value={key}>
-                  {VISIBILITY_FILTER_LABELS[key]}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        {filterCount ? (
-          <Button type="button" variant="ghost" onClick={clearFilters}>
-            Clear filters ({filterCount})
-          </Button>
-        ) : null}
-      </div>
+      <FilterBar
+        search={search}
+        onSearchChange={withClearedSelection(setSearch)}
+        searchPlaceholder="Search name, model, maker, capability, slug…"
+        searchLabel="Search types"
+        filters={filterDefinitions}
+        value={filters}
+        onChange={withClearedSelection(setFilters)}
+      />
 
       {status === "LoadingFirstPage" ? (
         <div className="space-y-2">
@@ -419,11 +358,18 @@ export function TypesManager() {
           ) : null}
 
           {rows.length === 0 ? (
-            <p className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-              {filterCount
-                ? "No types match these filters. Clear a filter, or search for a different name."
-                : "No types yet. Add the first model with New type, then add its units from Items."}
-            </p>
+            <div className="space-y-2 border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+              <p>
+                {filterCount
+                  ? "No types match this search and these filters."
+                  : "No types yet. Add the first model with New type, then add its units from Items."}
+              </p>
+              {filterCount ? (
+                <Button type="button" variant="outline" size="sm" onClick={clearFilters}>
+                  Clear search and filters
+                </Button>
+              ) : null}
+            </div>
           ) : (
             <TypesTable
               rows={rows}

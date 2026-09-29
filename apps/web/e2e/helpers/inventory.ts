@@ -158,6 +158,31 @@ export async function searchTypes(page: Page, query: string) {
   return search;
 }
 
+/**
+ * Add a filter chip through the shared `FilterBar`: open "Filter", pick the
+ * filter, optionally switch to "is not", tick each option, then close the chip.
+ */
+export async function addFilter(
+  page: Page,
+  filter: string,
+  options: string[],
+  operator: "is" | "is not" = "is",
+) {
+  await page.getByTestId("filter-bar").getByRole("button", { name: /^Filter/ }).click();
+  await page.getByRole("menuitem", { name: filter, exact: true }).click();
+  const menu = page.locator("[data-testid^='filter-menu-']");
+  await expect(menu).toBeVisible({ timeout: 20_000 });
+  if (operator === "is not") await menu.getByRole("radio", { name: "is not" }).click();
+  for (const option of options) {
+    const search = menu.getByRole("textbox");
+    if (await search.count()) await search.fill(option);
+    // `click`, not `check`: a single-value chip closes as soon as it's picked.
+    await menu.getByRole("checkbox", { name: option, exact: true }).click();
+  }
+  if (await menu.count()) await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0, { timeout: 20_000 });
+}
+
 /** Load the types page and wait for its list (or empty state) to render. */
 export async function gotoTypes(page: Page, query?: string) {
   await page.goto(query ? `/dashboard/inventory/types?${query}` : "/dashboard/inventory/types");

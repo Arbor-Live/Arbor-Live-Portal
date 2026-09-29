@@ -149,30 +149,41 @@ function matchesInventoryTypeSearch(type: Doc<"inventoryTypes">, loweredSearch: 
 
 const MAX_TYPE_OPTIONS = 2000;
 
+/** A filter-bar chip: the row matches when any of `values` applies (`is`) or none does (`is_not`). */
+const listFilter = v.optional(
+  v.object({
+    operator: v.union(v.literal("is"), v.literal("is_not")),
+    values: v.array(v.string()),
+  }),
+);
+
+type ListFilter = { operator: "is" | "is_not"; values: string[] };
+
+function matchesListFilter(filter: ListFilter | undefined, candidates: string[]) {
+  if (!filter || filter.values.length === 0) return true;
+  const hit = candidates.some((candidate) => filter.values.includes(candidate));
+  return filter.operator === "is" ? hit : !hit;
+}
+
+function typeVisibilityKey(type: Doc<"inventoryTypes">) {
+  if (!type.publicListing) return "hidden";
+  return type.publicProfile ? "profile" : "listing";
+}
+
 function matchesInventoryTypeFilters(
   type: Doc<"inventoryTypes">,
   args: {
-    capability?: string;
-    manufacturer?: string;
-    publicListing?: boolean;
-    publicProfile?: boolean;
+    category?: ListFilter;
+    capability?: ListFilter;
+    manufacturer?: ListFilter;
+    visibility?: ListFilter;
     search?: string;
   },
 ) {
-  if (args.capability && !type.capabilities.includes(args.capability)) return false;
-  if (args.publicListing !== undefined && Boolean(type.publicListing) !== args.publicListing) {
-    return false;
-  }
-  if (args.publicProfile !== undefined && Boolean(type.publicProfile) !== args.publicProfile) {
-    return false;
-  }
-  const loweredManufacturer = args.manufacturer?.trim().toLowerCase();
-  if (
-    loweredManufacturer &&
-    (type.manufacturer ?? "").trim().toLowerCase() !== loweredManufacturer
-  ) {
-    return false;
-  }
+  if (!matchesListFilter(args.category, [type.category])) return false;
+  if (!matchesListFilter(args.capability, type.capabilities)) return false;
+  if (!matchesListFilter(args.manufacturer, [(type.manufacturer ?? "").trim()])) return false;
+  if (!matchesListFilter(args.visibility, [typeVisibilityKey(type)])) return false;
   const loweredSearch = args.search?.trim().toLowerCase();
   if (!loweredSearch) return true;
   return matchesInventoryTypeSearch(type, loweredSearch);
@@ -195,50 +206,69 @@ function matchesInventoryTypeFilters(
  * Load more twice. Pagination is by `_creationTime` ascending, so the rows this
  * hid were always the newest ones — the same failure #65 fixed in six other
  * admin lists.
+ *
+ * Each filter is a filter-bar chip (`is` / `is not` any of several values).
+ * `units` takes `"has"` or `"none"` and checks `inventoryItems` per type.
  */
 export const list = query({
   args: {
     paginationOpts: paginationOptsValidator,
-    category: v.optional(v.string()),
-    capability: v.optional(v.string()),
-    manufacturer: v.optional(v.string()),
-    publicListing: v.optional(v.boolean()),
-    publicProfile: v.optional(v.boolean()),
     search: v.optional(v.string()),
+    category: listFilter,
+    capability: listFilter,
+    manufacturer: listFilter,
+    visibility: listFilter,
+    units: listFilter,
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
 
-    // `category` is excluded: it is served by `by_category`, so it narrows the
-    // paginated query itself rather than the page it produced.
+    const active = (filter: ListFilter | undefined) => Boolean(filter?.values.length);
+    // A single `is` category is served by `by_category`, so on its own it can
+    // still paginate.
+    const indexedCategory =
+      args.category?.operator === "is" && args.category.values.length === 1
+        ? args.category.values[0]
+        : undefined;
     const hasInMemoryFilter =
       Boolean(args.search?.trim()) ||
-      Boolean(args.capability) ||
-      Boolean(args.manufacturer?.trim()) ||
-      args.publicListing !== undefined ||
-      args.publicProfile !== undefined;
+      (active(args.category) && !indexedCategory) ||
+      active(args.capability) ||
+      active(args.manufacturer) ||
+      active(args.visibility) ||
+      active(args.units);
 
     if (hasInMemoryFilter) {
-      const candidates = args.category
+      const candidates = indexedCategory
         ? await ctx.db
             .query("inventoryTypes")
-            .withIndex("by_category", (q) => q.eq("category", args.category!))
+            .withIndex("by_category", (q) => q.eq("category", indexedCategory))
             .take(MAX_TYPE_OPTIONS)
         : await ctx.db.query("inventoryTypes").take(MAX_TYPE_OPTIONS);
 
-      const page = candidates
-        .filter((type) => matchesInventoryTypeFilters(type, args))
-        .sort((a, b) => a.name.localeCompare(b.name));
+      const matches = candidates.filter((type) => matchesInventoryTypeFilters(type, args));
+      const page: Doc<"inventoryTypes">[] = [];
+      for (const type of matches) {
+        if (active(args.units)) {
+          const unit = await ctx.db
+            .query("inventoryItems")
+            .withIndex("by_typeId", (q) => q.eq("typeId", type._id))
+            .first();
+          if (!matchesListFilter(args.units, [unit ? "has" : "none"])) continue;
+        }
+        page.push(type);
+      }
+      page.sort((a, b) => a.name.localeCompare(b.name));
 
       // One page, already complete: `usePaginatedQuery` must not offer a Load
       // more button that would page past a result set it has all of.
       return { page, isDone: true, continueCursor: "" };
     }
 
-    const result = args.category
+    const result = indexedCategory
       ? await ctx.db
           .query("inventoryTypes")
-          .withIndex("by_category", (q) => q.eq("category", args.category!))
+          .withIndex("by_category", (q) => q.eq("category", indexedCategory))
           .paginate(args.paginationOpts)
       : await ctx.db.query("inventoryTypes").paginate(args.paginationOpts);
 

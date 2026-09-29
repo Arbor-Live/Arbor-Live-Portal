@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { formField } from "../helpers/form";
 import { pickSelectOption, pickSearchableOption } from "../helpers/select";
 import {
+  addFilter,
   confirmAppDialog,
   deleteInventoryFixtures,
   deleteTypeFromRow,
@@ -112,19 +113,12 @@ test.describe.serial("inventory taxonomy", () => {
 
     // Two filters at once, both server-side arguments to `inventoryTypes.list`.
     await searchTypes(page, typeName);
-    await pickSearchableOption(
-      page,
-      page.getByTestId("types-capability-filter").getByTestId("searchable-select-trigger"),
-      capabilityLabel,
-      capabilityLabel,
-    );
+    await addFilter(page, "Capability", [capabilityLabel]);
 
     await expect(typeRow(page, created.typeId)).toBeVisible({ timeout: 30_000 });
     await expect(typeRow(page, created.typeId)).toContainText(capabilityLabel);
-    // The filter counter is the page's own statement that a filter is applied.
-    await expect(page.getByRole("button", { name: /^Clear filters \(2\)$/ })).toBeVisible({
-      timeout: 20_000,
-    });
+    // The chip is the page's own statement that the filter is applied.
+    await expect(page.getByTestId("filter-chip-capability")).toContainText(`Capability is ${capabilityLabel}`);
   });
 
   test("a category in use cannot be deleted", async ({ page }) => {
