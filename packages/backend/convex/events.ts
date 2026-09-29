@@ -27,7 +27,17 @@ import {
 import { copyDaySetupToTargets, listSiblingDayEvents } from "./lib/copyDaySetup";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
 import { deleteEventRecord } from "./lib/bookingChainDelete";
-import { propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, type SeriesEditScope, type SeriesOverviewAffectedOccurrence, type SeriesOverviewOverride } from "./lib/eventSeriesGeneration";
+import {
+  buildSharedGroupPatchFromDay,
+  propagateInvoiceIdToSeriesOccurrences,
+  propagateOverviewToSeriesOccurrences,
+  type SeriesEditScope,
+  type SeriesOverviewAffectedOccurrence,
+  type SeriesOverviewOverride,
+} from "./lib/eventSeriesGeneration";
+import { isMultiDayGroup } from "./lib/eventGroupKind";
+import { syncMultiDayGroupForInvoice, syncMultiDayGroupsForInvoices } from "./lib/eventGroups";
+import { listGroupDays } from "./lib/eventGroupTemplates";
 import { resolveSeriesMetadataForInvoice } from "./lib/invoiceSeries";
 import { assertNoOpenMicOverlap } from "./lib/openMicAddon";
 import {
@@ -351,12 +361,16 @@ export const get = query({
                 .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", event.seriesId!))
                 .take(200);
               const costSummary = computeSeriesCostSummary(series, siblings);
+              const multiDay = isMultiDayGroup(series);
               return {
                 _id: series._id,
+                kind: multiDay ? ("multi_day" as const) : ("recurring" as const),
                 title: series.title,
                 status: series.status,
                 intervalWeeks: series.intervalWeeks,
-                totalOccurrences: series.occurrenceCount ?? siblings.length,
+                totalOccurrences: multiDay
+                  ? siblings.length
+                  : (series.occurrenceCount ?? siblings.length),
                 occurrenceIndex: event.occurrenceIndex,
                 seriesDetached: event.seriesDetached ?? false,
                 invoiceId: series.invoiceId,
@@ -446,7 +460,13 @@ export const listSiblingDays = query({
     await requireArborInternalContext(ctx);
     const event = await ctx.db.get(args.eventId);
     if (!event) return [];
-    const siblings = await listSiblingDayEvents(ctx, event);
+    const group = event.seriesId ? await ctx.db.get(event.seriesId) : null;
+    // A multi-day booking's days are its group; older ungrouped bookings fall
+    // back to the invoice/request siblings.
+    const siblings =
+      group && isMultiDayGroup(group)
+        ? await listGroupDays(ctx, group._id)
+        : await listSiblingDayEvents(ctx, event);
     return siblings.map((row, index) => ({
       _id: row._id,
       title: row.title,
@@ -594,6 +614,8 @@ export const create = mutation({
     });
     if (invoiceSplit.primary) {
       await syncEventStatusForLinkedInvoice(ctx, eventId, invoiceSplit.primary, initialStatus);
+      // Another day on a booking's invoice: it joins (or forms) the booking's group.
+      await syncMultiDayGroupForInvoice(ctx, invoiceSplit.primary, now);
     }
     if (args.additionalInvoiceIds !== undefined) {
       await replaceAdditionalInvoiceLinks(ctx, eventId, invoiceSplit.additional);
@@ -769,8 +791,41 @@ export const update = mutation({
     const clearOperationsLead =
       args.operationsLeadUserId === null || args.operationsLeadUserId === "";
 
-    if (hasSeries && existing.seriesId && scope !== "this") {
-      const series = await ctx.db.get(existing.seriesId);
+    const group = existing.seriesId ? await ctx.db.get(existing.seriesId) : null;
+    const multiDayGroup = group !== null && isMultiDayGroup(group);
+
+    if (hasSeries && existing.seriesId && scope !== "this" && multiDayGroup) {
+      // A multi-day booking's days keep their own title, times and costs: this
+      // day takes the whole edit, and only the shared fields reach the others.
+      await ctx.db.patch(args.id, patch);
+      await ctx.db.patch(existing.seriesId, {
+        ...buildSharedGroupPatchFromDay(patch),
+        updatedAt: now,
+      });
+      const updatedGroup = await ctx.db.get(existing.seriesId);
+      if (!updatedGroup) throw new Error("Linked event series not found.");
+      const overrides: SeriesOverviewOverride = { status: nextStatus, visibility: patch.visibility };
+      const propagated = await propagateOverviewToSeriesOccurrences(
+        ctx,
+        updatedGroup,
+        existing.occurrenceIndex ?? 0,
+        scope,
+        now,
+        overrides,
+      );
+      affectedOccurrences = [...affectedOccurrences, ...propagated];
+      if (args.invoiceId !== undefined) {
+        await propagateInvoiceIdToSeriesOccurrences(
+          ctx,
+          existing.seriesId,
+          nextInvoiceId,
+          existing.occurrenceIndex ?? 0,
+          scope,
+          now,
+        );
+      }
+    } else if (hasSeries && existing.seriesId && scope !== "this") {
+      const series = group;
       if (!series) throw new Error("Linked event series not found.");
       const referenceIndex = existing.occurrenceIndex ?? 0;
       const nextAnchorStartAt =
@@ -870,7 +925,9 @@ export const update = mutation({
     } else {
       await ctx.db.patch(args.id, {
         ...patch,
-        seriesDetached: hasSeries && scope === "this" ? true : existing.seriesDetached,
+        // Editing one day of a multi-day booking is normal, not an override.
+        seriesDetached:
+          hasSeries && scope === "this" && !multiDayGroup ? true : existing.seriesDetached,
       });
     }
 
@@ -891,6 +948,11 @@ export const update = mutation({
       await replaceAdditionalInvoiceLinks(ctx, args.id, nextAdditionalInvoiceIds);
     } else if (args.invoiceId !== undefined && nextInvoiceId) {
       await detachInvoiceFromAdditionalLinks(ctx, args.id, nextInvoiceId);
+    }
+
+    // Moving a day between invoices (or its date) reshapes the bookings' groups.
+    if (args.invoiceId !== undefined || args.startAt !== undefined) {
+      await syncMultiDayGroupsForInvoices(ctx, [existing.invoiceId, nextInvoiceId], now);
     }
 
     if (prevStatus !== nextStatus) {
@@ -1094,6 +1156,9 @@ export const duplicate = mutation({
         createdAt: now,
         updatedAt: now,
       });
+    }
+    if (existing.invoiceId) {
+      await syncMultiDayGroupForInvoice(ctx, existing.invoiceId, now);
     }
     return newId;
   },

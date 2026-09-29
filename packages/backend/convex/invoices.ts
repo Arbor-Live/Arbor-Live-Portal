@@ -18,7 +18,8 @@ import {
   deletePublicEventContact,
   requirePublicEditableEvent,
 } from "./lib/publicEventContacts";
-import { isSingleSeriesBooking } from "./lib/invoiceArtistDays";
+import { resolveArtistLineDayScope } from "./lib/invoiceArtistDays";
+import { isMultiDayGroup, isRecurringGroup } from "./lib/eventGroupKind";
 import { getActivePaymentProofSubmissionForInvoice, getPaymentProofOpensAt } from "./lib/paymentProof";
 import { invoiceDueEndMs } from "./lib/invoicePaymentStatus";
 import {
@@ -930,7 +931,7 @@ async function resolveInvoiceListLabels(ctx: QueryCtx, invoiceId: Id<"invoices">
   ];
   const seriesDoc = seriesIds.length === 1 ? await ctx.db.get(seriesIds[0]!) : null;
   return {
-    seriesTitle: seriesDoc?.title,
+    seriesTitle: seriesDoc && isRecurringGroup(seriesDoc) ? seriesDoc.title : undefined,
     linkedEventTitle: linkedEvents[0]?.title,
     eventCostsUsd,
     eventPassThroughCostsUsd,
@@ -1156,15 +1157,16 @@ export const getArtistLineDayScope = query({
   args: { invoiceId: v.id("invoices") },
   returns: v.object({
     firstEventId: v.union(v.id("events"), v.null()),
-    isSeriesBooking: v.boolean(),
+    unscopedAppliesToEveryDay: v.boolean(),
   }),
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const events = await listEventsByInvoiceId(ctx, args.invoiceId);
+    const scope = await resolveArtistLineDayScope(ctx, events);
     return {
-      firstEventId: events[0]?._id ?? null,
-      isSeriesBooking: isSingleSeriesBooking(events),
+      firstEventId: scope.firstEventId ?? null,
+      unscopedAppliesToEveryDay: scope.unscopedAppliesToEveryDay,
     };
   },
 });
@@ -2032,7 +2034,9 @@ export const resyncEquipmentFromPullList = mutation({
     if (event.invoiceId !== args.id) throw new Error("Event is not linked to this invoice.");
 
     const series = event.seriesId ? await ctx.db.get(event.seriesId) : null;
-    const useSeriesQty = Boolean(series?.invoiceId && series.invoiceId === args.id);
+    const useSeriesQty = Boolean(
+      series && isRecurringGroup(series) && series.invoiceId === args.id,
+    );
     const billableOccurrenceCount = useSeriesQty
       ? Math.max(1, await resolveBillableOccurrenceCount(ctx, args.id))
       : 1;
@@ -2256,6 +2260,9 @@ export const createDraftForSeries = mutation({
     await requireArborInternalContext(ctx);
     const series = await ctx.db.get(args.seriesId);
     if (!series) throw new Error("Event series not found.");
+    if (isMultiDayGroup(series)) {
+      throw new Error("A multi-day booking is billed through its days' invoice.");
+    }
     if (series.invoiceId) throw new Error("This series already has a linked invoice.");
 
     const publicApprovalToken = await generateUniquePublicApprovalToken(ctx);

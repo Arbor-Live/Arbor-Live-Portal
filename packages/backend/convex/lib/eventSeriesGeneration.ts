@@ -22,6 +22,9 @@ import {
 import { removePositionRow } from "./positionRows";
 import { isActBlock, syncNeedBlocks } from "./runOfShow";
 import type { ScheduleBlockType } from "./scheduleBlockTypes";
+import { isMultiDayGroup } from "./eventGroupKind";
+import { listGroupDays, selectDaysInScope, type GroupApplyScope } from "./eventGroupDays";
+import { formatPacificShortDate } from "./bookingDayLoad";
 
 export const EVENT_TIMEZONE = PORTAL_TIMEZONE;
 
@@ -484,7 +487,7 @@ export async function materializeOccurrence(
 ): Promise<Id<"events">> {
   const endAt = occurrenceEndAt(startAt, series.anchorStartAt, series.anchorEndAt);
   const eventId = await ctx.db.insert("events", {
-    title: series.title,
+    title: isMultiDayGroup(series) ? multiDayTitle(series.title, startAt) : series.title,
     status: "tentative",
     visibility: "public",
     invoiceId: series.invoiceId,
@@ -547,10 +550,67 @@ export async function materializeOccurrence(
   return eventId;
 }
 
+/**
+ * Fields every day of a group shares. A multi-day booking's days keep their
+ * own title (dated), times and per-day costs, so only these propagate there.
+ */
+const SHARED_DAY_FIELDS = [
+  "venueId",
+  "venueName",
+  "eventType",
+  "teamsInterested",
+  "category",
+  "hostGroupId",
+  "host",
+  "additionalHostGroupIds",
+  "expectedTurnout",
+  "dayOfLeadUserId",
+  "eventManagerUserId",
+  "operationsLeadUserId",
+  "rentalFulfillmentMode",
+  "requiresShowWindow",
+] as const satisfies ReadonlyArray<keyof Doc<"events"> & keyof Doc<"eventSeries">>;
+
+type SharedDayFields = Pick<Doc<"events">, (typeof SHARED_DAY_FIELDS)[number]>;
+
+function pickSharedDayFields(source: Partial<SharedDayFields>): Partial<SharedDayFields> {
+  const out: Partial<SharedDayFields> = {};
+  for (const field of SHARED_DAY_FIELDS) {
+    if (field in source) Object.assign(out, { [field]: source[field] });
+  }
+  return out;
+}
+
+export function buildSharedDayPatchFromGroup(group: Doc<"eventSeries">): Partial<Doc<"events">> {
+  return pickSharedDayFields(group);
+}
+
+/** The shared fields of a day edit, as a patch for its group. */
+export function buildSharedGroupPatchFromDay(
+  patch: Partial<Doc<"events">>,
+): Partial<Doc<"eventSeries">> {
+  return pickSharedDayFields(patch);
+}
+
+/** Where a group day starts: recurring days follow the rule; multi-day days are their own. */
+export function groupDayStartAt(
+  group: Doc<"eventSeries">,
+  day: Pick<Doc<"events">, "startAt" | "occurrenceIndex">,
+) {
+  if (isMultiDayGroup(group) || group.intervalWeeks === undefined) return day.startAt;
+  return occurrenceStartAt(group.anchorStartAt, day.occurrenceIndex ?? 0, group.intervalWeeks);
+}
+
+/** A multi-day booking's day title: "<group> — <short date>". */
+export function multiDayTitle(groupTitle: string, startAt: number) {
+  return `${groupTitle} — ${formatPacificShortDate(pacificDateKey(startAt))}`;
+}
+
 export function buildEventPatchFromSeriesTemplate(
   series: Doc<"eventSeries">,
   startAt: number,
 ): Partial<Doc<"events">> {
+  if (isMultiDayGroup(series)) return buildSharedDayPatchFromGroup(series);
   const endAt = occurrenceEndAt(startAt, series.anchorStartAt, series.anchorEndAt);
   return {
     title: series.title,
@@ -580,23 +640,7 @@ export function buildEventPatchFromSeriesTemplate(
   };
 }
 
-export type SeriesEditScope = "this" | "future" | "all";
-
-export function shouldApplySeriesUpdate(
-  event: Doc<"events">,
-  scope: SeriesEditScope,
-  referenceOccurrenceIndex: number,
-  now: number,
-) {
-  if (!event.seriesId || event.seriesDetached) return false;
-  if (event.status === "cancelled") return false;
-  if (scope === "this") return false;
-  if (scope === "all") return true;
-  const occurrenceIndex = event.occurrenceIndex ?? 0;
-  if (occurrenceIndex < referenceOccurrenceIndex) return false;
-  if (event.startAt < now) return false;
-  return true;
-}
+export type SeriesEditScope = GroupApplyScope;
 
 export async function propagateInvoiceIdToSeriesOccurrences(
   ctx: MutationCtx,
@@ -606,20 +650,14 @@ export async function propagateInvoiceIdToSeriesOccurrences(
   scope: SeriesEditScope,
   now: number,
 ) {
-  const occurrences = await ctx.db
-    .query("events")
-    .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", seriesId))
-    .take(200);
+  const occurrences = selectDaysInScope(
+    await listGroupDays(ctx, seriesId),
+    scope,
+    referenceOccurrenceIndex,
+    now,
+  );
 
-  for (const occurrence of occurrences.sort(
-    (a, b) => (a.occurrenceIndex ?? 0) - (b.occurrenceIndex ?? 0),
-  )) {
-    if (scope === "this") {
-      if (occurrence.occurrenceIndex !== referenceOccurrenceIndex) continue;
-    } else if (!shouldApplySeriesUpdate(occurrence, scope, referenceOccurrenceIndex, now)) {
-      continue;
-    }
-    if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
+  for (const occurrence of occurrences) {
 
     await ctx.db.patch(occurrence._id, { invoiceId, updatedAt: now });
     if (invoiceId) {
@@ -649,29 +687,18 @@ export async function propagateOverviewToSeriesOccurrences(
   now: number,
   overrides?: SeriesOverviewOverride,
 ): Promise<SeriesOverviewAffectedOccurrence[]> {
-  const occurrences = await ctx.db
-    .query("events")
-    .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", series._id))
-    .take(200);
+  const occurrences = selectDaysInScope(
+    await listGroupDays(ctx, series._id),
+    scope,
+    referenceOccurrenceIndex,
+    now,
+  );
 
   const affected: SeriesOverviewAffectedOccurrence[] = [];
 
-  for (const occurrence of occurrences.sort(
-    (a, b) => (a.occurrenceIndex ?? 0) - (b.occurrenceIndex ?? 0),
-  )) {
-    if (scope === "this") {
-      if (occurrence.occurrenceIndex !== referenceOccurrenceIndex) continue;
-    } else if (!shouldApplySeriesUpdate(occurrence, scope, referenceOccurrenceIndex, now)) {
-      continue;
-    }
+  for (const occurrence of occurrences) {
 
-    const occurrenceIndex = occurrence.occurrenceIndex ?? 0;
-    const startAt = occurrenceStartAt(
-      series.anchorStartAt,
-      occurrenceIndex,
-      series.intervalWeeks,
-    );
-    const patch = buildEventPatchFromSeriesTemplate(series, startAt);
+    const patch = buildEventPatchFromSeriesTemplate(series, groupDayStartAt(series, occurrence));
     await ctx.db.patch(occurrence._id, { ...patch, ...overrides, updatedAt: now });
     affected.push({
       id: occurrence._id,

@@ -5,6 +5,7 @@ import { artistOrganizationTypeValue } from "./lib/organizationType";
 import { scheduleBlockTypeValue } from "./lib/scheduleBlockTypes";
 import { userStatusValue } from "./lib/userStatus";
 import { eventSeriesPositionTemplateValue } from "./lib/eventSeriesPositions";
+import { eventGroupKindValue } from "./lib/eventGroupKind";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -850,12 +851,22 @@ export default defineSchema({
     .index("by_invoiceId", ["invoiceId"])
     .index("by_invoiceId_and_createdAt", ["invoiceId", "createdAt"]),
 
+  /**
+   * An event group: dated events that share setup and billing. `recurring`
+   * (a weekly/biweekly series, generated from a rule) or `multi_day` (a booking
+   * with explicit days that share one invoice). Absent `kind` means recurring
+   * until the `backfillEventGroupKinds` migration runs. Events point here via
+   * `events.seriesId` + `occurrenceIndex` (the day's position in the group).
+   */
   eventSeries: defineTable({
+    kind: v.optional(eventGroupKindValue),
     title: v.string(),
     status: v.union(v.literal("active"), v.literal("paused"), v.literal("ended")),
+    /** Day 1's start/end: templates are relative to each day's start. */
     anchorStartAt: v.number(),
     anchorEndAt: v.number(),
-    intervalWeeks: v.number(),
+    /** Recurring groups only. */
+    intervalWeeks: v.optional(v.number()),
     occurrenceCount: v.optional(v.number()),
     seriesEndAt: v.optional(v.number()),
     timezone: v.string(),

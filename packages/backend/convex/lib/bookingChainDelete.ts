@@ -5,6 +5,7 @@ import {
   deleteEventInvoiceLinksForInvoice,
 } from "./eventInvoiceLinks";
 import { listEventsByInvoiceId } from "./invoiceEvents";
+import { syncMultiDayGroupForInvoice } from "./eventGroups";
 
 const TAKE = 500;
 /**
@@ -111,6 +112,7 @@ export async function deleteInvoiceRecord(ctx: MutationCtx, invoiceId: Id<"invoi
 
 export async function deleteEventRecord(ctx: MutationCtx, eventId: Id<"events">) {
   const drainRows = withCascadeBudget();
+  const invoiceId = (await ctx.db.get(eventId))?.invoiceId;
   await deleteEventInvoiceLinksForEvent(ctx, eventId);
 
   await drainRows(
@@ -329,6 +331,10 @@ export async function deleteEventRecord(ctx: MutationCtx, eventId: Id<"events">)
   );
 
   await ctx.db.delete(eventId);
+  // The booking's remaining days close ranks (or stop being a group).
+  if (invoiceId && (await ctx.db.get(invoiceId))) {
+    await syncMultiDayGroupForInvoice(ctx, invoiceId, Date.now());
+  }
 }
 
 export async function unlinkInvoicePeers(ctx: MutationCtx, invoiceId: Id<"invoices">) {
