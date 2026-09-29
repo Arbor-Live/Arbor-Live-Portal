@@ -1,32 +1,18 @@
 "use client";
 
-import type { SnakeId, StageBoxDiagramModel, StageBoxPort } from "@arbor/show-file";
-import { SNAKE_LABEL, aes50PortFor, regionForPort } from "@arbor/show-file";
+import type { StageBoxDiagramModel, StageBoxPort } from "@arbor/show-file";
+import { SNAKE_LABEL } from "@arbor/show-file";
 import { cn } from "@/lib/utils";
 
-
-const REGION_PORTS: Record<"vox" | "mid" | "drums", [string, number, number]> = {
-  vox: ["Vox", 1, 4],
-  mid: ["Mid", 5, 10],
-  drums: ["Drums", 11, 16],
-};
-
 /**
- * Numbers as printed on the stage box, with the desk's sockets alongside when
- * the box sits down the daisy chain: "Vox · 1–4" on the first, "Vox · 1–4
- * (17–20)" on the second.
- */
-function regionLabel(region: "vox" | "mid" | "drums", snake: SnakeId): string {
-  const [name, first, last] = REGION_PORTS[region];
-  const from = aes50PortFor(snake, first);
-  const to = aes50PortFor(snake, last);
-  const sockets = from === first ? "" : ` (${from}–${to})`;
-  return `${name} · ${first}–${last}${sockets}`;
-}
-
-/**
- * SD16 / XR18 faceplate in Default.snap order (vox → mid → drums).
- * When `colored` is set, band diffs use green / mute strikethrough / yellow physical.
+ * SD16 / XR18 faceplate: only the sockets something plugs into tonight, packed
+ * in the allocator's order (families in rider order). When `colored` is set,
+ * band diffs use green / mute strikethrough / yellow physical.
+ *
+ * There are no fixed "vox / mid / drums" bands any more — the old template
+ * homes do not hold once the bill drives placement. Each cell prints its socket
+ * ("7 (23)" on the daisy-chained second box), so a crew member reads it off the
+ * box directly.
  */
 export function StageBoxPatchDiagram({
   model,
@@ -35,8 +21,6 @@ export function StageBoxPatchDiagram({
   model: StageBoxDiagramModel;
   colored?: boolean;
 }) {
-  const regions: Array<"vox" | "mid" | "drums"> = ["vox", "mid", "drums"];
-
   return (
     <div
       className="overflow-hidden border bg-background"
@@ -89,28 +73,15 @@ export function StageBoxPatchDiagram({
                 {SNAKE_LABEL[snake]}
               </div>
             ) : null}
-            {regions.map((region) => {
-              const regionPorts = boxPorts.filter(
-                (p) => regionForPort(p.port) === region,
-              );
-              if (regionPorts.length === 0) return null;
-              return (
-                <div key={region}>
-                  <div className="border-b bg-muted px-3 py-1.5 text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {regionLabel(region, snake)}
-                  </div>
-                  <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
-                    {regionPorts.map((port) => (
-                      <PortCell
-                        key={`${port.snake}.${port.port}`}
-                        port={port}
-                        colored={colored}
-                      />
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+            <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
+              {boxPorts.map((port) => (
+                <PortCell
+                  key={`${port.snake}.${port.port}`}
+                  port={port}
+                  colored={colored}
+                />
+              ))}
+            </div>
           </div>
         );
       })}

@@ -162,7 +162,6 @@ describe("event brief PDF", () => {
                   portLabel: "7",
                   strip: 7,
                   label: "Hi-hat",
-                  region: "mid",
                   stereo: false,
                   phantom: false,
                   di: false,

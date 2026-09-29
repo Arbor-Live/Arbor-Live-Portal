@@ -3,7 +3,6 @@ import {
   aes50Label,
   aes50PortFor,
   portLabel,
-  regionForPort,
 } from "./slots";
 import type {
   EventPatchAllocation,
@@ -223,5 +222,3 @@ function toStagePort(
     ...overrides,
   };
 }
-
-export { regionForPort } from "./slots";

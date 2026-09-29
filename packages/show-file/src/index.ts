@@ -43,7 +43,6 @@ export {
   aes50Label,
   aes50PortFor,
   portLabel,
-  regionForPort,
   snakeGroupForFamily,
 } from "./slots";
 export { buildShowFile, fileStem, showFileName } from "./show";

@@ -73,11 +73,9 @@ describe("StageBoxPatchDiagram", () => {
     const plan = buildPatchDiffPlan(allocateEventPatch(bands), "Test Night");
     const rendered = text(renderToStaticMarkup(<StageBoxPatchDiagram model={plan.night} />));
 
-    // One box, so ports read as printed on it: no socket brackets.
-    expect(rendered).toContain("Vox · 1–4");
-    // The region headers are fixed; used ports fall wherever families pack —
-    // Kick (drums) sits in the vox region, Sax (flex) in the mid region.
-    expect(rendered).toContain("Mid · 5–10");
+    // No fixed family bands: ports pack in the allocator's order, and each cell
+    // carries its own socket, so the stale "Vox / Mid / Drums" headers are gone.
+    expect(rendered).not.toContain("Vox ·");
     // Both halves of the stereo keys pair carry the same DI tag.
     expect(rendered.match(/DI/g)).toHaveLength(2);
     // Only ports in use are drawn, wearing the rider's own names; spares are
@@ -114,14 +112,13 @@ describe("StageBoxPatchDiagram", () => {
 
     expect(rendered).toContain("Snake A");
     expect(rendered).toContain("Snake B");
-    // Every region header is fixed to its socket range; the bill's ports fall
-    // wherever they pack. Box A fills 1–16, so all three headers show.
-    expect(rendered).toContain("Vox · 1–4");
-    expect(rendered).toContain("Mid · 5–10");
-    expect(rendered).toContain("Drums · 11–16");
+    // No fixed family bands anywhere.
+    expect(rendered).not.toContain("Vox ·");
+    expect(rendered).not.toContain("Drums ·");
     // Box B's overflow reads as printed on the box, with the desk's sockets
     // alongside — and those sockets are AES50 A, never "B".
-    expect(rendered).toContain("(17–20)");
+    expect(rendered).toContain("1 (17)");
+    expect(rendered).toContain("2 (18)");
     expect(rendered).not.toContain("B.9");
     expect(rendered).not.toContain("B.1");
   });
