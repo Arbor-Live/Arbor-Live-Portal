@@ -7,7 +7,7 @@ import {
   perOccurrencePullQuantity,
   resolveBillableOccurrenceCount,
 } from "./lib/invoiceSeries";
-import { shouldApplySeriesUpdate, type SeriesEditScope } from "./lib/eventSeriesGeneration";
+import { listGroupDays, selectDaysInScope, type GroupApplyScope as SeriesEditScope } from "./lib/eventGroupTemplates";
 
 async function listTemplateItems(ctx: QueryCtx | MutationCtx, seriesId: Id<"eventSeries">) {
   const rows = await ctx.db
@@ -15,14 +15,6 @@ async function listTemplateItems(ctx: QueryCtx | MutationCtx, seriesId: Id<"even
     .withIndex("by_seriesId", (q) => q.eq("seriesId", seriesId))
     .take(500);
   return rows.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
-}
-
-async function listOccurrencesForSeries(ctx: MutationCtx, seriesId: Id<"eventSeries">) {
-  const rows = await ctx.db
-    .query("events")
-    .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", seriesId))
-    .take(200);
-  return rows.sort((a, b) => (a.occurrenceIndex ?? 0) - (b.occurrenceIndex ?? 0));
 }
 
 export const scaffoldFromInvoice = mutation({
@@ -196,18 +188,15 @@ async function regenerateFuturePullLists(
   const templates = await listTemplateItems(ctx, args.seriesId);
   if (templates.length === 0) return { updatedCount: 0 };
 
-  const occurrences = await listOccurrencesForSeries(ctx, args.seriesId);
+  const occurrences = selectDaysInScope(
+    await listGroupDays(ctx, args.seriesId),
+    args.scope,
+    args.fromOccurrenceIndex,
+    args.now,
+  );
   let updatedCount = 0;
 
   for (const occurrence of occurrences) {
-    if (args.scope === "this") {
-      if (occurrence.occurrenceIndex !== args.fromOccurrenceIndex) continue;
-    } else if (
-      !shouldApplySeriesUpdate(occurrence, args.scope, args.fromOccurrenceIndex, args.now)
-    ) {
-      continue;
-    }
-    if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
 
     const existing = await ctx.db
       .query("eventPullListItems")

@@ -25,6 +25,7 @@ import { consolidatePackageIntoOneIncludedUnit } from "./lib/packageContentMigra
 import { normalizeCrewLineLabel } from "./lib/normalizeCrewLineLabel";
 import { syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
 import { ensureActPosition } from "./lib/actPositions";
+import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
 
 /**
  * Official @convex-dev/migrations runner.
@@ -760,6 +761,29 @@ export const unsetLegacyPendingInviteEmailFlags = migrations.define({
   },
 });
 
+/** Event groups (#341), step 2: every existing series is a recurring group. */
+export const backfillEventGroupKinds = migrations.define({
+  table: "eventSeries",
+  migrateOne: async (_ctx, series) => {
+    if (series.kind !== undefined) return;
+    return { kind: "recurring" as const };
+  },
+});
+
+/**
+ * Event groups (#341), step 3: each invoice whose primary days number two or
+ * more (and aren't one recurring series) becomes a `multi_day` group, with its
+ * templates derived from Day 1. Idempotent: re-running re-syncs membership.
+ * No day's schedule, crew or lineup changes.
+ */
+export const groupMultiDayBookings = migrations.define({
+  table: "invoices",
+  batchSize: 25,
+  migrateOne: async (ctx, invoice) => {
+    await syncMultiDayGroupForInvoice(ctx, invoice._id, Date.now());
+  },
+});
+
 /**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
@@ -797,6 +821,8 @@ const MIGRATION_SERIES = [
   internal.migrations.backfillUserEmailOptOuts,
   internal.migrations.unsetLegacyUserEmailFlags,
   internal.migrations.unsetLegacyPendingInviteEmailFlags,
+  internal.migrations.backfillEventGroupKinds,
+  internal.migrations.groupMultiDayBookings,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

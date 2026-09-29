@@ -4172,7 +4172,8 @@ export const getEventSeriesStateByEventId = query({
     v.object({
       seriesId: v.id("eventSeries"),
       title: v.string(),
-      intervalWeeks: v.number(),
+      kind: v.union(v.literal("recurring"), v.literal("multi_day")),
+      intervalWeeks: v.optional(v.number()),
       occurrenceCount: v.number(),
       occurrenceTitles: v.array(v.string()),
       occurrenceIds: v.array(v.id("events")),
@@ -4192,6 +4193,7 @@ export const getEventSeriesStateByEventId = query({
     return {
       seriesId: series._id,
       title: series.title,
+      kind: series.kind ?? "recurring",
       intervalWeeks: series.intervalWeeks,
       occurrenceCount: occurrences.length,
       occurrenceTitles: occurrences.map((row) => row.title),

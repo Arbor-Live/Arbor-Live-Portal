@@ -1,5 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { isRecurringGroup } from "./eventGroupKind";
 import { listEventsByInvoiceId } from "./invoiceEvents";
 
 export type EquipmentQuantityBasis = "total" | "per_occurrence";
@@ -8,6 +9,11 @@ export function isEquipmentSection(section: string) {
   return section === "equipment_package" || section === "equipment_type";
 }
 
+/**
+ * The recurring series billed by this invoice. A multi-day booking's group also
+ * points at its invoice, but bills day by day like any linked days, so it is
+ * not a "series invoice" here.
+ */
 export async function findSeriesByInvoiceId(
   ctx: QueryCtx | MutationCtx,
   invoiceId: Id<"invoices">,
@@ -16,7 +22,20 @@ export async function findSeriesByInvoiceId(
     .query("eventSeries")
     .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
     .take(5);
-  return rows[0] ?? null;
+  return rows.find((row) => isRecurringGroup(row)) ?? null;
+}
+
+/** The one recurring series every linked day belongs to, if any. */
+async function inferRecurringSeriesFromDays(
+  ctx: QueryCtx | MutationCtx,
+  linkedEvents: Doc<"events">[],
+): Promise<Doc<"eventSeries"> | null> {
+  const seriesIds = new Set(
+    linkedEvents.map((row) => row.seriesId).filter((id): id is Id<"eventSeries"> => Boolean(id)),
+  );
+  if (seriesIds.size !== 1) return null;
+  const seriesDoc = await ctx.db.get([...seriesIds][0]!);
+  return seriesDoc && isRecurringGroup(seriesDoc) ? seriesDoc : null;
 }
 
 export async function resolveBillableOccurrenceCount(
@@ -37,17 +56,13 @@ export async function resolveBillableOccurrenceCount(
   }
 
   const linkedEvents = await listEventsByInvoiceId(ctx, invoiceId);
-  const seriesIds = new Set(
-    linkedEvents.map((row) => row.seriesId).filter((id): id is Id<"eventSeries"> => Boolean(id)),
-  );
-  if (seriesIds.size === 1) {
-    const seriesId = [...seriesIds][0]!;
+  const seriesDoc = await inferRecurringSeriesFromDays(ctx, linkedEvents);
+  if (seriesDoc) {
     const billable = linkedEvents.filter(
-      (row) => row.seriesId === seriesId && !row.seriesDetached && row.status !== "cancelled",
+      (row) => row.seriesId === seriesDoc._id && !row.seriesDetached && row.status !== "cancelled",
     );
     if (billable.length > 0) return billable.length;
-    const seriesDoc = await ctx.db.get(seriesId);
-    return seriesDoc?.occurrenceCount ?? linkedEvents.length;
+    return seriesDoc.occurrenceCount ?? linkedEvents.length;
   }
 
   return linkedEvents.filter((row) => row.status !== "cancelled").length;
@@ -99,15 +114,9 @@ export async function resolveSeriesMetadataForInvoice(
   }
 
   const linkedEvents = await listEventsByInvoiceId(ctx, invoiceId);
-  const seriesIds = [
-    ...new Set(
-      linkedEvents.map((row) => row.seriesId).filter((id): id is Id<"eventSeries"> => Boolean(id)),
-    ),
-  ];
-  if (seriesIds.length !== 1) return null;
-  const seriesId = seriesIds[0]!;
-  const seriesDoc = await ctx.db.get(seriesId);
+  const seriesDoc = await inferRecurringSeriesFromDays(ctx, linkedEvents);
   if (!seriesDoc) return null;
+  const seriesId = seriesDoc._id;
   const billableCount = linkedEvents.filter(
     (row) => row.seriesId === seriesId && !row.seriesDetached && row.status !== "cancelled",
   ).length;
