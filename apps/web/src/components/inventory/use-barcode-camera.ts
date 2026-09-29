@@ -53,9 +53,17 @@ function canUseCameraScanner() {
  * Uses the native `BarcodeDetector` where available and `@zxing/browser`
  * everywhere else (Safari / iOS), so the same component works on an iPhone.
  */
+/**
+ * What happened to a read. `void` counts as accepted.
+ * - `"dropped"`: not taken (the form was busy), so the same code may fire again.
+ * - `"rejected"`: taken but it failed (the caller shows the error). No "Read …"
+ *   confirmation, and the code stays suppressed so a held label doesn't repeat
+ *   the error every frame.
+ */
+export type ScanOutcome = "accepted" | "dropped" | "rejected";
+
 export function useBarcodeCamera(
-  /** Return `false` when the read wasn't taken (e.g. the form was busy) so the same code can fire again. */
-  onDetect: (raw: string) => void | boolean | Promise<void | boolean>,
+  onDetect: (raw: string) => void | ScanOutcome | Promise<void | ScanOutcome>,
   options?: { closeOnDetect?: boolean },
 ) {
   const sessionId = useId();
@@ -134,16 +142,20 @@ export function useBarcodeCamera(
       }
       lastScanRef.current = { value: raw, at: now };
       inFlightRef.current = true;
-      let accepted: void | boolean;
+      let outcome: void | ScanOutcome;
       try {
-        accepted = await onDetectRef.current(raw);
+        outcome = await onDetectRef.current(raw);
       } finally {
+        // Restart the window from when the read finished, so a save slower
+        // than 2s doesn't let the still-held code fire again.
+        lastScanRef.current = { value: raw, at: Date.now() };
         inFlightRef.current = false;
       }
-      if (accepted === false) {
+      if (outcome === "dropped") {
         lastScanRef.current = { value: "", at: 0 };
         return;
       }
+      if (outcome === "rejected") return;
       if (!closeOnDetectRef.current && !cancelled) {
         setLastDetected(raw);
         navigator.vibrate?.(40);

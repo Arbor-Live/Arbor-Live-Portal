@@ -5,7 +5,7 @@ import { CameraIcon, XIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "./searchable-select";
-import { useBarcodeCamera } from "./use-barcode-camera";
+import { useBarcodeCamera, type ScanOutcome } from "./use-barcode-camera";
 
 export type ContainsOption = {
   value: string;
@@ -18,8 +18,11 @@ type ContainsEditorProps = {
   onChange: (value: string[]) => void;
   /** Everything that may still be added. Selected values are filtered out. */
   options: ContainsOption[];
-  /** Fired with the raw scanned/typed value when the operator uses the camera. */
-  onScan?: (raw: string) => void | Promise<void>;
+  /**
+   * Fired with the raw scanned value. Resolve once the asset is added (or
+   * `"rejected"` if it wasn't) — the camera waits for it before the next read.
+   */
+  onScan?: (raw: string) => void | ScanOutcome | Promise<void | ScanOutcome>;
   title?: string;
   emptyLabel?: string;
   disabled?: boolean;
@@ -46,7 +49,7 @@ export function ContainsEditor({
   }, [options, value]);
   // A container is filled one asset after another, so the camera stays open between reads.
   const { cameraOn, toggleCamera, cameraError, videoRef, supported, lastDetected } = useBarcodeCamera(
-    (raw) => void onScan?.(raw),
+    (raw) => onScan?.(raw),
   );
 
   const selectedOptions = useMemo(() => {

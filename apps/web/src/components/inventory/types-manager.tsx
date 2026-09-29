@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { CaretDownIcon, PackageIcon, PlusIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
@@ -20,7 +20,12 @@ import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import { toCategoryOptions } from "./constants";
-import { TYPE_VISIBILITY_LABELS, type InventoryTypeRow, type TypeVisibility } from "./type-form";
+import {
+  formatUnitCount,
+  TYPE_VISIBILITY_LABELS,
+  type InventoryTypeRow,
+  type TypeVisibility,
+} from "./type-form";
 import { TypeSettingsDialog, type TypeSettingsTab } from "./type-settings-dialog";
 import { TypeSheet } from "./type-sheet";
 import { TypesTable } from "./types-table";
@@ -158,6 +163,19 @@ export function TypesManager() {
     panelId && !loadedPanelRow ? { id: panelId } : "skip",
   );
   const panelRow = loadedPanelRow ?? fetchedPanelRow ?? null;
+  // Set while this page deletes a type, so its own delete isn't reported as a dead link.
+  const deletingIdRef = useRef<string | null>(null);
+
+  // A `?type=` link to a type that doesn't exist: say so and drop the param.
+  useEffect(() => {
+    if (!panelId || loadedPanelRow || fetchedPanelRow !== null) return;
+    if (deletingIdRef.current !== panelId) {
+      notify.error("That type doesn't exist anymore. It may have been deleted.");
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- close the panel once the lookup says the type is gone
+    setPanel(null);
+    setTypeParam(null);
+  }, [fetchedPanelRow, loadedPanelRow, panelId]);
 
   const filterCount = (search.trim() ? 1 : 0) + Object.keys(applied).length;
   const selectedIds = rows.filter((row) => selected.has(row._id)).map((row) => row._id);
@@ -198,8 +216,10 @@ export function TypesManager() {
       confirmLabel: "Delete type",
     });
     if (!ok) return false;
+    deletingIdRef.current = row._id;
     const deleted = await attempt(() => deleteType({ id: row._id }), `Deleted ${row.name}`);
     if (deleted && panel === row._id) openPanel(null);
+    deletingIdRef.current = null;
     return deleted;
   }
 
@@ -290,7 +310,7 @@ export function TypesManager() {
           <div className="space-y-0.5">
             <p className="text-sm" data-testid="types-summary">
               {plural(rows.length, "type")}
-              {shownUnits !== undefined ? ` · ${plural(shownUnits, "unit")}` : ""} · {listedCount} listed publicly (
+              {shownUnits !== undefined ? ` · ${formatUnitCount(shownUnits, Boolean(units?.truncated))}` : ""} · {listedCount} listed publicly (
               {profileCount} with a full profile)
               {status === "CanLoadMore" ? " · more to load" : ""}
             </p>
@@ -360,7 +380,9 @@ export function TypesManager() {
           {rows.length === 0 ? (
             <div className="space-y-2 border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
               <p>
-                {filterCount
+                {filterCount && status === "CanLoadMore"
+                  ? "Nothing matches in the types checked so far. Load more to keep looking."
+                  : filterCount
                   ? "No types match this search and these filters."
                   : "No types yet. Add the first model with New type, then add its units from Items."}
               </p>
@@ -376,6 +398,7 @@ export function TypesManager() {
               categoryLabels={categoryLabels}
               capabilityLabels={capabilityLabels}
               unitCounts={unitCounts}
+              unitsTruncated={Boolean(units?.truncated)}
               selected={selected}
               onSelectedChange={setSelected}
               onOpen={(row) => openPanel(row._id)}
@@ -395,7 +418,8 @@ export function TypesManager() {
       <TypeSheet
         open={panelIsNew || panelRow !== null}
         row={panelIsNew ? null : panelRow}
-        unitCount={panelRow ? unitCounts?.get(panelRow._id) : undefined}
+        unitCount={panelRow ? (unitCounts ? (unitCounts.get(panelRow._id) ?? 0) : undefined) : undefined}
+        unitsTruncated={Boolean(units?.truncated)}
         categoryOptions={categoryOptions}
         capabilityOptions={activeCapabilities}
         onOpenChange={(open) => {

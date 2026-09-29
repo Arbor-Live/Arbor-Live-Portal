@@ -98,6 +98,14 @@ export function buildTypePayload(values: InventoryTypeFormValues, editingRow?: I
   };
 }
 
+/**
+ * A unit count for display. `unitCounts` scans a bounded window of items, so
+ * once it's truncated every count is a floor ("3+ units").
+ */
+export function formatUnitCount(count: number, truncated: boolean) {
+  return `${count}${truncated ? "+" : ""} unit${count === 1 && !truncated ? "" : "s"}`;
+}
+
 /** How far a type is published: hidden, on the public browse pages, or with its full profile. */
 export type TypeVisibility = "hidden" | "listing" | "profile";
 

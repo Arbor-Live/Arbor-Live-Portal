@@ -32,6 +32,7 @@ import { SearchableSelect } from "./searchable-select";
 import {
   buildTypePayload,
   defaultTypeValues,
+  formatUnitCount,
   emptyResourceRow,
   toTypeFormValues,
   TYPE_VISIBILITY_LABELS,
@@ -51,6 +52,7 @@ export function TypeSheet({
   open,
   row,
   unitCount,
+  unitsTruncated = false,
   categoryOptions,
   capabilityOptions,
   onOpenChange,
@@ -59,6 +61,7 @@ export function TypeSheet({
   open: boolean;
   row: InventoryTypeRow | null;
   unitCount?: number;
+  unitsTruncated?: boolean;
   categoryOptions: ReadonlyArray<{ value: string; label: string }>;
   capabilityOptions: CapabilityOption[];
   onOpenChange: (open: boolean) => void;
@@ -97,6 +100,7 @@ export function TypeSheet({
             key={row?._id ?? "new"}
             row={row}
             unitCount={unitCount}
+            unitsTruncated={unitsTruncated}
             categoryOptions={categoryOptions}
             capabilityOptions={capabilityOptions}
             onDirtyChange={(dirty) => {
@@ -127,6 +131,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function TypeSheetBody({
   row,
   unitCount,
+  unitsTruncated = false,
   categoryOptions,
   capabilityOptions,
   onDirtyChange,
@@ -136,6 +141,7 @@ function TypeSheetBody({
 }: {
   row: InventoryTypeRow | null;
   unitCount?: number;
+  unitsTruncated?: boolean;
   categoryOptions: ReadonlyArray<{ value: string; label: string }>;
   capabilityOptions: CapabilityOption[];
   onDirtyChange: (dirty: boolean) => void;
@@ -198,7 +204,7 @@ function TypeSheetBody({
           </SheetTitle>
           <SheetDescription>
             {row
-              ? `${unitCount === undefined ? "Counting units…" : `${unitCount} unit${unitCount === 1 ? "" : "s"} in inventory`}. Changes apply to every unit, package line and pull list that uses this type.`
+              ? `${unitCount === undefined ? "Counting units…" : `${formatUnitCount(unitCount, unitsTruncated)} in inventory`}. Changes apply to every unit, package line and pull list that uses this type.`
               : "A model of gear. Add units of it from Items once it exists."}
           </SheetDescription>
         </SheetHeader>

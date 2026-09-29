@@ -14,6 +14,7 @@ import {
 import { formatCurrency } from "./constants";
 import { formatTypeDisplay } from "./package-section-utils";
 import {
+  formatUnitCount,
   TYPE_VISIBILITY_LABELS,
   TYPE_VISIBILITY_TONES,
   typeVisibility,
@@ -29,6 +30,7 @@ export function TypesTable({
   categoryLabels,
   capabilityLabels,
   unitCounts,
+  unitsTruncated,
   selected,
   onSelectedChange,
   onOpen,
@@ -40,6 +42,8 @@ export function TypesTable({
   capabilityLabels: Map<string, string>;
   /** Undefined while the counts load. */
   unitCounts: Map<string, number> | undefined;
+  /** The count scan hit its limit: counts are floors, and a missing type isn't known to be empty. */
+  unitsTruncated: boolean;
   selected: Set<string>;
   onSelectedChange: (selected: Set<string>) => void;
   onOpen: (row: InventoryTypeRow) => void;
@@ -106,13 +110,13 @@ export function TypesTable({
                 </span>
                 <span
                   className={
-                    units === 0 && unitCounts
+                    units === 0 && unitCounts && !unitsTruncated
                       ? "w-20 shrink-0 text-right text-muted-foreground tabular-nums"
                       : "w-20 shrink-0 text-right tabular-nums"
                   }
                   data-testid="type-row-units"
                 >
-                  {unitCounts ? `${units} unit${units === 1 ? "" : "s"}` : "…"}
+                  {unitCounts ? formatUnitCount(units, unitsTruncated) : "…"}
                 </span>
                 <StatusPill
                   tone={TYPE_VISIBILITY_TONES[visibility]}

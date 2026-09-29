@@ -207,6 +207,9 @@ function matchesInventoryTypeFilters(
  * hid were always the newest ones — the same failure #65 fixed in six other
  * admin lists.
  *
+ * Filtered pages each scan up to `MAX_TYPE_OPTIONS` rows (whatever the client
+ * asked for), so past that size the matches arrive over several pages.
+ *
  * Each filter is a filter-bar chip (`is` / `is not` any of several values).
  * `units` takes `"has"` or `"none"` and checks `inventoryItems` per type.
  */
@@ -239,14 +242,17 @@ export const list = query({
       active(args.units);
 
     if (hasInMemoryFilter) {
-      const candidates = indexedCategory
+      // Scan the table a window at a time on the client's cursor, so a catalog
+      // past the window pages on with Load more instead of being cut off.
+      const scanOpts = { ...args.paginationOpts, numItems: MAX_TYPE_OPTIONS };
+      const scanned = indexedCategory
         ? await ctx.db
             .query("inventoryTypes")
             .withIndex("by_category", (q) => q.eq("category", indexedCategory))
-            .take(MAX_TYPE_OPTIONS)
-        : await ctx.db.query("inventoryTypes").take(MAX_TYPE_OPTIONS);
+            .paginate(scanOpts)
+        : await ctx.db.query("inventoryTypes").paginate(scanOpts);
 
-      const matches = candidates.filter((type) => matchesInventoryTypeFilters(type, args));
+      const matches = scanned.page.filter((type) => matchesInventoryTypeFilters(type, args));
       const page: Doc<"inventoryTypes">[] = [];
       for (const type of matches) {
         if (active(args.units)) {
@@ -260,9 +266,9 @@ export const list = query({
       }
       page.sort((a, b) => a.name.localeCompare(b.name));
 
-      // One page, already complete: `usePaginatedQuery` must not offer a Load
-      // more button that would page past a result set it has all of.
-      return { page, isDone: true, continueCursor: "" };
+      // The matches from this window, with the scan's own cursor: in any
+      // catalog under the window size that's one finished page.
+      return { ...scanned, page };
     }
 
     const result = indexedCategory
