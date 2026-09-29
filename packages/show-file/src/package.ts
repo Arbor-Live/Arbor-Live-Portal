@@ -1,6 +1,6 @@
 import { zipSync, strToU8 } from "fflate";
 import { DEFAULT_PATCH_PLAN, allocateEventPatch, sortBandsForShow } from "./allocate";
-import { TEMPLATE_SLOTS, aes50PortFor } from "./slots";
+import { BOX_CAPACITY, aes50PortFor } from "./slots";
 import { buildShowFile, fileStem, showFileName } from "./show";
 import { buildBandSnap, buildNightSnap } from "./snap";
 import { buildX32Scene } from "./x32";
@@ -49,7 +49,7 @@ export function buildShowPackage(args: {
   eventName: string;
   bands: ShowBandInput[];
   template?: WingSnap;
-  /** Snake choices for the night (second stage box, per-group sides). */
+  /** Snake choices for the night (second stage box). */
   plan?: PatchPlan;
   /** Set false to make every scene a full recall (no snapshot scoping). */
   scope?: boolean;
@@ -172,12 +172,11 @@ function previewRows(
   const rows: ConsolePreviewRow[] = [];
   for (const snake of snakes) {
     const offset = target === "x32" && snake === "B" ? 16 : 0;
-    for (const slot of TEMPLATE_SLOTS) {
-      if (slot.strip === null) continue;
-      const port = byKey.get(`${snake}:${slot.port}`);
-      if (!port?.used) continue;
-      const ch = target === "wing" ? (port.strip ?? slot.port) : offset + slot.port;
-      const socket = aes50PortFor(snake, slot.port);
+    for (let portNumber = 1; portNumber <= BOX_CAPACITY; portNumber++) {
+      const port = byKey.get(`${snake}:${portNumber}`);
+      if (!port?.used || port.strip === null) continue;
+      const ch = target === "wing" ? port.strip : offset + portNumber;
+      const socket = aes50PortFor(snake, portNumber);
       rows.push({
         span: port.stereo ? `${ch}+${ch + 1}` : String(ch),
         name: port.label,

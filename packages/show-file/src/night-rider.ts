@@ -101,13 +101,13 @@ function nightInputsFromAllocation(
         ? "di"
         : ((types.find((t) => t !== "di") as RiderInputType | undefined) ?? "mic");
 
-    const sourceKey = Object.values(port.bandInstruments).find((k) => k.includes("."));
-
     inputs.push({
       id: createRiderId("in"),
       channel: port.strip,
       source: port.label,
-      sourceKey,
+      // The night consensus role, never one band's arbitrary pick: a mixed flex
+      // stays unmapped (family "—") instead of mislabelling itself "Drums".
+      sourceKey: port.nightSourceKey ?? undefined,
       inputType,
       stand: "none",
       phantom: port.phantom,

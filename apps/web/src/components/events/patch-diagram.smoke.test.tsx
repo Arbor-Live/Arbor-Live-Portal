@@ -35,6 +35,34 @@ const bands = [
   },
 ];
 
+/** A bill that needs a second box: box A fills 16 sockets, box B takes the OH pair. */
+const bigBands = [
+  {
+    bandName: "Big Band",
+    fileStem: fileStem("Big Band"),
+    role: "headliner" as const,
+    inputs: [
+      ...Array.from({ length: 4 }, (_, i) =>
+        input({ id: `v${i}`, channel: i + 1, source: `V${i}`, sourceKey: "vox.lead" }),
+      ),
+      ...Array.from({ length: 6 }, (_, i) =>
+        input({
+          id: `f${i}`,
+          channel: 5 + i,
+          source: `Horn ${i}`,
+          sourceKey: "wind.trumpet",
+        }),
+      ),
+      input({ id: "k", channel: 11, source: "Keys", sourceKey: "keys", stereo: true, inputType: "di" }),
+      input({ id: "kick", channel: 12, source: "Kick", sourceKey: "drum.kick" }),
+      input({ id: "sn", channel: 13, source: "Snare", sourceKey: "drum.snare" }),
+      input({ id: "t1", channel: 14, source: "Rack", sourceKey: "drum.tom.rack" }),
+      input({ id: "t2", channel: 15, source: "Floor", sourceKey: "drum.tom.floor" }),
+      input({ id: "oh", channel: 16, source: "OH", sourceKey: "drum.oh", stereo: true }),
+    ],
+  },
+];
+
 /** Text content of the rendered faceplate, tags and all. */
 function text(html: string): string {
   return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
@@ -47,19 +75,23 @@ describe("StageBoxPatchDiagram", () => {
 
     // One box, so ports read as printed on it: no socket brackets.
     expect(rendered).toContain("Vox · 1–4");
+    // The region headers are fixed; used ports fall wherever families pack —
+    // Kick (drums) sits in the vox region, Sax (flex) in the mid region.
     expect(rendered).toContain("Mid · 5–10");
-    expect(rendered).toContain("Drums · 11–16");
     // Both halves of the stereo keys pair carry the same DI tag.
     expect(rendered.match(/DI/g)).toHaveLength(2);
-    // Sax takes Flex1; Flex2 is spare, so it is not drawn as an empty cell.
-    expect(rendered).toContain("Flex1");
-    expect(rendered).not.toContain("Flex2");
+    // Only ports in use are drawn, wearing the rider's own names; spares are
+    // listed, never drawn as cells.
+    expect(rendered).toContain("Sax");
+    expect(rendered).toContain("Nord");
     expect(rendered).toContain("Leave empty");
   });
 
   it("groups two snakes and keeps the layout per box", () => {
-    const allocation = allocateEventPatch(bands, {
+    const allocation = allocateEventPatch(bigBands, {
       secondSnake: true,
+      // `sides` is UI intent only: placement is order-driven, so the overflow
+      // still lands on box B regardless.
       sides: { keys: "B", flex: "B" },
     });
     const plan = buildPatchDiffPlan(allocation, "Test Night");
@@ -82,11 +114,15 @@ describe("StageBoxPatchDiagram", () => {
 
     expect(rendered).toContain("Snake A");
     expect(rendered).toContain("Snake B");
-    // Box A carries only vox here, box B the keys and flex.
+    // Every region header is fixed to its socket range; the bill's ports fall
+    // wherever they pack. Box A fills 1–16, so all three headers show.
     expect(rendered).toContain("Vox · 1–4");
-    expect(rendered).toContain("Mid · 5–10 (21–26)"); // box B, sockets alongside
-    expect(rendered).toContain("9 (25)"); // keys: port 9 on box B = socket A.25
-    expect(rendered).toContain("Ch 25"); // …on its own console strip
-    expect(rendered).not.toContain("B.9"); // never AES50 B
+    expect(rendered).toContain("Mid · 5–10");
+    expect(rendered).toContain("Drums · 11–16");
+    // Box B's overflow reads as printed on the box, with the desk's sockets
+    // alongside — and those sockets are AES50 A, never "B".
+    expect(rendered).toContain("(17–20)");
+    expect(rendered).not.toContain("B.9");
+    expect(rendered).not.toContain("B.1");
   });
 });

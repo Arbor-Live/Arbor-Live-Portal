@@ -69,3 +69,14 @@ function truncateLabel(value: string): string {
   const cleaned = value.replace(/\s+/g, " ").trim();
   return cleaned.length <= 12 ? cleaned : `${cleaned.slice(0, 11)}…`;
 }
+
+/**
+ * Faceplate name for a source role ("Hi-hat", "Viola"), for when a flex port is
+ * actually a single instrument all night. Null when the key is unknown — the
+ * caller keeps its stable "Flex1" name rather than guess.
+ */
+export function sourceLabelForKey(sourceKey: string | null | undefined): string | null {
+  if (!sourceKey) return null;
+  const source = riderSource(sourceKey);
+  return source ? truncateLabel(source.label) : null;
+}

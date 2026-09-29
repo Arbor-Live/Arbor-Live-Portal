@@ -43,7 +43,7 @@ function EventBandRidersPanel({ eventId }: { eventId: Id<"events"> }) {
     return null;
   }
 
-  const { patchPlan, changeovers } = nightRiderPlan(rows, plan);
+  const { patchPlan, changeovers, fitsOneBox } = nightRiderPlan(rows, plan);
 
   return (
     <div className="space-y-4" data-testid="event-band-riders">
@@ -56,7 +56,7 @@ function EventBandRidersPanel({ eventId }: { eventId: Id<"events"> }) {
           <EventNightRiderDownloadButton eventId={eventId} disabled={!patchPlan} />
         </CardHeader>
         <CardContent className="space-y-4">
-          <SnakePlanControls eventId={eventId} plan={plan} />
+          <SnakePlanControls eventId={eventId} plan={plan} fitsOneBox={fitsOneBox} />
           {patchPlan ? <StageBoxPatchDiffViews plan={patchPlan} /> : null}
           {patchPlan ? <EventShowFilePanel eventId={eventId} /> : null}
           <NightRiderChangeoverList changeovers={changeovers} />
