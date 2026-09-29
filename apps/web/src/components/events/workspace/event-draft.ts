@@ -125,6 +125,7 @@ export type EventDraft = {
   additionalHostGroupIds: string[];
   managerUserId: string;
   dayOfLeadUserId: string;
+  operationsLeadUserId: string;
   bandsCostUsd: string;
   externalRentalsCostUsd: string;
   otherCostUsd: string;
@@ -153,6 +154,7 @@ export const EMPTY_EVENT_DRAFT: EventDraft = {
   additionalHostGroupIds: [],
   managerUserId: "",
   dayOfLeadUserId: "",
+  operationsLeadUserId: "",
   bandsCostUsd: "0",
   externalRentalsCostUsd: "0",
   otherCostUsd: "0",
@@ -189,6 +191,7 @@ const DRAFT_FIELD_SECTIONS: Record<EventDraftKey, DraftSection> = {
   additionalHostGroupIds: "billing",
   managerUserId: "details",
   dayOfLeadUserId: "details",
+  operationsLeadUserId: "details",
   bandsCostUsd: "billing",
   externalRentalsCostUsd: "billing",
   otherCostUsd: "billing",
@@ -228,6 +231,7 @@ export function draftFromEvent(
     additionalHostGroupIds: (event.additionalHostGroupIds ?? []).map((id) => String(id)),
     managerUserId: event.eventManagerUserId ?? "",
     dayOfLeadUserId: event.dayOfLeadUserId ?? "",
+    operationsLeadUserId: event.operationsLeadUserId ?? "",
     bandsCostUsd: String(event.bandsCostUsd ?? 0),
     externalRentalsCostUsd: String(event.externalRentalsCostUsd ?? 0),
     otherCostUsd: String(event.otherCostUsd ?? 0),
@@ -286,6 +290,7 @@ export function buildEventUpdatePatch(
     additionalHostGroupIds?: Id<"invoiceGroups">[];
     eventManagerUserId?: string;
     dayOfLeadUserId?: string;
+    operationsLeadUserId?: string;
     bandsCostUsd?: number;
     externalRentalsCostUsd?: number;
     otherCostUsd?: number;
@@ -333,6 +338,9 @@ export function buildEventUpdatePatch(
   // "" is an explicit clear on the server; undefined means unchanged.
   if (changed.has("managerUserId")) patch.eventManagerUserId = draft.managerUserId;
   if (changed.has("dayOfLeadUserId")) patch.dayOfLeadUserId = draft.dayOfLeadUserId;
+  if (changed.has("operationsLeadUserId")) {
+    patch.operationsLeadUserId = draft.operationsLeadUserId;
+  }
   if (changed.has("bandsCostUsd")) patch.bandsCostUsd = parseUsd(draft.bandsCostUsd);
   if (changed.has("externalRentalsCostUsd")) {
     patch.externalRentalsCostUsd = parseUsd(draft.externalRentalsCostUsd);

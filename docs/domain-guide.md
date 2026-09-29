@@ -218,8 +218,16 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     lines.
   Artists browse still-open slots from `/dashboard/opportunities` and
   `submitInquiry` (`eventArtistInquiries`), which flags the slot `inquiring`
-  and emails Operations admins (`email/artistNeedInquiryEmails.ts`). Riders sit
-  in their own card below the bill.
+  and emails Operations admins (`email/artistNeedInquiryEmails.ts`). Staff clear
+  the queue from the position side panel: **Accept** books the inquiring artist
+  into that position, marks the inquiry `accepted`, and dismisses the position's
+  other open inquiries (`acceptInquiry`); **Dismiss** marks one `dismissed`.
+  Riders sit in their own card below the bill.
+- **Operations lead** (`events.operationsLeadUserId`) — the person responsible
+  for filling an event's lineup. Assigned inline on the **Open positions** board
+  (`/dashboard/events/positions`), which lists upcoming events with unfilled
+  slots soonest-first and can filter to **Assigned to me**. It is a
+  coordination flag only and grants no extra event access.
 - **Schedule blocks** (`eventScheduleBlocks`) are the planning unit: typed
   (`setup`/`show`/`strike`/`custom`), snapped to 15-minute increments, may
   overlap (the timeline renders overlaps on separate lanes) and may cross

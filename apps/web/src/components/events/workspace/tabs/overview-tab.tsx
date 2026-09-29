@@ -162,6 +162,15 @@ export function OverviewTab() {
                   clearable
                 />
               </Field>
+              <Field label="Operations Lead" icon={UserCircleIcon}>
+                <UserSelect
+                  value={draft.operationsLeadUserId}
+                  onChange={(operationsLeadUserId) => updateDraft({ operationsLeadUserId })}
+                  options={userSelectOptions}
+                  emptyLabel="Select operations lead"
+                  clearable
+                />
+              </Field>
             </fieldset>
           </CardContent>
         </Card>

@@ -209,6 +209,7 @@ export type SeriesTemplateFields = Pick<
   | "occurrenceOtherCostUsd"
   | "dayOfLeadUserId"
   | "eventManagerUserId"
+  | "operationsLeadUserId"
   | "rentalFulfillmentMode"
   | "notes"
 >;
@@ -372,6 +373,7 @@ export async function materializeOccurrence(
     crewCostUsd: series.occurrenceBudgetCrewCostUsd,
     dayOfLeadUserId: series.dayOfLeadUserId,
     eventManagerUserId: series.eventManagerUserId,
+    operationsLeadUserId: series.operationsLeadUserId,
     rentalFulfillmentMode: series.rentalFulfillmentMode,
     notes: series.notes,
     createdAt: now,
@@ -425,6 +427,7 @@ export function buildEventPatchFromSeriesTemplate(
     otherCostUsd: series.occurrenceOtherCostUsd,
     dayOfLeadUserId: series.dayOfLeadUserId,
     eventManagerUserId: series.eventManagerUserId,
+    operationsLeadUserId: series.operationsLeadUserId,
     rentalFulfillmentMode: series.rentalFulfillmentMode,
     notes: series.notes,
     requiresShowWindow: series.requiresShowWindow,

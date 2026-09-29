@@ -781,6 +781,7 @@ export default defineSchema({
     seriesOtherCostUsd: v.optional(v.number()),
     dayOfLeadUserId: v.optional(v.string()),
     eventManagerUserId: v.optional(v.string()),
+    operationsLeadUserId: v.optional(v.string()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     notes: v.optional(v.string()),
     blockTemplates: v.optional(
@@ -859,6 +860,8 @@ export default defineSchema({
     budgetUsd: v.optional(v.number()),
     dayOfLeadUserId: v.optional(v.string()),
     eventManagerUserId: v.optional(v.string()),
+    /** Owns filling this event's lineup (the Open positions board). */
+    operationsLeadUserId: v.optional(v.string()),
     otPremium: v.optional(v.boolean()),
     crewCostBufferPercent: v.optional(v.number()),
     crewCostUsd: v.optional(v.number()),
@@ -1364,7 +1367,7 @@ export default defineSchema({
     eventId: v.id("events"),
     organizationId: v.string(),
     message: v.optional(v.string()),
-    status: v.union(v.literal("submitted"), v.literal("dismissed")),
+    status: v.union(v.literal("submitted"), v.literal("dismissed"), v.literal("accepted")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
