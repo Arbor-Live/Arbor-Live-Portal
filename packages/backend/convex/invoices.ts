@@ -106,6 +106,7 @@ const lineItemInput = v.object({
   needId: v.optional(v.id("eventArtistNeeds")),
   memberCount: v.optional(v.number()),
   performanceHours: v.optional(v.number()),
+  crewSource: v.optional(v.literal("manual")),
 });
 
 type LineInput = {
@@ -134,6 +135,8 @@ type LineInput = {
   memberCount?: number;
   /** Artist and crew lines: hours each person works or performs. */
   performanceHours?: number;
+  /** Crew lines: hand-added hours on a linked quote (vs. generated from the schedule). */
+  crewSource?: "manual";
 };
 
 function trimOptional(raw: string | undefined) {
@@ -394,6 +397,7 @@ function lineDocToInput(line: Doc<"invoiceLineItems">): LineInput {
     needId: line.needId,
     memberCount: line.memberCount,
     performanceHours: line.performanceHours,
+    crewSource: line.crewSource,
   };
 }
 
@@ -586,6 +590,7 @@ async function replaceLineItems(
         row.performanceHours > 0
           ? row.performanceHours
           : undefined,
+      crewSource: row.section === "crew" ? row.crewSource : undefined,
       createdAt: now,
       updatedAt: now,
     });
@@ -1824,6 +1829,7 @@ export const duplicate = mutation({
         organizationId: line.organizationId,
         memberCount: line.memberCount,
         performanceHours: line.performanceHours,
+        crewSource: line.crewSource,
         createdAt: now,
         updatedAt: now,
       });

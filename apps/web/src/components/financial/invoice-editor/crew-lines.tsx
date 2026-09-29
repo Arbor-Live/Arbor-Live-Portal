@@ -261,6 +261,7 @@ function CrewScheduleEditor({ draft }: { draft: InvoiceDraft }) {
       description:
         "Copies crew hours (open slots only, not assigned people) and equipment pull/checkout quantities. Existing schedule slots and pull-list rows on those days will be replaced.",
       confirmLabel: "Copy setup",
+      destructive: true,
     });
     if (!confirmed) return;
     setCopyingDaySetup(true);

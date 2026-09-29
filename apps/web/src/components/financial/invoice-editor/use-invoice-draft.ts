@@ -416,6 +416,7 @@ export function useInvoiceDraft({
       ...(row.memberCount && row.performanceHours
         ? { people: row.memberCount.toString(), hours: row.performanceHours.toString() }
         : {}),
+      ...(row.crewSource === "manual" ? { source: "manual" as const } : {}),
     }));
     const savedCustomRate =
       invoice.crewRateMode === "custom"
@@ -511,6 +512,11 @@ export function useInvoiceDraft({
 
     if (linkedEvent && !linkedSeries) {
       // Crew lines for a single linked event come from the event schedule editor.
+      // Hand-added hours don't: restore those now so the schedule merge keeps them.
+      const manualRows = savedCrewSnapshotRef.current.filter((row) => row.source === "manual");
+      if (manualRows.length) {
+        setCrewRows((current) => [...current.filter((row) => row.source !== "manual"), ...manualRows]);
+      }
       return;
     }
 

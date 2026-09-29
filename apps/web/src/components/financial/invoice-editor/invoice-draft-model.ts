@@ -262,6 +262,7 @@ export type InvoiceLineItemInput = {
   needId?: Id<"eventArtistNeeds">;
   memberCount?: number;
   performanceHours?: number;
+  crewSource?: "manual";
 };
 
 export type LineItemContext = {
@@ -348,6 +349,8 @@ export function buildInvoiceLineItems(lines: InvoiceDraftLines, ctx: LineItemCon
       quantity: Number(row.quantity),
       rateUsd: crewLineRateUsd(row, ctx.crewRateMode, ctx.customCrewRateUsd, ctx.settings),
       ...(split ? { memberCount: split.people, performanceHours: split.hours } : {}),
+      // Hand-added hours on a linked quote, so they come back on load (schedule lines are rebuilt).
+      ...(row.source === "manual" ? { crewSource: "manual" as const } : {}),
     });
   }
   for (const row of lines.fees) {

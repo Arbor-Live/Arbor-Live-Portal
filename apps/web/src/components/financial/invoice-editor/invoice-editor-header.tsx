@@ -200,7 +200,7 @@ export function InvoiceEditorHeader({
       await markReadyForClientReview({ id: activeInvoiceId, clientMessage });
       notify.success("Quote emailed to the client and marked ready on the request portal.");
     } catch (error) {
-      throw new Error(getConvexErrorMessage(error) ?? "Failed to send quote email.");
+      throw new Error(getConvexErrorMessage(error, "Failed to send quote email."));
     } finally {
       setSendingQuote(false);
     }
@@ -470,9 +470,13 @@ function InvoiceWorkflowStrip({
   const approval = invoice.clientApprovalStatus ?? "pending";
 
   async function regenerateToken() {
-    if (!(await confirm({ title: "Regenerate the public quote token?", description: "Old links will stop working." }))) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: "Regenerate the public quote link?",
+      description: "The current link stops working for anyone who has it.",
+      confirmLabel: "Regenerate link",
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       const result = await regeneratePublicApprovalToken({ id: invoiceId });
       draft.setApprovalToken(result.token);

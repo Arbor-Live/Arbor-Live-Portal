@@ -725,6 +725,13 @@ export default defineSchema({
     memberCount: v.optional(v.number()),
     /** Artist and crew lines: hours each person performs or works. */
     performanceHours: v.optional(v.number()),
+    /**
+     * Crew lines: "manual" marks hours added by hand on the quote, as opposed
+     * to lines generated from the linked Run of Show / series template. The
+     * editor restores manual lines on load; schedule lines are rebuilt from the
+     * schedule. Absent on older lines and on unlinked quotes.
+     */
+    crewSource: v.optional(v.literal("manual")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
