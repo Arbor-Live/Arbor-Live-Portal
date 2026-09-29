@@ -45,6 +45,7 @@ export function planVocalFx(
     ...vocals.filter((vocal) => vocal.isLead),
     ...vocals.filter((vocal) => !vocal.isLead),
   ];
+  const need = ordered.length;
 
   // Reuse the blueprint's own engines first, in slot order, then allocate extras
   // for the remainder. This keeps engine settings the blueprint configured.
@@ -54,37 +55,34 @@ export function planVocalFx(
       .sort((a, b) => a.slot - b.slot)
       .map((engine) => engine.slot);
 
-  const availableByModel: Record<string, number[]> = {
-    [PCORR_MODEL]: existingByModel(PCORR_MODEL),
-    [DEESSER_MODEL]: existingByModel(DEESSER_MODEL),
-  };
+  const pcorrSlots = existingByModel(PCORR_MODEL);
+  const deesserSlots = existingByModel(DEESSER_MODEL);
 
-  // Reuse the blueprint's engines first, then allocate extras for the rest.
-  const extrasNeeded: string[] = [];
-  const takeFor = (model: string): number | null => {
-    const pool = availableByModel[model] ?? [];
-    if (pool.length > 0) return pool.shift()!;
-    extrasNeeded.push(model);
-    return null;
-  };
+  // One engine per vocal, of each model, in vocal order; the front of each
+  // pool is reused and any miss needs an extra.
+  const reusedPcorr = pcorrSlots.slice(0, need);
+  const reusedDeesser = deesserSlots.slice(0, need);
 
-  // One engine per vocal, of each model, in vocal order. Reused slots come back
-  // immediately; misses are filled by the extra allocation just below.
-  const reusedPcorr: number[] = [];
-  const reusedDeesser: number[] = [];
-  for (let index = 0; index < ordered.length; index++) {
-    const pcorr = takeFor(PCORR_MODEL);
-    if (pcorr !== null) reusedPcorr.push(pcorr);
-    const deesser = takeFor(DEESSER_MODEL);
-    if (deesser !== null) reusedDeesser.push(deesser);
-  }
+  // Spares beyond what the vocals need are surplus: `clearUnusedFx` will blank
+  // them, so their slots are free for the extras — otherwise a spare PCORR
+  // would push a DE-S2 into a premium reverb slot.
+  const surplus = new Set<number>([
+    ...pcorrSlots.slice(need),
+    ...deesserSlots.slice(need),
+  ]);
+  const enginesForAlloc = engines.filter((engine) => !surplus.has(engine.slot));
+  const excluded = new Set<number>([...reusedPcorr, ...reusedDeesser]);
+
+  const extrasNeeded: string[] = [
+    ...new Array<string>(Math.max(0, need - reusedPcorr.length)).fill(PCORR_MODEL),
+    ...new Array<string>(Math.max(0, need - reusedDeesser.length)).fill(DEESSER_MODEL),
+  ];
 
   // Extras go into the best free slot, cloned from the blueprint's own engine of
   // that model so its settings come along.
-  const spent = new Set<number>(Object.values(availableByModel).flat());
   const additions: Array<{ model: string; slot: number; cloneFrom: number }> = [];
   const extraSlots = extrasNeeded.length
-    ? allocateSlots({ engines, needed: extrasNeeded, excluded: spent })
+    ? allocateSlots({ engines: enginesForAlloc, needed: extrasNeeded, excluded })
     : [];
   const extraByModel: Record<string, number[]> = { [PCORR_MODEL]: [], [DEESSER_MODEL]: [] };
   for (const { model, slot } of extraSlots) {
@@ -93,13 +91,13 @@ export function planVocalFx(
     additions.push({ model, slot, cloneFrom: existingByModel(model)[0]! });
   }
 
-  const pcorrSlots = [...reusedPcorr, ...(extraByModel[PCORR_MODEL] ?? [])];
-  const deesserSlots = [...reusedDeesser, ...(extraByModel[DEESSER_MODEL] ?? [])];
+  const pcorrSlotsFinal = [...reusedPcorr, ...(extraByModel[PCORR_MODEL] ?? [])];
+  const deesserSlotsFinal = [...reusedDeesser, ...(extraByModel[DEESSER_MODEL] ?? [])];
 
   const assignments = ordered.map((vocal, index) => ({
     strip: vocal.strip,
-    pcorrSlot: pcorrSlots[index] ?? null,
-    deesserSlot: deesserSlots[index] ?? null,
+    pcorrSlot: pcorrSlotsFinal[index] ?? null,
+    deesserSlot: deesserSlotsFinal[index] ?? null,
   }));
 
   return { assignments, additions };

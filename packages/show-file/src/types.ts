@@ -265,6 +265,23 @@ export type WingSnap = {
         [key: string]: unknown;
       }
     >;
+    /**
+     * The 8 AUX inputs, by number ("1".."8"). Console channels 41–48 on the
+     * surface. AUX 1 carries USB 1/2 walk-in music.
+     */
+    aux?: Record<
+      string,
+      {
+        name?: string;
+        col?: number;
+        icon?: number;
+        in?: {
+          conn?: { grp?: string; in?: number; altgrp?: string; altin?: number };
+          [key: string]: unknown;
+        };
+        [key: string]: unknown;
+      }
+    >;
     /** FX engines by slot number ("1".."16"); each has a `mdl`. */
     fx?: Record<string, { mdl?: string; [key: string]: unknown }>;
     /** DCAs by slot number. */
@@ -276,12 +293,13 @@ export type WingSnap = {
     >;
     [key: string]: unknown;
   };
-  /** Surface fader assignments (layers/banks). We write our pages into USER1. */
+  /**
+   * Surface fader assignments, keyed by surface (`L`/`C`/`R`/`CMPCT`/…). We
+   * write our pages into the WING Compact surface's USER1/USER2 banks.
+   * Surface → bank → slot.
+   */
   ce_data?: {
-    layer?: {
-      L?: Record<string, Record<string, unknown>>;
-      [key: string]: unknown;
-    };
+    layer?: Record<string, Record<string, Record<string, unknown>> | undefined>;
     [key: string]: unknown;
   };
   [key: string]: unknown;

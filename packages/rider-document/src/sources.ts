@@ -457,7 +457,7 @@ export const RIDER_SOURCES: RiderSourceDefinition[] = [
     family: "vocals",
     captures: [VOX_WIRED, VOX_WIRELESS],
     common: true,
-    aliases: ["bgv", "bg vox", "backing vox", "backup vocal", "harmony"],
+    aliases: ["bgv", "bvs", "bv", "bg vox", "backing vox", "backing vocals", "backup vocal", "harmony"],
   },
   {
     key: "vox.mc",

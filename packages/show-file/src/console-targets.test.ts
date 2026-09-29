@@ -55,22 +55,22 @@ describe("X32 / M32 scene", () => {
   it("names used channels, links stereo pairs, and 48V only on overheads", () => {
     const night = buildX32Scene({ template, allocation, band: null, sceneName: "Default" });
     // Names come from the rider's labels, packed by family: vox, kick, OH, keys.
+    // The two bands' first lead vocal is one shared row, named for the anchor.
     expect(night.text).toContain('/ch/01/config "Sam" 50 CY 1');
-    expect(night.text).toContain('/ch/02/config "Lee" 50 CY 2');
-    expect(night.text).toContain('/ch/03/config "Kick" 2 MG 3');
-    expect(night.text).toContain('/ch/05/config "OH L" 10 MG 5');
-    expect(night.text).toContain('/ch/06/config "OH R" 10 MG 6');
-    expect(night.text).toContain('/ch/07/config "Nord L" 1 GN 7');
-    expect(night.text).toContain('/ch/08/config "Nord R" 1 GN 8');
-    // Phantom lives on the headamp, AES50 A.5/A.6 → headamp 036/037.
-    expect(night.text).toContain("/headamp/036 +0.0 ON");
-    expect(night.text).toContain("/headamp/037 +0.0 ON");
-    // Kick (socket 3 → headamp 034) never gets 48V from a rider asking.
-    expect(night.text).toContain("/headamp/034 +0.0 OFF");
-    // Keys pair (7+8) and OH pair (5+6) are the linked pairs.
+    expect(night.text).toContain('/ch/02/config "Kick" 2 MG 2');
+    expect(night.text).toContain('/ch/03/config "OH L" 10 MG 3');
+    expect(night.text).toContain('/ch/04/config "OH R" 10 MG 4');
+    expect(night.text).toContain('/ch/05/config "Nord L" 1 GN 5');
+    expect(night.text).toContain('/ch/06/config "Nord R" 1 GN 6');
+    // Phantom lives on the headamp, AES50 A.3/A.4 → headamp 034/035.
+    expect(night.text).toContain("/headamp/034 +0.0 ON");
+    expect(night.text).toContain("/headamp/035 +0.0 ON");
+    // Kick (socket 2 → headamp 033) never gets 48V from a rider asking.
+    expect(night.text).toContain("/headamp/033 +0.0 OFF");
+    // Keys pair (5+6) and OH pair (3+4) are the linked pairs.
     const chlink = night.text.match(/^\/config\/chlink (.+)$/m)?.[1].split(" ");
+    expect(chlink?.[1]).toBe("ON");
     expect(chlink?.[2]).toBe("ON");
-    expect(chlink?.[3]).toBe("ON");
     expect(chlink?.[0]).toBe("OFF");
   });
 
@@ -95,12 +95,14 @@ describe("X32 / M32 scene", () => {
       sceneName: "Headliners",
       previous: openers,
     });
-    expect(band2.text).toContain("/ch/03/mix ON +0.0 ON +0 ON +0.0");
-    expect(band2.text).toContain("/ch/05/mix ON +0.0 ON -100 ON +0.0");
-    expect(band2.text).toContain("/ch/06/mix ON +0.0 ON +100 ON +0.0");
-    // The keys pair (7+8) is identical to the previous band — never re-emitted.
-    expect(band2.text).not.toContain("/ch/07/mix");
-    expect(band2.text).not.toContain("/ch/08/mix");
+    expect(band2.text).toContain("/ch/02/mix ON +0.0 ON +0 ON +0.0");
+    expect(band2.text).toContain("/ch/03/mix ON +0.0 ON -100 ON +0.0");
+    expect(band2.text).toContain("/ch/04/mix ON +0.0 ON +100 ON +0.0");
+    // The shared lead and the keys pair (5+6) are identical to the previous
+    // band — never re-emitted.
+    expect(band2.text).not.toContain("/ch/01/mix");
+    expect(band2.text).not.toContain("/ch/05/mix");
+    expect(band2.text).not.toContain("/ch/06/mix");
   });
 });
 
@@ -113,13 +115,13 @@ describe("X Air / XR18 scene", () => {
     expect(night.text.startsWith("/config/chlink ")).toBe(true);
     expect(night.text).not.toContain("#4.0#");
     expect(night.text).toContain('/ch/01/config "Sam" 6 In01 U01');
-    expect(night.text).toContain('/ch/03/config "Kick" 5 In03 U03');
-    expect(night.text).toContain('/ch/05/config "OH L" 5 In05 U05');
-    expect(night.text).toContain('/ch/06/config "OH R" 5 In06 U06');
-    expect(night.text).toContain('/ch/07/config "Nord L" 2 In07 U07');
-    expect(night.text).toContain('/ch/08/config "Nord R" 2 In08 U08');
-    expect(night.text).toContain("/headamp/05 +0.0 ON");
-    expect(night.text).toContain("/headamp/06 +0.0 ON");
+    expect(night.text).toContain('/ch/02/config "Kick" 5 In02 U02');
+    expect(night.text).toContain('/ch/03/config "OH L" 5 In03 U03');
+    expect(night.text).toContain('/ch/04/config "OH R" 5 In04 U04');
+    expect(night.text).toContain('/ch/05/config "Nord L" 2 In05 U05');
+    expect(night.text).toContain('/ch/06/config "Nord R" 2 In06 U06');
+    expect(night.text).toContain("/headamp/03 +0.0 ON");
+    expect(night.text).toContain("/headamp/04 +0.0 ON");
     // The whole node set, or X AIR Edit will not load it.
     expect(night.text).toContain("/bus/6/config");
     expect(night.text).toContain("/lr/config");
@@ -127,8 +129,8 @@ describe("X Air / XR18 scene", () => {
     expect(night.text).toContain("/dca/4/config");
     expect(night.text).toContain("/routing/main/01 LR");
     // A stereo right half is written once, as the R source — never again blank.
+    expect(night.text.match(/^\/ch\/04\/config /gm)).toHaveLength(1);
     expect(night.text.match(/^\/ch\/06\/config /gm)).toHaveLength(1);
-    expect(night.text.match(/^\/ch\/08\/config /gm)).toHaveLength(1);
   });
 });
 
@@ -158,16 +160,16 @@ describe("buildShowPackage targets", () => {
     });
     expect(x32.zipBytes.byteLength).toBe(0);
     const keys = x32.preview.find((row) => row.name === "Nord");
-    expect(keys?.span).toBe("7+8");
-    expect(keys?.patch).toBe("A7");
+    expect(keys?.span).toBe("5+6");
+    expect(keys?.patch).toBe("A5");
     expect(keys?.stereo).toBe(true);
-    expect(x32.preview.find((row) => row.name === "OH")?.patch).toBe("A5");
+    expect(x32.preview.find((row) => row.name === "OH")?.patch).toBe("A3");
 
     const xair = buildShowPackage({ eventName: "E", bands: [openers, headliners], target: "xair" });
-    expect(xair.preview.find((row) => row.name === "OH")?.patch).toBe("In05");
+    expect(xair.preview.find((row) => row.name === "OH")?.patch).toBe("In03");
 
     const wing = buildShowPackage({ eventName: "E", bands: [openers, headliners], target: "wing" });
-    expect(wing.preview.find((row) => row.name === "Nord")?.patch).toBe("A.7");
+    expect(wing.preview.find((row) => row.name === "Nord")?.patch).toBe("A.5");
   });
 
   it("names the Snake B inputs once when the X Air drops the second snake", () => {

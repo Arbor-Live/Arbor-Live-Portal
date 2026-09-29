@@ -206,7 +206,7 @@ type NightRow = {
   name: string;
   family: SlotFamily;
   stereo: boolean;
-  /** Stable merge key (sourceKey, else the normalized name). */
+  /** Stable merge key (sourceKey + instance, else the normalized name). */
   key: string;
   /** Band fileStem → that band's channel for this row, for per-band views. */
   perBand: Map<string, Classified>;
@@ -220,8 +220,13 @@ function nightRows(
   const byKey = new Map<string, NightRow>();
 
   for (const band of orderedBands) {
+    // How many of each role we have already seen *in this band*. A mapped input
+    // is identified by role plus its position among that role, so the bands'
+    // free-text names never split a shared channel: an opener's "BV" and a
+    // headliner's "Backing vocal" are the same first backing vocal.
+    const seenPerKey = new Map<string, number>();
     for (const item of byBand.get(band.fileStem) ?? []) {
-      const key = rowKey(item);
+      const key = rowKey(item, seenPerKey);
       let row = byKey.get(key);
       if (!row) {
         row = {
@@ -271,15 +276,23 @@ const FAMILY_RANK: Record<SlotFamily, number> = {
 
 /**
  * Identity of a night row across bands. A mapped source merges by its role plus
- * instance (two guitars are different rows); anything else falls back to its
- * normalized name, so an unmapped "Floor tom" stays distinct from "Rack tom".
+ * its instance within the band — the 1st guitar is the 1st guitar however each
+ * band spells it, and a second guitar is its own row. Anything unmapped falls
+ * back to its normalized name, so an unmapped "Floor tom" stays distinct from
+ * "Rack tom". The per-band counter is mutated as a side effect.
  */
-function rowKey(item: Classified): string {
+function rowKey(item: Classified, seenPerKey: Map<string, number>): string {
+  const sourceKey = item.input.sourceKey;
+  if (sourceKey) {
+    const instance = seenPerKey.get(sourceKey) ?? 0;
+    seenPerKey.set(sourceKey, instance + 1);
+    return `${sourceKey}#${instance}`;
+  }
   const normalized = (item.input.source || "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
-  return item.input.sourceKey ? `${item.input.sourceKey}|${normalized}` : `name:${normalized}`;
+  return `name:${normalized}`;
 }
 
 /** A row that has found a home on a box. */

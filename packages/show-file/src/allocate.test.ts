@@ -94,6 +94,27 @@ describe("allocateEventPatch layout", () => {
     expect(choir.port).toBeGreaterThan(bgv.port);
   });
 
+  it("merges a role across bands however each band spells it, by instance", () => {
+    const bands = [
+      band("Openers", "support", [
+        input({ id: "a1", channel: 1, source: "BV", sourceKey: "vox.bgv" }),
+      ]),
+      band("Headliners", "headliner", [
+        input({ id: "b1", channel: 1, source: "Backing Vocal", sourceKey: "vox.bgv" }),
+        input({ id: "b2", channel: 2, source: "BGV 2", sourceKey: "vox.bgv" }),
+      ]),
+    ];
+    const { ports } = allocateEventPatch(bands);
+    // One shared first backing vocal, plus the headliner's own second.
+    const bgvs = ports.filter((p) => p.used && p.family === "vox");
+    expect(bgvs).toHaveLength(2);
+    expect(bgvs[0]!.bandLabels).toMatchObject({
+      Openers: "BV",
+      Headliners: "Backing Vocal",
+    });
+    expect(bgvs[1]!.bandLabels).toEqual({ Headliners: "BGV 2" });
+  });
+
   /** Rows pack in the rider's own channel order; family never decides placement. */
   const familiesOf = (ports: Array<{ port: number; family: string; used: boolean }>) =>
     ports.filter((p) => p.used).map((p) => p.family);
@@ -279,22 +300,30 @@ describe("allocateEventPatch layout", () => {
         input({ id: "gtr", channel: 3, source: "Gtr", sourceKey: "gtr", inputType: "di" }),
       ]),
     ];
-    const plan = buildPatchDiffPlan(allocateEventPatch(bands));
+    const allocation = allocateEventPatch(bands);
+    const plan = buildPatchDiffPlan(allocation);
     expect(plan.steps).toHaveLength(2);
+
+    // Both bands' first lead vocal is one shared row, named for the anchor band.
+    const lead = allocation.ports.find(
+      (p) => p.used && p.family === "vox" && p.label === "Sam",
+    )!;
 
     const openers = plan.steps[0]!;
     // Openers' own lead and sax are live from the night baseline and unchanged.
-    expect(openers.ports.find((p) => p.label === "Sam")?.change).toBe("same");
+    expect(openers.ports.find((p) => p.port === lead.port)?.change).toBe("same");
     expect(openers.ports.find((p) => p.label === "Sax")?.change).toBe("same");
     // Rows only the headliners use read muted against the baseline.
-    expect(openers.ports.find((p) => p.label === "Lead")?.change).toBe("mute");
+    expect(openers.ports.find((p) => p.label === "BGV")?.change).toBe("mute");
+    expect(openers.ports.find((p) => p.label === "Gtr")?.change).toBe("mute");
 
     const head = plan.steps[1]!;
     expect(head.comparedTo).toBe("Openers");
-    // Distinct identities never rename a row; the previous set's rows mute.
-    expect(head.ports.find((p) => p.label === "Sam")?.change).toBe("mute");
+    // The shared lead stays up; the opener's own sax mutes and the headliner's
+    // own rows come up.
+    expect(head.ports.find((p) => p.port === lead.port)?.change).toBe("same");
     expect(head.ports.find((p) => p.label === "Sax")?.change).toBe("mute");
-    expect(head.ports.find((p) => p.label === "Lead")?.change).toBe("same");
+    expect(head.ports.find((p) => p.label === "BGV")?.change).toBe("same");
     expect(head.ports.find((p) => p.label === "Gtr")?.change).toBe("same");
     // First set never invents yellow swaps vs the night aggregate.
     expect(openers.ports.some((p) => p.change === "physical")).toBe(false);
@@ -591,6 +620,33 @@ describe("unused channels", () => {
     expect(snap.ae_data.ch["7"]?.mute).toBe(true);
     expect(snap.ae_data.ch["7"]?.in?.conn).toMatchObject({ grp: "OFF" });
     expect(snap.ae_data.io.in.A["7"]?.name).toBe("");
+  });
+
+  it("blanks strips the patch does not own: stereo right halves and idle box B", () => {
+    const bands = [
+      band("Stereo", "headliner", [
+        input({ id: "v", channel: 1, source: "Lead", sourceKey: "vox.lead" }),
+        input({ id: "k", channel: 2, source: "Keys", sourceKey: "keys", stereo: true, inputType: "di" }),
+      ]),
+    ];
+    const allocation = allocateEventPatch(bands);
+    const snap = buildNightSnap(loadDefaultTemplate(), allocation);
+
+    // The keys right half has no strip of its own; its channel must not keep the
+    // template's stale name, patch or tags.
+    const right = allocation.ports.find(
+      (p) => p.used && p.family === "keys" && p.strip === null,
+    )!;
+    expect(snap.ae_data.ch[String(right.port)]?.name).toBe("");
+    expect(snap.ae_data.ch[String(right.port)]?.mute).toBe(true);
+    expect(snap.ae_data.ch[String(right.port)]?.in?.conn).toMatchObject({ grp: "OFF" });
+    expect(snap.ae_data.ch[String(right.port)]?.tags).toBe("");
+
+    // One snake: box B's strips (17–32) are unowned, so the template's stale
+    // "Kick"/"Snare" names never survive the night recall.
+    expect(snap.ae_data.ch["17"]?.name).toBe("");
+    expect(snap.ae_data.ch["17"]?.mute).toBe(true);
+    expect(snap.ae_data.ch["17"]?.in?.conn).toMatchObject({ grp: "OFF" });
   });
 });
 
@@ -1067,13 +1123,32 @@ describe("desk layers", () => {
       sides: {},
     });
     const snap = buildNightSnap(loadDefaultTemplate(), allocation);
-    const user1 = (snap.ce_data?.layer?.L?.["6"] ?? {}) as Record<string, unknown>;
+    const user1 = (snap.ce_data?.layer?.CMPCT?.["8"] ?? {}) as Record<string, unknown>;
     expect(user1.name).toBe("USER1");
     // USER1 holds exactly 24 slots; the rest are still patched and named.
     expect(Object.keys(user1).filter((key) => /^\d+$/.test(key))).toHaveLength(24);
     expect(allocation.warnings.some((w) => w.includes("past the USER1 layer"))).toBe(
       true,
     );
+  });
+
+  it("writes USER1/USER2 into band scenes too, so a recall never blanks them", () => {
+    const bands = [
+      bandWith([
+        input({ id: "v", channel: 1, source: "Lead vocal", sourceKey: "vox.lead" }),
+        input({ id: "k", channel: 2, source: "Kick", sourceKey: "drum.kick" }),
+      ]),
+    ];
+    const allocation = allocateEventPatch(bands);
+    const night = buildNightSnap(loadDefaultTemplate(), allocation);
+    const bandSnap = buildBandSnap(loadDefaultTemplate(), allocation, bands[0]!);
+
+    for (const bank of ["8", "9"]) {
+      const fromBand = bandSnap.ce_data?.layer?.CMPCT?.[bank] as Record<string, unknown>;
+      const fromNight = night.ce_data?.layer?.CMPCT?.[bank] as Record<string, unknown>;
+      expect(fromBand).toEqual(fromNight);
+      expect(fromBand.name).toBe(bank === "8" ? "USER1" : "USER2");
+    }
   });
 });
 
@@ -1157,9 +1232,9 @@ describe("desk rebuild", () => {
   });
 
   it("keeps standard engines out of the premium FX slots", () => {
-    // Two vocals need two PCORR + two DE-S2 engines. The blueprint has PCORR on
-    // FX5–8 (premium range) and one DE-S2 on FX11; the extra DE-S2 must land in
-    // a standard slot, never steal a premium one a reverb might need.
+    // Two vocals need two PCORR + two DE-S2 engines. The blueprint has spare
+    // PCORR on FX12–15 and one DE-S2 on FX11; the extra DE-S2 must land in a
+    // standard slot, never steal a premium one a reverb might need.
     const allocation = allocateEventPatch([
       band("Vox Night", "headliner", [
         input({ id: "v1", channel: 1, source: "Lead 1", sourceKey: "vox.lead" }),
@@ -1191,6 +1266,66 @@ describe("desk rebuild", () => {
     // Bus 13/14 are the named Vox/Plate reverb returns — blueprint, kept.
     expect(buses["13"]?.preins).toMatchObject({ on: true, ins: "FX1" });
     expect(buses["14"]?.preins).toMatchObject({ on: true, ins: "FX2" });
+  });
+
+  it("flattens every channel's EQ so no blueprint curve rides along", () => {
+    // The template leaves a shaped EQ (a -1.8 dB dip at 244 Hz, a +2.7 dB bell
+    // at 1.5k) on every channel. The rebuild keeps the block's on/off but must
+    // zero the gains, or a Kick inherits an FX return's curve.
+    const allocation = allocateEventPatch([
+      band("EQ Night", "headliner", [leadVocal, kick]),
+    ]);
+    const snap = buildNightSnap(loadDefaultTemplate(), allocation);
+    const eqOf = (label: string) =>
+      snap.ae_data.ch[String(stripFor(allocation, label))] as {
+        eq?: Record<string, unknown>;
+      };
+
+    const flat = { lg: 0, "1g": 0, "2g": 0, "3g": 0, "4g": 0, hg: 0 };
+    // Kick: EQ on, curve flat.
+    expect(eqOf("Kick").eq).toMatchObject({ on: true, ...flat });
+    // Vocal: EQ off, curve also flat (so enabling it later starts neutral).
+    expect(eqOf("Lead vocal").eq).toMatchObject({ on: false, ...flat });
+  });
+
+  it("blanks FX engines the bill never reaches and keeps the ones it does", () => {
+    // One lead vocal uses one PCORR + one DE-S2. The blueprint's spare PCORR
+    // (FX14/15) and its unused UKROCK amp sims (FX9/10) must not squat slots.
+    const allocation = allocateEventPatch([
+      band("Solo Night", "headliner", [leadVocal]),
+    ]);
+    const snap = buildNightSnap(loadDefaultTemplate(), allocation);
+    const fx = snap.ae_data.fx as Record<string, { mdl?: string }>;
+
+    for (const slot of ["9", "10", "14", "15"]) {
+      expect(fx[slot]?.mdl, `FX${slot} should be blank`).toBe("NONE");
+    }
+    // The named reverb returns the buses still use stay loaded.
+    expect(fx["1"]?.mdl).toBe("VSS3");
+    expect(fx["2"]?.mdl).toBe("PLATE");
+  });
+
+  it("frees a spare standard engine instead of pushing a clone into a premium slot", () => {
+    // Three vocals need three DE-S2 but the blueprint loads one on FX11. The
+    // spare PCORR on FX15 is released, so both extra DE-S2 land in standard
+    // slots (15/16) rather than squatting FX3 in the reverb range.
+    const allocation = allocateEventPatch([
+      band("Vox Night", "headliner", [
+        input({ id: "v1", channel: 1, source: "Lead 1", sourceKey: "vox.lead" }),
+        input({ id: "v2", channel: 2, source: "Lead 2", sourceKey: "vox.lead" }),
+        input({ id: "v3", channel: 3, source: "Lead 3", sourceKey: "vox.lead" }),
+      ]),
+    ]);
+    const snap = buildNightSnap(loadDefaultTemplate(), allocation);
+    const slots: number[] = [];
+    for (const channel of Object.values(snap.ae_data.ch)) {
+      const ins = channel as { postins?: { on?: boolean; ins?: string } };
+      if (ins.postins?.on && ins.postins.ins?.startsWith("FX")) {
+        slots.push(Number(ins.postins.ins.replace("FX", "")));
+      }
+    }
+    expect(slots).toHaveLength(3);
+    for (const slot of slots) expect(slot).toBeGreaterThanOrEqual(9);
   });
 });
 
@@ -1251,7 +1386,7 @@ describe("USER2 vocal FX returns", () => {
       ]),
     ]);
     const snap = buildNightSnap(loadDefaultTemplate(), allocation);
-    const user2 = (snap.ce_data?.layer?.L?.["7"] ?? {}) as Record<
+    const user2 = (snap.ce_data?.layer?.CMPCT?.["9"] ?? {}) as Record<
       string,
       { type?: string; i?: number }
     >;
@@ -1277,5 +1412,28 @@ describe("talkback", () => {
     };
     expect(talkback.name).toBe("TALKBACK");
     expect(talkback.in?.conn).toMatchObject({ grp: "LCL", in: 24 });
+  });
+
+  it("names and patches USB 1/2 so the reserved USER1 fader reads", () => {
+    const allocation = allocateEventPatch([
+      band("Solo", "headliner", [
+        input({ id: "v", channel: 1, source: "Lead", sourceKey: "vox.lead" }),
+      ]),
+    ]);
+    const snap = buildNightSnap(loadDefaultTemplate(), allocation);
+    // AUX 1 is console channel 41; the template already feeds it from USB 1/2.
+    const usb = snap.ae_data.aux?.["1"] as {
+      name?: string;
+      in?: { conn?: { grp?: string; in?: number } };
+    };
+    expect(usb.name).toBe("USB 1/2");
+    expect(usb.in?.conn).toMatchObject({ grp: "USB", in: 1 });
+
+    // The USER1 fader that the page reserves points at AUX 1 (channel 41).
+    const user1 = (snap.ce_data?.layer?.CMPCT?.["8"] ?? {}) as Record<
+      string,
+      { type?: string; i?: number }
+    >;
+    expect(user1["12"]).toMatchObject({ type: "CH", i: 41 });
   });
 });

@@ -47,6 +47,16 @@ export const SNAKE_SHORT_LABEL: Record<SnakeId, string> = {
 export const TALKBACK_STRIP = "40";
 export const TALKBACK_LOCAL_INPUT = 24;
 
+/**
+ * USB 1/2 walk-in music lands on **AUX 1** — the template already feeds that
+ * input from source `USB 1/2`, and `clink` pairs it with AUX 2 for stereo. AUX
+ * inputs are console channels 41–48, so AUX 1 is channel 41: the index a surface
+ * fader points at. Named so the reserved USER1 fader reads as music.
+ */
+export const USB_MUSIC_AUX = "1";
+export const USB_MUSIC_CHANNEL = 41;
+export const USB_MUSIC_SOURCE = 1;
+
 /** Box-relative port (1–16) → socket number on the shared AES50 A link. */
 export function aes50PortFor(snake: SnakeId, port: number): number {
   return port + SNAKE_PORT_OFFSET[snake];
