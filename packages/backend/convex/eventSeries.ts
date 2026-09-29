@@ -26,6 +26,7 @@ import {
   eventSeriesPositionTemplateValue,
   positionTemplateFromSlot,
 } from "./lib/eventSeriesPositions";
+import { eventGroupKind } from "./lib/eventGroups";
 import { syncEventCrewCostUsd } from "./lib/crewCost";
 import {
   detachInvoiceFromAdditionalLinks,
@@ -620,6 +621,9 @@ export const addOccurrences = mutation({
     await requireArborInternalContext(ctx);
     const series = await ctx.db.get(args.id);
     if (!series) throw new Error("Event series not found.");
+    if (eventGroupKind(series) === "multi_day") {
+      throw new Error("Multi-day groups add individual days, not occurrences.");
+    }
     const existing = await listOccurrencesForSeries(ctx, args.id);
     const lastIndex = existing.length > 0 ? (existing[existing.length - 1]!.occurrenceIndex ?? 0) : -1;
 

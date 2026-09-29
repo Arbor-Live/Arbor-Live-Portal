@@ -794,11 +794,14 @@ export const groupMultiDayBookings = migrations.define({
   table: "invoices",
   migrateOne: async (ctx, invoice) => {
     const events = await listEventsByInvoiceId(ctx, invoice._id);
-    if (events.length < 2) return;
+    // Cancelled days are not part of the booking: neither for eligibility nor
+    // for deriving the group's fields and templates from Day 1.
+    const eligibleEvents = events.filter((event) => event.status !== "cancelled");
+    if (eligibleEvents.length < 2) return;
     // Already grouped, or a recurring series is the group.
-    if (events.some((event) => event.groupId || event.seriesId)) return;
+    if (eligibleEvents.some((event) => event.groupId || event.seriesId)) return;
 
-    const first = events[0]!;
+    const first = eligibleEvents[0]!;
     const now = Date.now();
 
     const blocks = (
