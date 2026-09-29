@@ -1,20 +1,14 @@
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import Link from "next/link";
+import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr";
+import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { FinancialHubSettings } from "@/components/financial/financial-hub-settings";
-import { BandPayoutsSummary } from "@/components/financial/band-payouts-summary";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FinancialHubAttention } from "@/components/financial/financial-hub-attention";
 import {
   FinancialHubExpensesCard,
   FinancialHubRevenueCard,
 } from "@/components/insights/financial-hub-kpi-cards";
-import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
-import { PageHeader } from "@/components/page-header";
 
 export default function FinancialHubPage() {
   return (
@@ -23,38 +17,18 @@ export default function FinancialHubPage() {
         <AdminOnlyGuard>
           <PageHeader
             title="Ops Center"
-            description="Centralize invoices, settlements, and payments across operations."
+            description="What needs attention across booking requests, quotes, invoices, and artist payouts."
+            actions={
+              <Button asChild variant="outline" size="sm">
+                <Link href="/dashboard/financial-hub/settings">
+                  <SlidersHorizontalIcon />
+                  Settings
+                </Link>
+              </Button>
+            }
           />
-          <div className="flex flex-wrap gap-2">
-            <Button asChild>
-              <Link href="/dashboard/financial-hub/invoices">Open Invoices</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/dashboard/financial-hub/requests">Booking Requests</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/dashboard/financial-hub/insights">Insights</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/dashboard/financial-hub/organizations">Host Organizations</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/dashboard/financial-hub/invoices/new">Create Invoice</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/dashboard/financial-hub/payments">Client Payments</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/dashboard/financial-hub/artist-payouts">Artist payouts</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/dashboard/timecards">Crew Timecards</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/dashboard/timecards/mine">My Timecards</Link>
-            </Button>
-          </div>
-          <div className="grid gap-4 md:grid-cols-3">
+          <FinancialHubAttention />
+          <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle>Revenue</CardTitle>
@@ -73,16 +47,7 @@ export default function FinancialHubPage() {
                 <FinancialHubExpensesCard />
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Payouts</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <BandPayoutsSummary />
-              </CardContent>
-            </Card>
           </div>
-          <FinancialHubSettings />
         </AdminOnlyGuard>
       </ArborOnlyGuard>
     </div>
