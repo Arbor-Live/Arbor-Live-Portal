@@ -2,6 +2,7 @@ import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { resolveStoredR2AssetUrl } from "../inventoryR2";
 import type { AuthUser } from "./auth";
+import type { UserStatus } from "./userStatus";
 
 type ProfileImageSource = { avatarStorageId?: Id<"_storage"> };
 
@@ -45,6 +46,8 @@ export async function loadAdminProfilesByUserIds(
       pronouns?: string;
       gradYear?: number;
       assignableAsCrew?: boolean;
+      status?: UserStatus;
+      active?: boolean;
     }
   >
 > {
@@ -55,6 +58,8 @@ export async function loadAdminProfilesByUserIds(
       pronouns?: string;
       gradYear?: number;
       assignableAsCrew?: boolean;
+      status?: UserStatus;
+      active?: boolean;
     }
   >();
   await Promise.all(
@@ -72,6 +77,8 @@ export async function loadAdminProfilesByUserIds(
           pronouns: profile.pronouns,
           gradYear: profile.gradYear,
           assignableAsCrew: profile.assignableAsCrew,
+          status: profile.status,
+          active: profile.active,
         });
       }
     }),

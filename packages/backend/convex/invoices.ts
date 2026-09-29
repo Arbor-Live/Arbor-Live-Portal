@@ -5,6 +5,7 @@ import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/s
 import { requireArborInternalContext, requireAuth, findAuthUsersByIds } from "./lib/auth";
 import { appError, withReportableErrors } from "./lib/errors";
 import { resolveParticipationFlags } from "./lib/userParticipation";
+import { isAlumniStatus, resolveUserStatus } from "./lib/userStatus";
 import { loadActiveOrgMemberUserIds } from "./lib/orgMembership";
 import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
 import { syncBookingRequestStatusFromInvoice } from "./lib/bookingRequestStatus";
@@ -683,6 +684,11 @@ export const listManagers = query({
         const user = userByKey.get(userId);
         if (!user) return null;
         const profile = profileByUserId.get(userId);
+        // Alumni keep no dashboard access and are not selectable for events;
+        // inactive crew stay assignable and are flagged in the picker.
+        if (isAlumniStatus(resolveUserStatus(profile))) {
+          return null;
+        }
         if (profile && !resolveParticipationFlags(profile).assignableAsCrew) {
           return null;
         }
@@ -693,6 +699,7 @@ export const listManagers = query({
           name: user.name ?? user.email ?? "Unknown user",
           email: user.email,
           role: user.role ?? undefined,
+          status: resolveUserStatus(profile),
           image: user.image ?? undefined,
           avatarUrl,
           hourlyRateUsd: compensation?.hourlyRateUsd,

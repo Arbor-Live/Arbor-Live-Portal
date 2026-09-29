@@ -1,12 +1,12 @@
 import { test, expect } from "@playwright/test";
 import { runConvex } from "../helpers/convex";
 import { acceptAppDialog, dismissAppDialog, signInWithCredentials } from "../helpers/auth";
-import { chooseRowAction, pickSelectOption } from "../helpers/select";
+import { pickSelectOption } from "../helpers/select";
 import {
   accessFilterSelect,
+  chooseRowStatus,
   openUserRow,
-  userRowActionMenu,
-  userRowCell,
+  userRowStatusSelect,
   waitForUserAdminState,
   type UserAdminState,
 } from "../helpers/users";
@@ -21,16 +21,16 @@ const guardAdminPassword = "E2eTestPassword1!";
 const guardAdminName = "E2E Guard Admin";
 
 /**
- * Remove access and reactivate (#69), plus the guard that stops an admin
- * locking themselves out.
+ * The three-state access model: Active / Inactive / Alumni, plus the guard that
+ * stops an admin locking themselves out.
  *
- * "Removed" is two writes that have to agree: a better-auth `banned` flag —
- * which is what actually ends the session, since `getCurrentUserOrNull` returns
- * null for a banned user — and `userAdminProfiles.active`, which is what the
- * table filters on. Asserting only the filter would pass on a user who could
- * still sign in.
+ * "Alumni" is two writes that have to agree: a better-auth `banned` flag — which
+ * is what actually ends the session, since `getCurrentUserOrNull` returns null
+ * for a banned user — and `userAdminProfiles.status`, which is what the table
+ * filters on. Asserting only the filter would pass on a user who could still
+ * sign in.
  */
-test.describe("user access removal", () => {
+test.describe("user access status", () => {
   test.setTimeout(240_000);
 
   test.beforeEach(() => {
@@ -43,60 +43,67 @@ test.describe("user access removal", () => {
     });
   });
 
-  test("admin removes access, then reactivates", async ({ page }) => {
-    const before = await waitForUserAdminState(targetEmail, (state) => state?.active === true);
+  test("admin marks a user alumni, then reactivates", async ({ page }) => {
+    const before = await waitForUserAdminState(targetEmail, (state) => state?.status === "active");
     expect(before.banned).toBe(false);
 
     const row = await openUserRow(page, before.userId);
-    await expect(userRowCell.active(row).getByRole("checkbox")).toBeChecked();
+    await expect(userRowStatusSelect(row)).toHaveText("Active");
 
-    await chooseRowAction(page, userRowActionMenu(row), "Remove access");
-    await acceptAppDialog(page, "Remove access");
+    await chooseRowStatus(page, row, "Alumni");
+    await acceptAppDialog(page, "Mark alumni");
+    await expect(page.getByText(`Marked ${targetName} as alumni.`)).toBeVisible({ timeout: 30_000 });
 
-    await expect(page.getByText(`Removed access for ${targetName}.`)).toBeVisible({
-      timeout: 30_000,
-    });
-    const removed = await waitForUserAdminState(targetEmail, (state) => state?.active === false);
+    const alumni = await waitForUserAdminState(targetEmail, (state) => state?.status === "alumni");
     // The ban is the half that actually ends the session.
-    expect(removed.banned).toBe(true);
+    expect(alumni.banned).toBe(true);
 
-    // The default Active filter drops them, and Removed picks them up.
-    await expect(page.getByTestId(`user-row-${before.userId}`)).toHaveCount(0, { timeout: 30_000 });
-    await pickSelectOption(page, accessFilterSelect(page), "Removed");
-    const removedRow = page.getByTestId(`user-row-${before.userId}`);
-    await expect(removedRow).toBeVisible({ timeout: 30_000 });
-    await expect(removedRow).toContainText("Removed");
-
-    await chooseRowAction(page, userRowActionMenu(removedRow), "Reactivate");
-    await acceptAppDialog(page, "Reactivate");
-
-    await expect(page.getByText(`Reactivated ${targetName}.`)).toBeVisible({ timeout: 30_000 });
-    const reactivated = await waitForUserAdminState(targetEmail, (state) => state?.active === true);
-    expect(reactivated.banned).toBe(false);
-
-    // Reactivating is only real if it also puts them back in the Active list.
+    // The Active filter drops them, and Alumni picks them up.
     await pickSelectOption(page, accessFilterSelect(page), "Active");
+    await expect(page.getByTestId(`user-row-${before.userId}`)).toHaveCount(0, { timeout: 30_000 });
+    await pickSelectOption(page, accessFilterSelect(page), "Alumni");
+    const alumniRow = page.getByTestId(`user-row-${before.userId}`);
+    await expect(alumniRow).toBeVisible({ timeout: 30_000 });
+
+    await chooseRowStatus(page, alumniRow, "Active");
+    await acceptAppDialog(page, "Activate");
+    await expect(page.getByText(`Activated ${targetName}.`)).toBeVisible({ timeout: 30_000 });
+
+    const reactivated = await waitForUserAdminState(targetEmail, (state) => state?.status === "active");
+    expect(reactivated.banned).toBe(false);
+  });
+
+  test("marking a user inactive keeps their account but drops digest targeting", async ({ page }) => {
+    const before = await waitForUserAdminState(targetEmail, (state) => state?.status === "active");
+    const row = await openUserRow(page, before.userId);
+
+    await chooseRowStatus(page, row, "Inactive");
+    await acceptAppDialog(page, "Mark inactive");
+
+    const inactive = await waitForUserAdminState(targetEmail, (state) => state?.status === "inactive");
+    // Inactive is not a ban: they can still sign in and reactivate.
+    expect(inactive.banned).toBe(false);
+
+    await pickSelectOption(page, accessFilterSelect(page), "Inactive");
     await expect(page.getByTestId(`user-row-${before.userId}`)).toBeVisible({ timeout: 30_000 });
   });
 
-  test("dismissing the remove confirm changes nothing", async ({ page }) => {
-    const before = await waitForUserAdminState(targetEmail, (state) => state?.active === true);
+  test("dismissing the change confirm changes nothing", async ({ page }) => {
+    const before = await waitForUserAdminState(targetEmail, (state) => state?.status === "active");
     const row = await openUserRow(page, before.userId);
 
-    await chooseRowAction(page, userRowActionMenu(row), "Remove access");
+    await chooseRowStatus(page, row, "Alumni");
     await dismissAppDialog(page);
 
-    // Still listed under the Active filter, and still unbanned.
-    await expect(row).toBeVisible();
-    await expect(userRowCell.active(row).getByRole("checkbox")).toBeChecked();
     const after = runConvex("e2eHelpers:getUserAdminStateByEmail", {
       email: targetEmail,
     }) as UserAdminState | null;
-    expect(after?.active).toBe(true);
+    expect(after?.status).toBe("active");
     expect(after?.banned).toBe(false);
+    await expect(userRowStatusSelect(row)).toHaveText("Active");
   });
 
-  test("an admin cannot remove their own access", async ({ browser }) => {
+  test("an admin cannot close their own access", async ({ browser }) => {
     // Driven as a *second* admin on purpose. The guard is checked before any
     // write, so this should be a no-op — but if it ever regresses, the damage is
     // confined to a throwaway fixture instead of banning the account the whole
@@ -113,8 +120,8 @@ test.describe("user access removal", () => {
       await signInWithCredentials(page, guardAdminEmail, guardAdminPassword);
       const row = await openUserRow(page, seeded.userId);
 
-      await chooseRowAction(page, userRowActionMenu(row), "Remove access");
-      await acceptAppDialog(page, "Remove access");
+      await chooseRowStatus(page, row, "Alumni");
+      await acceptAppDialog(page, "Mark alumni");
 
       // The mutation throws and the page surfaces the message instead of
       // silently doing nothing. `.first()` guards against the dev-mode error
@@ -124,11 +131,10 @@ test.describe("user access removal", () => {
       });
       // The invariant that matters: they are still signed in and still active.
       await expect(row).toBeVisible();
-      await expect(userRowCell.active(row).getByRole("checkbox")).toBeChecked();
       const after = runConvex("e2eHelpers:getUserAdminStateByEmail", {
         email: guardAdminEmail,
       }) as UserAdminState | null;
-      expect(after?.active).toBe(true);
+      expect(after?.status).toBe("active");
       expect(after?.banned).toBe(false);
       expect(after?.authRole).toBe("admin");
     } finally {
@@ -136,4 +142,3 @@ test.describe("user access removal", () => {
     }
   });
 });
-

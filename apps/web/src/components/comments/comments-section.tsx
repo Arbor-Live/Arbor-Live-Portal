@@ -480,7 +480,14 @@ function CommentsPanel({
                 />
               </span>
               <span className="min-w-0 flex-1 overflow-hidden">
-                <span className="block truncate">{candidate.name}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="truncate">{candidate.name}</span>
+                  {candidate.status === "inactive" ? (
+                    <span className="shrink-0 rounded bg-status-amber-500/15 px-1.5 py-0.5 text-3xs font-medium uppercase tracking-wide text-status-amber-800 dark:text-status-amber-300">
+                      Inactive
+                    </span>
+                  ) : null}
+                </span>
                 <span className="block truncate text-xs text-muted-foreground">
                   {buildUserSelectDescription({
                     role: candidate.username ? `@${candidate.username}` : undefined,

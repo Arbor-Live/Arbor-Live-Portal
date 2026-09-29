@@ -3,6 +3,7 @@ import { internal } from "../_generated/api";
 import { internalMutation } from "../_generated/server";
 import { findAuthUsersByIds, getUserId, isPortalAdmin } from "../lib/auth";
 import { resolveParticipationFlags } from "../lib/userParticipation";
+import { resolveUserStatus } from "../lib/userStatus";
 import { buildWeeklyDigest } from "../lib/weeklyDigest";
 import { SITE_URL, reminderDayKey, subjectForTemplate } from "./constants";
 import { enqueueEmail } from "./enqueue";
@@ -23,8 +24,9 @@ const WEEKLY_DIGEST_PROFILE_PAGE_SIZE = 200;
  * Opt out per person with the `weeklyDigest` Participation flag. Sections with
  * nothing pending are omitted, and a user with no pending items gets no email.
  *
- * Pages through active profiles (no fixed cap) and schedules a continuation
- * with the page cursor until every eligible profile has been visited.
+ * Pages through every profile (no fixed cap), skips non-active / opted-out
+ * profiles, and schedules a continuation with the page cursor until every
+ * eligible profile has been visited.
  */
 export const run = internalMutation({
   args: { cursor: v.optional(v.union(v.string(), v.null())) },
@@ -32,7 +34,6 @@ export const run = internalMutation({
   handler: async (ctx, args) => {
     const page = await ctx.db
       .query("userAdminProfiles")
-      .withIndex("by_active", (q) => q.eq("active", true))
       .paginate({
         cursor: args.cursor ?? null,
         numItems: WEEKLY_DIGEST_PROFILE_PAGE_SIZE,
@@ -40,6 +41,7 @@ export const run = internalMutation({
 
     let scheduledCount = 0;
     for (const profile of page.page) {
+      if (resolveUserStatus(profile) !== "active") continue;
       if (!resolveParticipationFlags(profile).weeklyDigest) continue;
       if (!profile.userId.trim()) continue;
       await ctx.scheduler.runAfter(0, internal.email.weeklyDigest.sendForUser, {
@@ -67,7 +69,7 @@ export const sendForUser = internalMutation({
       .query("userAdminProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .unique();
-    if (!profile || !profile.active) return null;
+    if (!profile || resolveUserStatus(profile) !== "active") return null;
     if (!resolveParticipationFlags(profile).weeklyDigest) return null;
 
     const userByKey = await findAuthUsersByIds(ctx, [args.userId]);

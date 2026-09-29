@@ -680,6 +680,21 @@ export const finalizeApprovedDraftInvoices = migrations.define({
 });
 
 /**
+ * Backfill `status` on userAdminProfiles from the legacy `active` boolean.
+ * `active: false` meant "removed" (banned) which is the new `alumni` state.
+ */
+export const backfillUserProfileStatus = migrations.define({
+  table: "userAdminProfiles",
+  migrateOne: async (_ctx, profile) => {
+    if (profile.status) return;
+    return {
+      status: profile.active === false ? ("alumni" as const) : ("active" as const),
+      updatedAt: Date.now(),
+    };
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -712,6 +727,7 @@ const MIGRATION_SERIES = [
   internal.migrations.backfillRunOfShowNeedBlocks,
   internal.migrations.giveEveryActAPosition,
   internal.migrations.finalizeApprovedDraftInvoices,
+  internal.migrations.backfillUserProfileStatus,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

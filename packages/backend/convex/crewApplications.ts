@@ -39,6 +39,7 @@ import { buildSingleIcsEventForUserShifts } from "./email/scheduleEmailData";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { ensureOnboardingForOrgMembership } from "./onboarding";
 import { upsertUserCompensationRate } from "./lib/crewCompensation";
+import { clearUserBan } from "./lib/userAccess";
 import {
   ensureUserProfileDefaults,
   getAuthRecordId,
@@ -593,13 +594,14 @@ export const convertToMember = mutation({
 
     if (existingUserId) {
       await ensureUserProfileDefaults(ctx, existingUserId, {
-        active: true,
+        status: "active",
         verticals,
         disciplines,
         defaultOrganizationId: arborOrg.id,
         payrollMethod: args.payrollMethod,
         gradYear: application.gradYear,
       });
+      await clearUserBan(ctx, existingUserId);
       await upsertOrgMembership(ctx, {
         userId: existingUserId,
         organizationId: arborOrg.id,

@@ -12,6 +12,7 @@ import {
   resolveUserCompensationHourlyRateUsd,
 } from "./lib/crewCompensation";
 import { resolveProfileMembership } from "./lib/userVerticals";
+import { resolveUserStatus } from "./lib/userStatus";
 import { assertE2eHelpersEnabled } from "./lib/e2eGuard";
 import { findAuthUsersByIds } from "./lib/auth";
 import {
@@ -233,14 +234,14 @@ export const ensureAdmin = mutation({
       .unique();
     if (existingUserProfile) {
       await ctx.db.patch(existingUserProfile._id, {
-        active: true,
+        status: "active",
         defaultOrganizationId: organizationId,
         updatedAt: now,
       });
     } else {
       await ctx.db.insert("userAdminProfiles", {
         userId,
-        active: true,
+        status: "active",
         verticals: [],
         disciplines: [],
         defaultOrganizationId: organizationId,
@@ -768,7 +769,7 @@ async function ensureE2eContactUser(
   } else {
     await ctx.db.insert("userAdminProfiles", {
       userId,
-      active: true,
+      status: "active",
       phone: args.phone,
       createdAt: now,
       updatedAt: now,
@@ -2029,7 +2030,7 @@ export const ensureCrewUser = mutation({
       .unique();
     if (existingUserProfile) {
       await ctx.db.patch(existingUserProfile._id, {
-        active: true,
+        status: "active",
         verticals: ["Crew"],
         disciplines: ["Sound"],
         defaultOrganizationId: organizationId,
@@ -2042,7 +2043,7 @@ export const ensureCrewUser = mutation({
     } else {
       await ctx.db.insert("userAdminProfiles", {
         userId,
-        active: true,
+        status: "active",
         verticals: ["Crew"],
         disciplines: ["Sound"],
         defaultOrganizationId: organizationId,
@@ -5243,6 +5244,7 @@ export const getUserAdminStateByEmail = query({
       authRole: v.string(),
       banned: v.boolean(),
       active: v.boolean(),
+      status: v.string(),
       title: v.string(),
       phone: v.string(),
       verticals: v.array(v.string()),
@@ -5302,7 +5304,8 @@ export const getUserAdminStateByEmail = query({
       email: user.email ?? email,
       authRole: user.role ?? "",
       banned: Boolean(user.banned),
-      active: profile?.active ?? true,
+      active: resolveUserStatus(profile) === "active",
+      status: resolveUserStatus(profile),
       title: profile?.title ?? "",
       phone: profile?.phone ?? "",
       verticals: membership.verticals as string[],
@@ -6505,7 +6508,7 @@ export const setUserAdminProfileFields = mutation({
         userId,
         title: args.title?.trim() || undefined,
         phone: args.phone?.trim() || undefined,
-        active: true,
+        status: "active",
         createdAt: now,
         updatedAt: now,
       });
