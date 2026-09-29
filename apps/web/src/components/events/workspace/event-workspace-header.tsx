@@ -134,7 +134,7 @@ export function EventWorkspaceHeader() {
             ) : null}
             {isAdmin ? (
               <>
-                {hasSiblingDays || seriesMeta ? <DropdownMenuSeparator /> : null}
+                {hasSiblingDays || seriesMeta || showsGroupOnly ? <DropdownMenuSeparator /> : null}
                 <DropdownMenuItem variant="destructive" onSelect={() => void workspace.deleteEvent()}>
                   <TrashIcon />
                   {draft.status === "cancelled" ? "Delete event" : "Cancel & delete event"}

@@ -31,25 +31,27 @@ export function seriesIntervalWeeks(series: Doc<"eventSeries">) {
 }
 
 /**
- * A group's days, soonest first. Reads the group link (`groupId`), falling back
- * to the older `seriesId` for rows the backfill hasn't reached yet.
+ * A group's days, soonest first. Reads the group link (`groupId`) and the older
+ * `seriesId` and merges them, so a group mid-backfill (some days linked by
+ * `groupId`, some not) still returns every day.
  */
 export async function listGroupDays(
   ctx: QueryCtx | MutationCtx,
   groupId: Id<"eventSeries">,
 ): Promise<Doc<"events">[]> {
-  const byGroup = await ctx.db
-    .query("events")
-    .withIndex("by_groupId_and_occurrenceIndex", (q) => q.eq("groupId", groupId))
-    .take(200);
-  const rows =
-    byGroup.length > 0
-      ? byGroup
-      : await ctx.db
-          .query("events")
-          .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", groupId))
-          .take(200);
-  return rows.sort(
+  const [byGroup, bySeries] = await Promise.all([
+    ctx.db
+      .query("events")
+      .withIndex("by_groupId_and_occurrenceIndex", (q) => q.eq("groupId", groupId))
+      .take(200),
+    ctx.db
+      .query("events")
+      .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", groupId))
+      .take(200),
+  ]);
+  const merged = new Map(byGroup.map((row) => [row._id, row]));
+  for (const row of bySeries) merged.set(row._id, row);
+  return [...merged.values()].sort(
     (a, b) => (a.occurrenceIndex ?? 0) - (b.occurrenceIndex ?? 0) || a.startAt - b.startAt,
   );
 }
