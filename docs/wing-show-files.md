@@ -42,10 +42,17 @@ the input patch, channel names/modes/tags, DCA names (blanking any group not on
 the bill), FX inserts, and the surface layers. The template's old "PCORR on
 ch1–4" and "DE-S2 on bus 15" are strays and do not survive a build.
 
-**Talkback is rig furniture.** It is constant: console strip 40, always patched
-from the desk's **local input 24** (`cfg.talk.assign` points at strip 40). It
-never touches the stage boxes, so the allocator does not reserve any socket for
-it.
+**Talkback and USB music are rig furniture.** Talkback is constant: console strip
+40, always patched from the desk's **local input 24** (`cfg.talk.assign` points
+at strip 40). USB 1/2 walk-in music is **AUX 1** (console channel 41, `clink`ed
+to AUX 2), fed from source `USB 1/2` and named so the reserved USER1 fader reads.
+Neither touches the stage boxes, so the allocator does not reserve any socket for
+them.
+
+**Unowned strips are blanked.** The right half of a stereo pair rides the left's
+strip, and with one snake box B's strips (17–32) are idle. Both are cleared (no
+name, `grp: "OFF"`, muted) so a template leftover can never sit patched to a live
+socket as a channel that no band scene unmutes.
 
 ## Patch model
 
@@ -66,9 +73,12 @@ Rules worth knowing:
 
 - **48V only on overheads.** A rider asking for phantom on a kick does not get it.
 - **Inputs pack in the rider's own order.** The night list is the union of every
-  band's channels, merged by role/name and laid out in the order the bands wrote
-  them — not a fixed template. There are no per-family caps: two kicks, three
-  vocals, a dozen playback feeds all just patch.
+  band's channels, merged by role and instance and laid out in the order the
+  bands wrote them — not a fixed template. Free-text labels never split a shared
+  channel: an opener's "BV" and a headliner's "Backing vocal" are the same first
+  backing vocal, while a band with two guitars keeps two rows (role + position).
+  There are no per-family caps: two kicks, three vocals, a dozen playback feeds
+  all just patch.
 - **Stereo is honoured wherever the rider asked for it.** A stereo row takes a
   legal pair (adjacent, starting on an odd socket: 1-2, 3-4, 5-6 …) while one is
   free. Only when no legal pair remains does a row collapse to mono, and the
@@ -104,14 +114,21 @@ section, `USER1` holds two pages / 24 slots). Priority, highest first:
 5. **Fader 12 is reserved** for USB 1/2 walk-in music.
 
 Anything past USER1's 24 slots is still patched and named; it is listed in the
-warnings so it can go on the brief. `buildNightSnap` writes the pages into
-`ce_data.layer.L[6]` (USER1), which ships empty.
+warnings so it can go on the brief. The rig is a WING Compact, so the build
+writes the pages into `ce_data.layer.CMPCT[8]` (USER1) and the vocal FX returns
+into `CMPCT[9]` (USER2) — not the full WING's `L` surface — and it writes them
+into **every** scene, not just the night baseline, so recalling a band never
+blanks the surface. Every channel also gets its family's default
+gate/HPF/comp; EQ blocks keep their on/off but their gains are flattened, so a
+channel never inherits the blueprint's leftover curve.
 
-The night baseline also re-points **pitch correction** and **de-essing** at the
-vocals. The engines come from the template — PCORR in FX5–FX8, DE-S2 in FX11 —
+The baseline also re-points **pitch correction** and **de-essing** at the
+vocals. The engines come from the template — PCORR in FX12–FX15, DE-S2 in FX11 —
 and the template had PCORR left on channels 1–4, so the build clears every
 channel insert and re-adds PCORR to the vocal pre insert and DE-S2 to the post
-insert: leads first, then backings, cycling each engine's slots. A vocal past
+insert: leads first, then backings, cycling each engine's slots. Engines no
+insert references (the blueprint's spare PCORR, its unused amp sims) are blanked
+back to `NONE`, freeing the slot and its DSP. A vocal past
 the loaded engines simply gets none of that effect — nothing is shared. The
 template's stray de-esser insert on bus 15 is cleared too, while the named
 Vox/Plate reverb returns on buses 13/14 stay as blueprint.

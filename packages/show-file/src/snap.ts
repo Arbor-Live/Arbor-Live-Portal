@@ -1,8 +1,11 @@
 import {
   AES50_GROUP,
+  BOX_CAPACITY,
   FAMILY_STYLE,
   TALKBACK_LOCAL_INPUT,
   TALKBACK_STRIP,
+  USB_MUSIC_AUX,
+  USB_MUSIC_SOURCE,
   aes50PortFor,
 } from "./slots";
 import { writeLayerPages } from "./layer-write";
@@ -72,9 +75,6 @@ export function buildNightSnap(
   allocation: EventPatchAllocation,
 ): WingSnap {
   const snap = applyAllocation(template, allocation, null);
-  // Lay the generated pages onto the surface (USER1 on a WING Compact). The
-  // vocal FX (PCORR/DE-S2) are rebuilt as part of the channel strips.
-  writeLayerPages(snap, allocation.layers);
   snap.scopes = fullScope();
   return snap;
 }
@@ -153,13 +153,44 @@ function applyAllocation(
     applyProcessing(strip, port.family);
   }
 
+  // Blank every strip the patch does not own: the right half of a stereo pair
+  // (it rides the left's strip), and box B's strips when only one snake runs.
+  // Left as-is, a template leftover gets fed from a live socket — a channel
+  // patched to a guitar input that never unmutes, because no band scene scopes
+  // a strip the allocator never placed.
+  const ownedStrips = new Set(
+    allocation.ports
+      .filter((port) => port.strip !== null)
+      .map((port) => port.strip!),
+  );
+  for (let strip = 1; strip <= BOX_CAPACITY * 2; strip++) {
+    if (ownedStrips.has(strip)) continue;
+    const channel = channels[String(strip)];
+    if (!channel) continue;
+    channel.name = "";
+    channel.mute = true;
+    channel.in = channel.in ?? {};
+    channel.in.conn = { grp: "OFF", in: 1, altgrp: "OFF", altin: 1 };
+    channel.tags = "";
+  }
+
   // Vocal inserts are part of a rebuilt channel strip, not the template: clear
   // every owned channel's inserts, then put PCORR/DE-S2 on the vocals. This is
   // shared with band snaps, so a changed channel never recalls a stray insert.
   applyVocalFx(snap, allocation);
+  // Free FX engines the bill never reaches. The blueprint is a source of
+  // models, not content: an unused amp sim or spare PCORR squatting a slot (and
+  // the DSP behind it) goes back to NONE so a real effect can use it.
+  clearUnusedFx(snap);
   // Talkback is constant, not bill-driven: it is always on its own strip,
   // patched from A.8, whatever the band patch does with the other sockets.
   pinTalkback(snap);
+  // USB 1/2 walk-in music is rig furniture too: AUX 1 is fed from the desk's
+  // USB pair and named so the reserved USER1 fader reads.
+  pinUsbMusic(snap);
+  // Lay the generated pages onto the surface. Written into every scene (not just
+  // the night baseline) so recalling a band does not blank USER1/USER2.
+  writeLayerPages(snap, allocation.layers);
 
   return snap;
 }
@@ -202,6 +233,27 @@ function pinTalkback(snap: WingSnap): void {
     altin: 1,
   };
   channel.name = "TALKBACK";
+}
+
+/**
+ * USB 1/2 walk-in music is rig furniture, not band content: **AUX 1** (console
+ * channel 41) is fed from the desk's USB stereo pair and named, so the reserved
+ * USER1 fader reads "USB 1/2" instead of a blank channel. It never touches the
+ * stage boxes, so the allocator reserves no socket for it.
+ */
+function pinUsbMusic(snap: WingSnap): void {
+  const aux = snap.ae_data.aux?.[USB_MUSIC_AUX];
+  if (!aux) return;
+  aux.name = "USB 1/2";
+  aux.col = 8;
+  aux.icon = 605;
+  aux.in = aux.in ?? {};
+  aux.in.conn = {
+    grp: "USB",
+    in: USB_MUSIC_SOURCE,
+    altgrp: "OFF",
+    altin: 1,
+  };
 }
 
 /**
@@ -337,6 +389,46 @@ function applyVocalFx(snap: WingSnap, allocation: EventPatchAllocation): void {
     if (deesserSlot !== null) {
       channel.postins = { on: true, mode: "FX", ins: `FX${deesserSlot}`, w: 0 };
     }
+  }
+}
+
+/**
+ * Blank every FX engine the rebuilt show never points at.
+ *
+ * An engine is kept only when a channel or bus insert still references its slot
+ * (`ins: "FX5"`). The blueprint's spare PCORR and its unused amp sims are set
+ * back to NONE, freeing the slot — and the DSP behind it — for the bill.
+ */
+function clearUnusedFx(snap: WingSnap): void {
+  const fx = snap.ae_data.fx;
+  if (!fx) return;
+
+  const used = new Set<number>();
+  const note = (insert: { ins?: unknown } | undefined) => {
+    const ins = insert?.ins;
+    if (typeof ins !== "string") return;
+    const match = /^FX(\d+)$/.exec(ins);
+    if (match) used.add(Number(match[1]));
+  };
+  const scan = (holder: unknown) => {
+    const inserts = holder as
+      | { preins?: { ins?: unknown }; postins?: { ins?: unknown } }
+      | undefined;
+    note(inserts?.preins);
+    note(inserts?.postins);
+  };
+
+  for (const channel of Object.values(snap.ae_data.ch)) scan(channel);
+  const buses = snap.ae_data.bus as
+    | Record<string, { preins?: unknown; postins?: unknown }>
+    | undefined;
+  for (const bus of Object.values(buses ?? {})) scan(bus);
+
+  for (const [slot, engine] of Object.entries(fx)) {
+    if (used.has(Number(slot))) continue;
+    if ((engine as { mdl?: string }).mdl === "NONE") continue;
+    const fxmix = (engine as { fxmix?: unknown }).fxmix;
+    fx[slot] = fxmix === undefined ? { mdl: "NONE" } : { mdl: "NONE", fxmix };
   }
 }
 

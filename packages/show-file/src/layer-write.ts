@@ -5,31 +5,28 @@ import {
   type LayerSlot,
 } from "./layers";
 import { VOCAL_FX_BUSES } from "./groups";
+import { USB_MUSIC_CHANNEL } from "./slots";
 
 /**
  * Write our fader pages onto the desk's surface.
  *
- * The WING Compact has one 12-fader section: four channel banks, a BUSES bank,
- * and USER1/USER2. In a `.snap` these are `ce_data.layer.L[n]` — bank 6 is
- * USER1, bank 7 is USER2 — each with 24 assignable slots (two 12-fader pages).
- * We write the generated pages into USER1, the layer an operator reaches with
- * the bank button and that ships empty.
+ * The rig is a **WING Compact**, whose 12-fader surface is `ce_data.layer.CMPCT`
+ * (the full WING stores its left/centre/right surfaces under `L`/`C`/`R`). The
+ * Compact has four channel banks, a BUSES bank, MAIN/MTX, DCA, and USER1/USER2 —
+ * USER1 is bank 8, USER2 is bank 9 — each with 24 assignable slots (two
+ * 12-fader pages). We write the generated pages into USER1, the layer an
+ * operator reaches with the bank button and that ships empty.
  */
 export const LAYER_BANK = {
-  /** `layer.L` bank holding USER1. */
-  user1: 6,
+  /** Surface the pages are written to (`ce_data.layer.CMPCT`). */
+  surface: "CMPCT",
+  /** `layer.CMPCT` bank holding USER1. */
+  user1: 8,
+  /** `layer.CMPCT` bank holding USER2 (the vocal FX return page). */
+  user2: 9,
   /** Slots in a bank (two 12-fader pages). */
   slots: USER_LAYER_SLOTS,
 } as const;
-
-/**
- * USB 1/2 walk-in music lives on the mixer's USB input. We reserve a fader for
- * it and point that slot at channel 33/34, the Wing's fixed USB stereo pair.
- */
-const USB_MUSIC_CHANNEL = 33;
-
-/** `layer.L` bank holding USER2 (the vocal FX return page). */
-const USER2_BANK = 7;
 
 /** Slots the USER1 bank exposes (two 12-fader pages). */
 export const LAYER_SLOT_CAPACITY = LAYER_BANK.slots;
@@ -40,10 +37,7 @@ type DeskBank = Record<string, DeskSlot | number | string>;
 /** Minimal slice of a snap the layer writer touches. */
 type LayerTarget = {
   ce_data?: {
-    layer?: {
-      L?: Record<string, Record<string, unknown>>;
-      [key: string]: unknown;
-    };
+    layer?: Record<string, Record<string, Record<string, unknown>> | undefined>;
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -66,9 +60,9 @@ export function writeLayerPages(
   pages: LayerPage[],
   overflow: LayerSlot[] = [],
 ): { assigned: LayerSlot[]; overflow: LayerSlot[] } {
-  const layer = snap.ce_data?.layer?.L;
+  const surface = snap.ce_data?.layer?.[LAYER_BANK.surface];
   const assigned = pages.flatMap((page) => page.slots);
-  if (!layer) return { assigned, overflow };
+  if (!surface) return { assigned, overflow };
 
   const bank: DeskBank = { name: "USER1", ofs: 0 };
   for (let slot = 0; slot < LAYER_BANK.slots; slot++) {
@@ -88,7 +82,7 @@ export function writeLayerPages(
     });
   });
 
-  layer[String(LAYER_BANK.user1)] = bank;
+  surface[String(LAYER_BANK.user1)] = bank;
 
   // USER2 is the vocal FX page: the reverb returns an engineer rides while
   // mixing vocals. One fader per return, in bus order — no duplicates. Only
@@ -100,7 +94,7 @@ export function writeLayerPages(
     user2[String(slot + 1)] =
       bus === undefined ? { type: "OFF", i: 0, dst } : { type: "BUS", i: bus, dst };
   }
-  layer[String(USER2_BANK)] = user2;
+  surface[String(LAYER_BANK.user2)] = user2;
 
   return { assigned, overflow };
 }
