@@ -1,9 +1,12 @@
 import { test, expect } from "@playwright/test";
 import { runConvex } from "../helpers/convex";
-import { checkboxByLabel, formField, formTextarea } from "../helpers/form";
+import { formField, formTextarea } from "../helpers/form";
 import { pickSearchableOption } from "../helpers/select";
 import {
   deleteInventoryFixtures,
+  gotoTypes,
+  openNewType,
+  openTypeRow,
   saveTypeForm,
   searchTypes,
   typeRow,
@@ -50,22 +53,22 @@ test.describe.serial("inventory type public visibility", () => {
   });
 
   test("a listing-only type is published without its profile fields", async ({ page }) => {
-    await page.goto("/dashboard/inventory/types");
-    await expect(page.getByText("Model Types")).toBeVisible({ timeout: 30_000 });
+    await gotoTypes(page);
 
-    const form = page.locator("form");
+    const form = await openNewType(page);
     await formField(form, "Name").fill(typeName);
     await formField(form, "Model").fill("E2E-PUB-1");
     await formTextarea(form, "Description").fill("Public description for the Batch 10 suite.");
     await formTextarea(form, "Tips").fill("Profile-only tips that must stay private.");
     await pickSearchableOption(
       page,
-      page.getByTestId("type-category-field").getByTestId("searchable-select-trigger"),
+      form.getByTestId("type-category-field").getByTestId("searchable-select-trigger"),
       "Sound",
       /^Sound$/,
     );
-    await formField(form, "Optional public slug (for direct links)").fill(publicSlug);
-    await checkboxByLabel(form, "List publicly").check();
+    await formField(form, "Public slug").fill(publicSlug);
+    await form.getByRole("switch", { name: "List publicly" }).click();
+    await expect(form.getByRole("switch", { name: "List publicly" })).toBeChecked();
 
     await saveTypeForm(page, "create");
 
@@ -89,18 +92,15 @@ test.describe.serial("inventory type public visibility", () => {
   test("enabling the full profile unlocks tips and the slug", async ({ page }) => {
     const created = await waitForInventoryType(typeName, (state) => Boolean(state?.typeId));
 
-    await page.goto("/dashboard/inventory/types");
-    await expect(page.getByText("Model Types")).toBeVisible({ timeout: 30_000 });
+    await gotoTypes(page);
     await searchTypes(page, typeName);
 
     const row = typeRow(page, created.typeId);
     await expect(row).toBeVisible({ timeout: 30_000 });
     await expect(row).toContainText("Public listing");
-    await row.getByRole("button", { name: "Edit", exact: true }).click();
 
-    const form = page.locator("form");
-    await expect(page.getByText("Edit Type")).toBeVisible({ timeout: 20_000 });
-    await checkboxByLabel(form, "Share full public profile").check();
+    const form = await openTypeRow(page, created.typeId);
+    await form.getByRole("switch", { name: "Share full public profile" }).click();
     await saveTypeForm(page, "edit");
 
     await waitForInventoryType(typeName, (state) => state?.publicProfile === true);
@@ -115,8 +115,7 @@ test.describe.serial("inventory type public visibility", () => {
   test("the bulk Hide from public action unpublishes the row", async ({ page }) => {
     const created = await waitForInventoryType(typeName, (state) => Boolean(state?.typeId));
 
-    await page.goto("/dashboard/inventory/types");
-    await expect(page.getByText("Model Types")).toBeVisible({ timeout: 30_000 });
+    await gotoTypes(page);
     await searchTypes(page, typeName);
 
     const row = typeRow(page, created.typeId);
@@ -124,9 +123,9 @@ test.describe.serial("inventory type public visibility", () => {
     await expect(row).toContainText("Public + profile");
     // The row checkbox is what the bulk bar acts on; scoping to the seeded row
     // matters because the shared deployment is full of other `E2E ` types.
-    await row.locator("input[type='checkbox']").check();
+    await row.getByRole("checkbox").check();
 
-    await page.getByRole("button", { name: "Hide from public" }).click();
+    await page.getByTestId("types-bulk-bar").getByRole("button", { name: "Hide from public" }).click();
 
     // The button clears both flags in one mutation, which is the point: a type
     // must not be able to keep a full public profile while unlisted.

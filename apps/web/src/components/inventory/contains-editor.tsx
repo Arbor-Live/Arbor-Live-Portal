@@ -44,9 +44,9 @@ export function ContainsEditor({
     const selected = new Set(value);
     return options.filter((option) => !selected.has(option.value));
   }, [options, value]);
-  const { cameraOn, toggleCamera, cameraError, videoRef, supported } = useBarcodeCamera(
+  // A container is filled one asset after another, so the camera stays open between reads.
+  const { cameraOn, toggleCamera, cameraError, videoRef, supported, lastDetected } = useBarcodeCamera(
     (raw) => void onScan?.(raw),
-    { closeOnDetect: true },
   );
 
   const selectedOptions = useMemo(() => {
@@ -119,6 +119,13 @@ export function ContainsEditor({
           muted
           playsInline
         />
+      ) : null}
+      {cameraOn ? (
+        <p className="text-xs text-muted-foreground" aria-live="polite">
+          {lastDetected
+            ? `Read ${lastDetected}. Scan the next one, or close the camera when you're done.`
+            : "Scan each asset that goes inside. The camera stays open between scans."}
+        </p>
       ) : null}
     </div>
   );

@@ -1,6 +1,6 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { requireAuth } from "./lib/auth";
 import {
@@ -341,11 +341,36 @@ export const listManufacturers = query({
   },
 });
 
+const MAX_UNIT_SCAN = 5000;
+
+/**
+ * Units per type for the types list. `inventoryItems` has no per-type counter,
+ * so this scans a bounded window of the table and groups it; `truncated` says
+ * the counts are a floor rather than exact.
+ */
+export const unitCounts = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAuth(ctx);
+    const items = await ctx.db.query("inventoryItems").take(MAX_UNIT_SCAN + 1);
+    const counts = new Map<Id<"inventoryTypes">, number>();
+    for (const item of items.slice(0, MAX_UNIT_SCAN)) {
+      counts.set(item.typeId, (counts.get(item.typeId) ?? 0) + 1);
+    }
+    return {
+      counts: [...counts].map(([typeId, units]) => ({ typeId, units })),
+      truncated: items.length > MAX_UNIT_SCAN,
+    };
+  },
+});
+
+/** One type by id. Takes a plain string so a stale or mistyped `?type=` link reads as "not found". */
 export const get = query({
-  args: { id: v.id("inventoryTypes") },
+  args: { id: v.string() },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
-    return await ctx.db.get(args.id);
+    const id = ctx.db.normalizeId("inventoryTypes", args.id);
+    return id ? await ctx.db.get(id) : null;
   },
 });
 
