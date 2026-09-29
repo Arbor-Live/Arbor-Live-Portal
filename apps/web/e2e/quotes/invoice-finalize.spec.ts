@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { pollConvex } from "../helpers/convex";
+import { addInvoiceLine, invoiceEditorHeading } from "../helpers/invoice";
 
 test.describe("staff invoice create", () => {
   test("admin creates draft invoice and public quote link works", async ({ page }) => {
@@ -7,10 +8,10 @@ test.describe("staff invoice create", () => {
     const artistLabel = `E2E Artist ${stamp}`;
 
     await page.goto("/dashboard/financial-hub/invoices/new");
-    await expect(page.getByText("Create Invoice").first()).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText("Create invoice").first()).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(/E2E Admin/i).first()).toBeVisible({ timeout: 25_000 });
 
-    await page.getByRole("button", { name: "Add artist row" }).click();
+    await addInvoiceLine(page, "Artist");
     await page.getByPlaceholder("Artist / role").fill(artistLabel);
     await page.getByPlaceholder("People").fill("1");
     await page.getByPlaceholder("Rate").fill("50");
@@ -24,7 +25,7 @@ test.describe("staff invoice create", () => {
     await page.waitForURL(/\/dashboard\/financial-hub\/invoices\/(?!new$)[^/?#]+/, {
       timeout: 60_000,
     });
-    await expect(page.getByRole("heading", { name: "Edit Invoice" })).toBeVisible({
+    await expect(invoiceEditorHeading(page)).toBeVisible({
       timeout: 25_000,
     });
 

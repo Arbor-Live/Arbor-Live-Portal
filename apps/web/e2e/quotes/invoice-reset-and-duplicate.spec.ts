@@ -4,7 +4,9 @@ import { pollConvex } from "../helpers/convex";
 import { e2eEnv } from "../helpers/env";
 import {
   createDraftInvoiceWithArtistLine,
+  invoiceEditorHeading,
   invoiceIdFromUrl,
+  openInvoiceMenuItem,
   saveInvoiceEditor,
 } from "../helpers/invoice";
 
@@ -77,7 +79,7 @@ test.describe("invoice approval reset and duplicate", () => {
 
     // Re-open the editor so it hydrates with the approved state.
     await page.goto(`/dashboard/financial-hub/invoices/${invoiceId}`);
-    await expect(page.getByRole("heading", { name: "Edit Invoice" })).toBeVisible({
+    await expect(invoiceEditorHeading(page)).toBeVisible({
       timeout: 25_000,
     });
 
@@ -151,7 +153,7 @@ test.describe("invoice approval reset and duplicate", () => {
     );
     expect(originalTotals.lineItems).toHaveLength(1);
 
-    await page.getByTestId("invoice-duplicate").click();
+    await openInvoiceMenuItem(page, "invoice-duplicate");
     // `router.push`, so poll the URL rather than waiting on a load event.
     await expect
       .poll(() => invoiceIdFromUrl(page), { timeout: 60_000 })

@@ -107,6 +107,7 @@ const lineItemInput = v.object({
   needId: v.optional(v.id("eventArtistNeeds")),
   memberCount: v.optional(v.number()),
   performanceHours: v.optional(v.number()),
+  crewSource: v.optional(v.literal("manual")),
 });
 
 type LineInput = {
@@ -131,10 +132,12 @@ type LineInput = {
   eventId?: Id<"events">;
   /** Artist lines: the position this line stands for. */
   needId?: Id<"eventArtistNeeds">;
-  /** Artist lines: number of people performing. */
+  /** Artist and crew lines: number of people. */
   memberCount?: number;
-  /** Artist lines: hours performing. */
+  /** Artist and crew lines: hours each person works or performs. */
   performanceHours?: number;
+  /** Crew lines: hand-added hours on a linked quote (vs. generated from the schedule). */
+  crewSource?: "manual";
 };
 
 function trimOptional(raw: string | undefined) {
@@ -395,6 +398,7 @@ function lineDocToInput(line: Doc<"invoiceLineItems">): LineInput {
     needId: line.needId,
     memberCount: line.memberCount,
     performanceHours: line.performanceHours,
+    crewSource: line.crewSource,
   };
 }
 
@@ -573,16 +577,21 @@ async function replaceLineItems(
         row.section === "artist" && row.eventId
           ? (row.needId ?? reusedNeedId)
           : undefined,
+      // Artist and crew lines keep their people × hours split; `quantity` is still
+      // the billed person-hours.
       memberCount:
-        row.section === "artist" && row.memberCount !== undefined && row.memberCount > 0
+        (row.section === "artist" || row.section === "crew") &&
+        row.memberCount !== undefined &&
+        row.memberCount > 0
           ? row.memberCount
           : undefined,
       performanceHours:
-        row.section === "artist" &&
+        (row.section === "artist" || row.section === "crew") &&
         row.performanceHours !== undefined &&
         row.performanceHours > 0
           ? row.performanceHours
           : undefined,
+      crewSource: row.section === "crew" ? row.crewSource : undefined,
       createdAt: now,
       updatedAt: now,
     });
@@ -1827,6 +1836,7 @@ export const duplicate = mutation({
         organizationId: line.organizationId,
         memberCount: line.memberCount,
         performanceHours: line.performanceHours,
+        crewSource: line.crewSource,
         createdAt: now,
         updatedAt: now,
       });

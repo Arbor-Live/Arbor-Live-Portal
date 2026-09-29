@@ -8,6 +8,32 @@ import { downloadBytes } from "@/lib/download-bytes";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+/** Download an invoice's PDF. `status` is "error" after a failed download until the next try. */
+export function useInvoicePdfDownload(invoiceId: Id<"invoices"> | undefined, invoiceNumber?: string) {
+  const downloadPdf = useAction(api.invoicePdfDownload.downloadByInvoiceId);
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+
+  /** Resolves true when the file downloaded. */
+  async function download() {
+    if (!invoiceId) return false;
+    setStatus("loading");
+    try {
+      const bytes = await downloadPdf({
+        invoiceId,
+        siteOrigin: typeof window !== "undefined" ? window.location.origin : undefined,
+      });
+      downloadBytes(bytes, `${invoiceNumber ?? invoiceId}.pdf`);
+      setStatus("idle");
+      return true;
+    } catch {
+      setStatus("error");
+      return false;
+    }
+  }
+
+  return { download, status };
+}
+
 export function InvoicePdfDownloadButton({
   invoiceId,
   invoiceNumber,
@@ -27,22 +53,7 @@ export function InvoicePdfDownloadButton({
   loadingLabel?: string;
   iconOnly?: boolean;
 }) {
-  const downloadPdf = useAction(api.invoicePdfDownload.downloadByInvoiceId);
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
-
-  async function onDownload() {
-    setStatus("loading");
-    try {
-      const bytes = await downloadPdf({
-        invoiceId,
-        siteOrigin: typeof window !== "undefined" ? window.location.origin : undefined,
-      });
-      downloadBytes(bytes, `${invoiceNumber ?? invoiceId}.pdf`);
-      setStatus("idle");
-    } catch {
-      setStatus("error");
-    }
-  }
+  const { download, status } = useInvoicePdfDownload(invoiceId, invoiceNumber);
 
   // Prefer icon-sm so icon buttons match size="sm" text buttons (h-7).
   const buttonSize = iconOnly ? (size === "icon" || size === "icon-sm" ? size : "icon-sm") : size;
@@ -55,7 +66,7 @@ export function InvoicePdfDownloadButton({
         variant={variant}
         size={buttonSize}
         disabled={status === "loading"}
-        onClick={() => void onDownload()}
+        onClick={() => void download()}
         title={title}
         aria-label={title}
       >

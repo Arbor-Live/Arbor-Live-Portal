@@ -1,7 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
 import { acceptAppDialog } from "../helpers/auth";
 import { pollConvex } from "../helpers/convex";
-import { invoiceIdFromUrl, saveInvoiceEditor, waitForInvoiceEditorUrl } from "../helpers/invoice";
+import {
+  addInvoiceLine,
+  invoiceIdFromUrl,
+  saveInvoiceEditor,
+  waitForInvoiceEditorUrl,
+} from "../helpers/invoice";
 import { fillSearchableSelectQuery } from "../helpers/select";
 
 type GroupState = {
@@ -115,13 +120,13 @@ test.describe("invoice host organizations and contacts", () => {
 
     // Now bill an invoice to them through the editor's pickers.
     await page.goto("/dashboard/financial-hub/invoices/new");
-    await expect(page.getByText("Create Invoice").first()).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText("Create invoice").first()).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(/E2E Admin/i).first()).toBeVisible({ timeout: 25_000 });
 
     // Line items first, pickers second. Opening a SearchableSelect installs a
     // capture-phase scroll listener that re-renders on every scroll event, so
     // any later click in the main column fights Playwright's scroll-into-view.
-    await page.getByRole("button", { name: "Add artist row" }).click();
+    await addInvoiceLine(page, "Artist");
     const artistRow = page.getByTestId("invoice-row-artist-0");
     await artistRow.getByPlaceholder("Artist / role").fill(`E2E Host Artist ${stamp}`);
     await artistRow.getByPlaceholder("People").fill("1");

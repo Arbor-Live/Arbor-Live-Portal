@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { pollConvex, runConvex } from "../helpers/convex";
 import { pickSearchableOption } from "../helpers/select";
 import {
+  addInvoiceLine,
   invoiceIdFromUrl,
   readTotal,
   saveInvoiceEditor,
@@ -139,10 +140,10 @@ test.describe("invoice fee definitions", () => {
     );
 
     await page.goto("/dashboard/financial-hub/invoices/new");
-    await expect(page.getByText("Create Invoice").first()).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText("Create invoice").first()).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(/E2E Admin/i).first()).toBeVisible({ timeout: 25_000 });
 
-    await page.getByRole("button", { name: "Add fee" }).click();
+    await addInvoiceLine(page, "Fee");
     const feeRow = page.getByTestId("invoice-row-fee-0");
     await pickSearchableOption(
       page,

@@ -37,7 +37,7 @@ export function toDocumentLineItem(
         ? `~${qty} per occurrence (${remainder} remainder)`
         : `~${qty} per occurrence`;
   } else if (
-    row.section === "artist" &&
+    (row.section === "artist" || row.section === "crew") &&
     row.memberCount !== undefined &&
     row.memberCount > 0 &&
     row.performanceHours !== undefined &&
@@ -80,11 +80,13 @@ export function toDocumentLineItem(
     rateUsd: row.rateUsd,
     amountUsd,
     memberCount:
-      row.section === "artist" && row.memberCount !== undefined && row.memberCount > 0
+      (row.section === "artist" || row.section === "crew") &&
+      row.memberCount !== undefined &&
+      row.memberCount > 0
         ? row.memberCount
         : undefined,
     performanceHours:
-      row.section === "artist" &&
+      (row.section === "artist" || row.section === "crew") &&
       row.performanceHours !== undefined &&
       row.performanceHours > 0
         ? row.performanceHours
