@@ -698,21 +698,28 @@ export const backfillUserProfileStatus = migrations.define({
  * Consolidate the legacy `weeklyDigest` / `damageReportEmails` profile flags
  * into the single `emailOptOuts` list. Idempotent: profiles that already carry
  * an opt-out list are left alone.
+ *
+ * Reads the removed fields through a widened type so this keeps compiling after
+ * the schema narrowed; it is already complete on deployments that ran it.
  */
 export const backfillUserEmailOptOuts = migrations.define({
   table: "userAdminProfiles",
   migrateOne: async (_ctx, profile) => {
     if (profile.emailOptOuts !== undefined) return;
+    const legacy = profile as Doc<"userAdminProfiles"> & {
+      weeklyDigest?: boolean;
+      damageReportEmails?: boolean;
+    };
     const emailOptOuts: string[] = [];
-    if (profile.weeklyDigest === false) emailOptOuts.push("weekly_digest");
+    if (legacy.weeklyDigest === false) emailOptOuts.push("weekly_digest");
     // Advisor presets historically omitted `damageReportEmails` while setting
     // the three crew flags false; treat that as opted out of damage reports.
     const damageReportOff =
-      profile.damageReportEmails === false ||
-      (profile.damageReportEmails === undefined &&
-        profile.requiresOnboarding === false &&
-        profile.includeInTimecards === false &&
-        profile.assignableAsCrew === false);
+      legacy.damageReportEmails === false ||
+      (legacy.damageReportEmails === undefined &&
+        legacy.requiresOnboarding === false &&
+        legacy.includeInTimecards === false &&
+        legacy.assignableAsCrew === false);
     if (damageReportOff) emailOptOuts.push("damage_report_admin");
     return { emailOptOuts, updatedAt: Date.now() };
   },
@@ -720,18 +727,24 @@ export const backfillUserEmailOptOuts = migrations.define({
 
 /**
  * Widen → migrate → narrow, step 2: drop the deprecated profile flags now that
- * `backfillUserEmailOptOuts` has copied them across. Must run before a later
- * schema change removes the fields — Convex validates existing documents on
- * push, so the fields cannot be deleted from the schema while rows still carry
- * them.
+ * `backfillUserEmailOptOuts` has copied them across. The fields are gone from
+ * the schema, so this reads/writes them through a widened type; it is already
+ * complete on deployments that ran it.
  */
 export const unsetLegacyUserEmailFlags = migrations.define({
   table: "userAdminProfiles",
   migrateOne: async (_ctx, profile) => {
-    if (profile.weeklyDigest === undefined && profile.damageReportEmails === undefined) {
+    const legacy = profile as Doc<"userAdminProfiles"> & {
+      weeklyDigest?: boolean;
+      damageReportEmails?: boolean;
+    };
+    if (legacy.weeklyDigest === undefined && legacy.damageReportEmails === undefined) {
       return;
     }
-    return { weeklyDigest: undefined, damageReportEmails: undefined };
+    return {
+      weeklyDigest: undefined,
+      damageReportEmails: undefined,
+    } as unknown as Partial<Doc<"userAdminProfiles">>;
   },
 });
 
@@ -739,8 +752,11 @@ export const unsetLegacyUserEmailFlags = migrations.define({
 export const unsetLegacyPendingInviteEmailFlags = migrations.define({
   table: "pendingUserInvites",
   migrateOne: async (_ctx, row) => {
-    if (row.damageReportEmails === undefined) return;
-    return { damageReportEmails: undefined };
+    const legacy = row as Doc<"pendingUserInvites"> & { damageReportEmails?: boolean };
+    if (legacy.damageReportEmails === undefined) return;
+    return { damageReportEmails: undefined } as unknown as Partial<
+      Doc<"pendingUserInvites">
+    >;
   },
 });
 
