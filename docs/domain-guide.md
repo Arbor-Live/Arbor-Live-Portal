@@ -236,7 +236,9 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   the queue from the position side panel: **Accept** books the inquiring artist
   into that position, marks the inquiry `accepted`, and dismisses the position's
   other open inquiries (`acceptInquiry`); **Dismiss** marks one `dismissed`.
-  Riders sit in their own card below the bill.
+  Each opportunity shows the event's website-visible marketing design's caption
+  and poster, and links to the public event page only when the event is public
+  and publicly listable. Riders sit in their own card below the bill.
 - **Operations lead** (`events.operationsLeadUserId`) — the person responsible
   for filling an event's lineup. Assigned inline on the **Open positions** board
   (`/dashboard/events/positions`), which lists upcoming events with unfilled

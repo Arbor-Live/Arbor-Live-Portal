@@ -14,13 +14,21 @@ import {
   artistNeedTypeValue,
   ARTIST_NEED_TYPE_LABELS,
   artistTypeMatchesNeed,
+  buildArtistOpportunityRow,
   effectiveArtistNeedStatus,
   resolveEventArtistBooking,
   slotIsBooked,
-  type ArtistNeedStatus,
   type ArtistNeedType,
+  type ArtistOpportunityRow,
   type EffectiveArtistNeedStatus,
 } from "./lib/eventArtistNeeds";
+import {
+  latestWebsiteVisibleDesign,
+  MAX_DESIGNS_PER_EVENT,
+} from "./lib/marketingDesigns";
+import { buildPublicEventUrl, isPubliclyListableEvent } from "./lib/publicEvents";
+import { resolveStoredR2AssetUrl } from "./inventoryR2";
+import { SITE_URL } from "./email/constants";
 import { scheduleArtistNeedInquiryEmail } from "./email/artistNeedInquiryEmails";
 import {
   removeParticipationFromEvent,
@@ -517,20 +525,29 @@ export const listOpenNeedsForArtist = query({
       candidates.push(...rows);
     }
 
-    const out: Array<{
-      needId: Id<"eventArtistNeeds">;
-      eventId: Id<"events">;
-      title: string;
-      startAt: number;
-      endAt: number;
-      timezone: string;
-      venueName: string;
-      label: string;
-      artistType: ArtistNeedType;
-      genres: string;
-      status: ArtistNeedStatus;
-      alreadyInquired: boolean;
-    }> = [];
+    const out: ArtistOpportunityRow[] = [];
+
+    // Several positions can share an event, so read its design once and reuse
+    // it (description + resolved poster) for every row on that event.
+    const designByEvent = new Map<
+      Id<"events">,
+      { design: Doc<"eventMarketingDesigns"> | null; posterUrl?: string }
+    >();
+    async function designForEvent(eventId: Id<"events">) {
+      const cached = designByEvent.get(eventId);
+      if (cached) return cached;
+      const designs = await ctx.db
+        .query("eventMarketingDesigns")
+        .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+        .take(MAX_DESIGNS_PER_EVENT);
+      const design = latestWebsiteVisibleDesign(designs);
+      const posterUrl = design?.imageUrl
+        ? ((await resolveStoredR2AssetUrl(design.imageUrl)) ?? undefined)
+        : undefined;
+      const value = { design, posterUrl };
+      designByEvent.set(eventId, value);
+      return value;
+    }
 
     for (const need of candidates) {
       if (args.artistType && need.artistType !== args.artistType) continue;
@@ -556,20 +573,17 @@ export const listOpenNeedsForArtist = query({
         )
         .unique();
 
-      out.push({
-        needId: need._id,
-        eventId: event._id,
-        title: event.title,
-        startAt: event.startAt,
-        endAt: event.endAt,
-        timezone: event.timezone,
-        venueName: event.venueName ?? "",
-        label: slotLabel ?? "",
-        artistType: need.artistType,
-        genres: need.genres ?? "",
-        status: need.status,
-        alreadyInquired: existingInquiry?.status === "submitted",
-      });
+      const { design, posterUrl } = await designForEvent(event._id);
+      out.push(
+        buildArtistOpportunityRow({
+          need,
+          event,
+          design,
+          posterUrl,
+          siteUrl: SITE_URL,
+          alreadyInquired: existingInquiry?.status === "submitted",
+        }),
+      );
     }
 
     return out.sort((a, b) => a.startAt - b.startAt);
@@ -714,6 +728,23 @@ export const listMyInquiries = query({
       .withIndex("by_organizationId", (q) => q.eq("organizationId", context.organizationId))
       .take(100);
 
+    // Resolve each event's poster once, even if the band requested several of
+    // its positions.
+    const posterByEvent = new Map<Id<"events">, string | undefined>();
+    async function posterForEvent(eventId: Id<"events">) {
+      if (posterByEvent.has(eventId)) return posterByEvent.get(eventId);
+      const designs = await ctx.db
+        .query("eventMarketingDesigns")
+        .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+        .take(MAX_DESIGNS_PER_EVENT);
+      const design = latestWebsiteVisibleDesign(designs);
+      const posterUrl = design?.imageUrl
+        ? ((await resolveStoredR2AssetUrl(design.imageUrl)) ?? undefined)
+        : undefined;
+      posterByEvent.set(eventId, posterUrl);
+      return posterUrl;
+    }
+
     const rows = await Promise.all(
       inquiries.map(async (inquiry) => {
         const event = await ctx.db.get(inquiry.eventId);
@@ -733,6 +764,12 @@ export const listMyInquiries = query({
           status: inquiry.status,
           message: inquiry.message ?? "",
           createdAt: inquiry.createdAt,
+          posterUrl: await posterForEvent(inquiry.eventId),
+          // Link to the event page only when it exists (public + listable).
+          publicEventUrl:
+            event && isPubliclyListableEvent(event)
+              ? buildPublicEventUrl(String(event._id), SITE_URL)
+              : undefined,
         };
       }),
     );

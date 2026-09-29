@@ -1,7 +1,8 @@
 import { v } from "convex/values";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { artistLineAppliesToEvent, isSingleSeriesBooking } from "./invoiceArtistDays";
+import { buildPublicEventUrl, isPubliclyListableEvent } from "./publicEvents";
 
 export const ARTIST_NEED_TYPES = ["band", "dj", "no_preference"] as const;
 export type ArtistNeedType = (typeof ARTIST_NEED_TYPES)[number];
@@ -162,3 +163,78 @@ export async function resolveEventArtistBooking(
 
   return { lineup, filledSlotIds, invoiceArtistIds };
 }
+
+/** What an open position looks like to an artist on the Opportunities page. */
+export type ArtistOpportunityRow = {
+  needId: Id<"eventArtistNeeds">;
+  eventId: Id<"events">;
+  title: string;
+  startAt: number;
+  endAt: number;
+  timezone: string;
+  venueName: string;
+  label: string;
+  artistType: ArtistNeedType;
+  genres: string;
+  status: ArtistNeedStatus;
+  setStartsAt?: number;
+  setEndsAt?: number;
+  /** Caption of the event's website-visible marketing design, when there is one. */
+  description?: string;
+  /** Resolved poster image from that same design. */
+  posterUrl?: string;
+  /** The public event page — only set when that page actually exists. */
+  publicEventUrl?: string;
+  alreadyInquired: boolean;
+};
+
+type OpportunityNeed = Pick<
+  Doc<"eventArtistNeeds">,
+  "_id" | "artistType" | "genres" | "label" | "status" | "setStartsAt" | "setEndsAt"
+>;
+type OpportunityEvent = Pick<
+  Doc<"events">,
+  "_id" | "title" | "startAt" | "endAt" | "timezone" | "venueName" | "status" | "visibility"
+>;
+type OpportunityDesign = Pick<Doc<"eventMarketingDesigns">, "caption" | "imageUrl">;
+
+/**
+ * Build one artist-facing row. Pure, so the description / poster / public-page
+ * rules are unit-testable without a Convex context. The caller picks the
+ * website-visible design, resolves its poster, and passes `siteUrl`.
+ */
+export function buildArtistOpportunityRow(input: {
+  need: OpportunityNeed;
+  event: OpportunityEvent;
+  design: OpportunityDesign | null;
+  posterUrl?: string;
+  siteUrl: string;
+  alreadyInquired: boolean;
+}): ArtistOpportunityRow {
+  const { need, event, design } = input;
+  // The public page only renders for a public, listable, uncancelled event, so
+  // link there only when that page is real — never 404 the artist.
+  const publicEventUrl = isPubliclyListableEvent(event)
+    ? buildPublicEventUrl(String(event._id), input.siteUrl)
+    : undefined;
+  return {
+    needId: need._id,
+    eventId: event._id,
+    title: event.title,
+    startAt: event.startAt,
+    endAt: event.endAt,
+    timezone: event.timezone,
+    venueName: event.venueName ?? "",
+    label: need.label?.trim() ?? "",
+    artistType: need.artistType,
+    genres: need.genres ?? "",
+    status: need.status,
+    setStartsAt: need.setStartsAt,
+    setEndsAt: need.setEndsAt,
+    description: design?.caption?.trim() || undefined,
+    posterUrl: design?.imageUrl ? input.posterUrl : undefined,
+    publicEventUrl,
+    alreadyInquired: input.alreadyInquired,
+  };
+}
+
