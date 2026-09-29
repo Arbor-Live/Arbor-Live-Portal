@@ -85,6 +85,7 @@ function EventArtistBillPanel({
   const bill = useQuery(api.eventArtistNeeds.getForEvent, { eventId });
   const upsertSlot = useMutation(api.eventArtistNeeds.upsertSlot);
   const removeFromBill = useMutation(api.eventArtistNeeds.removeFromBill);
+  const acceptInquiry = useMutation(api.eventArtistNeeds.acceptInquiry);
   const dismissInquiry = useMutation(api.eventArtistNeeds.dismissInquiry);
   const updateSlotLineup = useMutation(api.eventArtistNeeds.updateSlotLineup);
   const updateParticipationLineup = useMutation(api.eventBands.updateParticipationLineup);
@@ -331,6 +332,8 @@ function EventArtistBillPanel({
       if (!ok) return false;
       return attempt(() => cancelPayment({ paymentId: payment._id }), "Payout removed.");
     },
+    acceptInquiry: (inquiryId) =>
+      attempt(() => acceptInquiry({ inquiryId }), "Inquiry accepted — artist booked."),
     dismissInquiry: (inquiryId) => attempt(() => dismissInquiry({ inquiryId }), "Inquiry dismissed."),
   };
 
