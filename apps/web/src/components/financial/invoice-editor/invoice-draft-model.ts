@@ -222,6 +222,22 @@ export function crewLineRateUsd(
   return crewRateMode === "custom" ? Number(customCrewRateUsd || "0") : modeDefaultRate;
 }
 
+/**
+ * A hand-entered crew row's people × hours, when it has one. Rows from a
+ * schedule (one per shift) and older rows with only a total don't.
+ */
+export function crewHeadcount(row: Pick<CrewRow, "hours" | "people">) {
+  const hours = Number(row.hours);
+  const people = Number(row.people);
+  if (!(hours > 0) || !(people > 0)) return null;
+  return { hours, people };
+}
+
+/** Person-hours for a hand-entered row edited as hours × people. */
+export function crewPersonHours(hours: string, people: string) {
+  return String(Math.max(0, Number(hours || "0")) * Math.max(0, Number(people || "0")));
+}
+
 /** Whether a crew row makes it onto the saved quote (blank or zero-hour rows don't). */
 export function isBillableCrewRow(row: Pick<CrewRow, "label" | "quantity">) {
   return Boolean(row.label.trim()) && Number(row.quantity) > 0;
@@ -324,12 +340,14 @@ export function buildInvoiceLineItems(lines: InvoiceDraftLines, ctx: LineItemCon
   }
   for (const row of lines.crewRows) {
     if (!isBillableCrewRow(row)) continue;
+    const split = crewHeadcount(row);
     rows.push({
       section: "crew",
       order: order++,
       label: row.label.trim(),
       quantity: Number(row.quantity),
       rateUsd: crewLineRateUsd(row, ctx.crewRateMode, ctx.customCrewRateUsd, ctx.settings),
+      ...(split ? { memberCount: split.people, performanceHours: split.hours } : {}),
     });
   }
   for (const row of lines.fees) {

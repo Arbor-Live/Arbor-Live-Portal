@@ -38,8 +38,7 @@ test.describe("linked invoice margin and crew rate copy", () => {
       timeout: 60_000,
     });
 
-    // The run of show sits collapsed under the Crew line group.
-    await page.getByTestId("invoice-crew-schedule-toggle").click();
+    // The run of show sits open under the Crew line group.
     const blurb = page.getByTestId("invoice-linked-crew-blurb");
     await expect(blurb).toBeVisible({ timeout: 45_000 });
     const text = (await blurb.innerText()).replace(/\s+/g, " ");

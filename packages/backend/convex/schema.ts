@@ -719,11 +719,11 @@ export default defineSchema({
      */
     needId: v.optional(v.id("eventArtistNeeds")),
     /**
-     * Artist lines: performers in the group. With `performanceHours` and `rateUsd`
-     * (per person per hour), `quantity` is person-hours (people × hours).
+     * Artist and crew lines: people on the line. With `performanceHours` and
+     * `rateUsd` (per person per hour), `quantity` is person-hours (people × hours).
      */
     memberCount: v.optional(v.number()),
-    /** Artist lines: hours the group is performing. */
+    /** Artist and crew lines: hours each person performs or works. */
     performanceHours: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

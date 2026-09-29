@@ -130,9 +130,9 @@ type LineInput = {
   eventId?: Id<"events">;
   /** Artist lines: the position this line stands for. */
   needId?: Id<"eventArtistNeeds">;
-  /** Artist lines: number of people performing. */
+  /** Artist and crew lines: number of people. */
   memberCount?: number;
-  /** Artist lines: hours performing. */
+  /** Artist and crew lines: hours each person works or performs. */
   performanceHours?: number;
 };
 
@@ -572,12 +572,16 @@ async function replaceLineItems(
         row.section === "artist" && row.eventId
           ? (row.needId ?? reusedNeedId)
           : undefined,
+      // Artist and crew lines keep their people × hours split; `quantity` is still
+      // the billed person-hours.
       memberCount:
-        row.section === "artist" && row.memberCount !== undefined && row.memberCount > 0
+        (row.section === "artist" || row.section === "crew") &&
+        row.memberCount !== undefined &&
+        row.memberCount > 0
           ? row.memberCount
           : undefined,
       performanceHours:
-        row.section === "artist" &&
+        (row.section === "artist" || row.section === "crew") &&
         row.performanceHours !== undefined &&
         row.performanceHours > 0
           ? row.performanceHours

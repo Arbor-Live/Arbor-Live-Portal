@@ -413,6 +413,9 @@ export function useInvoiceDraft({
       label: row.label,
       quantity: row.quantity.toString(),
       rateUsd: row.rateUsd.toString(),
+      ...(row.memberCount && row.performanceHours
+        ? { people: row.memberCount.toString(), hours: row.performanceHours.toString() }
+        : {}),
     }));
     const savedCustomRate =
       invoice.crewRateMode === "custom"

@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatUsd } from "@/lib/format";
 import { notify } from "@/lib/notify";
-import { crewLineRateUsd, isBillableCrewRow, type CrewRow } from "./invoice-draft-model";
+import { crewLineRateUsd, crewPersonHours, isBillableCrewRow, type CrewRow } from "./invoice-draft-model";
 import {
   AmountCell,
   LineColumnHeads,
@@ -52,6 +52,8 @@ export function emptyCrewRow(draft: InvoiceDraft, source?: "manual"): CrewRow {
   return {
     label: "",
     quantity: "1",
+    hours: "1",
+    people: "1",
     rateUsd: crewRateMode === "custom" ? customCrewRateUsd || "0" : undefined,
     ...(source ? { source } : {}),
   };
@@ -59,7 +61,9 @@ export function emptyCrewRow(draft: InvoiceDraft, source?: "manual"): CrewRow {
 
 /**
  * Editable crew rows: every crew line on an unlinked quote, or the extra
- * billable hours on top of a linked schedule.
+ * billable hours on top of a linked schedule. Each row is one phase at its
+ * own headcount (4 on load-in, 2 during, 4 on strike), billed as
+ * hours × people.
  */
 function ManualCrewRows({
   draft,
@@ -76,8 +80,16 @@ function ManualCrewRows({
   const custom = draft.fields.crewRateMode === "custom";
   return (
     <>
-      <LineColumnHeads item={kind === "crew" ? "Role" : "Description"} qty="Hours" rate="Rate / hr" />
-      {rows.map((row, idx) => (
+      <LineColumnHeads item={kind === "crew" ? "Role / phase" : "Description"} qty="Hours × people" rate="Rate / person / hr" />
+      {rows.map((row, idx) => {
+        // Older rows saved only a total: read that as hours for one person.
+        const hours = row.hours ?? row.quantity;
+        const people = row.people ?? "1";
+        const setSplit = (next: { hours?: string; people?: string }) => {
+          const split = { hours, people, ...next };
+          setRows((prev) => patchRow(prev, idx, { ...split, quantity: crewPersonHours(split.hours, split.people) }));
+        };
+        return (
         <LineRow
           key={`${kind}-${idx}`}
           testId={`invoice-row-${kind}-${idx}`}
@@ -86,17 +98,31 @@ function ManualCrewRows({
         >
           <Input
             aria-label={kind === "crew" ? "Crew role" : "Description"}
-            placeholder={kind === "crew" ? "Crew role" : "Description"}
+            placeholder={kind === "crew" ? "Crew role (e.g. Load-in)" : "Description"}
             value={row.label}
             onChange={(event) => setRows((prev) => patchRow(prev, idx, { label: event.target.value }))}
           />
-          <Input
-            aria-label="Hours"
-            placeholder={kind === "crew" ? "Qty/hours" : "Hours"}
-            inputMode="decimal"
-            value={row.quantity}
-            onChange={(event) => setRows((prev) => patchRow(prev, idx, { quantity: event.target.value }))}
-          />
+          <div className="flex items-center gap-1">
+            <Input
+              aria-label="Hours"
+              placeholder="Hours"
+              inputMode="decimal"
+              className="min-w-0 px-2"
+              value={hours}
+              onChange={(event) => setSplit({ hours: event.target.value })}
+            />
+            <span className="text-muted-foreground" aria-hidden>
+              ×
+            </span>
+            <Input
+              aria-label="People"
+              placeholder="People"
+              inputMode="numeric"
+              className="min-w-0 px-2"
+              value={people}
+              onChange={(event) => setSplit({ people: event.target.value })}
+            />
+          </div>
           {custom ? (
             <Input
               aria-label="Rate per hour"
@@ -118,9 +144,13 @@ function ManualCrewRows({
               {formatUsd(rateOf(row))}
             </StaticCell>
           )}
-          <AmountCell amountUsd={(Number(row.quantity) || 0) * rateOf(row)} />
+          <AmountCell
+            amountUsd={(Number(row.quantity) || 0) * rateOf(row)}
+            hint={plural(Number(row.quantity) || 0, "person-hr", "person-hrs")}
+          />
         </LineRow>
-      ))}
+        );
+      })}
     </>
   );
 }
@@ -141,7 +171,7 @@ export function CrewLines({ draft }: { draft: InvoiceDraft }) {
       <LineGroup
         icon={UsersThreeIcon}
         title="Crew"
-        detail={`${plural(sumHours(rows), "hr", "hrs")} · ${crewRateDetail(draft)}`}
+        detail={`${plural(sumHours(rows), "person-hr", "person-hrs")} · ${crewRateDetail(draft)}`}
         subtotalUsd={draft.draftTotals.crewSubtotalUsd}
         subtotalTestId="invoice-total-crew"
         testId="invoice-group-crew"
@@ -156,20 +186,22 @@ export function CrewLines({ draft }: { draft: InvoiceDraft }) {
     <LineGroup
       icon={UsersThreeIcon}
       title="Crew"
-      detail={`${plural(sumHours(scheduleRows), "hr", "hrs")} from the ${draft.linkedSeries ? "series" : "run of show"}`}
+      detail={`${plural(sumHours(scheduleRows), "person-hr", "person-hrs")} from the ${draft.linkedSeries ? "series" : "run of show"}`}
       subtotalUsd={sumAmount(scheduleRows, rateOf)}
       subtotalTestId="invoice-total-crew"
       testId="invoice-group-crew"
     >
       {scheduleRows.length > 0 ? (
         <>
-          <LineColumnHeads item="Shift" qty="Hours" rate="Rate / hr" />
-          {scheduleRows.map((row, idx) => (
-            <LineRow key={`crew-schedule-${idx}`} testId={`invoice-row-crew-schedule-${idx}`}>
-              <p className="truncate pt-1.5">{row.label || "Crew"}</p>
-              <StaticCell>{Number(row.quantity) || 0} hrs</StaticCell>
-              <StaticCell>{formatUsd(rateOf(row))}</StaticCell>
-              <AmountCell amountUsd={(Number(row.quantity) || 0) * rateOf(row)} />
+          <LineColumnHeads item="Phase · role" qty="Hours × people" rate="Rate / person / hr" />
+          {groupShiftRows(scheduleRows, rateOf).map((phase, idx) => (
+            <LineRow key={phase.key} testId={`invoice-row-crew-schedule-${idx}`}>
+              <p className="truncate pt-1.5">{phase.label}</p>
+              <StaticCell>
+                {phase.hours} hrs × {plural(phase.people, "person", "people")}
+              </StaticCell>
+              <StaticCell>{formatUsd(phase.rateUsd)}</StaticCell>
+              <AmountCell amountUsd={phase.hours * phase.people * phase.rateUsd} />
             </LineRow>
           ))}
         </>
@@ -182,6 +214,24 @@ export function CrewLines({ draft }: { draft: InvoiceDraft }) {
       <CrewScheduleEditor draft={draft} />
     </LineGroup>
   );
+}
+
+/**
+ * The schedule bills one line per shift. Shown here, identical shifts (same
+ * phase, role, hours and rate) fold into one row with a headcount, so 4 open
+ * load-in slots read as "3 hrs × 4 people". The saved lines don't change.
+ */
+function groupShiftRows(rows: CrewRow[], rateOf: (row: CrewRow) => number) {
+  const phases = new Map<string, { key: string; label: string; hours: number; people: number; rateUsd: number }>();
+  for (const row of rows.filter(isBillableCrewRow)) {
+    const hours = Number(row.quantity);
+    const rateUsd = rateOf(row);
+    const key = `${row.label}|${hours}|${rateUsd}`;
+    const phase = phases.get(key);
+    if (phase) phase.people += 1;
+    else phases.set(key, { key, label: row.label, hours, people: 1, rateUsd });
+  }
+  return [...phases.values()];
 }
 
 function crewRateDetail(draft: InvoiceDraft) {
@@ -198,7 +248,8 @@ function crewRateDetail(draft: InvoiceDraft) {
 function CrewScheduleEditor({ draft }: { draft: InvoiceDraft }) {
   const { confirm } = useAppDialog();
   const copyDaySetup = useMutation(api.events.copyDaySetup);
-  const [open, setOpen] = useState(false);
+  // Open by default: the schedule is where headcount per phase is set.
+  const [open, setOpen] = useState(true);
   const [copyingDaySetup, setCopyingDaySetup] = useState(false);
   const { linkedSeries, linkedEvent, linkedDayEvents, selectedDayEventId, seriesCostData, billableOccurrenceCount } =
     draft;
@@ -321,7 +372,7 @@ export function HoursLines({ draft }: { draft: InvoiceDraft }) {
     <LineGroup
       icon={ClockIcon}
       title="Extra crew hours"
-      detail={`${plural(sumHours(rows), "hr", "hrs")} on top of the schedule`}
+      detail={`${plural(sumHours(rows), "person-hr", "person-hrs")} on top of the schedule`}
       subtotalUsd={sumAmount(rows, rateOf)}
       subtotalTestId="invoice-total-hours"
       testId="invoice-group-hours"
