@@ -61,6 +61,8 @@ export type PositionSheetHandlers = {
   removePayout: (performer: PerformerRow) => Promise<unknown>;
   /** Resolves true once the row is gone; false if cancelled or it failed. */
   removePosition: (row: BillRow) => Promise<boolean>;
+  /** Books the inquiring artist into the position and closes the queue. */
+  acceptInquiry: (inquiryId: Id<"eventArtistInquiries">) => Promise<unknown>;
   dismissInquiry: (inquiryId: Id<"eventArtistInquiries">) => Promise<unknown>;
 };
 
@@ -319,16 +321,36 @@ function PositionSheetBody({
                 <div className="min-w-0">
                   <p className="font-medium">
                     {inquiry.name}
-                    {inquiry.status === "dismissed" ? (
+                    {inquiry.status === "accepted" ? (
+                      <span className="ml-2 text-xs font-normal text-status-emerald-700 dark:text-status-emerald-300">
+                        Accepted
+                      </span>
+                    ) : inquiry.status === "dismissed" ? (
                       <span className="ml-2 text-xs font-normal text-muted-foreground">Dismissed</span>
                     ) : null}
                   </p>
                   {inquiry.message ? <p className="mt-0.5 text-muted-foreground">{inquiry.message}</p> : null}
                 </div>
                 {inquiry.status === "submitted" ? (
-                  <Button type="button" size="sm" variant="ghost" onClick={() => void handlers.dismissInquiry(inquiry._id)}>
-                    Dismiss
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void run(() => handlers.acceptInquiry(inquiry._id))}
+                    >
+                      Accept
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => void run(() => handlers.dismissInquiry(inquiry._id))}
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
                 ) : null}
               </li>
             ))}

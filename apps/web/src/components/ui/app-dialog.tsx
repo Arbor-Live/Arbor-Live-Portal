@@ -100,7 +100,8 @@ export function AppDialogProvider({ children }: { children: ReactNode }) {
         <DialogContent
           data-testid="app-dialog"
           showCloseButton={false}
-          className="sm:max-w-md"
+          // Above sheets (z-60): confirms are often opened from inside one.
+          className="z-70 sm:max-w-md"
         >
           {request?.kind === "confirm" ? (
             <>

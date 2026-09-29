@@ -519,6 +519,7 @@ export const create = mutation({
     budgetUsd: v.optional(v.number()),
     dayOfLeadUserId: v.optional(v.string()),
     eventManagerUserId: v.optional(v.string()),
+    operationsLeadUserId: v.optional(v.string()),
     crewCostUsd: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
@@ -578,6 +579,7 @@ export const create = mutation({
       budgetUsd: args.budgetUsd,
       dayOfLeadUserId: trimOptional(args.dayOfLeadUserId),
       eventManagerUserId: trimOptional(args.eventManagerUserId),
+      operationsLeadUserId: trimOptional(args.operationsLeadUserId),
       crewCostUsd: args.crewCostUsd,
       bandsCostUsd: args.bandsCostUsd,
       externalRentalsCostUsd: args.externalRentalsCostUsd,
@@ -625,6 +627,7 @@ export const update = mutation({
     budgetUsd: v.optional(v.number()),
     dayOfLeadUserId: v.optional(v.union(v.string(), v.null())),
     eventManagerUserId: v.optional(v.union(v.string(), v.null())),
+    operationsLeadUserId: v.optional(v.union(v.string(), v.null())),
     crewCostUsd: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
@@ -734,6 +737,7 @@ export const update = mutation({
       budgetUsd: args.budgetUsd ?? existing.budgetUsd,
       dayOfLeadUserId: args.dayOfLeadUserId?.trim() ?? existing.dayOfLeadUserId,
       eventManagerUserId: args.eventManagerUserId?.trim() ?? existing.eventManagerUserId,
+      operationsLeadUserId: args.operationsLeadUserId?.trim() ?? existing.operationsLeadUserId,
       crewCostUsd: args.crewCostUsd ?? existing.crewCostUsd,
       bandsCostUsd: args.bandsCostUsd ?? existing.bandsCostUsd,
       externalRentalsCostUsd: args.externalRentalsCostUsd ?? existing.externalRentalsCostUsd,
@@ -762,6 +766,8 @@ export const update = mutation({
     // `undefined`, and a retained value would propagate to occurrences.
     const clearDayOfLead = args.dayOfLeadUserId === null || args.dayOfLeadUserId === "";
     const clearManager = args.eventManagerUserId === null || args.eventManagerUserId === "";
+    const clearOperationsLead =
+      args.operationsLeadUserId === null || args.operationsLeadUserId === "";
 
     if (hasSeries && existing.seriesId && scope !== "this") {
       const series = await ctx.db.get(existing.seriesId);
@@ -801,17 +807,19 @@ export const update = mutation({
           args.otherCostUsd !== undefined ? args.otherCostUsd : series.occurrenceOtherCostUsd,
         dayOfLeadUserId: patch.dayOfLeadUserId,
         eventManagerUserId: patch.eventManagerUserId,
+        operationsLeadUserId: patch.operationsLeadUserId,
         rentalFulfillmentMode: patch.rentalFulfillmentMode,
         notes: patch.notes,
         ...(args.invoiceId !== undefined ? { invoiceId: nextInvoiceId } : {}),
         updatedAt: now,
       });
-      if (clearDayOfLead || clearManager) {
+      if (clearDayOfLead || clearManager || clearOperationsLead) {
         const cleared = await ctx.db.get(existing.seriesId);
         if (cleared) {
           const next = { ...cleared };
           if (clearDayOfLead) delete next.dayOfLeadUserId;
           if (clearManager) delete next.eventManagerUserId;
+          if (clearOperationsLead) delete next.operationsLeadUserId;
           await ctx.db.replace(existing.seriesId, next);
         }
       }
@@ -866,12 +874,13 @@ export const update = mutation({
       });
     }
 
-    if (clearDayOfLead || clearManager) {
+    if (clearDayOfLead || clearManager || clearOperationsLead) {
       const updated = await ctx.db.get(args.id);
       if (updated) {
         const next = { ...updated };
         if (clearDayOfLead) delete next.dayOfLeadUserId;
         if (clearManager) delete next.eventManagerUserId;
+        if (clearOperationsLead) delete next.operationsLeadUserId;
         await ctx.db.replace(args.id, next);
       }
     }
@@ -951,6 +960,31 @@ export const setStatus = mutation({
   },
 });
 
+/**
+ * Assign or clear the operations lead from the Open positions board. Any Arbor
+ * internal member may set it — the same gate as the position edits on that
+ * board — so whoever fills lineups can flag who owns each event.
+ */
+export const setOperationsLead = mutation({
+  args: {
+    id: v.id("events"),
+    operationsLeadUserId: v.union(v.string(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const existing = await ctx.db.get(args.id);
+    if (!existing) throw new Error("Event not found.");
+    // `patch` ignores undefined, so `replace` is required to clear the field.
+    const next = { ...existing, updatedAt: Date.now() };
+    const lead = args.operationsLeadUserId?.trim();
+    if (lead) next.operationsLeadUserId = lead;
+    else delete next.operationsLeadUserId;
+    await ctx.db.replace(args.id, next);
+    return null;
+  },
+});
+
 export const deleteEvent = mutation({
   args: { id: v.id("events") },
   handler: async (ctx, args) => {
@@ -998,6 +1032,7 @@ export const duplicate = mutation({
       budgetUsd: existing.budgetUsd,
       dayOfLeadUserId: existing.dayOfLeadUserId,
       eventManagerUserId: existing.eventManagerUserId,
+      operationsLeadUserId: existing.operationsLeadUserId,
       crewCostUsd: existing.crewCostUsd,
       bandsCostUsd: existing.bandsCostUsd,
       externalRentalsCostUsd: existing.externalRentalsCostUsd,
