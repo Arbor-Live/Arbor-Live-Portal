@@ -33,15 +33,6 @@ export function resolveUserStatus(profile: unknown): UserStatus {
   return source?.active === false ? "alumni" : "active";
 }
 
-export function isActiveStatus(status: UserStatus): boolean {
-  return status === "active";
-}
-
 export function isAlumniStatus(status: UserStatus): boolean {
   return status === "alumni";
-}
-
-/** Inactive users stay assignable to events; alumni do not. */
-export function isAssignableStatus(status: UserStatus): boolean {
-  return status !== "alumni";
 }

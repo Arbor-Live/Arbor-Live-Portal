@@ -8,7 +8,7 @@ import {
   requireAuth,
 } from "./lib/auth";
 import { loadActiveOrgMemberUserIds } from "./lib/orgMembership";
-import { resolveUserStatus } from "./lib/userStatus";
+import { isAlumniStatus, resolveUserStatus } from "./lib/userStatus";
 import {
   buildUserProfileImageByUserId,
   loadAdminProfilesByUserIds,
@@ -88,6 +88,8 @@ export const listMentionCandidates = query({
         const user = userById.get(userId);
         if (!user) return null;
         const profile = profileByUserId.get(userId);
+        // Alumni are hidden from every picker, including mentions.
+        if (isAlumniStatus(resolveUserStatus(profile))) return null;
         return {
           userId,
           name: user.name ?? user.email ?? "Arbor Live user",
@@ -337,11 +339,21 @@ export const createComment = mutation({
 
     if (mentionedUserIds.length > 0) {
       const activeMemberIds = await loadActiveOrgMemberUserIds(ctx, context.organizationId);
-      const invalid = mentionedUserIds.filter(
-        (userId) => userId !== authorUserId && !activeMemberIds.has(userId),
-      );
+      const invalid: string[] = [];
+      for (const userId of mentionedUserIds) {
+        if (userId === authorUserId) continue;
+        if (!activeMemberIds.has(userId)) {
+          invalid.push(userId);
+          continue;
+        }
+        const row = await ctx.db
+          .query("userAdminProfiles")
+          .withIndex("by_userId", (q) => q.eq("userId", userId))
+          .take(1);
+        if (isAlumniStatus(resolveUserStatus(row[0] ?? null))) invalid.push(userId);
+      }
       if (invalid.length > 0) {
-        throw new Error("Mentions are limited to active Arbor Live team members.");
+        throw new Error("You can only mention current Arbor Live team members.");
       }
     }
 

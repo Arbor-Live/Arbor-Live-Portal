@@ -13,6 +13,7 @@ import {
   upsertOrgMembership,
 } from "../users";
 import { getUserId, type AuthUser } from "./auth";
+import { clearUserBan } from "./userAccess";
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -78,6 +79,7 @@ export async function inviteEmailToBandOrg(
         ? undefined
         : args.organizationId,
     });
+    await clearUserBan(ctx, existingUserId);
     await upsertOrgMembership(ctx, {
       userId: existingUserId,
       organizationId: args.organizationId,

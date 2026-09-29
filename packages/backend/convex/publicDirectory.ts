@@ -7,6 +7,7 @@ import { buildArtistLinks } from "./lib/publicArtistProfile";
 import { getUserId, findAuthOrganizationById, type AuthUser } from "./lib/auth";
 import { resolveUserProfileImageUrl } from "./lib/userProfileImage";
 import { resolveUserStatus } from "./lib/userStatus";
+import { loadAllAdminProfiles } from "./lib/userProfiles";
 import {
   getPrimaryVertical,
   getSecondaryTags,
@@ -126,7 +127,7 @@ export const listPublicCrew = query({
     );
     if (!activeMemberIds.size) return { sections: [] };
 
-    const profiles = await ctx.db.query("userAdminProfiles").take(2000);
+    const profiles = await loadAllAdminProfiles(ctx);
     const publicProfiles = profiles.filter(
       (profile) =>
         activeMemberIds.has(profile.userId) &&

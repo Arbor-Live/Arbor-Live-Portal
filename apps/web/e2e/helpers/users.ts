@@ -119,10 +119,9 @@ export function userRowSave(row: Locator) {
 }
 
 /**
- * The row's "Select..." menu (reset password, show details, waive onboarding,
- * remove access / reactivate). Drive it with `chooseRowAction`, not
- * `pickSelectOption` — its value is pinned to `""`, so the trigger text never
- * changes.
+ * The row's "Select..." menu (reset password, show details, waive onboarding).
+ * Drive it with `chooseRowAction`, not `pickSelectOption` — its value is pinned
+ * to `""`, so the trigger text never changes.
  */
 export function userRowActionMenu(row: Locator) {
   return userRowCell.options(row).locator("[data-slot='select-trigger']");

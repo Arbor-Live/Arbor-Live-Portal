@@ -34,6 +34,7 @@ import {
 import { resolveParticipationFlags } from "./lib/userParticipation";
 import { isArtistOrganizationType } from "./lib/organizationType";
 import { assertUsernameAvailable, normalizeUsername } from "./lib/username";
+import { loadAllAdminProfiles } from "./lib/userProfiles";
 
 const onboardingStatusValue = v.union(
   v.literal("not_started"),
@@ -905,7 +906,7 @@ export const listCrewOnboardingForAdmin = query({
   handler: async (ctx) => {
     await requireAdmin(ctx);
     const rows = await ctx.db.query("userOnboarding").withIndex("by_status").take(2000);
-    const profiles = await ctx.db.query("userAdminProfiles").take(2000);
+    const profiles = await loadAllAdminProfiles(ctx);
     const payrollByUserId = new Map(
       profiles.map((profile) => [profile.userId, normalizePayrollMethod(profile.payrollMethod)]),
     );

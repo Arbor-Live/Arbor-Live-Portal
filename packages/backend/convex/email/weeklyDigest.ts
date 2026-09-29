@@ -24,8 +24,9 @@ const WEEKLY_DIGEST_PROFILE_PAGE_SIZE = 200;
  * Opt out per person with the `weeklyDigest` Participation flag. Sections with
  * nothing pending are omitted, and a user with no pending items gets no email.
  *
- * Pages through active profiles (no fixed cap) and schedules a continuation
- * with the page cursor until every eligible profile has been visited.
+ * Pages through every profile (no fixed cap), skips non-active / opted-out
+ * profiles, and schedules a continuation with the page cursor until every
+ * eligible profile has been visited.
  */
 export const run = internalMutation({
   args: { cursor: v.optional(v.union(v.string(), v.null())) },

@@ -23,6 +23,7 @@ import {
 } from "./lib/userVerticals";
 import { resolveParticipationFlags } from "./lib/userParticipation";
 import { resolveUserStatus } from "./lib/userStatus";
+import { loadAllAdminProfiles } from "./lib/userProfiles";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { loadEventHostDisplay } from "./lib/hostOrgs";
 import { isSectionBlockType } from "./lib/scheduleBlockTypes";
@@ -90,7 +91,9 @@ function toUserSummary(
 }
 
 async function getActiveCrewProfiles(ctx: QueryCtx) {
-  const profiles = await ctx.db.query("userAdminProfiles").take(500);
+  // Filter by `resolveUserStatus` (not the `by_status` index) so a profile
+  // written before the status backfill still counts as active.
+  const profiles = await loadAllAdminProfiles(ctx);
   return profiles.filter((profile) => {
     if (resolveUserStatus(profile) !== "active") return false;
     if (!resolveParticipationFlags(profile).assignableAsCrew) return false;

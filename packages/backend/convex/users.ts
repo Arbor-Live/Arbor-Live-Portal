@@ -82,6 +82,8 @@ import {
 } from "./lib/crewCompensation";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { assertUsernameAvailable, normalizeUsername } from "./lib/username";
+import { clearUserBan, setAuthUserBanState } from "./lib/userAccess";
+import { loadAllAdminProfiles } from "./lib/userProfiles";
 import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
 import { returnActTimesToPosition } from "./lib/actPositions";
 
@@ -1541,7 +1543,7 @@ export const listWithRates = query({
         },
       ]),
     );
-    const profiles = await ctx.db.query("userAdminProfiles").take(2000);
+    const profiles = await loadAllAdminProfiles(ctx);
     const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
     return users
       .map((user) => {
@@ -1586,7 +1588,7 @@ export const listUsersForAdmin = query({
         },
       ]),
     );
-    const profiles = await ctx.db.query("userAdminProfiles").take(2000);
+    const profiles = await loadAllAdminProfiles(ctx);
     const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
     const orgMemberships = await ctx.db.query("userOrganizationMemberships").withIndex("by_userId").take(5000);
     const membershipsByUserId = new Map<string, typeof orgMemberships>();
@@ -1820,6 +1822,7 @@ export const inviteUserAdmin = mutation({
         weeklyDigest: participation?.weeklyDigest,
         damageReportEmails: participation?.damageReportEmails,
       });
+      await clearUserBan(ctx, existingUserId);
       await upsertOrgMembership(ctx, {
         userId: existingUserId,
         organizationId: args.organizationId,
@@ -2224,6 +2227,7 @@ export const createUserAdmin = mutation({
       weeklyDigest: participation?.weeklyDigest,
       damageReportEmails: participation?.damageReportEmails,
     });
+    await clearUserBan(ctx, userId);
     await upsertOrgMembership(ctx, {
       userId,
       organizationId: args.organizationId,
@@ -2254,8 +2258,6 @@ export const createUserAdmin = mutation({
   },
 });
 
-const REMOVED_BY_ADMIN_BAN_REASON = "Removed by admin";
-
 function assertCanChangeUserAccess(
   adminUser: AuthUser,
   target: AuthUser,
@@ -2277,26 +2279,6 @@ function assertCanChangeUserAccess(
   if (otherActiveAdmins.length === 0) {
     throw new Error("Cannot remove the last remaining admin.");
   }
-}
-
-async function setAuthUserBanState(
-  ctx: MutationCtx,
-  email: string,
-  banned: boolean,
-  now: number,
-) {
-  await ctx.runMutation(components.betterAuth.adapter.updateOne, {
-    input: {
-      model: "user",
-      where: [{ field: "email", value: email }],
-      update: {
-        banned,
-        banReason: banned ? REMOVED_BY_ADMIN_BAN_REASON : null,
-        banExpires: null,
-        updatedAt: now,
-      },
-    },
-  });
 }
 
 export const updateUserAdmin = mutation({
@@ -2367,13 +2349,6 @@ export const updateUserAdmin = mutation({
       .query("userAdminProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .unique();
-    if (args.username !== undefined) {
-      const username = normalizeUsername(args.username);
-      if (username) await assertUsernameAvailable(ctx, username, args.userId);
-      if (existingProfile) {
-        await ctx.db.patch(existingProfile._id, { username, updatedAt: now });
-      }
-    }
     const existingMembership = existingProfile
       ? resolveProfileMembership(existingProfile)
       : { verticals: [], disciplines: [] };
@@ -2419,6 +2394,20 @@ export const updateUserAdmin = mutation({
       payrollMethod: args.payrollMethod ?? existingProfile?.payrollMethod,
       defaultOrganizationId: args.defaultOrganizationId ?? existingProfile?.defaultOrganizationId,
     });
+
+    // Usernames live on the profile row, which may not have existed until the
+    // call above; patch it now so a username set while creating isn't dropped.
+    if (args.username !== undefined) {
+      const username = normalizeUsername(args.username);
+      if (username) await assertUsernameAvailable(ctx, username, args.userId);
+      const profileRow = await ctx.db
+        .query("userAdminProfiles")
+        .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+        .unique();
+      if (profileRow) {
+        await ctx.db.patch(profileRow._id, { username, updatedAt: now });
+      }
+    }
 
     const nextFlags = resolveParticipationFlags({
       requiresOnboarding:
@@ -2865,7 +2854,7 @@ export const listMembersForActiveOrganization = query({
     const context = await requireBandContext(ctx);
     const allUsers = await getAllAuthUsers(ctx);
     const usersById = new Map(allUsers.map((user) => [getUserId(user), user]));
-    const profiles = await ctx.db.query("userAdminProfiles").take(2000);
+    const profiles = await loadAllAdminProfiles(ctx);
     const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
     const memberships = await ctx.db
       .query("userOrganizationMemberships")
@@ -3138,7 +3127,6 @@ export const backfillUserAdminDefaults = mutation({
       if (!userId) continue;
       await ensureUserProfileDefaults(ctx, userId, {
         title: undefined,
-        status: "active",
         verticals: [],
         disciplines: [],
         defaultOrganizationId: defaultOrg.id,

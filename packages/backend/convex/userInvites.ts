@@ -16,6 +16,7 @@ import {
 import { resolveParticipationFlags } from "./lib/userParticipation";
 import { isArtistOrganizationType } from "./lib/organizationType";
 import { resolveGlobalRoleForOrganization } from "./lib/globalRole";
+import { clearUserBan } from "./lib/userAccess";
 import { ensureOnboardingForOrgMembership } from "./onboarding";
 import {
   applyPayrollMethodToProfile,
@@ -289,6 +290,7 @@ export const acceptInviteWithPassword = mutation({
       showOnPublicCrewPage: pending.showOnPublicCrewPage,
       damageReportEmails: pending.damageReportEmails,
     });
+    await clearUserBan(ctx, userId);
     await upsertOrgMembership(ctx, {
       userId,
       organizationId: pending.organizationId,
