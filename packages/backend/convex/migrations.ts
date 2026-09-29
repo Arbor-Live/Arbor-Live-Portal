@@ -889,7 +889,9 @@ export const groupMultiDayBookings = migrations.define({
     });
 
     for (const event of events) {
-      await ctx.db.patch(event._id, { groupId, updatedAt: now });
+      // Linking the group is not an edit; keep `updatedAt` so the public
+      // calendar LAST-MODIFIED and print freshness don't churn.
+      await ctx.db.patch(event._id, { groupId });
     }
   },
 });
