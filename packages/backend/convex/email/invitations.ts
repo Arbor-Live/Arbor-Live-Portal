@@ -65,7 +65,6 @@ export async function upsertPendingInviteToken(
     includeInTimecards?: boolean;
     assignableAsCrew?: boolean;
     showOnPublicCrewPage?: boolean;
-    damageReportEmails?: boolean;
     gradYear?: number;
     expiresAt: number;
   },
@@ -95,7 +94,6 @@ export async function upsertPendingInviteToken(
     includeInTimecards: args.includeInTimecards,
     assignableAsCrew: args.assignableAsCrew,
     showOnPublicCrewPage: args.showOnPublicCrewPage,
-    damageReportEmails: args.damageReportEmails,
     gradYear: args.gradYear,
     expiresAt: args.expiresAt,
     createdAt: now,
@@ -131,7 +129,6 @@ export async function scheduleUserInviteEmail(
     includeInTimecards?: boolean;
     assignableAsCrew?: boolean;
     showOnPublicCrewPage?: boolean;
-    damageReportEmails?: boolean;
     gradYear?: number;
     isExistingUser: boolean;
     resendKey?: string;
@@ -171,7 +168,6 @@ export async function scheduleUserInviteEmail(
       includeInTimecards: args.includeInTimecards,
       assignableAsCrew: args.assignableAsCrew,
       showOnPublicCrewPage: args.showOnPublicCrewPage,
-      damageReportEmails: args.damageReportEmails,
       gradYear: args.gradYear,
       expiresAt: args.expiresAt,
     });

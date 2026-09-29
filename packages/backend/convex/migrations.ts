@@ -695,6 +695,35 @@ export const backfillUserProfileStatus = migrations.define({
 });
 
 /**
+ * Consolidate the legacy `weeklyDigest` / `damageReportEmails` profile flags
+ * into the single `emailOptOuts` list. The widened type keeps this compiling
+ * after the fields were dropped from the schema. Idempotent: profiles that
+ * already carry an opt-out list are left alone.
+ */
+export const backfillUserEmailOptOuts = migrations.define({
+  table: "userAdminProfiles",
+  migrateOne: async (_ctx, profile) => {
+    if (profile.emailOptOuts !== undefined) return;
+    const legacy = profile as Doc<"userAdminProfiles"> & {
+      weeklyDigest?: boolean;
+      damageReportEmails?: boolean;
+    };
+    const emailOptOuts: string[] = [];
+    if (legacy.weeklyDigest === false) emailOptOuts.push("weekly_digest");
+    // Advisor presets historically omitted `damageReportEmails` while setting
+    // the three crew flags false; treat that as opted out of damage reports.
+    const damageReportOff =
+      legacy.damageReportEmails === false ||
+      (legacy.damageReportEmails === undefined &&
+        legacy.requiresOnboarding === false &&
+        legacy.includeInTimecards === false &&
+        legacy.assignableAsCrew === false);
+    if (damageReportOff) emailOptOuts.push("damage_report_admin");
+    return { emailOptOuts, updatedAt: Date.now() };
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -728,6 +757,7 @@ const MIGRATION_SERIES = [
   internal.migrations.giveEveryActAPosition,
   internal.migrations.finalizeApprovedDraftInvoices,
   internal.migrations.backfillUserProfileStatus,
+  internal.migrations.backfillUserEmailOptOuts,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

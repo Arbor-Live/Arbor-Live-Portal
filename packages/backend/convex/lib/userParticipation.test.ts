@@ -13,9 +13,9 @@ describe("participationForInviteKind", () => {
     expect(participationForInviteKind("advisor")).toEqual(ADVISOR_PARTICIPATION_PRESET);
   });
 
-  it("opts advisors out of damage-report emails", () => {
-    expect(ADVISOR_PARTICIPATION_PRESET.damageReportEmails).toBe(false);
-    expect(CREW_PARTICIPATION_DEFAULTS.damageReportEmails).toBe(true);
+  it("marks advisors as non-crew", () => {
+    expect(ADVISOR_PARTICIPATION_PRESET.assignableAsCrew).toBe(false);
+    expect(CREW_PARTICIPATION_DEFAULTS.assignableAsCrew).toBe(true);
   });
 });
 
@@ -26,35 +26,13 @@ describe("resolveParticipationFlags", () => {
     expect(resolveParticipationFlags({})).toEqual(CREW_PARTICIPATION_DEFAULTS);
   });
 
-  it("keeps legacy advisors off damage-report emails", () => {
+  it("honors explicit advisor-style flags", () => {
     expect(
       resolveParticipationFlags({
         requiresOnboarding: false,
         includeInTimecards: false,
         assignableAsCrew: false,
-      }).damageReportEmails,
-    ).toBe(false);
-  });
-
-  it("honors an explicit damage-report opt-in on an advisor-like profile", () => {
-    expect(
-      resolveParticipationFlags({
-        requiresOnboarding: false,
-        includeInTimecards: false,
-        assignableAsCrew: false,
-        damageReportEmails: true,
-      }).damageReportEmails,
-    ).toBe(true);
-  });
-
-  it("honors an explicit damage-report opt-out on a crew profile", () => {
-    expect(
-      resolveParticipationFlags({
-        requiresOnboarding: true,
-        includeInTimecards: true,
-        assignableAsCrew: true,
-        damageReportEmails: false,
-      }).damageReportEmails,
-    ).toBe(false);
+      }),
+    ).toEqual(ADVISOR_PARTICIPATION_PRESET);
   });
 });

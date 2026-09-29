@@ -131,6 +131,8 @@ import type * as lib_crewTeams from "../lib/crewTeams.js";
 import type * as lib_crewTraineeIntro from "../lib/crewTraineeIntro.js";
 import type * as lib_crewedEvents from "../lib/crewedEvents.js";
 import type * as lib_e2eGuard from "../lib/e2eGuard.js";
+import type * as lib_emailPreferenceViewer from "../lib/emailPreferenceViewer.js";
+import type * as lib_emailPreferences from "../lib/emailPreferences.js";
 import type * as lib_errors from "../lib/errors.js";
 import type * as lib_eventAccess from "../lib/eventAccess.js";
 import type * as lib_eventArtistNeeds from "../lib/eventArtistNeeds.js";
@@ -378,6 +380,8 @@ declare const fullApi: ApiFromModules<{
   "lib/crewTraineeIntro": typeof lib_crewTraineeIntro;
   "lib/crewedEvents": typeof lib_crewedEvents;
   "lib/e2eGuard": typeof lib_e2eGuard;
+  "lib/emailPreferenceViewer": typeof lib_emailPreferenceViewer;
+  "lib/emailPreferences": typeof lib_emailPreferences;
   "lib/errors": typeof lib_errors;
   "lib/eventAccess": typeof lib_eventAccess;
   "lib/eventArtistNeeds": typeof lib_eventArtistNeeds;

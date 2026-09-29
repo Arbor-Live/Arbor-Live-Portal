@@ -64,6 +64,12 @@ import {
   type UserParticipationFlags,
 } from "./lib/userParticipation";
 import {
+  emailOptOutsForInviteKind,
+  isConfigurableEmailTemplate,
+  resolveDisabledEmailTemplates,
+} from "./lib/emailPreferences";
+import { listUserEmailPreferences } from "./lib/emailPreferenceViewer";
+import {
   isAlumniStatus,
   resolveUserStatus,
   userStatusValue,
@@ -377,8 +383,7 @@ export async function ensureUserProfileDefaults(
     requiresOnboarding,
     includeInTimecards,
     assignableAsCrew,
-    weeklyDigest,
-    damageReportEmails,
+    emailOptOuts,
     payrollMethod,
     defaultOrganizationId,
     gradYear,
@@ -393,8 +398,7 @@ export async function ensureUserProfileDefaults(
     requiresOnboarding?: boolean;
     includeInTimecards?: boolean;
     assignableAsCrew?: boolean;
-    weeklyDigest?: boolean;
-    damageReportEmails?: boolean;
+    emailOptOuts?: string[];
     payrollMethod?: PayrollMethod;
     defaultOrganizationId?: string;
     gradYear?: number;
@@ -423,10 +427,8 @@ export async function ensureUserProfileDefaults(
         includeInTimecards !== undefined ? includeInTimecards : existing.includeInTimecards,
       assignableAsCrew:
         assignableAsCrew !== undefined ? assignableAsCrew : existing.assignableAsCrew,
-      weeklyDigest:
-        weeklyDigest !== undefined ? weeklyDigest : existing.weeklyDigest,
-      damageReportEmails:
-        damageReportEmails !== undefined ? damageReportEmails : existing.damageReportEmails,
+      emailOptOuts:
+        emailOptOuts !== undefined ? emailOptOuts : existing.emailOptOuts,
       payrollMethod: payrollMethod ?? existing.payrollMethod,
       defaultOrganizationId: defaultOrganizationId ?? existing.defaultOrganizationId,
       gradYear: gradYear ?? existing.gradYear,
@@ -446,8 +448,7 @@ export async function ensureUserProfileDefaults(
     requiresOnboarding,
     includeInTimecards,
     assignableAsCrew,
-    weeklyDigest,
-    damageReportEmails,
+    emailOptOuts,
     payrollMethod,
     defaultOrganizationId,
     gradYear,
@@ -1632,8 +1633,6 @@ export const listUsersForAdmin = query({
           requiresOnboarding: participation.requiresOnboarding,
           includeInTimecards: participation.includeInTimecards,
           assignableAsCrew: participation.assignableAsCrew,
-          weeklyDigest: participation.weeklyDigest,
-          damageReportEmails: participation.damageReportEmails,
           defaultOrganizationId: profile?.defaultOrganizationId ?? "",
           organizationMemberships: memberships,
           rateMode: rate?.rateMode ?? null,
@@ -1669,6 +1668,23 @@ export const listUsersForAdmin = query({
         return haystack.includes(search);
       })
       .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+/** Applicable email notification toggles for a user, for the admin editor. */
+export const getUserEmailPreferences = query({
+  args: { userId: v.string() },
+  returns: v.array(
+    v.object({
+      template: v.string(),
+      label: v.string(),
+      group: v.string(),
+      enabled: v.boolean(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    return await listUserEmailPreferences(ctx, args.userId);
   },
 });
 
@@ -1819,8 +1835,6 @@ export const inviteUserAdmin = mutation({
         includeInTimecards: participation?.includeInTimecards,
         assignableAsCrew: participation?.assignableAsCrew,
         showOnPublicCrewPage: participation?.showOnPublicCrewPage,
-        weeklyDigest: participation?.weeklyDigest,
-        damageReportEmails: participation?.damageReportEmails,
       });
       await clearUserBan(ctx, existingUserId);
       await upsertOrgMembership(ctx, {
@@ -1871,7 +1885,6 @@ export const inviteUserAdmin = mutation({
       includeInTimecards: participation?.includeInTimecards,
       assignableAsCrew: participation?.assignableAsCrew,
       showOnPublicCrewPage: participation?.showOnPublicCrewPage,
-      damageReportEmails: participation?.damageReportEmails,
       isExistingUser: Boolean(existingUserId),
     });
 
@@ -1922,7 +1935,6 @@ export const resendInviteAdmin = mutation({
       includeInTimecards: pending?.includeInTimecards,
       assignableAsCrew: pending?.assignableAsCrew,
       showOnPublicCrewPage: pending?.showOnPublicCrewPage,
-      damageReportEmails: pending?.damageReportEmails,
       isExistingUser: await userExistsForInvite(ctx, invite.email),
       resendKey: String(now),
     });
@@ -2224,8 +2236,11 @@ export const createUserAdmin = mutation({
       includeInTimecards: participation?.includeInTimecards,
       assignableAsCrew: participation?.assignableAsCrew,
       showOnPublicCrewPage: participation?.showOnPublicCrewPage,
-      weeklyDigest: participation?.weeklyDigest,
-      damageReportEmails: participation?.damageReportEmails,
+      // Seed advisor opt-outs only on a fresh profile; never reset an existing
+      // user's preferences when an admin re-creates their account.
+      emailOptOuts: existing
+        ? undefined
+        : emailOptOutsForInviteKind(crewInvite.isArbor ? crewInvite.inviteKind : undefined),
     });
     await clearUserBan(ctx, userId);
     await upsertOrgMembership(ctx, {
@@ -2296,8 +2311,8 @@ export const updateUserAdmin = mutation({
     requiresOnboarding: v.optional(v.boolean()),
     includeInTimecards: v.optional(v.boolean()),
     assignableAsCrew: v.optional(v.boolean()),
-    weeklyDigest: v.optional(v.boolean()),
-    damageReportEmails: v.optional(v.boolean()),
+    /** Full opt-out list; the editor sends every applicable template's state. */
+    emailOptOuts: v.optional(v.array(v.string())),
     defaultOrganizationId: v.optional(v.string()),
     rateMode: v.optional(userCompensationRateModeValue),
     customHourlyRateUsd: v.optional(v.number()),
@@ -2358,6 +2373,18 @@ export const updateUserAdmin = mutation({
         args.disciplines ?? existingMembership.disciplines,
       );
     }
+    if (args.emailOptOuts !== undefined) {
+      const unknown = args.emailOptOuts.filter(
+        (template) => !isConfigurableEmailTemplate(template),
+      );
+      if (unknown.length > 0) {
+        throw new Error(`Unknown email preference: ${unknown.join(", ")}`);
+      }
+    }
+    const disabledTemplates =
+      args.emailOptOuts !== undefined
+        ? new Set(args.emailOptOuts)
+        : resolveDisabledEmailTemplates(existingProfile);
     await ensureUserProfileDefaults(ctx, args.userId, {
       title: args.title?.trim() ?? existingProfile?.title,
       phone: args.phone ?? existingProfile?.phone,
@@ -2383,14 +2410,7 @@ export const updateUserAdmin = mutation({
         args.assignableAsCrew !== undefined
           ? args.assignableAsCrew
           : existingProfile?.assignableAsCrew,
-      weeklyDigest:
-        args.weeklyDigest !== undefined
-          ? args.weeklyDigest
-          : existingProfile?.weeklyDigest,
-      damageReportEmails:
-        args.damageReportEmails !== undefined
-          ? args.damageReportEmails
-          : existingProfile?.damageReportEmails,
+      emailOptOuts: [...disabledTemplates],
       payrollMethod: args.payrollMethod ?? existingProfile?.payrollMethod,
       defaultOrganizationId: args.defaultOrganizationId ?? existingProfile?.defaultOrganizationId,
     });
@@ -2426,14 +2446,6 @@ export const updateUserAdmin = mutation({
         args.showOnPublicCrewPage !== undefined
           ? args.showOnPublicCrewPage
           : existingProfile?.showOnPublicCrewPage,
-      weeklyDigest:
-        args.weeklyDigest !== undefined
-          ? args.weeklyDigest
-          : existingProfile?.weeklyDigest,
-      damageReportEmails:
-        args.damageReportEmails !== undefined
-          ? args.damageReportEmails
-          : existingProfile?.damageReportEmails,
     });
     if (!nextFlags.requiresOnboarding) {
       const defaultOrgId =
