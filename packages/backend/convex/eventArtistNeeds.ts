@@ -1,7 +1,13 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { getUserId, requireArborInternalContext, requireAuth, requireBandContext } from "./lib/auth";
+import {
+  findAuthUsersByIds,
+  getUserId,
+  requireArborInternalContext,
+  requireAuth,
+  requireBandContext,
+} from "./lib/auth";
 import { resolveBandName } from "./lib/bandIdentity";
 import {
   artistNeedStatusValue,
@@ -24,7 +30,11 @@ import { buildPublicEventUrl, isPubliclyListableEvent } from "./lib/publicEvents
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 import { SITE_URL } from "./email/constants";
 import { scheduleArtistNeedInquiryEmail } from "./email/artistNeedInquiryEmails";
-import { removeParticipationFromEvent, unclaimSlot } from "./eventBands";
+import {
+  removeParticipationFromEvent,
+  unclaimSlot,
+  upsertEventBandParticipation,
+} from "./eventBands";
 import { releaseSlotFromInvoice, syncInvoiceLineForSlot } from "./lib/artistLineSync";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { deleteActBlocks, syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
@@ -444,6 +454,55 @@ export const dismissInquiry = mutation({
   },
 });
 
+/**
+ * Accept an inquiry: book the inquiring artist into the position it asked for,
+ * mark the inquiry accepted, and dismiss the position's other open inquiries.
+ * Filling and closing out the queue are one step so a position can't be booked
+ * while its inquiries still read as pending.
+ */
+export const acceptInquiry = mutation({
+  args: { inquiryId: v.id("eventArtistInquiries") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const inquiry = await ctx.db.get(args.inquiryId);
+    if (!inquiry) throw new Error("Inquiry not found.");
+    if (inquiry.status === "accepted") return null;
+    const need = await ctx.db.get(inquiry.needId);
+    if (!need) throw new Error("Position not found.");
+    const currentAct = await findActForSlot(ctx, need._id);
+    if (
+      need.externalArtistName?.trim() ||
+      (currentAct && currentAct.organizationId !== inquiry.organizationId)
+    ) {
+      throw new Error("This position is already filled.");
+    }
+    const existing = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", need.eventId).eq("organizationId", inquiry.organizationId),
+      )
+      .unique();
+    await upsertEventBandParticipation(ctx, {
+      eventId: need.eventId,
+      organizationId: inquiry.organizationId,
+      role: existing?.role ?? "headliner",
+      needId: need._id,
+    });
+    const now = Date.now();
+    await ctx.db.patch(inquiry._id, { status: "accepted", updatedAt: now });
+    const siblings = await ctx.db
+      .query("eventArtistInquiries")
+      .withIndex("by_needId", (q) => q.eq("needId", need._id))
+      .take(200);
+    for (const row of siblings) {
+      if (row._id === inquiry._id || row.status !== "submitted") continue;
+      await ctx.db.patch(row._id, { status: "dismissed", updatedAt: now });
+    }
+    return null;
+  },
+});
+
 export const listOpenNeedsForArtist = query({
   args: {
     artistType: v.optional(artistNeedTypeValue),
@@ -565,6 +624,8 @@ export const listOpenPositions = query({
         venueName: v.string(),
         status: v.string(),
         totalPositions: v.number(),
+        operationsLeadUserId: v.optional(v.string()),
+        operationsLeadName: v.optional(v.string()),
         openPositions: v.array(openPositionValue),
       }),
     ),
@@ -635,10 +696,26 @@ export const listOpenPositions = query({
         venueName: event.venueName ?? "",
         status,
         totalPositions: positions.length,
+        operationsLeadUserId: event.operationsLeadUserId,
         openPositions,
       });
     }
-    return { events: out, truncated };
+    // One batch lookup for every distinct operations lead, so a lead who is no
+    // longer an assignable crew member still shows a name instead of blank.
+    const leadUserIds = out.flatMap((event) =>
+      event.operationsLeadUserId ? [event.operationsLeadUserId] : [],
+    );
+    const leadUsers = await findAuthUsersByIds(ctx, leadUserIds);
+    const eventsWithLeads = out.map((event) => {
+      const lead = event.operationsLeadUserId
+        ? leadUsers.get(event.operationsLeadUserId)
+        : undefined;
+      return {
+        ...event,
+        operationsLeadName: lead?.name?.trim() || lead?.email?.trim() || undefined,
+      };
+    });
+    return { events: eventsWithLeads, truncated };
   },
 });
 

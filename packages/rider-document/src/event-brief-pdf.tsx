@@ -1,5 +1,11 @@
 import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
-import { pdfSafe, RiderPages, RiderPdfFooter } from "./rider-pdf";
+import {
+  BriefPlotPages,
+  PatchFaceplate,
+  pdfSafe,
+  RiderPages,
+  RiderPdfFooter,
+} from "./rider-pdf";
 import type {
   EventBriefDocumentData,
   EventBriefMoment,
@@ -442,7 +448,14 @@ export function EventBriefPdf({
         <RiderPdfFooter />
       </Page>
 
-      {data.nightRider ? <RiderPages data={data.nightRider} /> : null}
+      {data.nightRider ? (
+        <RiderPages
+          data={data.nightRider}
+          includePlot={!data.nightPlots?.length}
+        />
+      ) : null}
+      {data.nightPlots?.length ? <BriefPlotPages plots={data.nightPlots} /> : null}
+      {data.nightPatch ? <PatchFaceplate patch={data.nightPatch} /> : null}
     </Document>
   );
 }

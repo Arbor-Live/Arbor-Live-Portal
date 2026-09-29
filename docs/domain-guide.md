@@ -28,7 +28,8 @@ canonical description of the domain itself.
   reminder that payouts are blocked until they complete it. When crew finish,
   admins and HR leadership get an email that includes the effective hourly rate
   (Normal, Lead, or Custom, resolved the same way as invoice crew pricing).
-  Admins see status under Users and can waive.
+  Admins see status under Users and can waive, and can switch a person's payroll
+  method under User details → **Payment method**.
 - Arbor Live crew invites (and convert-to-member) require a **compensation rate
   mode** (`normal` / `lead` / `custom`) and a **payroll method**
   (`stanford` / `external`). Normal/Lead resolve live from
@@ -68,6 +69,19 @@ canonical description of the domain itself.
   event availability and appear as eligible crew; Design (Marketing-only) and
   the specialty-less verticals are excluded (see `userVerticals.ts` and
   `userAdminProfiles`).
+- **User status** (`userAdminProfiles.status`, three states; legacy
+  `active: false` migrated to `alumni`):
+  - `active` — full participation.
+  - `inactive` — real account that can still sign in and reactivate itself from
+    a dashboard banner (`users.reactivateMyAccount`). Skipped by availability
+    targeting and the weekly digest, and hidden from the public `/crew` page,
+    but still assignable to events (shown with an **Inactive** badge in user
+    pickers), kept in the timecard overview, and mentionable in comments.
+  - `alumni` — no dashboard access (Better Auth `banned`). Hidden from every
+    picker, directory, and email; only visible in the Users admin list.
+  Change status with the per-row **Status** select in Users → Access, which
+  confirms and writes `users.setUserStatusAdmin`; it never touches org
+  memberships. Admins can close (alumni) but cannot close their own access.
 - **Participation flags** on `userAdminProfiles` (missing ⇒ crew defaults):
   `requiresOnboarding`, `includeInTimecards`, `assignableAsCrew`,
   `weeklyDigest`, `damageReportEmails`, plus existing
@@ -218,11 +232,18 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     lines.
   Artists browse still-open slots from `/dashboard/opportunities` and
   `submitInquiry` (`eventArtistInquiries`), which flags the slot `inquiring`
-  and emails Operations admins (`email/artistNeedInquiryEmails.ts`). Each
-  opportunity shows the event's website-visible marketing design's caption and
-  poster, and links to the public event page only when the event is public and
-  publicly listable. Riders sit
-  in their own card below the bill.
+  and emails Operations admins (`email/artistNeedInquiryEmails.ts`). Staff clear
+  the queue from the position side panel: **Accept** books the inquiring artist
+  into that position, marks the inquiry `accepted`, and dismisses the position's
+  other open inquiries (`acceptInquiry`); **Dismiss** marks one `dismissed`.
+  Each opportunity shows the event's website-visible marketing design's caption
+  and poster, and links to the public event page only when the event is public
+  and publicly listable. Riders sit in their own card below the bill.
+- **Operations lead** (`events.operationsLeadUserId`) — the person responsible
+  for filling an event's lineup. Assigned inline on the **Open positions** board
+  (`/dashboard/events/positions`), which lists upcoming events with unfilled
+  slots soonest-first and can filter to **Assigned to me**. It is a
+  coordination flag only and grants no extra event access.
 - **Schedule blocks** (`eventScheduleBlocks`) are the planning unit: typed
   (`setup`/`show`/`strike`/`custom`), snapped to 15-minute increments, may
   overlap (the timeline renders overlaps on separate lanes) and may cross
@@ -435,7 +456,11 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   signature-request emails (`resolveEventAlbumShareUrl`). The post-event album
   reminder points internal recipients (lead/crew, who have dashboard accounts)
   at the event **Media** tab so uploads go through the portal, and only sends
-  the raw Immich share URL to external clients. Emails that attach the share
+  the raw Immich share URL to external clients.
+- **Who owes media is the show shift only** (`lib/showShift.ts`): the crew
+  reminder and the admin **Crew media uploads** board both target crew whose
+  shift is linked to the event's `show` section block. Setup/strike-only crew
+  are not asked and are not listed. Events with no `show` block ask no crew. Emails that attach the share
   URL, and the public booking-request / quote feedback portal, ensure the event
   album when Immich is configured (`ensureEventAlbumBestEffort` /
   `ensureAlbumShareUrlByToken`). On multi-day bookings the public **After the

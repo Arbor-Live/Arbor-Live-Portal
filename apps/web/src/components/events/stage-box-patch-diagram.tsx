@@ -39,10 +39,10 @@ export function StageBoxPatchDiagram({
 
   return (
     <div
-      className="overflow-hidden rounded-md border border-zinc/20 bg-background"
+      className="overflow-hidden border bg-background"
       data-testid="stage-box-patch"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-zinc/20 bg-muted px-3 py-2"
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b bg-muted px-3 py-2"
       >
         <div>
           <p className="text-sm font-semibold text-foreground">
@@ -58,21 +58,21 @@ export function StageBoxPatchDiagram({
       </div>
 
       {colored ? (
-        <div className="flex flex-wrap gap-3 border-b border-zinc/20 px-3 py-1.5 text-3xs text-muted-foreground">
+        <div className="flex flex-wrap gap-3 border-b px-3 py-1.5 text-3xs text-muted-foreground">
           <span>
             <span
-              className="mr-1 inline-block h-2 w-2 rounded-sm border border-emerald/30 bg-emerald/10"
+              className="mr-1 inline-block h-2 w-2 border border-status-emerald-500/40 bg-status-emerald-500/10"
             />
             Same
           </span>
           <span>
             <span
-              className="mr-1 inline-block h-2 w-2 rounded-sm border border-amber/30 bg-amber/10"
+              className="mr-1 inline-block h-2 w-2 border border-status-amber-500/40 bg-status-amber-500/10"
             />
             Swap on stage
           </span>
           <span>
-            <span className="mr-1 text-2xs text-zinc line-through">
+            <span className="mr-1 text-2xs text-muted-foreground line-through">
               Mute
             </span>
           </span>
@@ -85,7 +85,7 @@ export function StageBoxPatchDiagram({
         return (
           <div key={snake}>
             {model.snakes.length > 1 ? (
-              <div className="border-b border-zinc/20 bg-background px-3 py-1.5 text-2xs font-semibold text-foreground">
+              <div className="border-b bg-background px-3 py-1.5 text-2xs font-semibold text-foreground">
                 {SNAKE_LABEL[snake]}
               </div>
             ) : null}
@@ -96,10 +96,10 @@ export function StageBoxPatchDiagram({
               if (regionPorts.length === 0) return null;
               return (
                 <div key={region}>
-                  <div className="border-b border-zinc/20 bg-muted px-3 py-1.5 text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <div className="border-b bg-muted px-3 py-1.5 text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {regionLabel(region, snake)}
                   </div>
-                  <div className="grid grid-cols-2 gap-px bg-zinc/20 sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
                     {regionPorts.map((port) => (
                       <PortCell
                         key={`${port.snake}.${port.port}`}
@@ -116,7 +116,7 @@ export function StageBoxPatchDiagram({
       })}
 
       {model.spare.length > 0 ? (
-        <p className="border-t border-zinc/20 px-3 py-2 text-2xs text-muted-foreground">
+        <p className="border-t px-3 py-2 text-2xs text-muted-foreground">
           <span className="font-semibold uppercase tracking-wide">Leave empty</span>
           {" · "}
           {model.spare.join(" · ")}
@@ -124,7 +124,7 @@ export function StageBoxPatchDiagram({
       ) : null}
 
       {model.warnings.length > 0 ? (
-        <ul className="space-y-1 border-t border-zinc/20 px-3 py-2 text-xs text-muted-foreground">
+        <ul className="space-y-1 border-t px-3 py-2 text-xs text-muted-foreground">
           {model.warnings.slice(0, 6).map((warning) => (
             <li key={warning}>{warning}</li>
           ))}
@@ -140,9 +140,9 @@ function PortCell({ port, colored }: { port: StageBoxPort; colored: boolean }) {
   const physical = change === "physical";
   const bg =
     change === "same"
-      ? "bg-emerald/10"
+      ? "bg-status-emerald-500/10"
       : physical
-        ? "bg-amber/10"
+        ? "bg-status-amber-500/10"
         : muted
           ? "bg-muted"
           : "bg-background";
@@ -178,7 +178,7 @@ function PortCell({ port, colored }: { port: StageBoxPort; colored: boolean }) {
         <p
           className={cn(
             "text-sm font-medium leading-tight",
-            muted ? "text-zinc/75 line-through" : "text-foreground",
+            muted ? "text-muted-foreground/75 line-through" : "text-foreground",
           )}
         >
           {port.label}
@@ -186,12 +186,12 @@ function PortCell({ port, colored }: { port: StageBoxPort; colored: boolean }) {
       )}
 
       {muted ? (
-        <p className="text-3xs font-semibold uppercase tracking-wide text-zinc">
+        <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
           Mute
         </p>
       ) : null}
       {physical ? (
-        <p className="text-3xs font-semibold uppercase tracking-wide text-amber/90">
+        <p className="text-3xs font-semibold uppercase tracking-wide text-status-amber-700 dark:text-status-amber-500">
           Swap on stage
         </p>
       ) : null}
@@ -209,7 +209,7 @@ function PortCell({ port, colored }: { port: StageBoxPort; colored: boolean }) {
 
 function Tag({ children }: { children: string }) {
   return (
-    <span className="rounded bg-muted px-1 py-0.5 text-4xs font-medium uppercase text-muted-foreground">
+    <span className="rounded-md bg-muted px-1 py-0.5 text-4xs font-medium uppercase text-muted-foreground">
       {children}
     </span>
   );

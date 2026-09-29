@@ -2,12 +2,18 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useQuery } from "convex/react";
-import { ChatCircleIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
-import { api } from "@/lib/convex-api";
+import { useMutation, useQuery } from "convex/react";
+import { ChatCircleIcon, MagnifyingGlassIcon, UserCircleIcon } from "@phosphor-icons/react";
+import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Toggle } from "@/components/ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
+import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
+import { assignableCrewSelectOptions } from "@/lib/user-select-description";
 import { TYPE_OPTIONS } from "@/components/events/lineup/lineup-model";
 import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
 import { formatDate, formatTime } from "@/lib/format";
@@ -40,14 +46,68 @@ function countdown(startAt: number, now: number) {
 
 /**
  * Logistics view: every upcoming position no act fills yet, grouped by event
- * and soonest first, each linking to its side panel on the event's Lineup.
+ * and soonest first, each linking to its side panel on the event's Lineup. The
+ * operations lead — who owns filling the lineup — is assigned inline here.
  */
 export function OpenPositionsBoard() {
   const result = useQuery(api.eventArtistNeeds.listOpenPositions, {});
   const events = result?.events;
+  const managerList = useQuery(api.invoices.listManagers, {});
+  const setOperationsLead = useMutation(api.events.setOperationsLead);
+  const shell = useSessionShell();
+  const viewer = useSessionViewer();
+  const account = shell?.account;
+  const viewerUserId = viewer?.userId;
   const [range, setRange] = useState<RangeKey>("30");
   const [search, setSearch] = useState("");
+  const [assignedToMe, setAssignedToMe] = useState(false);
+  // Value shown until the server query catches up with an assigned lead.
+  const [leadOverrides, setLeadOverrides] = useState<Record<string, string>>({});
   const [now] = useState(() => Date.now());
+
+  const userSelectOptions: UserSelectOption[] = useMemo(() => {
+    const base = assignableCrewSelectOptions(
+      managerList,
+      viewerUserId
+        ? {
+            id: viewerUserId,
+            name: account?.name ?? account?.email ?? "Current user",
+            email: account?.email,
+            avatarUrl: account?.avatarUrl,
+            image: account?.image,
+          }
+        : null,
+    );
+    // Keep a stored lead visible even after they stop being assignable crew.
+    const known = new Set(base.map((option) => option.value));
+    const extras: UserSelectOption[] = [];
+    for (const event of events ?? []) {
+      const leadId = event.operationsLeadUserId;
+      if (!leadId || known.has(leadId)) continue;
+      known.add(leadId);
+      extras.push({ value: leadId, label: event.operationsLeadName ?? "Unknown user" });
+    }
+    return extras.length ? [...base, ...extras].sort((a, b) => a.label.localeCompare(b.label)) : base;
+  }, [account, events, managerList, viewerUserId]);
+
+  function leadFor(eventId: string, storedLeadId: string | undefined) {
+    return leadOverrides[eventId] ?? storedLeadId ?? "";
+  }
+
+  async function changeLead(eventId: Id<"events">, value: string) {
+    setLeadOverrides((prev) => ({ ...prev, [eventId]: value }));
+    try {
+      await setOperationsLead({ id: eventId, operationsLeadUserId: value || null });
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setLeadOverrides((prev) => {
+        const next = { ...prev };
+        delete next[eventId];
+        return next;
+      });
+    }
+  }
 
   const visible = useMemo(() => {
     if (!events) return [];
@@ -55,6 +115,8 @@ export function OpenPositionsBoard() {
     const needles = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
     return events.flatMap((event) => {
       if (event.startAt > until) return [];
+      const lead = leadOverrides[event.eventId] ?? event.operationsLeadUserId ?? "";
+      if (assignedToMe && lead !== viewerUserId) return [];
       const positions = event.openPositions.filter((position) => {
         if (needles.length === 0) return true;
         const haystack = [
@@ -72,7 +134,7 @@ export function OpenPositionsBoard() {
       const filled = event.totalPositions - event.openPositions.length;
       return positions.length ? [{ ...event, filled, openPositions: positions }] : [];
     });
-  }, [events, now, range, search]);
+  }, [assignedToMe, events, leadOverrides, now, range, search, viewerUserId]);
 
   const openCount = visible.reduce((total, event) => total + event.openPositions.length, 0);
   const withInquiries = visible.reduce(
@@ -107,6 +169,15 @@ export function OpenPositionsBoard() {
             className="pl-8"
           />
         </div>
+        <Toggle
+          variant="outline"
+          size="sm"
+          pressed={assignedToMe}
+          onPressedChange={setAssignedToMe}
+          aria-label="Show only events assigned to me"
+        >
+          Assigned to me
+        </Toggle>
       </div>
 
       {events === undefined ? (
@@ -114,7 +185,9 @@ export function OpenPositionsBoard() {
       ) : (
         <p className="text-sm text-muted-foreground" data-testid="open-positions-summary">
           {openCount === 0
-            ? "Every position in this range is filled."
+            ? assignedToMe
+              ? "No open positions assigned to you in this range."
+              : "Every position in this range is filled."
             : `${openCount} open position${openCount === 1 ? "" : "s"} across ${visible.length} event${
                 visible.length === 1 ? "" : "s"
               }${withInquiries ? ` · ${withInquiries} with inquiries to review` : ""}`}
@@ -151,6 +224,21 @@ export function OpenPositionsBoard() {
                   {filled} of {event.totalPositions} filled
                 </span>
               </header>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t px-3 py-2">
+                <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <UserCircleIcon className="size-3.5" />
+                  Operations lead
+                </span>
+                <div className="w-full min-w-0 sm:w-56">
+                  <UserSelect
+                    value={leadFor(event.eventId, event.operationsLeadUserId)}
+                    onChange={(value) => void changeLead(event.eventId, value)}
+                    options={userSelectOptions}
+                    emptyLabel="Unassigned"
+                    clearable
+                  />
+                </div>
+              </div>
               <ul className="divide-y border-t">
                 {event.openPositions.map((position) => (
                   <li

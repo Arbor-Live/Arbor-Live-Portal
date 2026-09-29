@@ -2,9 +2,33 @@ import type {
   RiderInputChannel,
   RiderMonitorMix,
   RiderBacklineItem,
+  RiderSourceFamily,
   RiderStage,
   RiderStageItem,
 } from "@arbor/rider-document";
+import type { DeskGroup, FxDca } from "./groups";
+import type { LayerPage } from "./layers";
+
+/**
+ * Which console family a show package is built for.
+ * - `wing`  — Behringer WING `.show` + `.snap` (Arbor’s native rig).
+ * - `x32`   — Behringer X32 / Midas M32 `.scn` scene.
+ * - `xair`  — Behringer X Air / Midas MR `.scn` scene (XR12/16/18).
+ */
+export type ShowTarget = "wing" | "x32" | "xair";
+
+/** One channel as it lands on a target desk, for the pre-download report. */
+export type ConsolePreviewRow = {
+  /** Console channel, or “9+10” for a linked stereo pair. */
+  span: string;
+  name: string;
+  /** Target socket for the input, e.g. “A.9” (WING) · “A9” (X32) · “In09”. */
+  patch: string;
+  stereo: boolean;
+  phantom: boolean;
+  /** Bands that use this channel tonight. */
+  bands: string[];
+};
 
 /** One band’s rider inputs as consumed by show-file generation. */
 export type ShowBandInput = {
@@ -45,8 +69,11 @@ export type SnakeGroup = "vox" | "guitar" | "bass" | "flex" | "keys" | "drums";
 export type PatchPlan = {
   /** Second stage box patched tonight. */
   secondSnake: boolean;
-  /** Group → snake. Anything unset stays on A. */
-  sides: Partial<Record<SnakeGroup, SnakeId>>;
+  /**
+   * Legacy per-group snake picks. Placement is deterministic now (families pack
+   * box A, then overflow to B), so this is accepted for stored plans but unused.
+   */
+  sides?: Partial<Record<SnakeGroup, SnakeId>>;
   /**
    * Scope band scenes down to what changes (default). Off makes every scene a
    * full recall — the escape hatch if a desk ignores the scope block.
@@ -58,35 +85,40 @@ export type PortAssignment = {
   snake: SnakeId;
   port: number;
   /**
-   * Console channel strip patched to this port, or null when the port has no
-   * strip of its own (right half of a stereo pair, which rides the left one).
+   * Console channel strip patched to this port, or null for the right half of
+   * a stereo pair (it rides the left socket's strip).
    */
   strip: number | null;
-  /** Event-wide snake label (stable all night — e.g. "Vox 1", not singer names). */
+  /** Rider's name for this input ("Kick In", "OH SR") — what goes on the desk. */
   label: string;
-  /** Default.snap role name for this port (always set). */
-  templateLabel: string;
+  /** Bucket the input sits in, for the faceplate tags and DCA rollup. */
   family: SlotFamily;
   stereo: boolean;
-  /** True only for overheads (A.15–A.16). */
+  /** True only for overheads; 48V never reaches anything else. */
   phantom: boolean;
-  /** True when the night consensus capture is DI (shown as a faceplate tag). */
+  /** True when the majority capture for this input is DI (faceplate tag). */
   di: boolean;
   /**
-   * Band fileStem → stable strip name when live. Same as `label` — we do not
-   * rename for different singers on the same vocal mic.
+   * Band fileStem → that band's channel name for this row. The night label is
+   * the anchor band's; a band whose input differs shows its own name.
    */
   bandLabels: Record<string, string>;
-  /**
-   * Band fileStem → instrument identity for changeover diffs.
-   * Family for fixed roles; sourceKey for flex overflow.
-   */
+  /** Band fileStem → instrument identity (drives the changeover diff). */
   bandInstruments: Record<string, string>;
-  /** Band fileStem → human detail name when the instrument actually differs (yellow). */
+  /** Band fileStem → human detail name (yellow changeover label). */
   bandDetailLabels: Record<string, string>;
   /** Band fileStem → capture type for DI/mic tags. */
   bandInputTypes: Record<string, string>;
-  /** False when no band on the bill plugs anything in here — left unpatched. */
+  /**
+   * The one sourceKey every band uses this input for, or null when it changes
+   * across the bill. Lets the brief tag a role only when the night agrees.
+   */
+  nightSourceKey: string | null;
+  /** DCA/mute tags to write on the strip ("#D3,#M1,#M3"). */
+  tags: string;
+  /** Desk-group id ("vocals", "playback", …) this input rolls up into. */
+  groupId: RiderSourceFamily;
+  /** False when no band plugs anything in here — socket left unpatched. */
   used: boolean;
 };
 
@@ -97,8 +129,19 @@ export type EventPatchAllocation = {
   bandOrder: Array<{ bandName: string; fileStem: string }>;
   /** Stage boxes patched tonight, in order. */
   snakes: SnakeId[];
-  /** Effective group → snake map after any overflow moves. */
-  sides: Record<SnakeGroup, SnakeId>;
+  /** Desk groups that exist for this bill (only where channels are present). */
+  groups: DeskGroup[];
+  /** The vocal FX DCA (rides the reverb returns), or null when none. */
+  fxDca: FxDca | null;
+  /** The Melody DCA when the melodic frontline is compressed, else null. */
+  melodyDca: FxDca | null;
+  /** Fader-bank pages for the surface, in the order an operator reads them. */
+  layers: LayerPage[];
+  /**
+   * Whether the whole bill fits on a single stage box. False means the crew
+   * must either drop an input or run two snakes — one snake is not an option.
+   */
+  fitsOneBox: boolean;
 };
 
 export type StageBoxPort = {
@@ -222,6 +265,41 @@ export type WingSnap = {
         [key: string]: unknown;
       }
     >;
+    /**
+     * The 8 AUX inputs, by number ("1".."8"). Console channels 41–48 on the
+     * surface. AUX 1 carries USB 1/2 walk-in music.
+     */
+    aux?: Record<
+      string,
+      {
+        name?: string;
+        col?: number;
+        icon?: number;
+        in?: {
+          conn?: { grp?: string; in?: number; altgrp?: string; altin?: number };
+          [key: string]: unknown;
+        };
+        [key: string]: unknown;
+      }
+    >;
+    /** FX engines by slot number ("1".."16"); each has a `mdl`. */
+    fx?: Record<string, { mdl?: string; [key: string]: unknown }>;
+    /** DCAs by slot number. */
+    dca?: Record<string, Record<string, unknown>>;
+    /** Buses by slot number. */
+    bus?: Record<
+      string,
+      { name?: string; preins?: unknown; postins?: unknown; [key: string]: unknown }
+    >;
+    [key: string]: unknown;
+  };
+  /**
+   * Surface fader assignments, keyed by surface (`L`/`C`/`R`/`CMPCT`/…). We
+   * write our pages into the WING Compact surface's USER1/USER2 banks.
+   * Surface → bank → slot.
+   */
+  ce_data?: {
+    layer?: Record<string, Record<string, Record<string, unknown>> | undefined>;
     [key: string]: unknown;
   };
   [key: string]: unknown;

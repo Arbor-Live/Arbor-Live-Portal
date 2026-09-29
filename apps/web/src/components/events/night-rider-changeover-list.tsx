@@ -2,12 +2,6 @@
 
 import type { PhysicalChangeover } from "@arbor/show-file";
 
-const INK = "#0f172a";
-const MUTED = "#64748b";
-const HAIRLINE = "#e2e8f0";
-const HEADER = "#f1f5f9";
-const PHYSICAL_BG = "#fffbeb";
-
 /** Lists yellow “swap on stage” rows between sets. */
 export function NightRiderChangeoverList({
   changeovers,
@@ -17,37 +11,27 @@ export function NightRiderChangeoverList({
   const withSwaps = changeovers.filter((block) => block.lines.length > 0);
 
   return (
-    <div
-      className="overflow-hidden rounded-md border"
-      style={{ borderColor: HAIRLINE, background: "#fff" }}
-      data-testid="night-rider-changeovers"
-    >
-      <div
-        className="border-b px-3 py-2"
-        style={{ borderColor: HAIRLINE, background: HEADER }}
-      >
-        <p className="text-sm font-semibold" style={{ color: INK }}>
-          Changes between artists
-        </p>
-      </div>
+    <section className="space-y-3" data-testid="night-rider-changeovers">
+      <h3 className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
+        Changes between artists
+      </h3>
 
       {withSwaps.length === 0 ? (
-        <p className="px-3 py-3 text-sm" style={{ color: MUTED }}>
+        <p className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
           No physical swaps between sets — mute/unmute only.
         </p>
       ) : (
-        <div className="divide-y" style={{ borderColor: HAIRLINE }}>
+        <div className="divide-y border">
           {withSwaps.map((block) => (
-            <div key={block.title} className="px-3 py-2.5">
-              <p className="text-xs font-semibold" style={{ color: INK }}>
+            <div key={block.title} className="space-y-1.5 px-3 py-2.5">
+              <p className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
                 {block.title}
               </p>
-              <ul className="mt-1.5 space-y-1">
+              <ul className="space-y-1">
                 {block.lines.map((line) => (
                   <li
                     key={line}
-                    className="rounded px-2 py-1 text-sm"
-                    style={{ background: PHYSICAL_BG, color: INK }}
+                    className="border border-status-amber-500/40 bg-status-amber-500/10 px-2 py-1 text-sm text-status-amber-700 dark:text-status-amber-500"
                   >
                     {line}
                   </li>
@@ -57,6 +41,6 @@ export function NightRiderChangeoverList({
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }

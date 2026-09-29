@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { pollConvex } from "../helpers/convex";
 import {
+  addInvoiceLine,
   invoiceIdFromUrl,
   readTotal,
   saveInvoiceEditor,
@@ -38,11 +39,11 @@ test.describe("invoice line items and totals", () => {
     const feeLabel = `E2E Fee ${stamp}`;
 
     await page.goto("/dashboard/financial-hub/invoices/new");
-    await expect(page.getByText("Create Invoice").first()).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText("Create invoice").first()).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(/E2E Admin/i).first()).toBeVisible({ timeout: 25_000 });
 
     // 2 people × 1 hr × $75 = $150
-    await page.getByRole("button", { name: "Add artist row" }).click();
+    await addInvoiceLine(page, "Artist");
     const artistRow = page.getByTestId("invoice-row-artist-0");
     await artistRow.getByPlaceholder("Artist / role").fill(artistLabel);
     await artistRow.getByPlaceholder("Hours").fill("1");
@@ -50,7 +51,7 @@ test.describe("invoice line items and totals", () => {
     await artistRow.getByPlaceholder("Rate / person / hr").fill("75");
 
     // 1 x $40 = $40
-    await page.getByRole("button", { name: "Add external rental" }).click();
+    await addInvoiceLine(page, "External rental");
     const rentalRow = page.getByTestId("invoice-row-external-rental-0");
     await rentalRow.getByPlaceholder("Provider").fill("E2E Provider");
     await rentalRow.getByPlaceholder("Line item").fill(rentalLabel);
@@ -58,7 +59,7 @@ test.describe("invoice line items and totals", () => {
     await rentalRow.getByPlaceholder("Rate").fill("40");
 
     // 3 x $10 = $30
-    await page.getByRole("button", { name: "Add fee" }).click();
+    await addInvoiceLine(page, "Fee");
     const feeRow = page.getByTestId("invoice-row-fee-0");
     await feeRow.getByPlaceholder("Label").fill(feeLabel);
     await feeRow.getByPlaceholder("Qty").fill("3");

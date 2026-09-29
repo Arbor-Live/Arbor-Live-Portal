@@ -63,7 +63,7 @@ test.describe("invoice approval token regeneration", () => {
       });
 
       await page.getByTestId("invoice-regenerate-token").click();
-      await acceptAppDialog(page);
+      await acceptAppDialog(page, "Regenerate link");
 
       const after = await pollConvex<EditorState>(
         "e2eHelpers:getInvoiceEditorState",

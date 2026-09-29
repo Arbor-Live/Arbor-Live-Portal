@@ -1,4 +1,17 @@
-import { AES50_GROUP, aes50PortFor } from "./slots";
+import {
+  AES50_GROUP,
+  BOX_CAPACITY,
+  FAMILY_STYLE,
+  TALKBACK_LOCAL_INPUT,
+  TALKBACK_STRIP,
+  USB_MUSIC_AUX,
+  USB_MUSIC_SOURCE,
+  aes50PortFor,
+} from "./slots";
+import { writeLayerPages } from "./layer-write";
+import { planVocalFx } from "./fx-plan";
+import type { BlueprintEngine } from "./fx-allocate";
+import { processingForFamily } from "./processing";
 import type {
   EventPatchAllocation,
   PortAssignment,
@@ -66,7 +79,15 @@ export function buildNightSnap(
   return snap;
 }
 
-/** Patch + name every port. `fileStem` null builds the muted night baseline. */
+/**
+ * Patch + name every socket. `fileStem` null builds the muted night baseline.
+ *
+ * Each socket's own strip (socket N → strip N) is patched from it, and the
+ * strip gets its family's DCA/mute tags. The template is a blueprint, not
+ * content: its DCA names, bus inserts and channel inserts are all rebuilt from
+ * the bill (see `rebuildDcas`, `clearStrayBusInserts`, `applyVocalFx`), while
+ * its bus EQ/dynamics, sends, FX engines and other comforts are left as-is.
+ */
 function applyAllocation(
   template: WingSnap,
   allocation: EventPatchAllocation,
@@ -75,12 +96,21 @@ function applyAllocation(
   const snap = structuredClone(template);
   const channels = snap.ae_data.ch;
 
+  // Rebuild the desk from the bill: name only the DCAs the bill justifies, and
+  // drop the template's stray bus insert. Channel inserts are rebuilt below,
+  // once the patch is in place.
+  rebuildDcas(snap, allocation);
+  clearStrayBusInserts(snap);
+
   for (const port of allocation.ports) {
+    const style = FAMILY_STYLE[port.family];
     const socket = socketFor(snap, port);
     if (socket) {
       if (port.used) {
         socket.name = port.label;
         socket.mode = port.stereo ? "ST" : "M";
+        socket.col = style.col;
+        socket.icon = style.icon;
         // Hard rule: phantom only on OH ports.
         socket.vph = port.family === "oh" && port.phantom;
       } else {
@@ -90,6 +120,7 @@ function applyAllocation(
       }
     }
 
+    // Right half of a stereo pair rides the left socket's strip.
     if (port.strip === null) continue;
     const strip = channels[String(port.strip)];
     if (!strip) continue;
@@ -100,6 +131,7 @@ function applyAllocation(
       strip.mute = true;
       strip.in = strip.in ?? {};
       strip.in.conn = { grp: "OFF", in: 1, altgrp: "OFF", altin: 1 };
+      strip.tags = "";
       continue;
     }
 
@@ -111,10 +143,293 @@ function applyAllocation(
       altin: 1,
     };
     strip.name = port.label;
+    strip.col = style.col;
+    strip.icon = style.icon;
+    // Keep the group's DCA/mute subscription even though the patch moved.
+    strip.tags = port.tags;
     strip.mute = fileStem === null ? true : !port.bandLabels[fileStem];
+    // Per-family gate/HPF/dynamics/EQ: on where it helps, explicitly off where
+    // it does not, so a channel never inherits a stale FX-return's processing.
+    applyProcessing(strip, port.family);
   }
 
+  // Blank every strip the patch does not own: the right half of a stereo pair
+  // (it rides the left's strip), and box B's strips when only one snake runs.
+  // Left as-is, a template leftover gets fed from a live socket — a channel
+  // patched to a guitar input that never unmutes, because no band scene scopes
+  // a strip the allocator never placed.
+  const ownedStrips = new Set(
+    allocation.ports
+      .filter((port) => port.strip !== null)
+      .map((port) => port.strip!),
+  );
+  for (let strip = 1; strip <= BOX_CAPACITY * 2; strip++) {
+    if (ownedStrips.has(strip)) continue;
+    const channel = channels[String(strip)];
+    if (!channel) continue;
+    channel.name = "";
+    channel.mute = true;
+    channel.in = channel.in ?? {};
+    channel.in.conn = { grp: "OFF", in: 1, altgrp: "OFF", altin: 1 };
+    channel.tags = "";
+  }
+
+  // Vocal inserts are part of a rebuilt channel strip, not the template: clear
+  // every owned channel's inserts, then put PCORR/DE-S2 on the vocals. This is
+  // shared with band snaps, so a changed channel never recalls a stray insert.
+  applyVocalFx(snap, allocation);
+  // Free FX engines the bill never reaches. The blueprint is a source of
+  // models, not content: an unused amp sim or spare PCORR squatting a slot (and
+  // the DSP behind it) goes back to NONE so a real effect can use it.
+  clearUnusedFx(snap);
+  // Talkback is constant, not bill-driven: it is always on its own strip,
+  // patched from A.8, whatever the band patch does with the other sockets.
+  pinTalkback(snap);
+  // USB 1/2 walk-in music is rig furniture too: AUX 1 is fed from the desk's
+  // USB pair and named so the reserved USER1 fader reads.
+  pinUsbMusic(snap);
+  // Lay the generated pages onto the surface. Written into every scene (not just
+  // the night baseline) so recalling a band does not blank USER1/USER2.
+  writeLayerPages(snap, allocation.layers);
+
   return snap;
+}
+
+/**
+ * Write a family's gate/HPF/dynamics/EQ defaults onto a channel strip, keeping
+ * the blueprint's model and parameter shapes so the desk accepts the values.
+ */
+function applyProcessing(
+  strip: Record<string, unknown>,
+  family: EventPatchAllocation["ports"][number]["family"],
+): void {
+  const preset = processingForFamily(family);
+  const merge = (key: string, values: Record<string, unknown>) => {
+    const current = strip[key];
+    strip[key] =
+      current && typeof current === "object"
+        ? { ...current, ...values }
+        : { ...values };
+  };
+  merge("flt", preset.filter);
+  merge("gate", preset.gate);
+  merge("dyn", preset.dyn);
+  merge("eq", preset.eq);
+}
+
+/**
+ * Talkback is rig furniture, not content: it lives on its own channel strip
+ * patched from the desk's **local** input 24, and `cfg.talk.assign` points the
+ * talk key at it. Keep that fixed every build so a bill can never strand it.
+ */
+function pinTalkback(snap: WingSnap): void {
+  const channel = snap.ae_data.ch[TALKBACK_STRIP];
+  if (!channel) return;
+  channel.in = channel.in ?? {};
+  channel.in.conn = {
+    grp: "LCL",
+    in: TALKBACK_LOCAL_INPUT,
+    altgrp: "OFF",
+    altin: 1,
+  };
+  channel.name = "TALKBACK";
+}
+
+/**
+ * USB 1/2 walk-in music is rig furniture, not band content: **AUX 1** (console
+ * channel 41) is fed from the desk's USB stereo pair and named, so the reserved
+ * USER1 fader reads "USB 1/2" instead of a blank channel. It never touches the
+ * stage boxes, so the allocator reserves no socket for it.
+ */
+function pinUsbMusic(snap: WingSnap): void {
+  const aux = snap.ae_data.aux?.[USB_MUSIC_AUX];
+  if (!aux) return;
+  aux.name = "USB 1/2";
+  aux.col = 8;
+  aux.icon = 605;
+  aux.in = aux.in ?? {};
+  aux.in.conn = {
+    grp: "USB",
+    in: USB_MUSIC_SOURCE,
+    altgrp: "OFF",
+    altin: 1,
+  };
+}
+
+/**
+ * Rebuild the DCA names from the bill's groups.
+ *
+ * The template's DCA names are blueprint leftovers (" Vox DCA", "Melody DCA",
+ * "FX DCA"); a DCA is only justified when a group actually has channels on the
+ * bill. Active groups are named in order and every other slot is blanked so a
+ * stale name never rides a recall. Icons/colours stay on the template's base
+ * DCA shape — the bill says nothing about them.
+ */
+function rebuildDcas(
+  snap: WingSnap,
+  allocation: EventPatchAllocation,
+): void {
+  const dcas = snap.ae_data.dca as
+    | Record<string, Record<string, unknown>>
+    | undefined;
+  if (!dcas) return;
+
+  const byDca = new Map(
+    allocation.groups.map((group) => [String(group.dca), group.label]),
+  );
+  // Reserved DCAs (vocal FX, melody) are their own groups, so name them too.
+  if (allocation.fxDca) byDca.set(String(allocation.fxDca.dca), allocation.fxDca.name);
+  if (allocation.melodyDca) {
+    byDca.set(String(allocation.melodyDca.dca), allocation.melodyDca.name);
+  }
+  const base = dcas["1"];
+  for (const slot of Object.keys(dcas)) {
+    const label = byDca.get(slot);
+    if (label === undefined) {
+      dcas[slot] = { ...dcas[slot], name: "" };
+      continue;
+    }
+    dcas[slot] = {
+      ...(base ? structuredClone(base) : dcas[slot]),
+      name: label,
+    };
+  }
+
+  // Put the vocal FX returns into the FX DCA so one fader rides them.
+  if (allocation.fxDca) {
+    const buses = snap.ae_data.bus as
+      | Record<string, { tags?: string }>
+      | undefined;
+    for (const bus of allocation.fxDca.buses) {
+      const entry = buses?.[String(bus)];
+      if (entry) entry.tags = `#D${allocation.fxDca.dca}`;
+    }
+  }
+}
+
+/**
+ * Buses carry blueprint return routing: the template's named "Vox Rvrb" and
+ * "Plate Rvrb" feed the loaded reverb engines, so their inserts stay. A bus the
+ * template left unnamed is not part of that routing, and an insert sitting on it
+ * (the template's DE-S2 on bus 15) is a stray — clear it. Bus names, EQ,
+ * dynamics and routing are left as blueprint defaults.
+ */
+function clearStrayBusInserts(snap: WingSnap): void {
+  const buses = snap.ae_data.bus as
+    | Record<string, { name?: string; preins?: unknown; postins?: unknown }>
+    | undefined;
+  if (!buses) return;
+
+  for (const bus of Object.values(buses)) {
+    if ((bus.name ?? "").trim() !== "") continue;
+    bus.preins = { on: false, ins: "NONE" };
+    bus.postins = { on: false, ins: "NONE" };
+  }
+}
+
+/**
+ * Put the vocal effects on the vocals: PCORR on the pre insert, DE-S2 on the
+ * post insert. The template's own FX engines decide how many of each are
+ * available — we just find them and assign.
+ *
+ * The template left PCORR on channels 1–4, so every owned channel's inserts are
+ * cleared first and re-added to vocals only.
+ */
+function applyVocalFx(snap: WingSnap, allocation: EventPatchAllocation): void {
+  // Every channel the patch owns starts with no inserts. The template left
+  // PCORR on its own channels, and a band scene that recalls a changed channel
+  // must not drag that stray insert back in.
+  for (const port of allocation.ports) {
+    if (port.strip === null) continue;
+    const channel = snap.ae_data.ch[String(port.strip)];
+    if (!channel) continue;
+    channel.preins = { on: false, ins: "NONE" };
+    channel.postins = { on: false, mode: "FX", ins: "NONE", w: 0 };
+  }
+
+  // Read the blueprint's loaded engines (slot + model) — not hardcoded.
+  const fx = snap.ae_data.fx ?? {};
+  const engines: BlueprintEngine[] = Object.entries(fx)
+    .map(([slot, engine]) => ({
+      slot: Number(slot),
+      model: (engine as { mdl?: string }).mdl ?? "",
+    }))
+    .filter((engine) => engine.model && engine.model !== "NONE")
+    .sort((a, b) => a.slot - b.slot);
+
+  const vocals = allocation.ports
+    .filter(
+      (port) =>
+        port.used &&
+        port.strip !== null &&
+        (port.groupId === "vocals" || port.family === "vox"),
+    )
+    .map((port) => ({
+      strip: port.strip!,
+      isLead: port.label.toLowerCase().includes("lead"),
+    }));
+
+  const { assignments, additions } = planVocalFx(vocals, engines);
+
+  // Load any extra engines the allocation called for, cloning an existing one of
+  // the same model so its settings come along.
+  for (const addition of additions) {
+    const source = fx[String(addition.cloneFrom)];
+    if (!source) continue;
+    fx[String(addition.slot)] = structuredClone(source);
+  }
+  snap.ae_data.fx = fx;
+
+  for (const { strip, pcorrSlot, deesserSlot } of assignments) {
+    const channel = snap.ae_data.ch[String(strip)];
+    if (!channel) continue;
+    if (pcorrSlot !== null) {
+      channel.preins = { on: true, ins: `FX${pcorrSlot}` };
+    }
+    if (deesserSlot !== null) {
+      channel.postins = { on: true, mode: "FX", ins: `FX${deesserSlot}`, w: 0 };
+    }
+  }
+}
+
+/**
+ * Blank every FX engine the rebuilt show never points at.
+ *
+ * An engine is kept only when a channel or bus insert still references its slot
+ * (`ins: "FX5"`). The blueprint's spare PCORR and its unused amp sims are set
+ * back to NONE, freeing the slot — and the DSP behind it — for the bill.
+ */
+function clearUnusedFx(snap: WingSnap): void {
+  const fx = snap.ae_data.fx;
+  if (!fx) return;
+
+  const used = new Set<number>();
+  const note = (insert: { ins?: unknown } | undefined) => {
+    const ins = insert?.ins;
+    if (typeof ins !== "string") return;
+    const match = /^FX(\d+)$/.exec(ins);
+    if (match) used.add(Number(match[1]));
+  };
+  const scan = (holder: unknown) => {
+    const inserts = holder as
+      | { preins?: { ins?: unknown }; postins?: { ins?: unknown } }
+      | undefined;
+    note(inserts?.preins);
+    note(inserts?.postins);
+  };
+
+  for (const channel of Object.values(snap.ae_data.ch)) scan(channel);
+  const buses = snap.ae_data.bus as
+    | Record<string, { preins?: unknown; postins?: unknown }>
+    | undefined;
+  for (const bus of Object.values(buses ?? {})) scan(bus);
+
+  for (const [slot, engine] of Object.entries(fx)) {
+    if (used.has(Number(slot))) continue;
+    if ((engine as { mdl?: string }).mdl === "NONE") continue;
+    const fxmix = (engine as { fxmix?: unknown }).fxmix;
+    fx[slot] = fxmix === undefined ? { mdl: "NONE" } : { mdl: "NONE", fxmix };
+  }
 }
 
 /** Both boxes are daisy-chained on AES50 A, so box B lands on A.17–32. */

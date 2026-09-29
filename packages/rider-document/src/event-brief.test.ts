@@ -133,4 +133,50 @@ describe("event brief PDF", () => {
     const buffer = await renderEventBriefPdfBuffer(baseBrief({ runOfShow: [] }));
     expect(isPdf(buffer)).toBe(true);
   });
+
+  it("renders every act's stage plot and the snake faceplate", async () => {
+    const base = emptyRiderContent();
+    const items = [
+      { id: "i1", symbol: "guitarist", label: "Gtr", xFt: 6, yFt: 4, rotation: 0, scale: 1 },
+      { id: "i2", symbol: "drum_kit", label: "Drums", xFt: 14, yFt: 6, rotation: 0, scale: 1 },
+    ];
+    const withoutExtras = await renderEventBriefPdfBuffer(baseBrief({ nightRider }));
+    const withExtras = await renderEventBriefPdfBuffer(
+      baseBrief({
+        nightRider,
+        nightPlots: [
+          { bandName: "Tress Rider", stage: base.stage, items },
+          { bandName: "Main", stage: base.stage, items },
+        ],
+        nightPatch: {
+          title: "Night patch",
+          subtitle: "Kickoff · Snake A · A.1–16",
+          snakes: [
+            {
+              snake: "A",
+              label: "Snake A · A.1–16",
+              ports: [
+                {
+                  snake: "A",
+                  port: 7,
+                  portLabel: "7",
+                  strip: 7,
+                  label: "Hi-hat",
+                  region: "mid",
+                  stereo: false,
+                  phantom: false,
+                  di: false,
+                  usedBy: ["Main"],
+                },
+              ],
+            },
+          ],
+          spare: ["2–6", "8–9"],
+          warnings: [],
+        },
+      }),
+    );
+    expect(isPdf(withExtras)).toBe(true);
+    expect(withExtras.byteLength).toBeGreaterThan(withoutExtras.byteLength);
+  });
 });

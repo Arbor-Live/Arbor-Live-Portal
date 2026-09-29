@@ -26,12 +26,14 @@ import {
 } from "./plot";
 import { inputFamilyLabel } from "./content";
 import { RIDER_CATEGORY_PALETTE, riderSymbol } from "./symbols";
+import type { EventBriefPatch, EventBriefPatchPort, EventBriefPlot } from "./brief-types";
 import {
   INPUT_TYPE_LABELS,
   MONITOR_TYPE_LABELS,
   PROVIDED_BY_LABELS,
   STAND_LABELS,
   type RiderDocumentData,
+  type RiderStage,
   type RiderStageItem,
 } from "./types";
 
@@ -193,11 +195,21 @@ function PlotGlyph({ item, layout }: { item: RiderStageItem; layout: PlotLayout 
   );
 }
 
-function StagePlot({ data, width, height }: { data: RiderDocumentData; width: number; height: number }) {
-  const layout = computePlotLayout(data.stage, { width, height, padding: 18 });
+export function StagePlot({
+  stage: stageSpec,
+  items,
+  width,
+  height,
+}: {
+  stage: RiderStage;
+  items: RiderStageItem[];
+  width: number;
+  height: number;
+}) {
+  const layout = computePlotLayout(stageSpec, { width, height, padding: 18 });
   const grid = gridLineOffsets(layout);
   const stage = layout.stage;
-  const usedSymbols = [...new Set(data.items.map((item) => item.symbol))].slice(0, 12);
+  const usedSymbols = [...new Set(items.map((item) => item.symbol))].slice(0, 12);
 
   return (
     <View>
@@ -242,12 +254,12 @@ function StagePlot({ data, width, height }: { data: RiderDocumentData; width: nu
             stroke={PLOT_COLORS.audienceBar}
             strokeWidth={3}
           />
-          {data.items.map((item) => (
+          {items.map((item) => (
             <PlotGlyph key={item.id} item={item} layout={layout} />
           ))}
         </Svg>
 
-        {data.items.map((item) => {
+        {items.map((item) => {
           const rect = itemRect(layout, item);
           const label = labelRect(layout, rect);
           return (
@@ -280,7 +292,7 @@ function StagePlot({ data, width, height }: { data: RiderDocumentData; width: nu
             { left: stage.left, top: stage.top + 4, width: stage.width, textAlign: "center" },
           ]}
         >
-          UPSTAGE · {data.stage.widthFt} × {data.stage.depthFt} FT
+          UPSTAGE · {stageSpec.widthFt} × {stageSpec.depthFt} FT
         </Text>
         <Text
           style={[
@@ -413,8 +425,18 @@ function NotesSection({ title, body }: { title: string; body?: string }) {
   );
 }
 
-/** The rider body as standalone pages, so other documents (event briefs) can embed it. */
-export function RiderPages({ data }: { data: RiderDocumentData }) {
+/**
+ * The rider body as standalone pages, so other documents (event briefs) can
+ * embed it. The event brief passes `includePlot={false}` and draws every act's
+ * plot itself, so it does not double up on the one picked here.
+ */
+export function RiderPages({
+  data,
+  includePlot = true,
+}: {
+  data: RiderDocumentData;
+  includePlot?: boolean;
+}) {
   const inputRows = data.inputs.map((input) => [
     input.stereo ? `${input.channel}–${input.channel + 1}` : String(input.channel),
     input.stereo ? `${input.source || "—"} (L/R)` : input.source || "—",
@@ -444,12 +466,14 @@ export function RiderPages({ data }: { data: RiderDocumentData }) {
 
   return (
     <>
-      <Page size="LETTER" orientation="landscape" style={styles.page}>
-        <Header data={data} />
-        <Summary data={data} />
-        <StagePlot data={data} width={716} height={380} />
-        <RiderPdfFooter />
-      </Page>
+      {includePlot ? (
+        <Page size="LETTER" orientation="landscape" style={styles.page}>
+          <Header data={data} />
+          <Summary data={data} />
+          <StagePlot stage={data.stage} items={data.items} width={716} height={380} />
+          <RiderPdfFooter />
+        </Page>
+      ) : null}
 
       <Page size="LETTER" style={styles.page}>
         <Header data={data} />
@@ -509,6 +533,108 @@ export function RiderPages({ data }: { data: RiderDocumentData }) {
         <RiderPdfFooter />
       </Page>
     </>
+  );
+}
+
+const PATCH_REGIONS: Array<{ key: "vox" | "mid" | "drums"; label: string }> = [
+  { key: "vox", label: "Vox" },
+  { key: "mid", label: "Mid" },
+  { key: "drums", label: "Drums" },
+];
+
+/** Every act's stage plot, one act per landscape page. */
+export function BriefPlotPages({ plots }: { plots: EventBriefPlot[] }) {
+  return (
+    <>
+      {plots.map((plot) => (
+        <Page
+          key={plot.bandName}
+          size="LETTER"
+          orientation="landscape"
+          style={styles.page}
+        >
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              <Text style={styles.title}>{plot.bandName}</Text>
+              <Text style={styles.subtitle}>Stage plot</Text>
+            </View>
+          </View>
+          <StagePlot stage={plot.stage} items={plot.items} width={716} height={420} />
+          <RiderPdfFooter />
+        </Page>
+      ))}
+    </>
+  );
+}
+
+/**
+ * The night snake faceplate: what plugs in where, in Default.snap order. A table
+ * rather than the web card so it stays legible on a printed brief.
+ */
+export function PatchFaceplate({ patch }: { patch: EventBriefPatch }) {
+  const tag = (port: EventBriefPatchPort) =>
+    [port.stereo ? "ST" : null, port.di ? "DI" : null, port.phantom ? "48V" : null]
+      .filter(Boolean)
+      .join(" ");
+
+  return (
+    <Page size="LETTER" style={styles.page}>
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.title}>{patch.title}</Text>
+          <Text style={styles.subtitle}>{patch.subtitle}</Text>
+        </View>
+      </View>
+
+      {patch.snakes.map((box) => (
+        <View key={box.snake} style={styles.section} wrap={false}>
+          {patch.snakes.length > 1 ? (
+            <Text style={styles.changeoverTitle}>{box.label}</Text>
+          ) : null}
+          {PATCH_REGIONS.map((region) => {
+            const ports = box.ports.filter((port) => port.region === region.key);
+            if (ports.length === 0) return null;
+            return (
+              <View key={region.key}>
+                <View style={styles.tableHeader}>
+                  <Text style={[styles.headerCell, { width: 56 }]}>{region.label.toUpperCase()}</Text>
+                  <Text style={[styles.headerCell, { width: 52 }]}>PORT</Text>
+                  <Text style={[styles.headerCell, { width: 44 }]}>CH</Text>
+                  <Text style={[styles.headerCell, { width: 108 }]}>NAME</Text>
+                  <Text style={[styles.headerCell, { width: 58 }]}>TAGS</Text>
+                  <Text style={[styles.headerCell, { flexGrow: 1 }]}>USED BY</Text>
+                </View>
+                {ports.map((port) => (
+                  <View key={port.port} style={styles.row} wrap={false}>
+                    <Text style={[styles.cell, { width: 56 }]}>{region.label}</Text>
+                    <Text style={[styles.cell, { width: 52, fontFamily: "Courier" }]}>{port.portLabel}</Text>
+                    <Text style={[styles.cell, { width: 44 }]}>
+                      {port.strip === null ? "—" : `Ch ${port.strip}`}
+                    </Text>
+                    <Text style={[styles.cell, { width: 108 }]}>{port.label}</Text>
+                    <Text style={[styles.cell, { width: 58 }]}>{tag(port) || "—"}</Text>
+                    <Text style={[styles.cell, { flexGrow: 1 }]}>{port.usedBy.join(", ")}</Text>
+                  </View>
+                ))}
+              </View>
+            );
+          })}
+        </View>
+      ))}
+
+      {patch.spare.length > 0 ? (
+        <Text style={styles.emptyNote}>
+          Leave empty · {patch.spare.join(" · ")}
+        </Text>
+      ) : null}
+
+      {patch.warnings.map((warning) => (
+        <Text key={warning} style={styles.changeoverLine}>
+          {warning}
+        </Text>
+      ))}
+      <RiderPdfFooter />
+    </Page>
   );
 }
 

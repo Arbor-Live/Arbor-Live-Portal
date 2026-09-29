@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { pollConvex, runConvex } from "../helpers/convex";
 import { formField, formTextarea } from "../helpers/form";
 import {
+  addInvoiceLine,
   invoiceIdFromUrl,
   saveInvoiceEditor,
   waitForInvoiceEditorUrl,
@@ -135,7 +136,7 @@ test.describe("invoice terms templates", () => {
     );
 
     await page.goto("/dashboard/financial-hub/invoices/new");
-    await expect(page.getByText("Create Invoice").first()).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText("Create invoice").first()).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(/E2E Admin/i).first()).toBeVisible({ timeout: 25_000 });
 
     // The Terms card only loads its catalog after a hover/focus, and only shows
@@ -149,7 +150,7 @@ test.describe("invoice terms templates", () => {
     await termsCheckbox.check();
 
     // A line item is required to save.
-    await page.getByRole("button", { name: "Add artist row" }).click();
+    await addInvoiceLine(page, "Artist");
     const artistRow = page.getByTestId("invoice-row-artist-0");
     await artistRow.getByPlaceholder("Artist / role").fill(`E2E Terms Artist ${Date.now()}`);
     await artistRow.getByPlaceholder("People").fill("1");

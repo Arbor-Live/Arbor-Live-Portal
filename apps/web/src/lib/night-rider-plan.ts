@@ -24,7 +24,12 @@ type RiderRow = {
 export function nightRiderPlan(
   rows: RiderRow[],
   plan: Parameters<typeof allocateEventPatch>[1],
-): { patchPlan: PatchDiffPlan | null; changeovers: PhysicalChangeover[] } {
+): {
+  patchPlan: PatchDiffPlan | null;
+  changeovers: PhysicalChangeover[];
+  /** False when the bill only fits with the second stage box. */
+  fitsOneBox: boolean;
+} {
   const showBands: ShowBandInput[] = rows
     .filter((row) => row.rider && row.rider.inputs.length > 0)
     .map((row) => ({
@@ -37,7 +42,14 @@ export function nightRiderPlan(
       monitorMixes: row.rider!.monitorMixes,
       backline: row.rider!.backline,
     }));
-  if (showBands.length === 0) return { patchPlan: null, changeovers: [] };
-  const patchPlan = buildPatchDiffPlan(allocateEventPatch(showBands, plan));
-  return { patchPlan, changeovers: listPhysicalChangeovers(patchPlan) };
+  if (showBands.length === 0) {
+    return { patchPlan: null, changeovers: [], fitsOneBox: true };
+  }
+  const allocation = allocateEventPatch(showBands, plan);
+  const patchPlan = buildPatchDiffPlan(allocation);
+  return {
+    patchPlan,
+    changeovers: listPhysicalChangeovers(patchPlan),
+    fitsOneBox: allocation.fitsOneBox,
+  };
 }

@@ -65,6 +65,23 @@ describe("toDocumentLineItem crew labels", () => {
 
     expect(doc.label).toBe("Setup — Damian Luciano Muschamp (Lead)");
   });
+
+  it("shows a hand-entered phase's headcount", () => {
+    const row = {
+      ...equipmentLine({ quantity: 12, rateUsd: 25, amountUsd: 300 }),
+      section: "crew" as const,
+      label: "Load-in",
+      memberCount: 4,
+      performanceHours: 3,
+    };
+
+    const doc = toDocumentLineItem(row, 1);
+
+    expect(doc.quantity).toBe(12);
+    expect(doc.amountUsd).toBe(300);
+    expect(doc.quantityDetail).toBe("4 people × 3 hrs");
+    expect(doc.memberCount).toBe(4);
+  });
 });
 
 describe("recomputeInvoiceTotalsFromDocumentLines", () => {

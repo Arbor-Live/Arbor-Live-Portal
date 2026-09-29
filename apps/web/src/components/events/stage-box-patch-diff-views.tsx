@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { PatchDiffPlan } from "@arbor/show-file";
 import { StageBoxPatchDiagram } from "@/components/events/stage-box-patch-diagram";
-import { cn } from "@/lib/utils";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 /**
  * Night patch (Default.snap layout) plus per-band changeover views.
@@ -23,23 +23,23 @@ export function StageBoxPatchDiffViews({ plan }: { plan: PatchDiffPlan }) {
 
   return (
     <div className="space-y-3" data-testid="stage-box-patch-diffs">
-      <div className="flex flex-wrap gap-1">
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        value={active}
+        onValueChange={(value) => {
+          if (value) setActive(value);
+        }}
+        className="flex-wrap"
+        aria-label="Patch view"
+      >
         {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActive(tab.id)}
-            className={cn(
-              "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-              active === tab.id
-                ? "bg-foreground text-background"
-                : "bg-muted text-muted-foreground hover:text-foreground",
-            )}
-          >
+          <ToggleGroupItem key={tab.id} value={tab.id}>
             {tab.label}
-          </button>
+          </ToggleGroupItem>
         ))}
-      </div>
+      </ToggleGroup>
 
       {active === "night" ? (
         <StageBoxPatchDiagram model={plan.night} />

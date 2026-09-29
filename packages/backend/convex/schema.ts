@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { riderContentFields, riderStatusValue } from "./lib/riderSchema";
 import { artistOrganizationTypeValue } from "./lib/organizationType";
 import { scheduleBlockTypeValue } from "./lib/scheduleBlockTypes";
+import { userStatusValue } from "./lib/userStatus";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -187,20 +188,25 @@ export const snakeIdValue = v.union(v.literal("A"), v.literal("B"));
 
 /**
  * Wing show-file patch plan for one event: whether the second snake is out
- * tonight and which box each instrument group lands on.
+ * tonight, and whether band scenes scope to changes.
+ *
+ * `sides` is retained for backward compatibility with plans saved before the
+ * patch was family-packed; placement is deterministic now, so it is unused.
  */
 export const patchPlanValue = v.object({
   secondSnake: v.boolean(),
   /** Scope band scenes to what changes (default true). */
   scopeScenes: v.optional(v.boolean()),
-  sides: v.object({
-    vox: v.optional(snakeIdValue),
-    guitar: v.optional(snakeIdValue),
-    bass: v.optional(snakeIdValue),
-    flex: v.optional(snakeIdValue),
-    keys: v.optional(snakeIdValue),
-    drums: v.optional(snakeIdValue),
-  }),
+  sides: v.optional(
+    v.object({
+      vox: v.optional(snakeIdValue),
+      guitar: v.optional(snakeIdValue),
+      bass: v.optional(snakeIdValue),
+      flex: v.optional(snakeIdValue),
+      keys: v.optional(snakeIdValue),
+      drums: v.optional(snakeIdValue),
+    }),
+  ),
 });
 
 const crewAvailabilityResponseStatusValue = v.union(
@@ -719,12 +725,19 @@ export default defineSchema({
      */
     needId: v.optional(v.id("eventArtistNeeds")),
     /**
-     * Artist lines: performers in the group. With `performanceHours` and `rateUsd`
-     * (per person per hour), `quantity` is person-hours (people × hours).
+     * Artist and crew lines: people on the line. With `performanceHours` and
+     * `rateUsd` (per person per hour), `quantity` is person-hours (people × hours).
      */
     memberCount: v.optional(v.number()),
-    /** Artist lines: hours the group is performing. */
+    /** Artist and crew lines: hours each person performs or works. */
     performanceHours: v.optional(v.number()),
+    /**
+     * Crew lines: "manual" marks hours added by hand on the quote, as opposed
+     * to lines generated from the linked Run of Show / series template. The
+     * editor restores manual lines on load; schedule lines are rebuilt from the
+     * schedule. Absent on older lines and on unlinked quotes.
+     */
+    crewSource: v.optional(v.literal("manual")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -776,6 +789,7 @@ export default defineSchema({
     seriesOtherCostUsd: v.optional(v.number()),
     dayOfLeadUserId: v.optional(v.string()),
     eventManagerUserId: v.optional(v.string()),
+    operationsLeadUserId: v.optional(v.string()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     notes: v.optional(v.string()),
     blockTemplates: v.optional(
@@ -854,6 +868,8 @@ export default defineSchema({
     budgetUsd: v.optional(v.number()),
     dayOfLeadUserId: v.optional(v.string()),
     eventManagerUserId: v.optional(v.string()),
+    /** Owns filling this event's lineup (the Open positions board). */
+    operationsLeadUserId: v.optional(v.string()),
     otPremium: v.optional(v.boolean()),
     crewCostBufferPercent: v.optional(v.number()),
     crewCostUsd: v.optional(v.number()),
@@ -939,7 +955,10 @@ export default defineSchema({
     title: v.optional(v.string()),
     phone: v.optional(v.string()),
     avatarStorageId: v.optional(v.id("_storage")),
-    active: v.boolean(),
+    /** @deprecated Use `status`. Retained only until the backfill migration runs. */
+    active: v.optional(v.boolean()),
+    /** Portal lifecycle. Optional while the `active` → `status` migration lands. */
+    status: v.optional(userStatusValue),
     /**
      * Short @handle for comment mentions (lowercase letters, digits, underscore).
      * Unique when set; omit/undefined when unset.
@@ -976,7 +995,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_userId", ["userId"])
-    .index("by_active", ["active"])
+    .index("by_defaultOrganizationId", ["defaultOrganizationId"])
     .index("by_username", ["username"]),
 
   userOrganizationMemberships: defineTable({
@@ -1359,7 +1378,7 @@ export default defineSchema({
     eventId: v.id("events"),
     organizationId: v.string(),
     message: v.optional(v.string()),
-    status: v.union(v.literal("submitted"), v.literal("dismissed")),
+    status: v.union(v.literal("submitted"), v.literal("dismissed"), v.literal("accepted")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
