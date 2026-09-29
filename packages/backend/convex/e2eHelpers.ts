@@ -30,6 +30,7 @@ import {
   allocateRequestNumber,
 } from "./lib/publicReferenceIds";
 import { listFulfillmentPackageBom } from "./lib/packageBom";
+import { eventStatusValue } from "./lib/eventStatus";
 
 const makeToken = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 24);
 const makeInvoiceSuffix = customAlphabet(
@@ -785,6 +786,14 @@ export const seedCrewedEventWithSchedule = mutation({
      * `assertTraineeIntroReady` requires before a trainee can be assigned.
      */
     traineeReady: v.optional(v.boolean()),
+    /** Event lifecycle status; defaults to tentative (no public event page). */
+    status: v.optional(eventStatusValue),
+    /** Adds a published marketing design with this caption (website-visible). */
+    marketingCaption: v.optional(v.string()),
+    /** Poster for that design; an http(s) URL is stored as-is. */
+    marketingImageUrl: v.optional(v.string()),
+    /** Seeds one open artist position on the event. */
+    openPosition: v.optional(v.boolean()),
   },
   returns: v.object({
     eventId: v.id("events"),
@@ -800,7 +809,7 @@ export const seedCrewedEventWithSchedule = mutation({
     const title = args.title?.trim() || `E2E Seeded Event ${now}`;
     const eventId = await ctx.db.insert("events", {
       title,
-      status: "tentative",
+      status: args.status ?? "tentative",
       visibility: "public",
       publicToken: makeToken(),
       startAt,
@@ -841,6 +850,32 @@ export const seedCrewedEventWithSchedule = mutation({
         updatedAt: now,
       });
       blockIds.push(blockId);
+    }
+
+    if (args.marketingCaption) {
+      await ctx.db.insert("eventMarketingDesigns", {
+        eventId,
+        status: "published",
+        caption: args.marketingCaption,
+        imageUrl: args.marketingImageUrl,
+        createdByUserId: "e2e",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    if (args.openPosition) {
+      await ctx.db.insert("eventArtistNeeds", {
+        eventId,
+        sortOrder: now,
+        label: "Headliner",
+        artistType: "no_preference",
+        genres: "indie, jazz",
+        status: "open",
+        createdByUserId: "e2e",
+        createdAt: now,
+        updatedAt: now,
+      });
     }
 
     if (args.traineeReady) {

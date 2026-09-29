@@ -161,6 +161,7 @@ import type * as lib_invoicePeople from "../lib/invoicePeople.js";
 import type * as lib_invoiceProfit from "../lib/invoiceProfit.js";
 import type * as lib_invoiceSeries from "../lib/invoiceSeries.js";
 import type * as lib_marketingContent from "../lib/marketingContent.js";
+import type * as lib_marketingDesigns from "../lib/marketingDesigns.js";
 import type * as lib_marketingLinks from "../lib/marketingLinks.js";
 import type * as lib_myEventActions from "../lib/myEventActions.js";
 import type * as lib_newsletterWeek from "../lib/newsletterWeek.js";
@@ -403,6 +404,7 @@ declare const fullApi: ApiFromModules<{
   "lib/invoiceProfit": typeof lib_invoiceProfit;
   "lib/invoiceSeries": typeof lib_invoiceSeries;
   "lib/marketingContent": typeof lib_marketingContent;
+  "lib/marketingDesigns": typeof lib_marketingDesigns;
   "lib/marketingLinks": typeof lib_marketingLinks;
   "lib/myEventActions": typeof lib_myEventActions;
   "lib/newsletterWeek": typeof lib_newsletterWeek;

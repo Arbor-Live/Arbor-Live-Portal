@@ -218,7 +218,10 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     lines.
   Artists browse still-open slots from `/dashboard/opportunities` and
   `submitInquiry` (`eventArtistInquiries`), which flags the slot `inquiring`
-  and emails Operations admins (`email/artistNeedInquiryEmails.ts`). Riders sit
+  and emails Operations admins (`email/artistNeedInquiryEmails.ts`). Each
+  opportunity shows the event's website-visible marketing design's caption and
+  poster, and links to the public event page only when the event is public and
+  publicly listable. Riders sit
   in their own card below the bill.
 - **Schedule blocks** (`eventScheduleBlocks`) are the planning unit: typed
   (`setup`/`show`/`strike`/`custom`), snapped to 15-minute increments, may
