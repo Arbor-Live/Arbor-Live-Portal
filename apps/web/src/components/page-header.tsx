@@ -29,10 +29,10 @@ export type Tone = "neutral" | "blue" | "emerald" | "amber" | "rose";
 
 export const TONE_PILL: Record<Tone, string> = {
   neutral: "border-border bg-muted text-muted-foreground",
-  blue: "border-status-blue-500/30 bg-status-blue-500/15 text-status-blue-700",
-  emerald: "border-status-emerald-500/30 bg-status-emerald-500/15 text-status-emerald-700",
-  amber: "border-status-amber-500/30 bg-status-amber-500/15 text-status-amber-700",
-  rose: "border-status-rose-500/30 bg-status-rose-500/15 text-status-rose-700",
+  blue: "border-status-blue-500/30 bg-status-blue-500/15 text-status-blue-700 dark:text-status-blue-200",
+  emerald: "border-status-emerald-500/30 bg-status-emerald-500/15 text-status-emerald-700 dark:text-status-emerald-200",
+  amber: "border-status-amber-500/30 bg-status-amber-500/15 text-status-amber-700 dark:text-status-amber-200",
+  rose: "border-status-rose-500/30 bg-status-rose-500/15 text-status-rose-700 dark:text-status-rose-200",
 };
 
 export const TONE_DOT: Record<Tone, string> = {

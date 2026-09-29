@@ -230,7 +230,7 @@ function TypeSheetBody({
         </Section>
 
         <Section title="Pricing">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-3 sm:items-end">
             <TextFormField name="msrpUsd" label="MSRP (USD)" type="number" />
             <TextFormField name="subsidizedRentalPriceUsd" label="Subsidized (5%) USD" type="number" />
             <TextFormField name="nonSubsidizedRentalPriceUsd" label="Normal (10%) USD" type="number" />
