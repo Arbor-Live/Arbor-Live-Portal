@@ -18,7 +18,7 @@ import {
   deletePublicEventContact,
   requirePublicEditableEvent,
 } from "./lib/publicEventContacts";
-import { isSingleSeriesBooking } from "./lib/invoiceArtistDays";
+import { isGroupBooking } from "./lib/invoiceArtistDays";
 import { getActivePaymentProofSubmissionForInvoice } from "./lib/paymentProof";
 import { invoiceDueEndMs } from "./lib/invoicePaymentStatus";
 import {
@@ -959,13 +959,14 @@ export const get = query({
 
 /**
  * How artist lines scope to days on this invoice: the fallback day for unscoped
- * lines (the first linked event) and whether one recurring series owns every day.
+ * lines (the first linked event) and whether one group (recurring or multi-day)
+ * owns every day.
  */
 export const getArtistLineDayScope = query({
   args: { invoiceId: v.id("invoices") },
   returns: v.object({
     firstEventId: v.union(v.id("events"), v.null()),
-    isSeriesBooking: v.boolean(),
+    isGroupBooking: v.boolean(),
   }),
   handler: async (ctx, args) => {
     await requireAuth(ctx);
@@ -973,7 +974,7 @@ export const getArtistLineDayScope = query({
     const events = await listEventsByInvoiceId(ctx, args.invoiceId);
     return {
       firstEventId: events[0]?._id ?? null,
-      isSeriesBooking: isSingleSeriesBooking(events),
+      isGroupBooking: isGroupBooking(events),
     };
   },
 });

@@ -114,11 +114,11 @@ function EventArtistBillPanel({
     for (const line of invoiceDetail?.lineItems ?? []) {
       if (line.section !== "artist") continue;
       // Match loadPublicQuoteView's day scoping: an explicit day wins; an
-      // unscoped line belongs to the first linked day, or every day for a series.
+      // unscoped line belongs to the first linked day, or every day for a group.
       if (line.eventId) {
         if (line.eventId !== eventId) continue;
       } else if (
-        !(artistDayScope?.isSeriesBooking || artistDayScope?.firstEventId === eventId)
+        !(artistDayScope?.isGroupBooking || artistDayScope?.firstEventId === eventId)
       ) {
         continue;
       }

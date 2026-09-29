@@ -27,7 +27,7 @@ import {
 import { copyDaySetupToTargets, listSiblingDayEvents } from "./lib/copyDaySetup";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
 import { deleteEventRecord } from "./lib/bookingChainDelete";
-import { propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, resolveEventGroupSummary, type SeriesEditScope, type SeriesOverviewAffectedOccurrence, type SeriesOverviewOverride } from "./lib/eventSeriesGeneration";
+import { listGroupDays, propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, resolveEventGroupSummary, type SeriesEditScope, type SeriesOverviewAffectedOccurrence, type SeriesOverviewOverride } from "./lib/eventSeriesGeneration";
 import { resolveSeriesMetadataForInvoice } from "./lib/invoiceSeries";
 import { assertNoOpenMicOverlap } from "./lib/openMicAddon";
 import {
@@ -386,9 +386,14 @@ export const getByInvoiceId = query({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const linkedEvents = await listEventsByInvoiceId(ctx, args.invoiceId);
-    const event = linkedEvents[0];
+    const invoiceEvents = await listEventsByInvoiceId(ctx, args.invoiceId);
+    const event = invoiceEvents[0];
     if (!event) return null;
+    // A grouped booking's days come from the group; otherwise the invoice's
+    // events are the linked days.
+    const linkedEvents = event.groupId
+      ? await listGroupDays(ctx, event.groupId)
+      : invoiceEvents;
 
     const eventIds = linkedEvents.map((row) => row._id);
     const blocks = (
