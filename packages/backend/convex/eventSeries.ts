@@ -19,9 +19,9 @@ import {
   resolveDefaultCrewHourlyRateUsd,
   seriesIntervalWeeks,
   shiftsToTemplates,
-  shouldApplySeriesUpdate,
   type SeriesEditScope,
 } from "./lib/eventSeriesGeneration";
+import { applyGroupTemplates, groupTemplateTargets } from "./lib/eventGroupTemplates";
 import {
   eventSeriesPositionTemplateValue,
   positionTemplateFromSlot,
@@ -357,19 +357,13 @@ export const regenerateFutureBlocks = mutation({
       await ctx.db.patch(args.id, { blockTemplates: args.blockTemplates, updatedAt: now });
     }
     const occurrences = await listOccurrencesForSeries(ctx, args.id);
-    const scope = args.scope as SeriesEditScope;
-    let updatedCount = 0;
-
-    for (const occurrence of occurrences) {
-      if (scope === "this") {
-        if (occurrence.occurrenceIndex !== args.fromOccurrenceIndex) continue;
-      } else if (!shouldApplySeriesUpdate(occurrence, scope, args.fromOccurrenceIndex, now)) {
-        continue;
-      }
-      if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
-      await replaceScheduleBlocksFromTemplates(ctx, occurrence._id, occurrence.startAt, templates, now);
-      updatedCount += 1;
-    }
+    const targets = groupTemplateTargets(
+      occurrences,
+      args.scope as SeriesEditScope,
+      args.fromOccurrenceIndex,
+      now,
+    );
+    const updatedCount = await applyGroupTemplates(ctx, targets, { blockTemplates: templates }, now);
     return { updatedCount };
   },
 });
@@ -440,7 +434,6 @@ export const regenerateFutureShifts = mutation({
       throw new Error("Apply schedule block templates before crew shift templates.");
     }
     const now = Date.now();
-    const defaultRate = await resolveDefaultCrewHourlyRateUsd(ctx);
     if (args.shiftTemplates && args.shiftTemplates.length > 0) {
       await ctx.db.patch(args.id, {
         shiftTemplates: args.shiftTemplates,
@@ -448,35 +441,18 @@ export const regenerateFutureShifts = mutation({
       });
     }
     const occurrences = await listOccurrencesForSeries(ctx, args.id);
-    const scope = args.scope as SeriesEditScope;
-    let updatedCount = 0;
-
-    for (const occurrence of occurrences) {
-      if (scope === "this") {
-        if (occurrence.occurrenceIndex !== args.fromOccurrenceIndex) continue;
-      } else if (!shouldApplySeriesUpdate(occurrence, scope, args.fromOccurrenceIndex, now)) {
-        continue;
-      }
-      if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
-      await replaceScheduleBlocksFromTemplates(
-        ctx,
-        occurrence._id,
-        occurrence.startAt,
-        blockTemplates,
-        now,
-      );
-      await replaceEmptyShiftsFromTemplates(
-        ctx,
-        occurrence._id,
-        occurrence.startAt,
-        templates,
-        blockTemplates,
-        defaultRate,
-        now,
-      );
-      await syncEventCrewCostUsd(ctx, occurrence._id, now);
-      updatedCount += 1;
-    }
+    const targets = groupTemplateTargets(
+      occurrences,
+      args.scope as SeriesEditScope,
+      args.fromOccurrenceIndex,
+      now,
+    );
+    const updatedCount = await applyGroupTemplates(
+      ctx,
+      targets,
+      { blockTemplates, shiftTemplates: templates },
+      now,
+    );
     return { updatedCount };
   },
 });
@@ -555,19 +531,18 @@ export const regenerateFuturePositions = mutation({
       await ctx.db.patch(args.id, { positionTemplates: args.positionTemplates, updatedAt: now });
     }
     const occurrences = await listOccurrencesForSeries(ctx, args.id);
-    const scope = args.scope as SeriesEditScope;
-    let updatedCount = 0;
-
-    for (const occurrence of occurrences) {
-      if (scope === "this") {
-        if (occurrence.occurrenceIndex !== args.fromOccurrenceIndex) continue;
-      } else if (!shouldApplySeriesUpdate(occurrence, scope, args.fromOccurrenceIndex, now)) {
-        continue;
-      }
-      if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
-      await applyPositionTemplates(ctx, occurrence._id, occurrence.startAt, templates, now);
-      updatedCount += 1;
-    }
+    const targets = groupTemplateTargets(
+      occurrences,
+      args.scope as SeriesEditScope,
+      args.fromOccurrenceIndex,
+      now,
+    );
+    const updatedCount = await applyGroupTemplates(
+      ctx,
+      targets,
+      { positionTemplates: templates },
+      now,
+    );
     return { updatedCount };
   },
 });
