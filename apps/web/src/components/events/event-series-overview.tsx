@@ -2,28 +2,21 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
-import { FormSaveBar } from "@/components/forms";
-import { Form } from "@/components/ui/form";
-import { TextFormField } from "@/components/forms/text-form-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
-import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
 import { formatEventStatusLabel, normalizeEventStatus } from "@/lib/event-status";
 import { formatOccurrencePreview } from "@/lib/event-series";
 import { formatUsd } from "@/lib/format";
-import {
-  eventSeriesCostsSchema,
-  type EventSeriesCostsFormValues,
-} from "@/lib/validations/event";
+import { EventSeriesCostsCard } from "@/components/events/event-series-costs-card";
 import { EventSeriesScheduleEditor } from "@/components/events/event-series-schedule-editor";
 import { EventSeriesShiftEditor } from "@/components/events/event-series-shift-editor";
 import { EventSeriesPositionEditor } from "@/components/events/event-series-position-editor";
@@ -33,49 +26,6 @@ function intervalLabel(weeks: number | undefined) {
   if (weeks === undefined) return "Recurring";
   if (weeks === 1) return "Weekly";
   return `Every ${weeks} weeks`;
-}
-
-function emptyCostsForm(): EventSeriesCostsFormValues {
-  return {
-    budgetUsd: "",
-    occurrenceBandsCostUsd: "",
-    occurrenceExternalRentalsCostUsd: "",
-    occurrenceOtherCostUsd: "",
-    occurrenceBudgetCrewCostUsd: "",
-    seriesBandsCostUsd: "",
-    seriesExternalRentalsCostUsd: "",
-    seriesOtherCostUsd: "",
-    propagateOccurrenceCosts: true,
-  };
-}
-
-type SeriesDoc = NonNullable<NonNullable<ReturnType<typeof useQuery<typeof api.eventSeries.get>>>["series"]>;
-
-function costsFromSeries(series: SeriesDoc): EventSeriesCostsFormValues {
-  if (!series) return emptyCostsForm();
-  return {
-    budgetUsd: series.budgetUsd !== undefined ? String(series.budgetUsd) : "",
-    occurrenceBandsCostUsd:
-      series.occurrenceBandsCostUsd !== undefined ? String(series.occurrenceBandsCostUsd) : "",
-    occurrenceExternalRentalsCostUsd:
-      series.occurrenceExternalRentalsCostUsd !== undefined
-        ? String(series.occurrenceExternalRentalsCostUsd)
-        : "",
-    occurrenceOtherCostUsd:
-      series.occurrenceOtherCostUsd !== undefined ? String(series.occurrenceOtherCostUsd) : "",
-    occurrenceBudgetCrewCostUsd:
-      series.occurrenceBudgetCrewCostUsd !== undefined
-        ? String(series.occurrenceBudgetCrewCostUsd)
-        : "",
-    seriesBandsCostUsd: series.seriesBandsCostUsd !== undefined ? String(series.seriesBandsCostUsd) : "",
-    seriesExternalRentalsCostUsd:
-      series.seriesExternalRentalsCostUsd !== undefined
-        ? String(series.seriesExternalRentalsCostUsd)
-        : "",
-    seriesOtherCostUsd:
-      series.seriesOtherCostUsd !== undefined ? String(series.seriesOtherCostUsd) : "",
-    propagateOccurrenceCosts: true,
-  };
 }
 
 export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> }) {
@@ -89,7 +39,6 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
   const addOccurrences = useMutation(api.eventSeries.addOccurrences);
   const cancelFuture = useMutation(api.eventSeries.cancelFuture);
   const endSeries = useMutation(api.eventSeries.endSeries);
-  const updateSeriesCosts = useMutation(api.eventSeries.updateSeriesCosts);
   const linkInvoice = useMutation(api.eventSeries.linkInvoice);
   const unlinkInvoice = useMutation(api.eventSeries.unlinkInvoice);
   const createDraftForSeries = useMutation(api.invoices.createDraftForSeries);
@@ -97,20 +46,8 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
 
   const [invoiceLinkOverride, setInvoiceLinkOverride] = useState<string | null>(null);
 
-  const costsForm = useConvexForm<EventSeriesCostsFormValues>({
-    schema: eventSeriesCostsSchema,
-    defaultValues: emptyCostsForm(),
-    mode: "onChange",
-  });
-
   const [additionalCount, setAdditionalCount] = useState("5");
   const [cancelFromIndex, setCancelFromIndex] = useState("0");
-
-  useEffect(() => {
-    if (!data?.series) return;
-    if (costsForm.formState.isDirty) return;
-    costsForm.reset(costsFromSeries(data.series));
-  }, [data?.series, costsForm]);
 
   // The "link draft invoice" picker only renders while no invoice is linked;
   // derive its value from the series rather than syncing it in an effect.
@@ -144,32 +81,6 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
     const cancelled = rows.filter((row) => normalizeEventStatus(row.status) === "cancelled").length;
     return { confirmed, cancelled, total: rows.length };
   }, [data?.occurrences]);
-
-  const onSaveCosts = costsForm.submitMutation(async (values) => {
-    await updateSeriesCosts({
-      id: seriesId,
-      budgetUsd: values.budgetUsd.trim() ? Number(values.budgetUsd) : undefined,
-      occurrenceBandsCostUsd: values.occurrenceBandsCostUsd.trim()
-        ? Number(values.occurrenceBandsCostUsd)
-        : undefined,
-      occurrenceExternalRentalsCostUsd: values.occurrenceExternalRentalsCostUsd.trim()
-        ? Number(values.occurrenceExternalRentalsCostUsd)
-        : undefined,
-      occurrenceOtherCostUsd: values.occurrenceOtherCostUsd.trim()
-        ? Number(values.occurrenceOtherCostUsd)
-        : undefined,
-      occurrenceBudgetCrewCostUsd: values.occurrenceBudgetCrewCostUsd.trim()
-        ? Number(values.occurrenceBudgetCrewCostUsd)
-        : undefined,
-      seriesBandsCostUsd: values.seriesBandsCostUsd.trim() ? Number(values.seriesBandsCostUsd) : undefined,
-      seriesExternalRentalsCostUsd: values.seriesExternalRentalsCostUsd.trim()
-        ? Number(values.seriesExternalRentalsCostUsd)
-        : undefined,
-      seriesOtherCostUsd: values.seriesOtherCostUsd.trim() ? Number(values.seriesOtherCostUsd) : undefined,
-      propagateOccurrenceCosts: values.propagateOccurrenceCosts,
-    });
-    notify.success("Series costs saved.");
-  });
 
   if (data === undefined) {
     return <p className="text-sm text-muted-foreground">Loading series...</p>;
@@ -419,73 +330,7 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recurring &amp; template costs</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Form {...costsForm}>
-            <form
-              onSubmit={costsForm.handleSubmit(onSaveCosts)}
-              className="grid gap-3 md:grid-cols-3"
-            >
-              <div className="space-y-1 md:col-span-3">
-                <TextFormField name="budgetUsd" label="Series budget (USD)" />
-              </div>
-              <div className="space-y-1">
-                <TextFormField name="occurrenceBandsCostUsd" label="Per-occurrence artists (USD)" />
-                <p className="text-xs text-muted-foreground">Default artists cost applied to each event.</p>
-              </div>
-              <div className="space-y-1">
-                <TextFormField name="occurrenceBudgetCrewCostUsd" label="Per-occurrence budget crew (USD)" />
-                <p className="text-xs text-muted-foreground">
-                  Standard crew cost assumed for budgeting until shifts are staffed.
-                </p>
-              </div>
-              <div className="space-y-1">
-                <TextFormField
-                  name="occurrenceExternalRentalsCostUsd"
-                  label="Per-occurrence external rentals (USD)"
-                />
-              </div>
-              <div className="space-y-1">
-                <TextFormField name="occurrenceOtherCostUsd" label="Per-occurrence other costs (USD)" />
-                <p className="text-xs text-muted-foreground">Default other costs applied to each event.</p>
-              </div>
-              <div className="space-y-1">
-                <TextFormField name="seriesBandsCostUsd" label="Series-wide artists (USD)" />
-                <p className="text-xs text-muted-foreground">Counted once for the whole series.</p>
-              </div>
-              <div className="space-y-1">
-                <TextFormField
-                  name="seriesExternalRentalsCostUsd"
-                  label="Series-wide external rentals (USD)"
-                />
-              </div>
-              <div className="space-y-1">
-                <TextFormField name="seriesOtherCostUsd" label="Series-wide other costs (USD)" />
-              </div>
-              <label className="flex items-center gap-2 text-sm md:col-span-3">
-                <input
-                  type="checkbox"
-                  checked={costsForm.watch("propagateOccurrenceCosts")}
-                  onChange={(event) =>
-                    costsForm.setValue("propagateOccurrenceCosts", event.target.checked, {
-                      shouldDirty: true,
-                    })
-                  }
-                />
-                Push per-occurrence template costs to linked events (skips detached/cancelled)
-              </label>
-              <div className="md:col-span-3">
-                <Button type="submit" disabled={costsForm.saveStatus === "saving"}>
-                  Save series costs
-                </Button>
-              </div>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
+      <EventSeriesCostsCard seriesId={seriesId} series={series} />
 
       <EventSeriesScheduleEditor
         seriesId={seriesId}
@@ -599,19 +444,6 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
           </div>
         </CardContent>
       </Card>
-
-      <FormSaveBar
-        tier="C"
-        saveStatus={costsForm.saveStatus}
-        saveError={costsForm.saveError}
-        isDirty={costsForm.formState.isDirty}
-        saveLabel="Save series costs"
-        onSave={() => void costsForm.handleSubmit(onSaveCosts)()}
-        onDiscard={() => {
-          costsForm.reset(costsFromSeries(series));
-        }}
-        onRetry={() => void costsForm.handleSubmit(onSaveCosts)()}
-      />
     </div>
   );
 }

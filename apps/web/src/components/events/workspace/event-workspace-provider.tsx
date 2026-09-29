@@ -256,6 +256,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     : draft.hostGroupId;
 
   const seriesMeta = eventData?.series ?? null;
+  const groupMeta = eventData?.group ?? null;
   const canEdit = eventData?.canEdit ?? false;
   const readOnly = eventData !== undefined && !canEdit;
 
@@ -562,6 +563,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     dayCount,
     userSelectOptions,
     seriesMeta,
+    groupMeta,
     linkedInvoice,
     effectivePrimaryHostGroupId,
     editScopeRequest,

@@ -13,6 +13,7 @@ import {
   computeOccurrenceStarts,
   EVENT_TIMEZONE,
   materializeOccurrence,
+  listGroupDays,
   propagateInvoiceIdToSeriesOccurrences,
   replaceEmptyShiftsFromTemplates,
   replaceScheduleBlocksFromTemplates,
@@ -89,11 +90,7 @@ function resolveRentalFulfillmentMode(
 }
 
 async function listOccurrencesForSeries(ctx: QueryCtx | MutationCtx, seriesId: Id<"eventSeries">) {
-  const rows = await ctx.db
-    .query("events")
-    .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", seriesId))
-    .take(200);
-  return rows.sort((a, b) => (a.occurrenceIndex ?? 0) - (b.occurrenceIndex ?? 0));
+  return await listGroupDays(ctx, seriesId);
 }
 
 async function computeShiftStats(ctx: QueryCtx | MutationCtx, eventId: Id<"events">) {

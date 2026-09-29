@@ -6,9 +6,10 @@ import {
   PORTAL_TIMEZONE,
 } from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { syncEventCrewCostUsd } from "./crewCost";
 import { detachInvoiceFromAdditionalLinks } from "./eventInvoiceLinks";
+import { eventGroupKind } from "./eventGroups";
 import { syncEventStatusForLinkedInvoice, type EventStatus } from "./eventStatus";
 import {
   planPositionTemplateApplication,
@@ -27,6 +28,55 @@ export const EVENT_TIMEZONE = PORTAL_TIMEZONE;
  */
 export function seriesIntervalWeeks(series: Doc<"eventSeries">) {
   return series.intervalWeeks ?? 1;
+}
+
+/**
+ * A group's days, soonest first. Reads the group link (`groupId`), falling back
+ * to the older `seriesId` for rows the backfill hasn't reached yet.
+ */
+export async function listGroupDays(
+  ctx: QueryCtx | MutationCtx,
+  groupId: Id<"eventSeries">,
+): Promise<Doc<"events">[]> {
+  const byGroup = await ctx.db
+    .query("events")
+    .withIndex("by_groupId_and_occurrenceIndex", (q) => q.eq("groupId", groupId))
+    .take(200);
+  const rows =
+    byGroup.length > 0
+      ? byGroup
+      : await ctx.db
+          .query("events")
+          .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", groupId))
+          .take(200);
+  return rows.sort(
+    (a, b) => (a.occurrenceIndex ?? 0) - (b.occurrenceIndex ?? 0) || a.startAt - b.startAt,
+  );
+}
+
+/** Lightweight group context for an event's page (display only). */
+export async function resolveEventGroupSummary(
+  ctx: QueryCtx | MutationCtx,
+  event: Doc<"events">,
+): Promise<{
+  _id: Id<"eventSeries">;
+  title: string;
+  kind: "recurring" | "multi_day";
+  dayIndex: number;
+  dayCount: number;
+} | null> {
+  if (!event.groupId) return null;
+  const group = await ctx.db.get(event.groupId);
+  if (!group) return null;
+  const days = await listGroupDays(ctx, group._id);
+  const index = days.findIndex((day) => day._id === event._id);
+  return {
+    _id: group._id,
+    title: group.title,
+    kind: eventGroupKind(group),
+    dayIndex: index >= 0 ? index : (event.occurrenceIndex ?? 0),
+    dayCount: days.length,
+  };
 }
 
 export type EventSeriesBlockTemplate = {

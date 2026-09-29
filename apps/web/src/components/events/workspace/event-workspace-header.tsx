@@ -6,6 +6,7 @@ import {
   ArrowCounterClockwiseIcon,
   BuildingsIcon,
   CalendarBlankIcon,
+  CalendarDotsIcon,
   CopySimpleIcon,
   GlobeIcon,
   InfoIcon,
@@ -71,6 +72,7 @@ export function EventWorkspaceHeader() {
     readOnly,
     isAdmin,
     seriesMeta,
+    groupMeta,
     userSelectOptions,
   } = workspace;
   const [venueOpen, setVenueOpen] = useState(false);
@@ -89,7 +91,8 @@ export function EventWorkspaceHeader() {
     ? userSelectOptions.find((option) => option.value === draft.managerUserId)?.label
     : undefined;
   const hasSiblingDays = (siblingDays?.length ?? 0) > 1;
-  const showMenu = hasSiblingDays || Boolean(seriesMeta) || isAdmin;
+  const showsGroupOnly = Boolean(groupMeta) && !seriesMeta;
+  const showMenu = hasSiblingDays || Boolean(seriesMeta) || Boolean(groupMeta) || isAdmin;
 
   return (
     <PageHeader
@@ -120,6 +123,14 @@ export function EventWorkspaceHeader() {
                   </DropdownMenuItem>
                 ) : null}
               </>
+            ) : null}
+            {showsGroupOnly && groupMeta ? (
+              <DropdownMenuItem asChild>
+                <Link href={`/dashboard/events/groups/${groupMeta._id}`}>
+                  <CalendarDotsIcon />
+                  Open group
+                </Link>
+              </DropdownMenuItem>
             ) : null}
             {isAdmin ? (
               <>
@@ -156,6 +167,17 @@ export function EventWorkspaceHeader() {
               {seriesMeta.seriesDetached ? " · detached" : ""}
               <span className="sr-only"> — </span>
               <span className="underline underline-offset-2">View series</span>
+            </Link>
+          ) : null}
+          {showsGroupOnly && groupMeta ? (
+            <Link
+              href={`/dashboard/events/groups/${groupMeta._id}`}
+              className="inline-flex h-7 items-center gap-1.5 border px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <CalendarDotsIcon className="size-3.5" />
+              Part of {groupMeta.title} · Day {groupMeta.dayIndex + 1} of {groupMeta.dayCount}
+              <span className="sr-only"> — </span>
+              <span className="underline underline-offset-2">View group</span>
             </Link>
           ) : null}
         </>

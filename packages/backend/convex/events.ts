@@ -27,7 +27,7 @@ import {
 import { copyDaySetupToTargets, listSiblingDayEvents } from "./lib/copyDaySetup";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
 import { deleteEventRecord } from "./lib/bookingChainDelete";
-import { propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, type SeriesEditScope, type SeriesOverviewAffectedOccurrence, type SeriesOverviewOverride } from "./lib/eventSeriesGeneration";
+import { propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, resolveEventGroupSummary, type SeriesEditScope, type SeriesOverviewAffectedOccurrence, type SeriesOverviewOverride } from "./lib/eventSeriesGeneration";
 import { resolveSeriesMetadataForInvoice } from "./lib/invoiceSeries";
 import { assertNoOpenMicOverlap } from "./lib/openMicAddon";
 import {
@@ -341,6 +341,7 @@ export const get = query({
       canEdit,
       event: { ...event, status: normalizeEventStatus(event.status) },
       linkedInvoices,
+      group: await resolveEventGroupSummary(ctx, event),
       series:
         event.seriesId !== undefined
           ? await (async () => {
