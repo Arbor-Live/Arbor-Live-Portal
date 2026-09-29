@@ -70,11 +70,12 @@ export function LineColumnHeads({ item = "Item", qty = "Qty", rate = "Rate" }: {
     <div
       className={cn(
         LINE_GRID,
-        "hidden px-3 py-1.5 text-2xs font-medium tracking-wide text-muted-foreground uppercase @3xl/lines:grid",
+        "px-3 py-1.5 text-2xs font-medium tracking-wide text-muted-foreground uppercase",
       )}
       aria-hidden
     >
-      <span>{item}</span>
+      {/* Stacked rows put the item on its own line, so only the number columns need heads. */}
+      <span className="hidden @3xl/lines:block">{item}</span>
       <span>{qty}</span>
       <span>{rate}</span>
       <span className="text-right">Amount</span>

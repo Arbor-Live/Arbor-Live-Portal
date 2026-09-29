@@ -150,6 +150,13 @@ export function InvoiceEditorHeader({
     if (next === "void") return handleVoid();
     if (status === "void") return handleUnvoid();
     if (next === "finalized") {
+      // A standalone quote can't go back to draft from here, so ask first.
+      const confirmed = await confirm({
+        title: `Finalize ${invoice?.invoiceNumber ?? "this invoice"}?`,
+        description: "It moves out of draft. Only voiding moves it again.",
+        confirmLabel: "Finalize",
+      });
+      if (!confirmed) return;
       await run(() => finalizeInvoice({ id: activeInvoiceId }), "Invoice finalized.", "Could not finalize the invoice.");
       return;
     }

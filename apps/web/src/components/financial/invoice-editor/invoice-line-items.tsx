@@ -148,7 +148,7 @@ export function InvoiceLineItems({ draft }: { draft: InvoiceDraft }) {
       <CardContent className="@container/lines space-y-3">
         {isEmpty ? (
           <p className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-            No line items yet. Use Add line for equipment, artists, crew or fees. The quote saves once it has a line.
+            No line items yet. Use Add line for equipment, artists, crew or fees. A quote needs at least one line to save.
           </p>
         ) : null}
         <EquipmentLines draft={draft} />
