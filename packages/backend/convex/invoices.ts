@@ -923,6 +923,8 @@ export const listEnriched = query({
           clientGroupName: invoice.clientGroupName,
           clientContactName: invoice.clientContactName,
           createdAt: invoice.createdAt,
+          clientReviewReadyAt: invoice.clientReviewReadyAt,
+          changesRequestedAt: invoice.changesRequestedAt,
           seriesTitle,
           linkedEventTitle,
         };

@@ -106,6 +106,7 @@ const financialHubSubItems: NavSubItem[] = [
   { title: "My Timecards", url: "/dashboard/timecards/mine" },
   { title: "Host Organizations", url: "/dashboard/financial-hub/organizations" },
   { title: "Create Invoice", url: "/dashboard/financial-hub/invoices/new" },
+  { title: "Settings", url: "/dashboard/financial-hub/settings" },
 ]
 
 const eventsSubItems: NavSubItem[] = [
