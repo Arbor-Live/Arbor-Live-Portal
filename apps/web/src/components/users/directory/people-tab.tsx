@@ -2,11 +2,19 @@
 
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "convex/react";
-import { CaretRightIcon, DotsThreeIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, DotsThreeIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { cn } from "@/lib/utils";
 import { UserAvatar } from "@/components/account/user-avatar";
 import { ListRow } from "@/components/list-row";
+import {
+  activeFilters,
+  FilterBar,
+  matchesFilter,
+  type FilterDefinition,
+  type FilterState,
+} from "@/components/filter-bar";
+import { USER_DISCIPLINE_OPTIONS, USER_VERTICAL_OPTIONS } from "@/lib/validations/users";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,10 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PersonSheet, usePersonActions } from "@/components/users/directory/person-sheet";
 import {
@@ -38,6 +43,11 @@ import {
 import { OrgFilterSelect, useUsersDirectory } from "@/components/users/directory/users-directory-shell";
 
 type AccessFilter = UserStatus | "all";
+
+const ONBOARDING_OPTIONS = [
+  { value: "incomplete", label: "Not finished" },
+  { value: "complete", label: "Finished or waived" },
+];
 
 function matchesSearch(user: AdminUser, query: string) {
   if (!query) return true;
@@ -68,7 +78,7 @@ export function PeopleTab() {
   const [search, setSearch] = useState("");
   const query = useDeferredValue(search.trim().toLowerCase());
   const [access, setAccess] = useState<AccessFilter>("active");
-  const [onboardingOnly, setOnboardingOnly] = useState(false);
+  const [filters, setFilters] = useState<FilterState>({});
 
   const onboardingByUserId = useMemo(() => {
     const map = new Map<string, CrewOnboardingRow>();
@@ -87,14 +97,40 @@ export function PeopleTab() {
     return counts;
   }, [users, onboardingByUserId]);
 
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () => [
+      { id: "onboarding", label: "Onboarding", options: ONBOARDING_OPTIONS, single: true },
+      {
+        id: "role",
+        label: "Role",
+        options: [...new Set((users ?? []).map((user) => user.role))]
+          .sort((a, b) => a.localeCompare(b))
+          .map((role) => ({ value: role, label: roleLabel(role) })),
+      },
+      { id: "vertical", label: "Vertical", options: USER_VERTICAL_OPTIONS.map((value) => ({ value, label: value })) },
+      {
+        id: "discipline",
+        label: "Discipline",
+        options: USER_DISCIPLINE_OPTIONS.map((value) => ({ value, label: value })),
+      },
+    ],
+    [users],
+  );
+
   const rows = useMemo(
     () =>
       (users ?? []).filter((user) => {
         if (access !== "all" && user.status !== access) return false;
-        if (onboardingOnly && !isOnboardingIncomplete(onboardingByUserId.get(user.id))) return false;
-        return matchesSearch(user, query);
+        const onboarding = isOnboardingIncomplete(onboardingByUserId.get(user.id)) ? "incomplete" : "complete";
+        return (
+          matchesFilter(filters.onboarding, onboarding) &&
+          matchesFilter(filters.role, user.role) &&
+          matchesFilter(filters.vertical, user.verticals) &&
+          matchesFilter(filters.discipline, user.disciplines) &&
+          matchesSearch(user, query)
+        );
       }),
-    [users, access, onboardingOnly, onboardingByUserId, query],
+    [users, access, filters, onboardingByUserId, query],
   );
 
   // Resolve against the unfiltered list, so changing someone's status keeps
@@ -115,21 +151,19 @@ export function PeopleTab() {
     }
   }, [users, selectedId, selectedUser, filterOrgId, setOrgFilter, setSelectedId]);
 
-  const filtersActive = Boolean(query) || access !== "all" || onboardingOnly;
+  const filtersActive = Boolean(query) || access !== "all" || Object.keys(activeFilters(filters)).length > 0;
 
   return (
     <div className="space-y-3" data-testid="people-tab">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full sm:w-64">
-          <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            aria-label="Search people"
-            placeholder="Search name, email, team…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search name, email, team…"
+        searchLabel="Search people"
+        filters={filterDefinitions}
+        value={filters}
+        onChange={setFilters}
+      >
         <OrgFilterSelect />
         <ToggleGroup
           type="single"
@@ -146,13 +180,7 @@ export function PeopleTab() {
           ))}
           <ToggleGroupItem value="all">All</ToggleGroupItem>
         </ToggleGroup>
-        <div className="flex items-center gap-2">
-          <Switch id="people-onboarding-only" checked={onboardingOnly} onCheckedChange={setOnboardingOnly} />
-          <Label htmlFor="people-onboarding-only" className="font-normal">
-            Onboarding incomplete
-          </Label>
-        </div>
-      </div>
+      </FilterBar>
 
       {users === undefined ? (
         <div className="space-y-2">
