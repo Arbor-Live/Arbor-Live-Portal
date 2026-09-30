@@ -382,6 +382,10 @@ Event types (drive which workspace tabs and quick-add blocks appear):
       approval to pending, and emails the client `quote_updated` (old → new
       total).
     - `keep_approval`: needs a note; saves a `change_kept_approval` version.
+    - `match_approval`: keeps the new lines and sets one amount discount
+      (new subtotal − approved total) so the total stays what the client
+      approved; saves a `matched_approval` version. Only offered when the total
+      went up (e.g. crew repriced at the lead rate).
   - Manager, contact, due date and notes save freely.
   - `recalculateTotals`, `recalculateSeriesEquipmentLines` and
     `resyncEquipmentFromPullList` refuse to change an approved quote, and point
