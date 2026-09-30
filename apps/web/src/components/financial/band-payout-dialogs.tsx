@@ -187,6 +187,7 @@ export function EditPayoutDialog({
               embedded
               showStatus={false}
               showPayee={false}
+              actionsClassName="justify-end"
               eventId={row.eventId}
               organizationId={row.organizationId}
               payment={row}

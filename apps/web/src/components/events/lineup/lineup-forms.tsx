@@ -15,6 +15,7 @@ import {
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import { formatUsd } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
 import { resolvePayoutDefaults } from "@/lib/band-payout-defaults";
 import { eventBandOnboardingInviteSchema, eventBandPayoutFieldsSchema } from "@/lib/validations/bands";
@@ -396,6 +397,7 @@ export function EventBandPaymentForm({
   embedded = false,
   showPayee = true,
   showStatus = true,
+  actionsClassName,
   onSaved,
   onCancel,
 }: {
@@ -415,6 +417,8 @@ export function EventBandPaymentForm({
   showPayee?: boolean;
   /** Hide the status card where the surrounding panel already shows payout status. */
   showStatus?: boolean;
+  /** Extra classes for the action row, e.g. `justify-end` inside a dialog footer. */
+  actionsClassName?: string;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -719,7 +723,7 @@ export function EventBandPaymentForm({
       </div>
 
 
-      <div className="flex flex-wrap gap-2">
+      <div className={cn("flex flex-wrap gap-2", actionsClassName)}>
         {payment?.status !== "paid" ? (
           <Button type="button" onClick={() => void onSave()} disabled={busy}>
             {payment ? "Save payout" : "Save payout"}
