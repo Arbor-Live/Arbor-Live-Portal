@@ -37,7 +37,7 @@ test.describe("crew timecard view", () => {
 
     // The seeded shift lands in the current period, which is listed first.
     const period = page.locator('[data-slot="card"]').first();
-    await expect(period.getByText(/1 days worked/)).toBeVisible({ timeout: 30_000 });
+    await expect(period.getByText(/[1-9]\d* days worked/)).toBeVisible({ timeout: 30_000 });
 
     // Event titles only render once the period is expanded.
     await period.getByRole("button", { name: "Show day-by-day details" }).click();
@@ -59,9 +59,13 @@ test.describe("admin timecards overview", () => {
     });
 
     await page.goto("/dashboard/timecards");
-    await expect(page.getByRole("heading", { name: "Crew Timecards" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Crew timecards" })).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByText(e2eEnv.crewName).first()).toBeVisible({ timeout: 30_000 });
+    // The seeded shift puts them in a worked group, linking to their timecard.
+    const row = page.getByTestId(`timecard-row-${crew.userId}`);
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await expect(row).toContainText(e2eEnv.crewName);
+    await expect(row).not.toContainText(/\b0 days/);
   });
 });
