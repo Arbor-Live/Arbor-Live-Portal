@@ -6,6 +6,7 @@ import {
   ArrowCounterClockwiseIcon,
   BuildingsIcon,
   CalendarBlankIcon,
+  CalendarDotsIcon,
   CopySimpleIcon,
   GlobeIcon,
   InfoIcon,
@@ -89,6 +90,7 @@ export function EventWorkspaceHeader() {
     ? userSelectOptions.find((option) => option.value === draft.managerUserId)?.label
     : undefined;
   const hasSiblingDays = (siblingDays?.length ?? 0) > 1;
+  const multiDayGroup = seriesMeta?.kind === "multi_day";
   const showMenu = hasSiblingDays || Boolean(seriesMeta) || isAdmin;
 
   return (
@@ -100,23 +102,23 @@ export function EventWorkspaceHeader() {
         showMenu ? (
           <>
             {hasSiblingDays ? (
-              <DropdownMenuItem disabled={readOnly} onSelect={() => void workspace.copySetupToOtherDays()}>
+              <DropdownMenuItem disabled={readOnly} onSelect={() => workspace.setApplySetupOpen(true)}>
                 <CopySimpleIcon />
-                Copy setup to other days
+                Apply this day&apos;s setup to other days…
               </DropdownMenuItem>
             ) : null}
             {seriesMeta ? (
               <>
                 <DropdownMenuItem asChild>
                   <Link href={`/dashboard/events/series/${seriesMeta._id}`}>
-                    <RepeatIcon />
-                    Open series
+                    {multiDayGroup ? <CalendarDotsIcon /> : <RepeatIcon />}
+                    {multiDayGroup ? "Open booking" : "Open series"}
                   </Link>
                 </DropdownMenuItem>
                 {seriesMeta.seriesDetached ? (
                   <DropdownMenuItem disabled={readOnly} onSelect={() => void workspace.resetToSeries()}>
                     <ArrowCounterClockwiseIcon />
-                    Reset to series template
+                    {multiDayGroup ? "Reset to booking template" : "Reset to series template"}
                   </DropdownMenuItem>
                 ) : null}
               </>
@@ -151,11 +153,24 @@ export function EventWorkspaceHeader() {
               href={`/dashboard/events/series/${seriesMeta._id}`}
               className="inline-flex h-7 items-center gap-1.5 border px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              <RepeatIcon className="size-3.5" />
-              Recurring · occurrence {(seriesMeta.occurrenceIndex ?? 0) + 1} of {seriesMeta.totalOccurrences}
+              {multiDayGroup ? (
+                <>
+                  <CalendarDotsIcon className="size-3.5" />
+                  Part of {seriesMeta.title} · Day {(seriesMeta.occurrenceIndex ?? 0) + 1} of{" "}
+                  {seriesMeta.totalOccurrences}
+                </>
+              ) : (
+                <>
+                  <RepeatIcon className="size-3.5" />
+                  Recurring · occurrence {(seriesMeta.occurrenceIndex ?? 0) + 1} of{" "}
+                  {seriesMeta.totalOccurrences}
+                </>
+              )}
               {seriesMeta.seriesDetached ? " · detached" : ""}
               <span className="sr-only"> — </span>
-              <span className="underline underline-offset-2">View series</span>
+              <span className="underline underline-offset-2">
+                {multiDayGroup ? "View booking" : "View series"}
+              </span>
             </Link>
           ) : null}
         </>

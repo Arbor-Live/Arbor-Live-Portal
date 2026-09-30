@@ -21,6 +21,7 @@ import {
   usernameFromEmail,
 } from "./lib/username";
 import { deleteEventRecord, deleteInvoiceRecord } from "./lib/bookingChainDelete";
+import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
 import { listEventsLinkedToRequest } from "./lib/bookingDayLoad";
 import { inviteAcceptUrl } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
@@ -4159,6 +4160,96 @@ export const getOccurrenceScheduleBlocks = query({
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .collect();
     return blocks.map((b) => ({ blockType: b.blockType, label: b.label }));
+  },
+});
+
+/**
+ * Test-only: a two-day booking (one draft invoice, two upcoming day events),
+ * grouped the way a real booking is (`syncMultiDayGroupForInvoice`).
+ */
+export const seedMultiDayBooking = mutation({
+  args: { title: v.string() },
+  returns: v.object({
+    invoiceId: v.id("invoices"),
+    groupId: v.id("eventSeries"),
+    eventIds: v.array(v.id("events")),
+    groupPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const invoiceId = await ctx.db.insert("invoices", {
+      invoiceNumber: `ALINV-${makeInvoiceSuffix()}`,
+      status: "draft",
+      issueDate: new Date(now).toISOString().slice(0, 10),
+      managerUserId: "e2e-manager",
+      managerName: "E2E Admin",
+      managerEmail: "e2e-admin@arborlive.test",
+      clientGroupName: "E2E Multi-day Client",
+      clientEmail: "e2e-client@example.com",
+      equipmentPricingMode: "nonSubsidized",
+      crewRateMode: "normal",
+      discountType: "amount",
+      discountValue: 0,
+      discountAmountUsd: 0,
+      equipmentSubtotalUsd: 0,
+      externalRentalsSubtotalUsd: 0,
+      artistsSubtotalUsd: 0,
+      crewSubtotalUsd: 0,
+      feesSubtotalUsd: 0,
+      subtotalUsd: 0,
+      totalUsd: 0,
+      publicApprovalToken: makeToken(),
+      clientApprovalStatus: "pending",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const eventIds: Id<"events">[] = [];
+    for (const [index, daysAhead] of [20, 21].entries()) {
+      const window = futureEventWindow(daysAhead);
+      eventIds.push(
+        await ctx.db.insert("events", {
+          title: `${args.title} — Day ${index + 1}`,
+          status: "tentative",
+          visibility: "public",
+          publicToken: makeToken(),
+          invoiceId,
+          startAt: window.startAt,
+          endAt: window.endAt,
+          timezone: "America/Los_Angeles",
+          spansMultipleDays: false,
+          setupOnly: false,
+          strikeOnly: false,
+          requiresShowWindow: true,
+          venueName: "E2E Multi-day Venue",
+          eventType: "Crewed Event",
+          createdAt: now,
+          updatedAt: now,
+        }),
+      );
+    }
+    const groupId = await syncMultiDayGroupForInvoice(ctx, invoiceId, now);
+    if (!groupId) throw new Error("Expected a multi-day group.");
+    return {
+      invoiceId,
+      groupId,
+      eventIds,
+      groupPath: `/dashboard/events/series/${groupId}`,
+    };
+  },
+});
+
+/** Test-only: an event's positions (label + template key). */
+export const getEventPositions = query({
+  args: { eventId: v.id("events") },
+  returns: v.array(v.object({ label: v.string(), templateKey: v.union(v.string(), v.null()) })),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const rows = await ctx.db
+      .query("eventArtistNeeds")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(100);
+    return rows.map((row) => ({ label: row.label ?? "", templateKey: row.templateKey ?? null }));
   },
 });
 

@@ -58,6 +58,13 @@ test.describe("event series edit scope", () => {
     // --- Navigate to series overview page ---
     await page.getByRole("link", { name: "View series" }).click();
     await page.waitForURL(new RegExp(`/dashboard/events/series/${series.seriesId}`), { timeout: 30_000 });
+    await expect(page.getByTestId("event-group-days-summary")).toContainText("3 occurrences", {
+      timeout: 30_000,
+    });
+    await page.getByRole("link", { name: /Run of Show template/ }).click();
+    await page.waitForURL(new RegExp(`/dashboard/events/series/${series.seriesId}/run-of-show`), {
+      timeout: 30_000,
+    });
     await expect(page.getByText("Series schedule template")).toBeVisible({ timeout: 30_000 });
 
     // --- Step 1: apply blocks to all 3 occurrences via Quick Add + scope "all" ---
@@ -82,28 +89,15 @@ test.describe("event series edit scope", () => {
     await templateBlocks.getByRole("button", { name: /^Remove / }).nth(2).click();
     await expect(templateBlocks.getByRole("button", { name: /^Remove / })).toHaveCount(2, { timeout: 10_000 });
 
-    const scheduleGrid = page
-      .locator("div.grid")
-      .filter({ has: page.getByRole("button", { name: /Save template.*apply blocks/ }) });
-
+    await page
+      .getByTestId("series-schedule-apply-scope")
+      .getByText("This occurrence only", { exact: true })
+      .click();
     await pickSearchableOption(
       page,
-      scheduleGrid
-        .locator("div.space-y-1")
-        .filter({ has: page.getByText("Apply to", { exact: true }) })
-        .getByTestId("searchable-select-trigger"),
-      "This occurrence only",
-      "This occurrence only",
-    );
-
-    await pickSearchableOption(
-      page,
-      scheduleGrid
-        .locator("div.space-y-1")
-        .filter({ has: page.getByText("From occurrence index (0-based)", { exact: true }) })
-        .getByTestId("searchable-select-trigger"),
+      page.getByTestId("series-schedule-apply-day").getByTestId("searchable-select-trigger"),
       "#2",
-      "#2",
+      /^#2 · /,
     );
 
     await page.getByRole("button", { name: /Save template.*apply blocks/ }).first().click();

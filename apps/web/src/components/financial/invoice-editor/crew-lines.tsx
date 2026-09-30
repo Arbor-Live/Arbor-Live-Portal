@@ -5,10 +5,10 @@ import { useState } from "react";
 import { useMutation } from "convex/react";
 import { CaretDownIcon, ClockIcon, CopyIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
+import { ApplyDaySetupDialog, type ApplyDaySetupArgs } from "@/components/events/apply-day-setup-dialog";
 import { EventSeriesShiftEditor } from "@/components/events/event-series-shift-editor";
 import { LinkedEventDaySwitcher } from "@/components/events/linked-event-day-switcher";
 import { InvoiceLinkedEventCrewSection } from "@/components/financial/invoice-linked-event-crew";
-import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
@@ -246,35 +246,25 @@ function crewRateDetail(draft: InvoiceDraft) {
  * to the quote.
  */
 function CrewScheduleEditor({ draft }: { draft: InvoiceDraft }) {
-  const { confirm } = useAppDialog();
-  const copyDaySetup = useMutation(api.events.copyDaySetup);
+  const applyDaySetup = useMutation(api.eventSeries.applyDaySetup);
   // Open by default: the schedule is where headcount per phase is set.
   const [open, setOpen] = useState(true);
-  const [copyingDaySetup, setCopyingDaySetup] = useState(false);
+  const [applySetupOpen, setApplySetupOpen] = useState(false);
   const { linkedSeries, linkedEvent, linkedDayEvents, selectedDayEventId, seriesCostData, billableOccurrenceCount } =
     draft;
 
-  async function handleCopyDaySetupToOtherDays() {
-    if (!selectedDayEventId || linkedDayEvents.length < 2) return;
-    const confirmed = await confirm({
-      title: "Copy this day's setup to the other linked days?",
-      description:
-        "Copies crew hours (open slots only, not assigned people) and equipment pull/checkout quantities. Existing schedule slots and pull-list rows on those days will be replaced.",
-      confirmLabel: "Copy setup",
-      destructive: true,
-    });
-    if (!confirmed) return;
-    setCopyingDaySetup(true);
+  async function handleApplyDaySetup(args: ApplyDaySetupArgs) {
+    if (!selectedDayEventId) return false;
     try {
-      const result = await copyDaySetup({ sourceEventId: selectedDayEventId });
+      const result = await applyDaySetup({ eventId: selectedDayEventId, ...args });
       draft.invalidateCrewBuckets();
       notify.success(
-        `Copied setup to ${result.copiedToEventIds.length} other day${result.copiedToEventIds.length === 1 ? "" : "s"}.`,
+        `Applied this day's setup to ${result.updatedCount} other day${result.updatedCount === 1 ? "" : "s"}.`,
       );
+      return true;
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
-    } finally {
-      setCopyingDaySetup(false);
+      return false;
     }
   }
 
@@ -317,12 +307,18 @@ function CrewScheduleEditor({ draft }: { draft: InvoiceDraft }) {
               type="button"
               size="sm"
               variant="outline"
-              disabled={!selectedDayEventId || copyingDaySetup}
-              onClick={() => void handleCopyDaySetupToOtherDays()}
+              disabled={!selectedDayEventId}
+              onClick={() => setApplySetupOpen(true)}
             >
               <CopyIcon />
-              {copyingDaySetup ? "Copying…" : "Copy setup to other days"}
+              Apply day setup to other days…
             </Button>
+            <ApplyDaySetupDialog
+              open={applySetupOpen}
+              onOpenChange={setApplySetupOpen}
+              kind="multi_day"
+              onApply={handleApplyDaySetup}
+            />
             {selectedDayEventId ? (
               <Button type="button" size="sm" variant="outline" asChild>
                 <Link href={`/dashboard/events/${selectedDayEventId}`}>Open selected day</Link>

@@ -16,7 +16,6 @@ import type { TimelineBlockDraft } from "@/components/events/event-timeline-sche
 import { RunOfShowEditor } from "@/components/events/workspace/run-of-show/run-of-show-editor";
 import type { RunOfShowAct } from "@/lib/run-of-show";
 import { isSectionBlockType } from "@/lib/schedule-block-types";
-import { SERIES_EDIT_SCOPE_LABELS, type SeriesEditScope } from "@/lib/event-series";
 import {
   templatesToTimelineDrafts,
   type SeriesBlockTemplate,
@@ -36,13 +35,20 @@ import {
   seriesShiftEditorSchema,
   type SeriesShiftEditorFormValues,
 } from "@/lib/validations/event";
-import { formatOccurrencePreview } from "@/lib/event-series";
+import { GroupApplyScopeFields } from "@/components/events/group-apply-scope-fields";
+import {
+  formatOccurrencePreview,
+  groupDayLabel,
+  groupDayNoun,
+  type EventGroupKind,
+} from "@/lib/event-series";
 import { averageCrewHourlyRateUsd } from "@/lib/crew-rates";
 import { formatUsd } from "@/lib/format";
 import { notify } from "@/lib/notify";
 
 type EventSeriesShiftEditorProps = {
   seriesId: Id<"eventSeries">;
+  kind?: EventGroupKind;
   anchorStartAt: number;
   anchorEndAt: number;
   eventType?: string;
@@ -91,6 +97,7 @@ const EMBEDDED_CARD =
 
 export function EventSeriesShiftEditor({
   seriesId,
+  kind = "recurring",
   anchorStartAt,
   eventType,
   blockTemplates,
@@ -184,9 +191,9 @@ export function EventSeriesShiftEditor({
     () =>
       occurrences.map((row) => ({
         value: row._id,
-        label: `#${(row.occurrenceIndex ?? 0) + 1} · ${formatOccurrencePreview(row.startAt)}`,
+        label: `${groupDayLabel(kind, row.occurrenceIndex)} · ${formatOccurrencePreview(row.startAt)}`,
       })),
-    [occurrences],
+    [kind, occurrences],
   );
 
   const estimatedPerOccurrence = useMemo(
@@ -233,7 +240,7 @@ export function EventSeriesShiftEditor({
     }
     const parsedFromIndex = Number(values.fromOccurrenceIndex);
     if (!Number.isFinite(parsedFromIndex) || parsedFromIndex < 0) {
-      throw new Error("Enter a valid occurrence index.");
+      throw new Error(`Pick a ${groupDayNoun(kind)} to apply from.`);
     }
     const result = await regenerateShifts({
       id: seriesId,
@@ -242,7 +249,7 @@ export function EventSeriesShiftEditor({
       shiftTemplates: templates,
     });
     onMessage(
-      `Saved shift template and applied empty shifts on ${result.updatedCount} occurrence${result.updatedCount === 1 ? "" : "s"}. Assigned crew were kept.`,
+      `Saved crew template and applied open slots on ${result.updatedCount} ${groupDayNoun(kind, result.updatedCount !== 1)}. Assigned crew were kept.`,
     );
     setShiftsDirty(false);
     form.reset(values);
@@ -253,7 +260,7 @@ export function EventSeriesShiftEditor({
   async function handleImportFromOccurrence() {
     const importOccurrenceId = form.getValues("importOccurrenceId");
     if (!importOccurrenceId) {
-      notify.error("Select an occurrence to import from.");
+      notify.error(`Select a ${groupDayNoun(kind)} to import from.`);
       return;
     }
     await form.runMutation(async () => {
@@ -321,8 +328,8 @@ export function EventSeriesShiftEditor({
                 <Label>
                   Estimated template crew cost
                   {billableOccurrenceCount > 1
-                    ? ` (${billableOccurrenceCount} occurrences)`
-                    : " (per occurrence)"}
+                    ? ` (${billableOccurrenceCount} ${groupDayNoun(kind, true)})`
+                    : ` (per ${groupDayNoun(kind)})`}
                 </Label>
                 <p className="rounded-md border bg-muted/30 px-3 py-2 text-lg font-semibold">
                   {formatUsd(estimatedSeriesTotal)}
@@ -337,15 +344,15 @@ export function EventSeriesShiftEditor({
 
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <div className="space-y-1">
-                <Label>Import empty shifts from occurrence</Label>
+                <Label>Import open crew slots from {groupDayNoun(kind)}</Label>
                 <SearchableSelect
                   value={form.watch("importOccurrenceId")}
                   onChange={(value) =>
                     form.setValue("importOccurrenceId", value, { shouldDirty: true })
                   }
                   options={occurrenceOptions}
-                  placeholder="Select occurrence..."
-                  emptyLabel="Select occurrence"
+                  placeholder={`Select ${groupDayNoun(kind)}...`}
+                  emptyLabel={`Select ${groupDayNoun(kind)}`}
                 />
               </div>
               <div className="flex items-end">
@@ -460,35 +467,18 @@ export function EventSeriesShiftEditor({
           )}
 
           <Form {...form}>
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="space-y-1">
-                <Label>Apply to</Label>
-                <SearchableSelect
-                  value={form.watch("applyScope")}
-                  onChange={(value) =>
-                    form.setValue("applyScope", value as SeriesEditScope, { shouldDirty: true })
-                  }
-                  options={(Object.keys(SERIES_EDIT_SCOPE_LABELS) as SeriesEditScope[]).map((scope) => ({
-                    value: scope,
-                    label: SERIES_EDIT_SCOPE_LABELS[scope],
-                  }))}
-                  placeholder="Select scope..."
-                  emptyLabel="Select scope"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>From occurrence index (0-based)</Label>
-                <SearchableSelect
-                  value={form.watch("fromOccurrenceIndex")}
-                  onChange={(value) =>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-0 flex-1">
+                <GroupApplyScopeFields
+                  idPrefix="series-crew"
+                  kind={kind}
+                  days={occurrences}
+                  scope={form.watch("applyScope")}
+                  dayIndex={form.watch("fromOccurrenceIndex")}
+                  onScopeChange={(value) => form.setValue("applyScope", value, { shouldDirty: true })}
+                  onDayIndexChange={(value) =>
                     form.setValue("fromOccurrenceIndex", value, { shouldDirty: true })
                   }
-                  options={occurrences.map((row) => ({
-                    value: String(row.occurrenceIndex ?? 0),
-                    label: `#${(row.occurrenceIndex ?? 0) + 1}`,
-                  }))}
-                  placeholder="Select index..."
-                  emptyLabel="Select index"
                 />
               </div>
               <div className="flex items-end">
@@ -503,8 +493,8 @@ export function EventSeriesShiftEditor({
             </div>
           </Form>
           <p className="text-xs text-muted-foreground">
-            Applying syncs schedule blocks on each selected occurrence, then replaces unassigned crew
-            shifts from this template.
+            Applying syncs the Run of Show sections on each selected {groupDayNoun(kind)}, then
+            replaces its open crew slots from this template. Assigned crew are kept.
           </p>
           {form.saveError ? (
             <p className="text-sm text-destructive">{form.saveError}</p>
