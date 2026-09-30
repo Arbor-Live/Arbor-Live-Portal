@@ -100,8 +100,9 @@ export function AppDialogProvider({ children }: { children: ReactNode }) {
         <DialogContent
           data-testid="app-dialog"
           showCloseButton={false}
-          // Above sheets (z-60): confirms are often opened from inside one.
-          className="z-70 sm:max-w-md"
+          // Dialogs already sit above sheets (z-70 > z-60), so confirms opened
+          // from inside a side panel render on top without a z override here.
+          className="sm:max-w-md"
         >
           {request?.kind === "confirm" ? (
             <>
