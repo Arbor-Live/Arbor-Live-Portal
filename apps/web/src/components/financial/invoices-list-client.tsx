@@ -29,8 +29,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { MultiSelect } from "@/components/ui/multi-select";
+import {
+  activeFilters,
+  FilterBar,
+  matchesFilter,
+  type FilterDefinition,
+  type FilterState,
+} from "@/components/filter-bar";
 import { formatUsd } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { getConvexErrorMessage } from "@/lib/convex-error";
@@ -69,6 +74,26 @@ function invoiceLifecycle(invoice: InvoiceLifecycleInput): InvoiceLifecycle {
   if (invoice.paymentStatus) return invoice.paymentStatus;
   if (invoice.clientApprovalStatus === "changes_requested") return "changes_requested";
   return "awaiting_approval";
+}
+
+const ISSUED_OPTIONS = [
+  { value: "last_30", label: "In the last 30 days" },
+  { value: "last_90", label: "In the last 90 days" },
+  { value: "this_year", label: "This year" },
+  { value: "older", label: "Before this year" },
+];
+
+/** Every "Issued" bucket an issue date (YYYY-MM-DD) falls in. */
+function issuedBuckets(issueDate: string, todayMs: number): string[] {
+  const issuedMs = Date.parse(`${issueDate}T00:00:00`);
+  if (Number.isNaN(issuedMs)) return [];
+  const days = (todayMs - issuedMs) / 86_400_000;
+  const thisYear = new Date(todayMs).getFullYear() === new Date(issuedMs).getFullYear();
+  return [
+    ...(days <= 30 ? ["last_30"] : []),
+    ...(days <= 90 ? ["last_90"] : []),
+    thisYear ? "this_year" : "older",
+  ];
 }
 
 function lifecycleLabel(lifecycle: InvoiceLifecycle) {
@@ -112,18 +137,27 @@ export function InvoicesListClient() {
   const router = useRouter();
   const { confirm } = useAppDialog();
   const viewer = useSessionViewer();
-  const [lifecycleFilters, setLifecycleFilters] = useState<InvoiceLifecycle[]>([]);
+  // Starts on the active view, shown as a chip so paid and void are one click away.
+  const [filters, setFilters] = useState<FilterState>({
+    stage: { operator: "is_not", values: ["paid", "void"] },
+  });
   const [search, setSearch] = useState("");
+  const [todayMs] = useState(() => Date.now());
+  const stage = activeFilters(filters).stage;
   const listQueryArgs = useMemo(() => {
-    if (lifecycleFilters.length === 1) {
-      if (lifecycleFilters[0] === "draft") return { status: "draft" as const };
-      if (lifecycleFilters[0] === "void") return { status: "void" as const };
+    // Narrow on the server where the stage allows it, so the recency cap
+    // applies to the right rows.
+    if (stage?.operator === "is" && stage.values.length === 1) {
+      if (stage.values[0] === "draft") return { status: "draft" as const };
+      if (stage.values[0] === "void") return { status: "void" as const };
     }
-    // Void and paid are hidden unless explicitly selected in the Stage filter.
-    const hideClosed =
-      !lifecycleFilters.includes("void") && !lifecycleFilters.includes("paid");
-    return hideClosed ? { excludeClosed: true as const } : {};
-  }, [lifecycleFilters]);
+    const showsClosed = stage
+      ? LIFECYCLE_OPTIONS.some(
+          (option) => (option.value === "paid" || option.value === "void") && matchesFilter(stage, option.value),
+        )
+      : true;
+    return showsClosed ? {} : { excludeClosed: true as const };
+  }, [stage]);
   const rows = useQuery(api.invoices.listEnriched, listQueryArgs);
   const deleteInvoiceAdmin = useMutation(api.adminDeletes.deleteInvoiceAdmin);
   const voidInvoice = useMutation(api.invoices.voidInvoice);
@@ -136,21 +170,27 @@ export function InvoicesListClient() {
   );
   const isAdmin = viewer?.isAdmin ?? false;
 
+  const filterDefinitions = useMemo<FilterDefinition[]>(() => {
+    const distinct = (values: (string | undefined)[]) =>
+      [...new Set(values.filter((value): value is string => Boolean(value?.trim())))]
+        .sort((a, b) => a.localeCompare(b))
+        .map((value) => ({ value, label: value }));
+    return [
+      { id: "stage", label: "Stage", options: LIFECYCLE_OPTIONS },
+      { id: "client", label: "Client", options: distinct((rows ?? []).map((row) => row.clientGroupName)) },
+      { id: "manager", label: "Manager", options: distinct((rows ?? []).map((row) => row.managerName)) },
+      { id: "issued", label: "Issued", options: ISSUED_OPTIONS, single: true },
+    ];
+  }, [rows]);
+
   const filteredRows = useMemo(() => {
     const needle = search.trim().toLowerCase();
+    const applied = activeFilters(filters);
     return (rows ?? []).filter((invoice) => {
-      const lifecycle = invoiceLifecycle(invoice);
-      if (lifecycleFilters.length > 0 && !lifecycleFilters.includes(lifecycle)) {
-        return false;
-      }
-      // Void and paid are archived by default; selecting them in the Stage
-      // filter opts back in.
-      if (
-        (lifecycle === "void" || lifecycle === "paid") &&
-        !lifecycleFilters.includes(lifecycle)
-      ) {
-        return false;
-      }
+      if (!matchesFilter(applied.stage, invoiceLifecycle(invoice))) return false;
+      if (!matchesFilter(applied.client, invoice.clientGroupName ?? "")) return false;
+      if (!matchesFilter(applied.manager, invoice.managerName)) return false;
+      if (!matchesFilter(applied.issued, issuedBuckets(invoice.issueDate, todayMs))) return false;
       if (!needle) return true;
       const haystack = [
         invoice.invoiceNumber,
@@ -165,7 +205,7 @@ export function InvoicesListClient() {
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [rows, search, lifecycleFilters]);
+  }, [filters, rows, search, todayMs]);
 
   const columns = useMemo(
     () =>
@@ -371,21 +411,15 @@ export function InvoicesListClient() {
           onClick: () => router.push(`/dashboard/financial-hub/invoices/${row.original._id}`),
         })}
         toolbar={
-          <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
-            <div className="min-w-56 flex-1 space-y-1">
-              <label className="text-xs text-muted-foreground">Search</label>
-              <Input
-                placeholder="Invoice, client, series…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            <MultiSelect
-              label="Stage"
-              options={LIFECYCLE_OPTIONS}
-              values={lifecycleFilters}
-              onChange={(values) => setLifecycleFilters(values as InvoiceLifecycle[])}
-              emptyLabel="All"
+          <div className="min-w-0 flex-1">
+            <FilterBar
+              search={search}
+              onSearchChange={setSearch}
+              searchPlaceholder="Invoice, client, series…"
+              searchLabel="Search invoices"
+              filters={filterDefinitions}
+              value={filters}
+              onChange={setFilters}
             />
           </div>
         }

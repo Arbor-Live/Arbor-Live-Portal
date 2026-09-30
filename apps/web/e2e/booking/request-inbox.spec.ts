@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { runConvex } from "../helpers/convex";
-import { pickSearchableOption } from "../helpers/select";
+import { editFilter } from "../helpers/filter-bar";
 
 type Seed = {
   requestId: string;
@@ -68,8 +68,10 @@ test.describe("booking request inbox", () => {
       timeout: 25_000,
     });
 
-    const filter = page.getByTestId("searchable-select-trigger");
-    await pickSearchableOption(page, filter, "Declined", "Declined");
+    // The open view is a "Status is not Converted, Declined" chip; flip it to "is Declined".
+    await expect(page.getByTestId("filter-chip-status")).toContainText("Status is not Converted, Declined");
+    await editFilter(page, "status", { operator: "is", toggle: ["Converted"] });
+    await expect(page.getByTestId("filter-chip-status")).toContainText("Status is Declined");
 
     await expect(page.getByText(seeds.declined.requestNumber).first()).toBeVisible({
       timeout: 25_000,
@@ -85,8 +87,8 @@ test.describe("booking request inbox", () => {
       timeout: 25_000,
     });
 
-    const filter = page.getByTestId("searchable-select-trigger");
-    await pickSearchableOption(page, filter, "All statuses", "All statuses");
+    // Removing the open-view chip shows every status.
+    await page.getByRole("button", { name: "Remove the Status filter" }).click();
 
     await expect(page.getByText(seeds.declined.requestNumber).first()).toBeVisible({
       timeout: 25_000,
