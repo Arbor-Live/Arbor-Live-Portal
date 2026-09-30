@@ -80,25 +80,37 @@ async function findMultiDayGroupForInvoice(
   return groups.find((group) => isMultiDayGroup(group)) ?? null;
 }
 
-/** Drop an event's group membership fields (a `patch` cannot unset them). */
-export async function releaseFromGroup(ctx: MutationCtx, eventId: Id<"events">, now: number) {
+/**
+ * Drop an event's group membership fields (a `patch` cannot unset them).
+ * Membership is bookkeeping, not an edit: `updatedAt` is left alone so the
+ * public calendar's LAST-MODIFIED and print freshness don't churn.
+ */
+export async function releaseFromGroup(ctx: MutationCtx, eventId: Id<"events">) {
   const event = await ctx.db.get(eventId);
   if (!event || event.seriesId === undefined) return;
-  const next = { ...event, updatedAt: now };
+  const next = { ...event };
   delete next.seriesId;
   delete next.occurrenceIndex;
   delete next.seriesDetached;
   await ctx.db.replace(eventId, next);
 }
 
-/** Create a multi-day group for an invoice's days, with templates from Day 1. */
+/** Days that count toward being a booking: cancelled days don't. */
+function activeDays(days: readonly Doc<"events">[]) {
+  return days.filter((day) => day.status !== "cancelled");
+}
+
+/**
+ * Create a multi-day group for an invoice's days. Shared fields and templates
+ * come from the first day that isn't cancelled.
+ */
 async function createMultiDayGroup(
   ctx: MutationCtx,
   invoiceId: Id<"invoices">,
   days: readonly Doc<"events">[],
   now: number,
 ): Promise<Doc<"eventSeries">> {
-  const first = days[0]!;
+  const first = activeDays(days)[0] ?? days[0]!;
   const groupId = await ctx.db.insert("eventSeries", {
     kind: "multi_day",
     title: groupTitleFromDayTitles(days.map((day) => day.title)),
@@ -158,15 +170,15 @@ export async function syncMultiDayGroupForInvoice(
     if (other && isRecurringGroup(other)) return null;
   }
 
-  if (days.length < 2) {
-    // One day is a plain event again. The group row (and its templates) stays
+  if (activeDays(days).length < 2) {
+    // One (live) day is a plain event again. The group row (and its templates) stays
     // on the invoice, so linking a second day picks it back up.
     for (const day of days) {
-      if (day.seriesId) await releaseFromGroup(ctx, day._id, now);
+      if (day.seriesId) await releaseFromGroup(ctx, day._id);
     }
     if (group) {
       for (const member of await listGroupDays(ctx, group._id)) {
-        await releaseFromGroup(ctx, member._id, now);
+        await releaseFromGroup(ctx, member._id);
       }
     }
     return null;
@@ -177,20 +189,19 @@ export async function syncMultiDayGroupForInvoice(
 
   const plan = planMultiDayMembership(group._id, days, await listGroupDays(ctx, group._id));
   for (const eventId of plan.release) {
-    await releaseFromGroup(ctx, eventId, now);
+    await releaseFromGroup(ctx, eventId);
   }
   for (const row of plan.assign) {
     await ctx.db.patch(row.eventId, {
       seriesId: group._id,
       occurrenceIndex: row.occurrenceIndex,
       seriesDetached: row.seriesDetached,
-      updatedAt: now,
     });
   }
 
   // Templates are relative to each day's start; the anchor is Day 1, which the
   // template editors use to show clock times.
-  const first = days[0];
+  const first = activeDays(days)[0];
   if (
     first &&
     (group.anchorStartAt !== first.startAt || group.anchorEndAt !== first.endAt)
