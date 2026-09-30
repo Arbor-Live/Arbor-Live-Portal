@@ -174,9 +174,14 @@ test.describe.serial("inventory type CRUD", () => {
   });
 
   test("a link to a deleted type says so and drops the param", async ({ page }) => {
-    const deleted = await waitForInventoryType(guardedTypeName, (state) => Boolean(state?.typeId));
-    // A well-formed id that no longer exists, and one that was never an id.
-    for (const id of [`${deleted.typeId.slice(0, -1)}x`, "not-a-type"]) {
+    // A real id whose type has since been deleted, and one that was never an id.
+    const doomedName = `E2E Type Doomed ${stamp}`;
+    const { typeId: deletedId } = runConvex("e2eHelpers:seedInventoryType", {
+      name: doomedName,
+      category: "misc",
+    }) as { typeId: string };
+    deleteInventoryFixtures({ typeNames: [doomedName] });
+    for (const id of [deletedId, "not-a-type"]) {
       await gotoTypes(page, `type=${id}`);
       await expect(page.getByText("That type doesn't exist anymore")).toBeVisible({ timeout: 20_000 });
       await expect(page).not.toHaveURL(/type=/);
