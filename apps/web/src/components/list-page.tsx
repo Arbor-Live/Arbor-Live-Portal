@@ -26,8 +26,9 @@ import { cn } from "@/lib/utils";
  *   PageHeader
  *   FilterBar
  *   ListSummary (plain-words counts + the order rule)
- *   RowGroup / RowList → ListRow (RowCell…, RowMenu)
- *   DetailSheet → DetailSheetHeader, SheetSection…, SheetFooter
+ *   RowGroup / RowList → ListRow (`components/list-row.tsx`) with RowText,
+ *     RowCell… inside and a RowMenu in `actions`
+ *   DetailSheet → DetailSheetHeader, SheetSection…, DetailSheetFooter
  */
 
 /** The summary line above a list, plus the ordering rule in muted text. */
@@ -61,18 +62,27 @@ export function EmptyState({ children, action }: { children: React.ReactNode; ac
   );
 }
 
-/** A bordered list of rows. */
+/**
+ * A list of `ListRow`s. Stacked (the default) keeps each row's own border with
+ * a gap between; `joined` draws one frame with dividers, for dense lists
+ * under a column header.
+ */
 export function RowList({
   children,
+  joined,
   className,
   testId,
 }: {
   children: React.ReactNode;
+  joined?: boolean;
   className?: string;
   testId?: string;
 }) {
   return (
-    <ul className={cn("divide-y border", className)} data-testid={testId}>
+    <ul
+      className={cn(joined ? "divide-y border [&>li]:border-0" : "space-y-2", className)}
+      data-testid={testId}
+    >
       {children}
     </ul>
   );
@@ -126,76 +136,32 @@ export function RowGroup({
         </div>
         {aside}
       </div>
-      {children ? <ul className="divide-y border-t">{children}</ul> : null}
+      {children ? <ul className="divide-y border-t [&>li]:border-0">{children}</ul> : null}
     </section>
   );
 }
 
 /**
- * One row. The main area is a button that opens the side panel: a tiny
- * uppercase context label, the name, and a muted detail line. Put `RowCell`s
- * (numbers, status) in `children`, and a `RowMenu` in `trailing`.
+ * The text block at the start of a `ListRow`'s main area: a tiny uppercase
+ * context label, the name, and one muted detail line.
  */
-export function ListRow({
+export function RowText({
   eyebrow,
   title,
   detail,
-  leading,
-  children,
-  trailing,
-  onOpen,
-  selected,
-  testId,
-  className,
-  ...rest
 }: {
   eyebrow?: React.ReactNode;
   title: React.ReactNode;
   detail?: React.ReactNode;
-  /** Left of the button: a checkbox, a time. */
-  leading?: React.ReactNode;
-  /** Right-hand cells inside the button (`RowCell`, status pill). */
-  children?: React.ReactNode;
-  /** After the button: the row's one action and its `RowMenu`. */
-  trailing?: React.ReactNode;
-  onOpen?: () => void;
-  selected?: boolean;
-  testId?: string;
-  className?: string;
-} & Omit<React.ComponentProps<"li">, "title">) {
-  const body = (
-    <>
-      <div className="min-w-0 flex-1">
-        {eyebrow ? (
-          <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">{eyebrow}</p>
-        ) : null}
-        <p className="truncate font-medium">{title}</p>
-        {detail ? <p className="truncate text-xs text-muted-foreground">{detail}</p> : null}
-      </div>
-      {children}
-    </>
-  );
+}) {
   return (
-    <li
-      data-testid={testId}
-      className={cn("flex items-center gap-2 pr-1 pl-3 text-sm", selected && "bg-muted/40", className)}
-      {...rest}
-    >
-      {leading}
-      {onOpen ? (
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-center gap-3 py-2.5 text-left hover:bg-muted/30"
-          data-testid={testId ? `${testId}-open` : undefined}
-          onClick={onOpen}
-        >
-          {body}
-        </button>
-      ) : (
-        <div className="flex min-w-0 flex-1 items-center gap-3 py-2.5">{body}</div>
-      )}
-      {trailing}
-    </li>
+    <div className="min-w-0 flex-1">
+      {eyebrow ? (
+        <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">{eyebrow}</p>
+      ) : null}
+      <p className="truncate font-medium">{title}</p>
+      {detail ? <p className="truncate text-xs text-muted-foreground">{detail}</p> : null}
+    </div>
   );
 }
 

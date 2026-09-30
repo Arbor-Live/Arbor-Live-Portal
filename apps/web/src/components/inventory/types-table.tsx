@@ -3,7 +3,8 @@
 import { StatusPill } from "@/components/page-header";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { ListRow, RowCell, RowMenu } from "@/components/list-page";
+import { ListRow } from "@/components/list-row";
+import { RowCell, RowMenu, RowText } from "@/components/list-page";
 import { formatCurrency } from "./constants";
 import { formatTypeDisplay } from "./package-section-utils";
 import {
@@ -67,7 +68,7 @@ export function TypesTable({
         <span className="hidden w-32 text-center sm:block">Public</span>
         <span className="w-8" />
       </div>
-      <ul className="divide-y">
+      <ul className="divide-y [&>li]:border-0">
         {rows.map((row) => {
           const visibility = typeVisibility(row);
           const units = unitCounts?.get(row._id) ?? 0;
@@ -75,11 +76,8 @@ export function TypesTable({
           return (
             <ListRow
               key={row._id}
-              testId={`type-row-${row._id}`}
+              data-testid={`type-row-${row._id}`}
               onOpen={() => onOpen(row)}
-              eyebrow={categoryLabels.get(row.category) ?? row.category}
-              title={formatTypeDisplay(row)}
-              detail={capabilities.length ? capabilities.join(" · ") : "No capabilities"}
               leading={
                 <Checkbox
                   aria-label={`Select ${row.name}`}
@@ -87,7 +85,7 @@ export function TypesTable({
                   onCheckedChange={(checked) => toggle(row._id, checked === true)}
                 />
               }
-              trailing={
+              actions={
                 <RowMenu label={`More for ${row.name}`}>
                   <DropdownMenuItem onSelect={() => onOpen(row)}>Open details</DropdownMenuItem>
                   {visibility === "hidden" ? (
@@ -108,6 +106,11 @@ export function TypesTable({
                 </RowMenu>
               }
             >
+              <RowText
+                eyebrow={categoryLabels.get(row.category) ?? row.category}
+                title={formatTypeDisplay(row)}
+                detail={capabilities.length ? capabilities.join(" · ") : "No capabilities"}
+              />
               <RowCell className="w-20" hideBelow="md">
                 {formatCurrency(row.nonSubsidizedRentalPriceUsd ?? row.rentalPriceUsd)}
               </RowCell>

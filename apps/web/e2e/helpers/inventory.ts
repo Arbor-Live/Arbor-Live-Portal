@@ -183,7 +183,8 @@ export async function openNewType(page: Page) {
 export async function openTypeRow(page: Page, typeId: string) {
   const row = typeRow(page, typeId);
   await expect(row).toBeVisible({ timeout: 30_000 });
-  await row.getByTestId(`type-row-${typeId}-open`).click();
+  // The row's main area is its first button (the checkbox has role="checkbox").
+  await row.getByRole("button").first().click();
   const sheet = typeSheet(page);
   await expect(sheet.getByRole("button", { name: "Save changes" })).toBeVisible({ timeout: 20_000 });
   return sheet;
