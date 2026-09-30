@@ -118,12 +118,13 @@ function EventArtistBillPanel({
     const map = new Map<string, InvoiceArtistSuggestion>();
     for (const line of invoiceDetail?.lineItems ?? []) {
       if (line.section !== "artist") continue;
-      // Match loadPublicQuoteView's day scoping: an explicit day wins; an
-      // unscoped line belongs to the first linked day, or every day for a series.
+      // Match the server's day scoping (`lib/invoiceArtistDays.ts`): an explicit
+      // day wins; an unscoped line belongs to the first day, or to every
+      // occurrence of a recurring series.
       if (line.eventId) {
         if (line.eventId !== eventId) continue;
       } else if (
-        !(artistDayScope?.isSeriesBooking || artistDayScope?.firstEventId === eventId)
+        !(artistDayScope?.unscopedAppliesToEveryDay || artistDayScope?.firstEventId === eventId)
       ) {
         continue;
       }

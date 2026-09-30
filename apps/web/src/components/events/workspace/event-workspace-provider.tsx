@@ -40,7 +40,7 @@ import {
   getEventEditorTabPath,
   type EventEditorTabId,
 } from "@/lib/event-editor-tabs";
-import type { SeriesEditScope } from "@/lib/event-series";
+import { eventGroupKind, groupDayNoun, type SeriesEditScope } from "@/lib/event-series";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import type { SaveStatus } from "@/hooks/use-convex-form";
@@ -81,7 +81,8 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
   const upsertShifts = useMutation(api.eventCrew.upsertShifts);
   const deleteUnassignedShifts = useMutation(api.eventCrew.deleteUnassignedShifts);
   const reattachOccurrence = useMutation(api.eventSeries.reattachOccurrence);
-  const copyDaySetupMutation = useMutation(api.events.copyDaySetup);
+  const applyDaySetupMutation = useMutation(api.eventSeries.applyDaySetup);
+  const [applySetupOpen, setApplySetupOpen] = useState(false);
 
   const [draft, setDraft] = useState<EventDraft>(EMPTY_EVENT_DRAFT);
   const [baseline, setBaseline] = useState<EventDraft | null>(null);
@@ -448,29 +449,38 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     router.push(getEventEditorTabPath(nextId, resolvedActiveTab));
   }
 
-  async function copySetupToOtherDays() {
-    const confirmed = await confirm({
-      title: "Copy this day's setup to the other linked days?",
-      description:
-        "Copies crew hours (open slots only, not assigned people) and equipment pull/checkout quantities. Existing schedule slots and pull-list rows on those days will be replaced.",
-      confirmLabel: "Copy setup",
-    });
-    if (!confirmed) return;
+  /**
+   * Apply this day's setup (Run of Show sections, open crew slots, positions,
+   * pull list) to the other days of its group, through the group template.
+   */
+  async function applySetupToOtherDays(args: {
+    scope: "all" | "future";
+    schedule: boolean;
+    positions: boolean;
+    pullList: boolean;
+  }) {
     try {
-      const result = await copyDaySetupMutation({ sourceEventId: eventId });
-      const count = result.copiedToEventIds.length;
-      notify.success(`Copied setup to ${count} other day${count === 1 ? "" : "s"}.`);
+      const result = await applyDaySetupMutation({ eventId, ...args });
+      const count = result.updatedCount;
+      const noun = groupDayNoun(eventGroupKind(seriesMeta), count !== 1);
+      notify.success(`Applied this day's setup to ${count} other ${noun}.`);
+      return true;
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
+      return false;
     }
   }
 
   async function resetToSeries() {
     if (readOnly) return;
+    const multiDay = eventGroupKind(seriesMeta) === "multi_day";
     const shouldReset = await confirm({
-      title: "Reset this occurrence to the series template?",
-      description:
-        "This restores overview fields, times, schedule blocks, and unassigned crew shifts, and clears the detached state. Assigned crew shifts are kept.",
+      title: multiDay
+        ? "Reset this day to the booking template?"
+        : "Reset this occurrence to the series template?",
+      description: multiDay
+        ? "This restores the shared details, Run of Show sections, open crew slots and open positions from the booking template, and clears the detached state. Times, assigned crew and booked acts are kept."
+        : "This restores overview fields, times, schedule blocks, and unassigned crew shifts, and clears the detached state. Assigned crew shifts are kept.",
       confirmLabel: "Reset",
     });
     if (!shouldReset) return;
@@ -478,7 +488,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
       await reattachOccurrence({ eventId });
       // Re-hydrate local form state from the restored occurrence.
       setHydrationToken((token) => token + 1);
-      notify.success("Occurrence reset to series template.");
+      notify.success(multiDay ? "Day reset to the booking template." : "Occurrence reset to series template.");
     } catch (error) {
       notify.error(getConvexErrorMessage(error, "Failed to reset occurrence."));
     }
@@ -572,7 +582,9 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     effectivePrimaryHostGroupId,
     editScopeRequest,
     switchToDay,
-    copySetupToOtherDays,
+    applySetupOpen,
+    setApplySetupOpen,
+    applySetupToOtherDays,
     resetToSeries,
     deleteEvent,
   };

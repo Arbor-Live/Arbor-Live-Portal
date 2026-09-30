@@ -1,0 +1,23 @@
+"use client";
+
+import { createContext, useContext } from "react";
+import type { useQuery } from "convex/react";
+import type { api, Id } from "@/lib/convex-api";
+import type { EventGroupKind } from "@/lib/event-series";
+
+export type EventGroupData = NonNullable<ReturnType<typeof useQuery<typeof api.eventSeries.get>>>;
+
+type EventGroupContextValue = {
+  groupId: Id<"eventSeries">;
+  /** Undefined while loading; the workspace only renders tabs once loaded. */
+  data: EventGroupData | undefined;
+  kind: EventGroupKind;
+};
+
+export const EventGroupContext = createContext<EventGroupContextValue | null>(null);
+
+export function useEventGroup() {
+  const value = useContext(EventGroupContext);
+  if (!value) throw new Error("useEventGroup must be used inside the event group page.");
+  return value;
+}

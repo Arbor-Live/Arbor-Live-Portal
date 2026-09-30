@@ -21,7 +21,13 @@ import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
-import { formatOccurrencePreview, SERIES_EDIT_SCOPE_LABELS, type SeriesEditScope } from "@/lib/event-series";
+import { GroupApplyScopeFields } from "@/components/events/group-apply-scope-fields";
+import {
+  formatOccurrencePreview,
+  groupDayLabel,
+  groupDayNoun,
+  type EventGroupKind,
+} from "@/lib/event-series";
 import {
   formatPositionDraftWindows,
   positionDraftsToTemplates,
@@ -38,6 +44,7 @@ import {
 
 type EventSeriesPositionEditorProps = {
   seriesId: Id<"eventSeries">;
+  kind?: EventGroupKind;
   positionTemplates?: SeriesPositionTemplate[];
   occurrences: Array<{ _id: Id<"events">; occurrenceIndex?: number; startAt: number }>;
   onMessage: (message: string) => void;
@@ -64,6 +71,7 @@ function emptyDraft(clientId: string): SeriesPositionTemplateDraft {
  */
 export function EventSeriesPositionEditor({
   seriesId,
+  kind = "recurring",
   positionTemplates,
   occurrences,
   onMessage,
@@ -109,9 +117,9 @@ export function EventSeriesPositionEditor({
     () =>
       occurrences.map((row) => ({
         value: row._id,
-        label: `#${(row.occurrenceIndex ?? 0) + 1} · ${formatOccurrencePreview(row.startAt)}`,
+        label: `${groupDayLabel(kind, row.occurrenceIndex)} · ${formatOccurrencePreview(row.startAt)}`,
       })),
-    [occurrences],
+    [kind, occurrences],
   );
 
   const selectedDraft = drafts.find((draft) => draft.clientId === selectedClientId) ?? null;
@@ -143,7 +151,7 @@ export function EventSeriesPositionEditor({
     }
     const parsedFromIndex = Number(values.fromOccurrenceIndex);
     if (!Number.isInteger(parsedFromIndex) || parsedFromIndex < 0) {
-      throw new Error("Enter a valid occurrence index.");
+      throw new Error(`Pick a ${groupDayNoun(kind)} to apply from.`);
     }
     const result = await applyPositions({
       id: seriesId,
@@ -152,7 +160,7 @@ export function EventSeriesPositionEditor({
       positionTemplates: templates,
     });
     onMessage(
-      `Saved position template and applied it to ${result.updatedCount} occurrence${result.updatedCount === 1 ? "" : "s"}. Filled positions were kept.`,
+      `Saved position template and applied it to ${result.updatedCount} ${groupDayNoun(kind, result.updatedCount !== 1)}. Filled positions were kept.`,
     );
     setDraftsDirty(false);
     form.reset(values);
@@ -163,7 +171,7 @@ export function EventSeriesPositionEditor({
   async function handleImportFromOccurrence() {
     const importOccurrenceId = form.getValues("importOccurrenceId");
     if (!importOccurrenceId) {
-      notify.error("Select an occurrence to import from.");
+      notify.error(`Select a ${groupDayNoun(kind)} to import from.`);
       return;
     }
     await form.runMutation(async () => {
@@ -204,12 +212,12 @@ export function EventSeriesPositionEditor({
             {positionCount === 0
               ? "No positions in the template"
               : `${positionCount} position${positionCount === 1 ? "" : "s"} in the template`}
-            {" · "}applied to each occurrence in scope
+            {" · "}applied to each {groupDayNoun(kind)} in scope
           </p>
 
           {drafts.length === 0 ? (
             <div className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-              No positions yet. Add a position, or import them from an occurrence.
+              No positions yet. Add a position, or import them from a {groupDayNoun(kind)}.
             </div>
           ) : (
             <ul className="space-y-0 border" data-testid="series-position-list">
@@ -241,15 +249,15 @@ export function EventSeriesPositionEditor({
 
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
-              <Label>Import positions from occurrence</Label>
+              <Label>Import positions from {groupDayNoun(kind)}</Label>
               <SearchableSelect
                 value={form.watch("importOccurrenceId")}
                 onChange={(value) =>
                   form.setValue("importOccurrenceId", value, { shouldDirty: true })
                 }
                 options={occurrenceOptions}
-                placeholder="Select occurrence..."
-                emptyLabel="Select occurrence"
+                placeholder={`Select ${groupDayNoun(kind)}...`}
+                emptyLabel={`Select ${groupDayNoun(kind)}`}
               />
             </div>
             <div className="flex items-end">
@@ -264,35 +272,18 @@ export function EventSeriesPositionEditor({
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-1">
-              <Label>Apply to</Label>
-              <SearchableSelect
-                value={form.watch("applyScope")}
-                onChange={(value) =>
-                  form.setValue("applyScope", value as SeriesEditScope, { shouldDirty: true })
-                }
-                options={(Object.keys(SERIES_EDIT_SCOPE_LABELS) as SeriesEditScope[]).map((scope) => ({
-                  value: scope,
-                  label: SERIES_EDIT_SCOPE_LABELS[scope],
-                }))}
-                placeholder="Select scope..."
-                emptyLabel="Select scope"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>From occurrence index (0-based)</Label>
-              <SearchableSelect
-                value={form.watch("fromOccurrenceIndex")}
-                onChange={(value) =>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-0 flex-1">
+              <GroupApplyScopeFields
+                idPrefix="series-positions"
+                kind={kind}
+                days={occurrences}
+                scope={form.watch("applyScope")}
+                dayIndex={form.watch("fromOccurrenceIndex")}
+                onScopeChange={(value) => form.setValue("applyScope", value, { shouldDirty: true })}
+                onDayIndexChange={(value) =>
                   form.setValue("fromOccurrenceIndex", value, { shouldDirty: true })
                 }
-                options={occurrences.map((row) => ({
-                  value: String(row.occurrenceIndex ?? 0),
-                  label: `#${(row.occurrenceIndex ?? 0) + 1}`,
-                }))}
-                placeholder="Select index..."
-                emptyLabel="Select index"
               />
             </div>
             <div className="flex items-end">
