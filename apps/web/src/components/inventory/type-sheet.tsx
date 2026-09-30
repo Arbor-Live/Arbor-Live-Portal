@@ -1,5 +1,6 @@
 "use client";
 
+import { SheetSection } from "@/components/list-page";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { CaretDownIcon, PlusIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
@@ -119,15 +120,6 @@ export function TypeSheet({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="space-y-3 border-t px-4 py-4">
-      <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{title}</h3>
-      {children}
-    </section>
-  );
-}
-
 function TypeSheetBody({
   row,
   unitCount,
@@ -209,7 +201,7 @@ function TypeSheetBody({
           </SheetDescription>
         </SheetHeader>
 
-        <Section title="Details">
+        <SheetSection title="Details">
           <TextFormField name="name" label="Name" />
           <div className="grid gap-3 sm:grid-cols-2">
             <TextFormField name="model" label="Model" />
@@ -233,9 +225,9 @@ function TypeSheetBody({
           <p className="-mt-2 text-xs text-muted-foreground">
             Shown on the public model pages when the type is listed.
           </p>
-        </Section>
+        </SheetSection>
 
-        <Section title="Pricing">
+        <SheetSection title="Pricing">
           <div className="grid gap-3 sm:grid-cols-3 sm:items-end">
             <TextFormField name="msrpUsd" label="MSRP (USD)" type="number" />
             <TextFormField name="subsidizedRentalPriceUsd" label="Subsidized (5%) USD" type="number" />
@@ -244,17 +236,17 @@ function TypeSheetBody({
           <p className="text-xs text-muted-foreground">
             Leave a rate blank and it&apos;s worked out from the MSRP (5% subsidized, 10% normal).
           </p>
-        </Section>
+        </SheetSection>
 
-        <Section title="Capabilities">
+        <SheetSection title="Capabilities">
           <CapabilityPicker
             value={values.capabilities}
             onChange={(next) => setField("capabilities", next)}
             options={capabilityOptions}
           />
-        </Section>
+        </SheetSection>
 
-        <Section title="Resources">
+        <SheetSection title="Resources">
           <ResourceLinksField
             idPrefix="type-manual"
             label="Manuals and documentation"
@@ -273,9 +265,9 @@ function TypeSheetBody({
               upload={{ purpose: "gdtf", entityId }}
             />
           ) : null}
-        </Section>
+        </SheetSection>
 
-        <Section title="Public page">
+        <SheetSection title="Public page">
           <p className="text-xs text-muted-foreground">
             Listed types appear on the public browse pages, grouped by their category&apos;s public bucket. The
             full profile also shows manuals, GDTF links, tips and images (including on Lost &amp; Found pages).
@@ -328,7 +320,7 @@ function TypeSheetBody({
             onClear={() => setField("promoImageUrl", "")}
             helperText="Larger marketing image for public type profiles."
           />
-        </Section>
+        </SheetSection>
 
         <SheetFooter className="sticky bottom-0 flex-row flex-wrap items-center justify-between border-t bg-popover">
           {row ? (

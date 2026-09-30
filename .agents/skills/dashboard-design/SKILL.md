@@ -26,6 +26,7 @@ files before building; copy their structure, don't reinvent it.
 | Main + aside grid | `components/events/workspace/tabs/overview-tab.tsx` |
 | **Shared list row** (use this) | `apps/web/src/components/list-row.tsx` |
 | List rows + side panel (the model for any list) | `components/events/event-artist-bill-section.tsx`, `components/events/lineup/position-sheet.tsx` |
+| **Shared list shell** (use these for any list page) | `apps/web/src/components/list-page.tsx`; working example `components/inventory/types-manager.tsx` + `types-table.tsx` + `type-sheet.tsx` |
 | Grouped rows with a type chip and a coloured rail | `components/events/workspace/run-of-show/run-of-show-editor.tsx`, `run-of-show-styles.tsx` |
 | Create dialog with modes | `components/events/lineup/add-to-bill-dialog.tsx` |
 | Tabs as routes | `lib/event-editor-tabs.ts`, `app/dashboard/events/[id]/layout.tsx` |
@@ -106,7 +107,20 @@ row (`flex flex-row flex-wrap items-start justify-between gap-2`). A card is a
 ## Lists: rows plus a side panel
 
 Every list of things (positions, payouts, users, types, requests) follows the
-Lineup:
+Lineup. **Build it from `components/list-page.tsx`** rather than by hand:
+`ListSummary` (summary + order rule), `RowGroup` (a titled, counted group),
+`RowList` / `ListRow` (eyebrow, title, detail, `leading` checkbox, right-hand
+`RowCell`s, `trailing` action + `RowMenu`), `EmptyState`, and `DetailSheet` →
+`DetailSheetHeader`, `SheetSection`, `SheetFields`/`SheetField`,
+`DetailSheetFooter`. `ListRow` gives the row `data-testid={testId}` and its open
+button `${testId}-open`.
+
+The shell, top to bottom: `PageHeader` → `FilterBar` → `ListSummary` → groups
+of rows → `DetailSheet`. A page that is really a view of another (Payments is
+the back half of Invoices) is a `PageTabs` tab there, not its own nav item.
+Dense numbers stay in fixed-width `RowCell`s rather than a spreadsheet table.
+
+The rules the pieces encode:
 
 - **Search and filters: use `FilterBar`** (`components/filter-bar.tsx`), never
   a row of selects. It's a search box, a **Filter** menu that adds a filter as

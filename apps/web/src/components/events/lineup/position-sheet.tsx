@@ -1,5 +1,6 @@
 "use client";
 
+import { SheetSection } from "@/components/list-page";
 import Link from "next/link";
 import { useState } from "react";
 import { EnvelopeSimpleIcon, MicrophoneStageIcon, UserIcon } from "@phosphor-icons/react";
@@ -118,15 +119,6 @@ export function PositionSheet({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="space-y-3 border-t px-4 py-4">
-      <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{title}</h3>
-      {children}
-    </section>
-  );
-}
-
 function PositionSheetBody({
   row,
   eventId,
@@ -195,7 +187,7 @@ function PositionSheetBody({
       </SheetHeader>
 
       {slot && draft ? (
-        <Section title="Position">
+        <SheetSection title="Position">
           <div className="space-y-1">
             <Label htmlFor="position-name">Name</Label>
             <Input
@@ -247,11 +239,11 @@ function PositionSheetBody({
               Save position
             </Button>
           ) : null}
-        </Section>
+        </SheetSection>
       ) : null}
 
       {slot || performer ? (
-        <Section title="Performance times">
+        <SheetSection title="Performance times">
           <PerformanceTimes
             key={`${rowSetWindow(row).join()}|${rowSoundcheckWindow(row).join()}`}
             eventId={eventId}
@@ -262,10 +254,10 @@ function PositionSheetBody({
             busy={busy}
             onSave={(times) => run(() => handlers.saveTimes(row, times))}
           />
-        </Section>
+        </SheetSection>
       ) : null}
 
-      <Section title={actName ? "Act" : "Fill this position"}>
+      <SheetSection title={actName ? "Act" : "Fill this position"}>
         {performer ? (
           <PlatformAct
             performer={performer}
@@ -311,10 +303,10 @@ function PositionSheetBody({
             onOutside={(name) => run(() => handlers.saveExternal(slot, name))}
           />
         ) : null}
-      </Section>
+      </SheetSection>
 
       {slot && slot.inquiries.length > 0 ? (
-        <Section title={`Inquiries (${slot.inquiries.length})`}>
+        <SheetSection title={`Inquiries (${slot.inquiries.length})`}>
           <ul className="space-y-2">
             {slot.inquiries.map((inquiry) => (
               <li key={inquiry._id} className="flex items-start justify-between gap-3 border px-3 py-2 text-sm">
@@ -355,7 +347,7 @@ function PositionSheetBody({
               </li>
             ))}
           </ul>
-        </Section>
+        </SheetSection>
       ) : null}
 
       {canEdit ? (

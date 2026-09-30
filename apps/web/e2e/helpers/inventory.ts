@@ -183,7 +183,7 @@ export async function openNewType(page: Page) {
 export async function openTypeRow(page: Page, typeId: string) {
   const row = typeRow(page, typeId);
   await expect(row).toBeVisible({ timeout: 30_000 });
-  await row.getByTestId("type-row-open").click();
+  await row.getByTestId(`type-row-${typeId}-open`).click();
   const sheet = typeSheet(page);
   await expect(sheet.getByRole("button", { name: "Save changes" })).toBeVisible({ timeout: 20_000 });
   return sheet;
