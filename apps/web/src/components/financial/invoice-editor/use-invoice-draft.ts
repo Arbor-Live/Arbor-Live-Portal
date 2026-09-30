@@ -45,7 +45,10 @@ import {
 type SaveState = { status: "idle" | "saving" | "saved" | "error"; error: string | null };
 
 /** How to handle a save that changes what the client approved (see `invoices.updateDraft`). */
-export type ApprovedChange = { decision: "request_reapproval" | "keep_approval"; note?: string };
+export type ApprovedChange = {
+  decision: "request_reapproval" | "keep_approval" | "match_approval";
+  note?: string;
+};
 
 /**
  * The quote editor's draft: server hydration, the dirty signature, autosave
@@ -835,7 +838,7 @@ export function useInvoiceDraft({
       return false;
     }
 
-    const signature = JSON.stringify(payload);
+    let signature = JSON.stringify(payload);
     const requestId = ++saveRequestIdRef.current;
     setSaving(true);
     setSaveState({ status: "saving", error: null });
@@ -848,8 +851,19 @@ export function useInvoiceDraft({
           ...(approvedChange ? { approvedChange } : {}),
         });
         if (result.warning) notify.warning(result.warning);
+        if (result.appliedDiscount) {
+          // The server set the discount that keeps the approved total: adopt it,
+          // so the editor matches what was saved instead of reading as dirty.
+          const { discountType, discountValue } = result.appliedDiscount;
+          setFields((current) => ({ ...current, discountType, discountValue: String(discountValue) }));
+          signature = JSON.stringify({ ...payload, discountType, discountValue });
+        }
         if (result.revision?.kind === "reapproval_requested") {
           notify.success(`Saved as version ${result.revision.number} and sent to the client for re-approval.`);
+        } else if (result.revision?.kind === "matched_approval" && result.appliedDiscount) {
+          notify.success(
+            `Saved as version ${result.revision.number} with a $${result.appliedDiscount.discountValue.toFixed(2)} discount. The approved total stands.`,
+          );
         } else if (result.revision?.kind === "change_kept_approval") {
           notify.success(`Saved as version ${result.revision.number}. The client's approval stands.`);
         }

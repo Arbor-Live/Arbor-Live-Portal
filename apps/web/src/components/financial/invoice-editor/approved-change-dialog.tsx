@@ -59,6 +59,7 @@ function ApprovedChangeBody({ draft }: { draft: InvoiceDraft }) {
   );
 
   const keeping = decision === "keep_approval";
+  const matching = decision === "match_approval";
   const noteMissing = keeping && !note.trim();
 
   async function submit() {
@@ -72,6 +73,17 @@ function ApprovedChangeBody({ draft }: { draft: InvoiceDraft }) {
   const approved = preview?.approved ?? null;
   const proposed = preview?.proposed ?? null;
   const changes = approved && proposed ? diffQuoteLines(approved.lines, proposed.lines) : [];
+  // Matching the approval only makes sense when the total went up.
+  const increase = approved && proposed ? proposed.totalUsd - approved.totalUsd : 0;
+  const canMatch = increase >= 0.005;
+  const matchDiscount = approved && proposed ? proposed.subtotalUsd - approved.totalUsd : 0;
+  const choiceHelp = matching
+    ? `The discount becomes ${formatUsd(matchDiscount)}${
+        proposed && proposed.discountAmountUsd > 0 ? ` (was ${formatUsd(proposed.discountAmountUsd)})` : ""
+      }, so the total stays ${formatUsd(approved?.totalUsd ?? 0)}. The approval stands, and the client sees the updated lines in their quote history.`
+    : keeping
+      ? "The approval stands at the new total. The change is logged with your reason and shows in the client's quote history."
+      : "The quote goes back to awaiting approval, and the client gets an email showing the old and new totals.";
 
   return (
     <>
@@ -121,6 +133,7 @@ function ApprovedChangeBody({ draft }: { draft: InvoiceDraft }) {
         <ToggleGroup
           type="single"
           variant="outline"
+          orientation="vertical"
           value={decision}
           onValueChange={(value) => {
             if (value) setDecision(value as Decision);
@@ -128,22 +141,30 @@ function ApprovedChangeBody({ draft }: { draft: InvoiceDraft }) {
           aria-label="What happens to the approval"
           className="w-full"
         >
-          <ToggleGroupItem value="request_reapproval" className="flex-1">
+          <ToggleGroupItem value="request_reapproval" className="w-full justify-start">
             Send for re-approval
           </ToggleGroupItem>
-          <ToggleGroupItem value="keep_approval" className="flex-1">
-            Keep the approval
+          <ToggleGroupItem value="keep_approval" className="w-full justify-start">
+            Keep the approval at the new total
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="match_approval"
+            className="w-full justify-start"
+            disabled={!canMatch}
+            title={canMatch ? undefined : "Only when the total went up"}
+          >
+            Update the quote and discount to match the approval
           </ToggleGroupItem>
         </ToggleGroup>
-        <p className="text-xs text-muted-foreground">
-          {keeping
-            ? "The approval stands. The change is logged with your reason and shows in the client's quote history."
-            : "The quote goes back to awaiting approval, and the client gets an email showing the old and new totals."}
+        <p className="text-xs text-muted-foreground" data-testid="approved-change-help">
+          {choiceHelp}
         </p>
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="approved-change-note">{keeping ? "Why the approval still stands" : "Note to the client (optional)"}</Label>
+        <Label htmlFor="approved-change-note">
+          {keeping ? "Why the approval still stands" : matching ? "Note (optional)" : "Note to the client (optional)"}
+        </Label>
         <Textarea
           id="approved-change-note"
           value={note}
@@ -158,7 +179,13 @@ function ApprovedChangeBody({ draft }: { draft: InvoiceDraft }) {
           Cancel
         </Button>
         <Button type="button" disabled={submitting || noteMissing || !payload} onClick={() => void submit()}>
-          {submitting ? "Saving…" : keeping ? "Save and keep approval" : "Save and send for re-approval"}
+          {submitting
+            ? "Saving…"
+            : keeping
+              ? "Save and keep approval"
+              : matching
+                ? "Save with discount"
+                : "Save and send for re-approval"}
         </Button>
       </DialogFooter>
     </>

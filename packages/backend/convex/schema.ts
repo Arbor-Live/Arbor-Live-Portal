@@ -58,6 +58,8 @@ const invoiceRevisionKindValue = v.union(
   v.literal("reapproval_requested"),
   /** Staff changed an approved quote and kept the approval, with a reason. */
   v.literal("change_kept_approval"),
+  /** Staff changed an approved quote and discounted it back to the approved total. */
+  v.literal("matched_approval"),
 );
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));

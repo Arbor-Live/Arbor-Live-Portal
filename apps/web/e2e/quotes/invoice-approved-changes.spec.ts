@@ -162,4 +162,34 @@ test.describe("changing an approved quote", () => {
     expect(state.approvedTotalUsd).toBe(150);
     expect(state.revisions[1]).toMatchObject({ kind: "change_kept_approval", note: "Client agreed by email." });
   });
+
+  test("discounting to match keeps the approved total and the approval", async ({ page, browser }) => {
+    const { invoiceId } = await approvedQuote(page, browser, `E2E Approved Match ${Date.now()}`);
+
+    const dialog = await repriceAndSave(page);
+    await dialog.getByRole("radio", { name: /discount to match the approval/ }).click();
+    await expect(dialog.getByTestId("approved-change-help")).toContainText(
+      "The discount becomes $250.00, so the total stays $150.00",
+    );
+    await dialog.getByRole("button", { name: "Save with discount" }).click();
+    await expect(page.getByText(/Saved as version 2 with a \$250\.00 discount/)).toBeVisible({ timeout: 25_000 });
+
+    const state = await pollConvex<RevisionsState>(
+      "e2eHelpers:getInvoiceRevisionsState",
+      { invoiceId },
+      (row) => row?.revisions.length === 2,
+    );
+    expect(state.clientApprovalStatus).toBe("approved");
+    expect(state.totalUsd).toBe(150);
+    expect(state.revisions[1]).toMatchObject({ kind: "matched_approval", totalUsd: 150 });
+    const totals = await pollConvex<{ discountType: string; discountValue: number; subtotalUsd: number }>(
+      "e2eHelpers:getInvoiceTotalsState",
+      { invoiceId },
+      (row) => Boolean(row),
+    );
+    expect(totals).toMatchObject({ discountType: "amount", discountValue: 250, subtotalUsd: 400 });
+
+    // The editor adopted the server's discount, so nothing reads as unsaved.
+    await expect(page.getByText("Unsaved changes")).toHaveCount(0, { timeout: 10_000 });
+  });
 });

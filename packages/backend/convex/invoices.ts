@@ -441,7 +441,12 @@ function approvalContentSignature(
 }
 
 const approvedChangeValue = v.object({
-  decision: v.union(v.literal("request_reapproval"), v.literal("keep_approval")),
+  decision: v.union(
+    v.literal("request_reapproval"),
+    v.literal("keep_approval"),
+    /** Keep the new lines, and add a discount so the total stays what the client approved. */
+    v.literal("match_approval"),
+  ),
   /** Why it changed. Required to keep an approval; shown to the client either way. */
   note: v.optional(v.string()),
 });
@@ -1356,7 +1361,7 @@ export const updateDraft = mutation({
     // invoice that already has a live link must not silently extend it.
     const mintedNewToken = Boolean(publicApprovalToken) && !existing.publicApprovalToken;
     const normalizedTermsIds = normalizeTermsIds(args.termsIds);
-    const totals = await computeTotals(
+    let totals = await computeTotals(
       ctx,
       args.lineItems as LineInput[],
       args.equipmentPricingMode,
@@ -1365,6 +1370,8 @@ export const updateDraft = mutation({
       args.discountValue,
       args.id,
     );
+    let discountType = args.discountType;
+    let discountValue = args.discountValue;
     const now = Date.now();
 
     const beforeRows = await ctx.db
@@ -1398,6 +1405,29 @@ export const updateDraft = mutation({
       }
       // Pin what the client approved before this change replaces it.
       await ensureApprovedRevision(ctx, existing);
+      if (approvedChange.decision === "match_approval") {
+        const pinned = await ctx.db.get(args.id);
+        const approvedTotalUsd = pinned?.approvedTotalUsd ?? existing.totalUsd;
+        if (totals.totalUsd <= approvedTotalUsd) {
+          appError(
+            "QUOTE_MATCH_APPROVAL_NOT_HIGHER",
+            "The total didn't go up, so there's nothing to discount back to the approved amount.",
+          );
+        }
+        // One amount discount covering everything above the approved total
+        // (it replaces any earlier discount, which it already includes).
+        discountType = "amount";
+        discountValue = Number(Math.max(0, totals.subtotalUsd - approvedTotalUsd).toFixed(2));
+        totals = await computeTotals(
+          ctx,
+          args.lineItems as LineInput[],
+          args.equipmentPricingMode,
+          args.crewRateMode,
+          discountType,
+          discountValue,
+          args.id,
+        );
+      }
     }
 
     await ctx.db.patch(args.id, {
@@ -1420,8 +1450,8 @@ export const updateDraft = mutation({
       clientPostalCode: trimOptional(args.clientPostalCode),
       equipmentPricingMode: args.equipmentPricingMode,
       crewRateMode: args.crewRateMode,
-      discountType: args.discountType,
-      discountValue: Math.max(0, args.discountValue),
+      discountType,
+      discountValue: Math.max(0, discountValue),
       discountAmountUsd: totals.discountAmountUsd,
       discountWarning: totals.discountWarning,
       equipmentSubtotalUsd: totals.equipmentSubtotalUsd,
@@ -1453,11 +1483,19 @@ export const updateDraft = mutation({
       if (!saved) appError("INVOICE_NOT_FOUND", "Invoice not found.");
       const snapshot = await snapshotInvoice(ctx, saved);
       const kind =
-        approvedChange.decision === "request_reapproval" ? "reapproval_requested" : "change_kept_approval";
+        approvedChange.decision === "request_reapproval"
+          ? "reapproval_requested"
+          : approvedChange.decision === "match_approval"
+            ? "matched_approval"
+            : "change_kept_approval";
+      const matchedNote =
+        kind === "matched_approval"
+          ? `Discounted $${discountValue.toFixed(2)} to keep the approved total.`
+          : undefined;
       const { number } = await recordInvoiceRevision(ctx, args.id, snapshot, {
         kind,
         at: now,
-        note: approvedChange.note,
+        note: [approvedChange.note?.trim(), matchedNote].filter(Boolean).join(" ") || undefined,
         actorName: viewer.name,
         actorUserId: viewer._id ?? viewer.id,
       });
@@ -1473,7 +1511,14 @@ export const updateDraft = mutation({
         });
       }
     }
-    return { id: args.id, warning: totals.discountWarning, revision };
+    return {
+      id: args.id,
+      warning: totals.discountWarning,
+      revision,
+      /** Set when the server rewrote the discount (match_approval); the editor adopts it. */
+      appliedDiscount:
+        revision?.kind === "matched_approval" ? { discountType: "amount" as const, discountValue } : null,
+    };
     });
   },
 });
