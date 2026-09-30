@@ -22,6 +22,7 @@ import {
 } from "./lib/auth";
 import {
   FWS_JOB_INFO,
+  ONBOARDING_FWS_EMAILS,
   ONBOARDING_LEADERSHIP_EMAILS,
   ONBOARDING_LINKS,
 } from "./lib/onboardingLinks";
@@ -31,6 +32,7 @@ import {
   normalizePayrollMethod,
   type PayrollMethod,
 } from "./lib/crewCompensation";
+import { formatStanfordPosition, type StanfordPosition } from "./lib/stanfordPosition";
 import { resolveParticipationFlags } from "./lib/userParticipation";
 import { isArtistOrganizationType } from "./lib/organizationType";
 import { assertUsernameAvailable, normalizeUsername } from "./lib/username";
@@ -44,6 +46,15 @@ const onboardingStatusValue = v.union(
 );
 
 const REMINDER_COOLDOWN_MS = 6 * 24 * 60 * 60 * 1000;
+
+const stanfordPositionValue = v.union(
+  v.literal("undergrad"),
+  v.literal("coterm"),
+  v.literal("masters"),
+  v.literal("phd"),
+  v.literal("postdoc"),
+  v.literal("other"),
+);
 
 type CrewOnboardingDoc = Doc<"userOnboarding">;
 
@@ -331,6 +342,8 @@ async function scheduleOnboardingCompletedEmails(
     userId: string;
     name: string;
     email: string;
+    payrollMethod: PayrollMethod;
+    stanfordPosition: StanfordPosition | undefined;
     hasFederalWorkStudy: boolean | null | undefined;
     hasValidDriversLicense: boolean | undefined;
     signatureLegalName: string;
@@ -348,6 +361,12 @@ async function scheduleOnboardingCompletedEmails(
   for (const email of ONBOARDING_LEADERSHIP_EMAILS) {
     recipients.add(email.toLowerCase());
   }
+  // Stanford HR / FWS leadership only deals with Stanford-payroll hires.
+  if (args.payrollMethod !== "external") {
+    for (const email of ONBOARDING_FWS_EMAILS) {
+      recipients.add(email.toLowerCase());
+    }
+  }
 
   const [rate, settings] = await Promise.all([
     ctx.db
@@ -360,6 +379,8 @@ async function scheduleOnboardingCompletedEmails(
   const payload = {
     crewName: args.name,
     crewEmail: args.email,
+    studentTypeLabel: formatStanfordPosition(args.stanfordPosition),
+    payrollTypeLabel: args.payrollMethod === "external" ? "External payroll" : "Stanford payroll",
     hasFederalWorkStudy: args.hasFederalWorkStudy ?? false,
     hasValidDriversLicense: args.hasValidDriversLicense ?? false,
     signatureLegalName: args.signatureLegalName,
@@ -427,6 +448,7 @@ const crewOnboardingReturn = v.object({
     username: v.optional(v.string()),
     pronouns: v.optional(v.string()),
     gradYear: v.optional(v.number()),
+    stanfordPosition: v.optional(stanfordPositionValue),
   }),
 });
 
@@ -443,6 +465,7 @@ function serializeCrewOnboarding(
     username?: string;
     pronouns?: string;
     gradYear?: number;
+    stanfordPosition?: StanfordPosition;
   },
   payrollMethod: PayrollMethod,
 ) {
@@ -554,6 +577,7 @@ export const getMyCrewOnboarding = query({
       username: profile?.username,
       pronouns: profile?.pronouns,
       gradYear: profile?.gradYear,
+      stanfordPosition: profile?.stanfordPosition,
     };
 
     const payrollMethod = normalizePayrollMethod(profile?.payrollMethod);
@@ -609,6 +633,7 @@ export const saveCrewProfileStep = mutation({
     username: v.optional(v.string()),
     pronouns: v.optional(v.string()),
     gradYear: v.optional(v.number()),
+    stanfordPosition: v.optional(stanfordPositionValue),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -661,6 +686,7 @@ export const saveCrewProfileStep = mutation({
         ...(usernameProvided ? { username } : {}),
         pronouns: pronouns ?? profile.pronouns,
         gradYear: gradYear ?? profile.gradYear,
+        stanfordPosition: args.stanfordPosition ?? profile.stanfordPosition,
         updatedAt: now,
       });
     } else {
@@ -676,6 +702,7 @@ export const saveCrewProfileStep = mutation({
         ...(usernameProvided ? { username } : {}),
         pronouns,
         gradYear,
+        stanfordPosition: args.stanfordPosition,
         createdAt: now,
         updatedAt: now,
       });
@@ -816,7 +843,11 @@ export const completeCrewOnboarding = mutation({
       signatureUserAgent: args.signatureUserAgent?.trim() || undefined,
     };
 
-    const payrollMethod = await getPayrollMethodForUser(ctx, userId);
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    const payrollMethod = normalizePayrollMethod(profile?.payrollMethod);
     if (!crewRequiredStepsComplete(next, payrollMethod)) {
       throw new Error("Please complete all required onboarding steps before signing.");
     }
@@ -834,6 +865,8 @@ export const completeCrewOnboarding = mutation({
       userId,
       name: user.name ?? user.email ?? "Crew member",
       email: user.email ?? "",
+      payrollMethod,
+      stanfordPosition: profile?.stanfordPosition,
       hasFederalWorkStudy: row.hasFederalWorkStudy,
       hasValidDriversLicense: row.hasValidDriversLicense,
       signatureLegalName,

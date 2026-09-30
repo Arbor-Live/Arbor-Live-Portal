@@ -33,8 +33,12 @@ canonical description of the domain itself.
   `organizationOnboarding`. Incomplete crew get a dashboard banner and weekly
   reminder email; assigned bands that have not finished onboarding get a weekly
   reminder that payouts are blocked until they complete it. When crew finish,
-  admins and HR leadership get an email that includes the effective hourly rate
-  (Normal, Lead, or Custom, resolved the same way as invoice crew pricing).
+  admins and leadership get an email that includes the effective hourly rate
+  (Normal, Lead, or Custom, resolved the same way as invoice crew pricing), the
+  crew member's student type (their `stanfordPosition`, set in the profile step
+  and seeded from the crew application), and their payroll type. Stanford-HR/FWS
+  recipients (`ONBOARDING_FWS_EMAILS`) are only copied for Stanford-payroll
+  hires; external (contractor) crew are not processed through HR.
   Admins see status under Users and can waive, and can switch a person's payroll
   method under User details → **Payment method**.
 - Arbor Live crew invites (and convert-to-member) require a **compensation rate

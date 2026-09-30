@@ -3826,6 +3826,7 @@ export const resetCrewOnboarding = mutation({
     if (profile) {
       await ctx.db.patch(profile._id, {
         payrollMethod: "stanford",
+        stanfordPosition: undefined,
         updatedAt: now,
       });
     }
@@ -3851,6 +3852,7 @@ export const getCrewOnboardingState = query({
       narcanCompleted: v.boolean(),
       studentId: v.union(v.string(), v.null()),
       i9Acknowledged: v.boolean(),
+      stanfordPosition: v.union(v.string(), v.null()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -3860,6 +3862,10 @@ export const getCrewOnboardingState = query({
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .unique();
     if (!row) return null;
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .unique();
     return {
       userId: row.userId,
       status: row.status,
@@ -3870,6 +3876,7 @@ export const getCrewOnboardingState = query({
       narcanCompleted: Boolean(row.narcanCompletedAt),
       studentId: row.studentId ?? null,
       i9Acknowledged: Boolean(row.i9AcknowledgedAt),
+      stanfordPosition: profile?.stanfordPosition ?? null,
     };
   },
 });

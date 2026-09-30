@@ -5,6 +5,8 @@ import type { OnboardingCompletedEmailProps } from "../src/types";
 const props = {
   crewName: "Alex Crew",
   crewEmail: "alex@stanford.edu",
+  studentTypeLabel: "Undergrad",
+  payrollTypeLabel: "Stanford payroll",
   hasFederalWorkStudy: true,
   hasValidDriversLicense: false,
   signatureLegalName: "Alexandra Crew",
@@ -22,5 +24,13 @@ describe("renderOnboardingCompletedEmail", () => {
     expect(html).toContain("Rate");
     expect(html).toContain("$20.00/hr · Normal");
     expect(html).toContain("Alex Crew");
+  });
+
+  it("includes the student and payroll type", async () => {
+    const html = await renderOnboardingCompletedEmail(props);
+    expect(html).toContain("Student type");
+    expect(html).toContain("Undergrad");
+    expect(html).toContain("Payroll type");
+    expect(html).toContain("Stanford payroll");
   });
 });

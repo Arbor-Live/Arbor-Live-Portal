@@ -90,6 +90,7 @@ import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { assertUsernameAvailable, normalizeUsername } from "./lib/username";
 import { clearUserBan, setAuthUserBanState } from "./lib/userAccess";
 import { loadAllAdminProfiles } from "./lib/userProfiles";
+import type { StanfordPosition } from "./lib/stanfordPosition";
 import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
 import { returnActTimesToPosition } from "./lib/actPositions";
 
@@ -387,6 +388,7 @@ export async function ensureUserProfileDefaults(
     payrollMethod,
     defaultOrganizationId,
     gradYear,
+    stanfordPosition,
   }: {
     title?: string;
     phone?: string;
@@ -402,6 +404,7 @@ export async function ensureUserProfileDefaults(
     payrollMethod?: PayrollMethod;
     defaultOrganizationId?: string;
     gradYear?: number;
+    stanfordPosition?: StanfordPosition;
   },
 ) {
   const now = Date.now();
@@ -432,6 +435,7 @@ export async function ensureUserProfileDefaults(
       payrollMethod: payrollMethod ?? existing.payrollMethod,
       defaultOrganizationId: defaultOrganizationId ?? existing.defaultOrganizationId,
       gradYear: gradYear ?? existing.gradYear,
+      stanfordPosition: stanfordPosition ?? existing.stanfordPosition,
       updatedAt: now,
     });
     return existing._id;
@@ -452,6 +456,7 @@ export async function ensureUserProfileDefaults(
     payrollMethod,
     defaultOrganizationId,
     gradYear,
+    stanfordPosition,
     createdAt: now,
     updatedAt: now,
   });
@@ -1935,6 +1940,8 @@ export const resendInviteAdmin = mutation({
       includeInTimecards: pending?.includeInTimecards,
       assignableAsCrew: pending?.assignableAsCrew,
       showOnPublicCrewPage: pending?.showOnPublicCrewPage,
+      gradYear: pending?.gradYear,
+      stanfordPosition: pending?.stanfordPosition,
       isExistingUser: await userExistsForInvite(ctx, invite.email),
       resendKey: String(now),
     });
@@ -2048,6 +2055,7 @@ async function resendPendingInvitation(
     assignableAsCrew: pending?.assignableAsCrew,
     showOnPublicCrewPage: pending?.showOnPublicCrewPage,
     gradYear: pending?.gradYear,
+    stanfordPosition: pending?.stanfordPosition,
     isExistingUser: await userExistsForInvite(ctx, email),
     resendKey: String(now),
   });

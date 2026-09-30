@@ -25,6 +25,7 @@ import {
   type PayrollMethod,
   type UserCompensationRateMode,
 } from "./lib/crewCompensation";
+import type { StanfordPosition } from "./lib/stanfordPosition";
 
 type AuthUser = {
   id?: string;
@@ -47,6 +48,7 @@ async function ensureUserProfileDefaults(
     defaultOrganizationId?: string;
     payrollMethod?: PayrollMethod;
     gradYear?: number;
+    stanfordPosition?: StanfordPosition;
     requiresOnboarding?: boolean;
     includeInTimecards?: boolean;
     assignableAsCrew?: boolean;
@@ -67,6 +69,7 @@ async function ensureUserProfileDefaults(
       defaultOrganizationId: args.defaultOrganizationId ?? existing.defaultOrganizationId,
       payrollMethod: args.payrollMethod ?? existing.payrollMethod,
       gradYear: args.gradYear ?? existing.gradYear,
+      stanfordPosition: args.stanfordPosition ?? existing.stanfordPosition,
       requiresOnboarding:
         args.requiresOnboarding !== undefined
           ? args.requiresOnboarding
@@ -95,6 +98,7 @@ async function ensureUserProfileDefaults(
     defaultOrganizationId: args.defaultOrganizationId,
     payrollMethod: args.payrollMethod,
     gradYear: args.gradYear,
+    stanfordPosition: args.stanfordPosition,
     requiresOnboarding: args.requiresOnboarding,
     includeInTimecards: args.includeInTimecards,
     assignableAsCrew: args.assignableAsCrew,
@@ -283,6 +287,7 @@ export const acceptInviteWithPassword = mutation({
       defaultOrganizationId: pending.organizationId,
       payrollMethod: pending.payrollMethod,
       gradYear: pending.gradYear,
+      stanfordPosition: pending.stanfordPosition,
       requiresOnboarding: pending.requiresOnboarding,
       includeInTimecards: pending.includeInTimecards,
       assignableAsCrew: pending.assignableAsCrew,

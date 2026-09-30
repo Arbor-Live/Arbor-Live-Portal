@@ -603,6 +603,7 @@ export const convertToMember = mutation({
         defaultOrganizationId: arborOrg.id,
         payrollMethod: args.payrollMethod,
         gradYear: application.gradYear,
+        stanfordPosition: application.stanfordPosition,
       });
       await clearUserBan(ctx, existingUserId);
       await upsertOrgMembership(ctx, {
@@ -637,6 +638,7 @@ export const convertToMember = mutation({
       customHourlyRateUsd: args.customHourlyRateUsd,
       payrollMethod: args.payrollMethod,
       gradYear: application.gradYear,
+      stanfordPosition: application.stanfordPosition,
       isExistingUser: Boolean(existingUserId),
     });
 

@@ -11,6 +11,8 @@ import type { OnboardingCompletedEmailProps } from "../src/types";
 export function OnboardingCompletedEmail({
   crewName,
   crewEmail,
+  studentTypeLabel,
+  payrollTypeLabel,
   hasFederalWorkStudy,
   hasValidDriversLicense,
   signatureLegalName,
@@ -33,6 +35,8 @@ export function OnboardingCompletedEmail({
       </BodyCopy>
       <DataCard title="Details">
         <DetailRow label="Legal signature" value={signatureLegalName} />
+        <DetailRow label="Student type" value={studentTypeLabel} />
+        <DetailRow label="Payroll type" value={payrollTypeLabel} />
         <DetailRow label="Rate" value={hourlyRateLabel} />
         {studentId ? <DetailRow label="Student ID" value={studentId} /> : null}
         {employmentStartDateLabel ? (
@@ -59,6 +63,8 @@ export function OnboardingCompletedEmail({
 OnboardingCompletedEmail.PreviewProps = {
   crewName: "Alex Crew",
   crewEmail: "alex@stanford.edu",
+  studentTypeLabel: "Undergrad",
+  payrollTypeLabel: "Stanford payroll",
   hasFederalWorkStudy: true,
   hasValidDriversLicense: false,
   signatureLegalName: "Alexandra Crew",
