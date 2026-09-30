@@ -700,6 +700,23 @@ export const replaceContainedAssets = mutation({
  * Direct children of a container, hydrated with type/location (Contains editor).
  * Bounded like listSummaries.
  */
+/**
+ * One item, hydrated like a list row, for the items side panel. Takes a plain
+ * string so a stale or mistyped `?item=` link reads as "not found".
+ */
+export const get = query({
+  args: { id: v.string() },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const id = ctx.db.normalizeId("inventoryItems", args.id);
+    if (!id) return null;
+    const item = await ctx.db.get(id);
+    if (!item) return null;
+    const [row] = await hydrateInventoryItems(ctx, [item]);
+    return row ?? null;
+  },
+});
+
 export const getChildren = query({
   args: { id: v.id("inventoryItems") },
   handler: async (ctx, args) => {

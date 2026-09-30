@@ -46,7 +46,7 @@ test.describe.serial("create-asset wizard", () => {
       timeout: 30_000,
     });
 
-    await page.getByRole("button", { name: "New Item", exact: true }).click();
+    await page.getByRole("button", { name: "New item", exact: true }).click();
     const sheet = page.getByRole("dialog", { name: "Create assets" });
     await expect(sheet).toBeVisible({ timeout: 30_000 });
 
@@ -104,7 +104,7 @@ test.describe.serial("create-asset wizard", () => {
       timeout: 30_000,
     });
 
-    await page.getByRole("button", { name: "New Item", exact: true }).click();
+    await page.getByRole("button", { name: "New item", exact: true }).click();
     const sheet = page.getByRole("dialog", { name: "Create assets" });
     await expect(sheet).toBeVisible({ timeout: 30_000 });
 
@@ -164,8 +164,13 @@ test.describe.serial("create-asset wizard", () => {
     await page.getByLabel("Scan asset").fill(caseAssetId);
     await page.getByRole("button", { name: "Add", exact: true }).click();
 
+    // The scan opens the item's panel and narrows the list to its selected row.
+    await expect(page.getByTestId("item-sheet")).toContainText(caseAssetId, { timeout: 30_000 });
+    // The modal panel hides the page from the accessibility tree; close it to check the row.
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("item-sheet")).toHaveCount(0, { timeout: 20_000 });
     const row = itemRow(page, state!.itemId);
     await expect(row).toBeVisible({ timeout: 30_000 });
-    await expect(row.locator("input[type=checkbox]")).toBeChecked({ timeout: 30_000 });
+    await expect(row.getByRole("checkbox")).toBeChecked({ timeout: 30_000 });
   });
 });

@@ -4,7 +4,7 @@ import { formField } from "../helpers/form";
 import { pickSearchableOption } from "../helpers/select";
 import {
   deleteInventoryFixtures,
-  formSaveBar,
+  confirmAppDialog,
   itemRow,
   revealRow,
   waitForInventoryItem,
@@ -120,8 +120,9 @@ test.describe.serial("inventory items and storage locations", () => {
     await searchItems(page, contentAssetId);
 
     const row = await revealRow(page, itemRow(page, content.itemId));
-    await row.getByRole("button", { name: "Edit", exact: true }).click();
-    await expect(page.getByText("Edit Item")).toBeVisible({ timeout: 20_000 });
+    await openItemRow(row);
+    const sheet = page.getByTestId("item-sheet");
+    await expect(sheet.getByRole("button", { name: "Save changes" })).toBeVisible({ timeout: 20_000 });
 
     await pickSearchableOption(
       page,
@@ -129,7 +130,9 @@ test.describe.serial("inventory items and storage locations", () => {
       caseAssetId,
       new RegExp(`^${caseAssetId}`),
     );
-    await formSaveBar(page).getByRole("button", { name: "Save", exact: true }).click();
+    await sheet.getByRole("button", { name: "Save changes", exact: true }).click();
+    // The panel closes once the save lands.
+    await expect(sheet).toHaveCount(0, { timeout: 30_000 });
 
     const contained = await waitForInventoryItem(
       contentAssetId,
@@ -154,7 +157,9 @@ test.describe.serial("inventory items and storage locations", () => {
     await searchItems(page, caseAssetId);
 
     const row = await revealRow(page, itemRow(page, seededCase.itemId));
-    await row.getByRole("button", { name: "Delete", exact: true }).click();
+    await row.getByRole("button", { name: /^More for / }).click();
+    await page.getByRole("menuitem", { name: "Delete item" }).click();
+    await confirmAppDialog(page, "Delete item");
 
     // `inventoryItems.remove` refuses rather than orphaning the contents.
     await page.waitForTimeout(3_000);
@@ -191,7 +196,12 @@ test.describe.serial("inventory items and storage locations", () => {
   });
 });
 
-/** The items manager's search box (a bare `Input`, not a `FilterField`). */
+/** Open an item row's side panel: the row's main area is its first button. */
+async function openItemRow(row: Locator) {
+  await row.getByRole("button").first().click();
+}
+
+/** The items page's search box. */
 async function searchItems(page: Page, query: string) {
   await page.getByPlaceholder("Search by asset ID, serial, model").fill(query);
 }
@@ -216,7 +226,7 @@ async function createItem(
     submitOnly?: boolean;
   },
 ): Promise<Locator> {
-  await page.getByRole("button", { name: "New Item", exact: true }).click();
+  await page.getByRole("button", { name: "New item", exact: true }).click();
   const sheet = page.getByRole("dialog", { name: "Create assets" });
   await expect(sheet).toBeVisible({ timeout: 30_000 });
 

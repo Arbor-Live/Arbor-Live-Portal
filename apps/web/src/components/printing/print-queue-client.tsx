@@ -1,9 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { createColumnHelper } from "@tanstack/react-table";
-import { useEffect, useMemo, useState } from "react";
 import { PrinterIcon } from "@phosphor-icons/react";
 import {
   activeFilters,
@@ -12,23 +12,23 @@ import {
   type FilterDefinition,
   type FilterState,
 } from "@/components/filter-bar";
-import { api } from "@/lib/convex-api";
-import { formatDateTime } from "@/lib/format";
-import { getConvexErrorMessage } from "@/lib/convex-error";
+import { EmptyState, ListSummary, RowCell, RowGroup, RowMenu, RowText } from "@/components/list-page";
+import { ListRow } from "@/components/list-row";
+import { MetaItem, PageHeader, StatusPill, type Tone } from "@/components/page-header";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DataTable } from "@/components/ui/data-table";
-import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
-import type { DataTableFeatures } from "@/components/ui/data-table-features";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/convex-api";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { formatDateTime } from "@/lib/format";
+import { notify } from "@/lib/notify";
 
 type PrinterRow = FunctionReturnType<typeof api.printAgent.listPrinters>[number];
 type JobRow = FunctionReturnType<typeof api.printJobs.listRecent>[number];
 
 /** The agent heartbeats about every 10 min (jittered); allow a missed beat. */
 const ONLINE_WINDOW_MS = 15 * 60 * 1000;
-
-const jobColumnHelper = createColumnHelper<DataTableFeatures, JobRow>();
 
 const JOB_STATUS_LABELS: Record<JobRow["status"], string> = {
   pending: "Rendering",
@@ -38,78 +38,59 @@ const JOB_STATUS_LABELS: Record<JobRow["status"], string> = {
   failed: "Failed",
 };
 
+const JOB_STATUS_TONES: Record<JobRow["status"], Tone> = {
+  pending: "neutral",
+  ready: "blue",
+  printing: "blue",
+  printed: "emerald",
+  failed: "rose",
+};
+
 const JOB_KIND_LABELS: Record<JobRow["kind"], string> = {
   brief: "Brief",
   event_file: "Event file",
   poster: "Poster",
 };
 
-function jobStatusBadgeClass(status: JobRow["status"]): string {
-  switch (status) {
-    case "printed":
-      return "border-status-emerald-500/40 bg-status-emerald-500/10 text-status-emerald-700 dark:text-status-emerald-300";
-    case "printing":
-      return "border-status-sky-500/40 bg-status-sky-500/10 text-status-sky-700 dark:text-status-sky-300";
-    case "ready":
-      return "border-status-amber-500/40 bg-status-amber-500/10 text-status-amber-700 dark:text-status-amber-300";
-    case "failed":
-      return "border-destructive/40 bg-destructive/10 text-destructive";
-    default:
-      return "border-muted-foreground/30 text-muted-foreground";
-  }
+const JOB_GROUPS: { id: string; label: string; description: string; statuses: JobRow["status"][] }[] = [
+  {
+    id: "failed",
+    label: "Needs attention",
+    description: "The printer gave up on these. Check the printer, then reprint.",
+    statuses: ["failed"],
+  },
+  {
+    id: "queued",
+    label: "In the queue",
+    description: "Rendering, waiting for the printer, or printing now.",
+    statuses: ["pending", "ready", "printing"],
+  },
+  { id: "printed", label: "Printed", description: "Done. Reprint if a copy went missing.", statuses: ["printed"] },
+];
+
+function isOnline(printer: PrinterRow, now: number) {
+  return printer.lastSeenAt !== undefined && now - printer.lastSeenAt < ONLINE_WINDOW_MS;
 }
 
-function StatusBadge({ status }: { status: JobRow["status"] }) {
-  return (
-    <span
-      className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${jobStatusBadgeClass(status)}`}
-    >
-      {JOB_STATUS_LABELS[status]}
-    </span>
-  );
-}
-
-function PrinterCard({ printer, now }: { printer: PrinterRow; now: number }) {
-  const online =
-    printer.lastSeenAt !== undefined && now - printer.lastSeenAt < ONLINE_WINDOW_MS;
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-        <div className="flex items-center gap-2">
-          <PrinterIcon className="size-5 text-muted-foreground" />
-          <div>
-            <CardTitle>{printer.name}</CardTitle>
-            <p className="text-xs text-muted-foreground">Queue: {printer.queueName}</p>
-          </div>
-        </div>
-        <span
-          className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${
-            online
-              ? "border-status-emerald-500/40 bg-status-emerald-500/10 text-status-emerald-700 dark:text-status-emerald-300"
-              : "border-destructive/40 bg-destructive/10 text-destructive"
-          }`}
-        >
-          {online ? "Online" : "Offline"}
-        </span>
-      </CardHeader>
-      <CardContent className="space-y-1 text-sm">
-        <p className="text-muted-foreground">
-          Last seen: {printer.lastSeenAt ? formatDateTime(printer.lastSeenAt) : "Never"}
-        </p>
-        {printer.lastSeenStatus ? (
-          <p className="text-muted-foreground">Status: {printer.lastSeenStatus}</p>
-        ) : null}
-        {printer.lastError ? <p className="text-destructive">Error: {printer.lastError}</p> : null}
-      </CardContent>
-    </Card>
-  );
-}
-
+/**
+ * The warehouse printers and the last 100 jobs sent to them: what failed
+ * first, then what's still on its way, then what printed.
+ */
 export function PrintQueueClient() {
   const printers = useQuery(api.printAgent.listPrinters, {});
   const jobs = useQuery(api.printJobs.listRecent, { limit: 100 });
+  const reprint = useMutation(api.printJobs.reprintJob);
+  const { alert } = useAppDialog();
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<FilterState>({});
+  const [reprintingId, setReprintingId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   // The 100 most recent jobs are all on the page, so filters run here.
   const filterDefinitions = useMemo<FilterDefinition[]>(() => {
     const distinct = (values: string[]) =>
@@ -123,6 +104,14 @@ export function PrintQueueClient() {
           label: JOB_STATUS_LABELS[value],
         })),
       },
+      {
+        id: "kind",
+        label: "Kind",
+        options: (Object.keys(JOB_KIND_LABELS) as JobRow["kind"][]).map((value) => ({
+          value,
+          label: JOB_KIND_LABELS[value],
+        })),
+      },
       { id: "printer", label: "Printer", options: distinct((jobs ?? []).map((job) => job.printerName)) },
       {
         id: "event",
@@ -133,26 +122,22 @@ export function PrintQueueClient() {
       },
     ];
   }, [jobs]);
+
   const shownJobs = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return (jobs ?? []).filter(
       (job) =>
         (!needle || [job.eventTitle, job.fileName].some((field) => field.toLowerCase().includes(needle))) &&
         matchesFilter(filters.status, job.status) &&
+        matchesFilter(filters.kind, job.kind) &&
         matchesFilter(filters.printer, job.printerName) &&
         matchesFilter(filters.event, job.eventId),
     );
   }, [filters, jobs, search]);
   const narrowed = Boolean(search.trim()) || Object.keys(activeFilters(filters)).length > 0;
-  const reprint = useMutation(api.printJobs.reprintJob);
-  const { alert } = useAppDialog();
-  const [reprintingId, setReprintingId] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(id);
-  }, []);
+  const onlineCount = (printers ?? []).filter((printer) => isOnline(printer, now)).length;
+  const count = (id: string) =>
+    shownJobs.filter((job) => JOB_GROUPS.find((group) => group.id === id)!.statuses.includes(job.status)).length;
 
   async function handleReprint(job: JobRow) {
     setReprintingId(job._id);
@@ -160,6 +145,8 @@ export function PrintQueueClient() {
       const jobId = await reprint({ jobId: job._id });
       if (!jobId) {
         await alert("No enabled printer is configured yet, so the reprint wasn't queued.");
+      } else {
+        notify.success(`Reprint of ${job.fileName} queued.`);
       }
     } catch (error) {
       await alert(getConvexErrorMessage(error, "Could not queue a reprint."));
@@ -168,129 +155,147 @@ export function PrintQueueClient() {
     }
   }
 
-  const columns = jobColumnHelper.columns([
-    jobColumnHelper.accessor("eventTitle", {
-      id: "event",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Event" />,
-      cell: ({ row }) => (
-        <div>
-          <div className="font-medium">{row.original.eventTitle}</div>
-          <div className="text-xs text-muted-foreground">
-            {JOB_KIND_LABELS[row.original.kind]} · {row.original.fileName}
-            {row.original.copies > 1 ? ` · ${row.original.copies} copies` : ""}
-          </div>
-        </div>
-      ),
-    }),
-    jobColumnHelper.accessor("status", {
-      id: "status",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-      cell: ({ row }) => <StatusBadge status={row.original.status} />,
-    }),
-    jobColumnHelper.accessor("printerName", {
-      id: "printer",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Printer" />,
-    }),
-    jobColumnHelper.accessor("attempts", {
-      id: "attempts",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Attempts" />,
-    }),
-    jobColumnHelper.accessor("createdAt", {
-      id: "queued",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Queued" />,
-      cell: ({ row }) => formatDateTime(row.original.createdAt),
-    }),
-    jobColumnHelper.accessor((row) => row.printedAt ?? 0, {
-      id: "printed",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Printed" />,
-      cell: ({ row }) =>
-        row.original.printedAt ? formatDateTime(row.original.printedAt) : "—",
-      sortFn: "basic",
-    }),
-    jobColumnHelper.accessor((row) => row.error ?? "", {
-      id: "error",
-      header: "Error",
-      cell: ({ row }) =>
-        row.original.error ? (
-          <span className="text-xs text-destructive">{row.original.error}</span>
-        ) : (
-          "—"
-        ),
-      enableSorting: false,
-    }),
-    jobColumnHelper.display({
-      id: "actions",
-      enableHiding: false,
-      enableSorting: false,
-      header: "Actions",
-      cell: ({ row }) => (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={reprintingId === row.original._id}
-          onClick={() => void handleReprint(row.original)}
-        >
-          {reprintingId === row.original._id ? "Queuing…" : "Reprint"}
-        </Button>
-      ),
-    }),
-  ]);
-
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Printers</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {printers === undefined ? (
-            <p className="text-sm text-muted-foreground">Loading printers…</p>
-          ) : printers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No printer has checked in yet. Install the agent on the warehouse Pi and it will
-              appear here on its first heartbeat.
-            </p>
+    <div className="space-y-4 pb-24" data-testid="print-queue-page">
+      <PageHeader
+        title="Print queue"
+        description="Briefs, event files and posters sent to the warehouse printers. The printer agent picks up ready jobs within a minute."
+        meta={
+          printers ? (
+            <MetaItem icon={PrinterIcon}>
+              {onlineCount} of {printers.length} printer{printers.length === 1 ? "" : "s"} online
+            </MetaItem>
+          ) : null
+        }
+      />
+
+      {printers === undefined ? (
+        <Skeleton className="h-20 w-full" />
+      ) : printers.length === 0 ? (
+        <EmptyState>
+          No printer has checked in yet. Install the agent on the warehouse Pi and it will appear here.
+        </EmptyState>
+      ) : (
+        <RowGroup title="Printers" count={printers.length} className="border" testId="printers">
+          {printers.map((printer) => {
+            const online = isOnline(printer, now);
+            return (
+              <ListRow key={printer._id} data-testid={`printer-row-${printer.queueName}`}>
+                <RowText
+                  eyebrow={`Queue ${printer.queueName}`}
+                  title={printer.name}
+                  detail={
+                    printer.lastError
+                      ? `Error: ${printer.lastError}`
+                      : `Last seen ${printer.lastSeenAt ? formatDateTime(printer.lastSeenAt) : "never"}${printer.lastSeenStatus ? ` · ${printer.lastSeenStatus}` : ""}`
+                  }
+                />
+                <StatusPill tone={online ? "emerald" : "rose"} className="h-6 w-24 shrink-0 justify-center">
+                  {online ? "Online" : "Offline"}
+                </StatusPill>
+              </ListRow>
+            );
+          })}
+        </RowGroup>
+      )}
+
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search event or file…"
+        searchLabel="Search print jobs"
+        filters={filterDefinitions}
+        value={filters}
+        onChange={setFilters}
+      />
+
+      {jobs === undefined ? (
+        <Skeleton className="h-48 w-full" />
+      ) : (
+        <>
+          <ListSummary testId="print-jobs-summary" order="The last 100 jobs, newest first within each group.">
+            {shownJobs.length} job{shownJobs.length === 1 ? "" : "s"} · {count("failed")} failed · {count("queued")} in
+            the queue
+          </ListSummary>
+          {shownJobs.length === 0 ? (
+            <EmptyState>
+              {narrowed
+                ? "No print jobs match this search and these filters."
+                : "Nothing has been printed yet. Print a brief or poster from an event."}
+            </EmptyState>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {printers.map((printer) => (
-                <PrinterCard key={printer._id} printer={printer} now={now} />
-              ))}
+            <div className="space-y-4">
+              {JOB_GROUPS.map((group) => {
+                const groupJobs = shownJobs.filter((job) => group.statuses.includes(job.status));
+                if (groupJobs.length === 0) return null;
+                return (
+                  <RowGroup
+                    key={group.id}
+                    testId={`print-group-${group.id}`}
+                    className="border"
+                    title={group.label}
+                    count={groupJobs.length}
+                    tone={group.id === "failed" ? "rose" : "neutral"}
+                    description={group.description}
+                  >
+                    {groupJobs.map((job) => (
+                      <ListRow
+                        key={job._id}
+                        data-testid={`print-job-${job._id}`}
+                        href={`/dashboard/events/${job.eventId}`}
+                        actions={
+                          <>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={reprintingId === job._id}
+                              onClick={() => void handleReprint(job)}
+                            >
+                              Reprint
+                            </Button>
+                            <RowMenu label={`More for ${job.fileName}`}>
+                              <DropdownMenuItem asChild>
+                                <Link href={`/dashboard/events/${job.eventId}`}>Open event</Link>
+                              </DropdownMenuItem>
+                            </RowMenu>
+                          </>
+                        }
+                      >
+                        <RowText
+                          eyebrow={`${JOB_KIND_LABELS[job.kind]} · queued ${formatDateTime(job.createdAt)}`}
+                          title={job.eventTitle}
+                          detail={
+                            job.error
+                              ? `Error: ${job.error}`
+                              : [
+                                  job.fileName,
+                                  job.copies > 1 ? `${job.copies} copies` : null,
+                                  job.printerName,
+                                  job.attempts > 1 ? `${job.attempts} attempts` : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")
+                          }
+                        />
+                        <RowCell className="w-36" hideBelow="lg" muted>
+                          {job.printedAt ? `Printed ${formatDateTime(job.printedAt)}` : "—"}
+                        </RowCell>
+                        <StatusPill
+                          tone={JOB_STATUS_TONES[job.status]}
+                          className="hidden h-6 w-24 shrink-0 justify-center sm:inline-flex"
+                        >
+                          {JOB_STATUS_LABELS[job.status]}
+                        </StatusPill>
+                      </ListRow>
+                    ))}
+                  </RowGroup>
+                );
+              })}
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent print jobs</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <FilterBar
-            search={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Search event or file…"
-            searchLabel="Search print jobs"
-            filters={filterDefinitions}
-            value={filters}
-            onChange={setFilters}
-          />
-          <DataTable
-            columns={columns}
-            data={shownJobs}
-            getRowId={(row) => row._id}
-            initialSorting={[{ id: "queued", desc: true }]}
-            emptyMessage={
-              jobs === undefined
-                ? "Loading jobs…"
-                : narrowed
-                  ? "No print jobs match this search and these filters."
-                  : "No briefs have been queued yet."
-            }
-            getRowProps={(row) => ({ "data-testid": `print-job-${row.original._id}` })}
-          />
-        </CardContent>
-      </Card>
+        </>
+      )}
     </div>
   );
 }
