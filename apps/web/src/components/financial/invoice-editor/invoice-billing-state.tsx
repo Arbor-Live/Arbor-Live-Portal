@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { Button } from "@/components/ui/button";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import {
@@ -34,6 +34,14 @@ export function InvoiceBillingState({ draft }: { draft: InvoiceDraft }) {
   const [now] = useState(() => Date.now());
   const invoice = draft.invoice!;
   const invoiceId = draft.activeInvoiceId!;
+  // A pending payment proof pins the amount: no reopening or closing payment under it.
+  const payment = useQuery(api.paymentProof.getByInvoiceId, { invoiceId });
+  const proofPending = Boolean(payment?.submission);
+  const proofPendingNote = (
+    <span className="text-xs" data-testid="invoice-billing-proof-pending">
+      Payment proof is pending. Verify or invalidate it first.
+    </span>
+  );
 
   const days = draft.linkedDayEvents.length > 0 ? draft.linkedDayEvents : draft.linkedEvent ? [draft.linkedEvent] : [];
   const eventEndAt = days.length > 0 ? Math.max(...days.map((day) => day.endAt)) : null;
@@ -97,7 +105,9 @@ export function InvoiceBillingState({ draft }: { draft: InvoiceDraft }) {
           Final invoice since {formatDate(invoice.billingFinalizedAt)}
           {invoice.billingFinalizedByName ? ` (${invoice.billingFinalizedByName})` : ""}. Payment is open.
         </span>
-        {invoice.paymentReceivedAt ? null : (
+        {invoice.paymentReceivedAt ? null : proofPending ? (
+          proofPendingNote
+        ) : (
           <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => void reopen()}>
             Reopen
           </Button>
@@ -127,7 +137,9 @@ export function InvoiceBillingState({ draft }: { draft: InvoiceDraft }) {
         )}
       </span>
       {invoice.paymentOpenedEarlyAt ? (
-        invoice.paymentReceivedAt ? null : (
+        invoice.paymentReceivedAt ? null : proofPending ? (
+          proofPendingNote
+        ) : (
           <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => void closeEarlyPayment()}>
             Close early payment
           </Button>

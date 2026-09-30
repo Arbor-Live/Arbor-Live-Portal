@@ -1803,7 +1803,11 @@ export const finalizeBilling = mutation({
   },
 });
 
-/** Undo `finalizeBilling` to correct the invoice. Refused once it's paid. */
+/**
+ * Undo `finalizeBilling` to correct the invoice. Refused once it's paid, or
+ * while the client's payment proof for the final amount is pending: changing
+ * the amount under a submitted proof would leave the two disagreeing.
+ */
 export const reopenBilling = mutation({
   args: { id: v.id("invoices") },
   handler: async (ctx, args) => {
@@ -1814,6 +1818,12 @@ export const reopenBilling = mutation({
       if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
       if (invoice.paymentReceivedAt) {
         appError("INVOICE_PAID", "This invoice is paid, so it can't be reopened.");
+      }
+      if (await getActivePaymentProofSubmissionForInvoice(ctx, invoice._id)) {
+        appError(
+          "INVOICE_PROOF_SUBMITTED",
+          "The client already submitted payment proof for this invoice. Verify or invalidate it before reopening.",
+        );
       }
       await ctx.db.patch(args.id, {
         billingFinalizedAt: undefined,
@@ -1845,6 +1855,13 @@ export const setPaymentOpenedEarly = mutation({
           updatedAt: now,
         });
       } else {
+        // Same reasoning as reopenBilling: don't close payment under a pending proof.
+        if (await getActivePaymentProofSubmissionForInvoice(ctx, invoice._id)) {
+          appError(
+            "INVOICE_PROOF_SUBMITTED",
+            "The client already submitted payment proof. Verify or invalidate it before closing payment.",
+          );
+        }
         await ctx.db.patch(args.id, {
           paymentOpenedEarlyAt: undefined,
           paymentOpenedEarlyByName: undefined,
