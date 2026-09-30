@@ -1,5 +1,6 @@
 "use client";
 
+import { SheetSection, SheetField } from "@/components/list-page";
 import Link from "next/link";
 import { useState } from "react";
 import { ArrowSquareOutIcon, CheckIcon } from "@phosphor-icons/react";
@@ -60,24 +61,6 @@ export function PayoutSheet({
         ) : null}
       </SheetContent>
     </Sheet>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="space-y-3 border-t px-4 py-4">
-      <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{title}</h3>
-      {children}
-    </section>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-2 text-sm">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-words">{children}</dd>
-    </div>
   );
 }
 
@@ -163,16 +146,16 @@ function PayoutSheetBody({
       </SheetHeader>
 
       {row.status === "pending_onboarding" && row.onboardingIncompleteSteps.length > 0 ? (
-        <Section title="Onboarding left">
+        <SheetSection title="Onboarding left">
           <ul className="space-y-1 text-sm">
             {row.onboardingIncompleteSteps.map((step) => (
               <li key={step.id}>{step.label}</li>
             ))}
           </ul>
-        </Section>
+        </SheetSection>
       ) : null}
 
-      <Section title="Payout">
+      <SheetSection title="Payout">
         {editing ? (
           <EventBandPaymentForm
             embedded
@@ -191,17 +174,17 @@ function PayoutSheetBody({
         ) : (
           <>
             <dl className="space-y-2">
-              <Field label="Amount">
+              <SheetField label="Amount">
                 <span className="font-medium tabular-nums">{formatUsd(row.totalUsd)}</span>
-              </Field>
-              <Field label="Pricing">{pricingSummary(row)}</Field>
-              <Field label="Payment ID">
+              </SheetField>
+              <SheetField label="Pricing">{pricingSummary(row)}</SheetField>
+              <SheetField label="Payment ID">
                 <span className="tabular-nums">{row.confirmationToken}</span>
-              </Field>
+              </SheetField>
               {row.servicePaymentNumber ? (
-                <Field label="Transfer #">
+                <SheetField label="Transfer #">
                   <span className="tabular-nums">{row.servicePaymentNumber}</span>
-                </Field>
+                </SheetField>
               ) : null}
             </dl>
             {row.canDownloadAgreementPdf ? (
@@ -214,25 +197,25 @@ function PayoutSheetBody({
             ) : null}
           </>
         )}
-      </Section>
+      </SheetSection>
 
-      <Section title="Payee">
+      <SheetSection title="Payee">
         {!row.payeeComplete ? (
           <p className="rounded-md bg-status-amber-500/15 px-2 py-1 text-xs text-status-amber-800 dark:text-status-amber-200">
             Payee info is incomplete, so the signature request can&apos;t go out yet.
           </p>
         ) : null}
         <dl className="space-y-2">
-          <Field label="Name">{row.designatedPayeeName ?? "Not set"}</Field>
-          <Field label="Email">{row.designatedPayeeEmail ?? "Not set"}</Field>
-          <Field label="Mailing address">
+          <SheetField label="Name">{row.designatedPayeeName ?? "Not set"}</SheetField>
+          <SheetField label="Email">{row.designatedPayeeEmail ?? "Not set"}</SheetField>
+          <SheetField label="Mailing address">
             <span className="whitespace-pre-wrap">{row.designatedPayeeMailingAddress?.trim() || "Not set"}</span>
-          </Field>
-          <Field label="Method">{formatBandPayeePayoutMethod(row.designatedPayeePayoutMethod)}</Field>
+          </SheetField>
+          <SheetField label="Method">{formatBandPayeePayoutMethod(row.designatedPayeePayoutMethod)}</SheetField>
         </dl>
-      </Section>
+      </SheetSection>
 
-      <Section title="Activity">
+      <SheetSection title="Activity">
         <ol className="space-y-2" data-testid="payout-activity">
           {steps.map((step) => (
             <li key={step.label} className="flex items-start gap-2 text-sm">
@@ -259,9 +242,9 @@ function PayoutSheetBody({
             </li>
           ))}
         </ol>
-      </Section>
+      </SheetSection>
 
-      <Section title="Links">
+      <SheetSection title="Links">
         <div className="flex flex-wrap gap-2">
           <Button asChild size="sm" variant="outline">
             <Link href={payoutLineupHref(row)}>
@@ -280,7 +263,7 @@ function PayoutSheetBody({
             </Button>
           ) : null}
         </div>
-      </Section>
+      </SheetSection>
 
       <SheetFooter className="flex-row flex-wrap justify-end gap-2 border-t">
         {row.status !== "paid" ? (

@@ -1,16 +1,10 @@
 "use client";
 
-import { DotsThreeIcon } from "@phosphor-icons/react";
 import { StatusPill } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { ListRow } from "@/components/list-row";
+import { RowCell, RowMenu, RowText } from "@/components/list-page";
 import { formatCurrency } from "./constants";
 import { formatTypeDisplay } from "./package-section-utils";
 import {
@@ -74,64 +68,25 @@ export function TypesTable({
         <span className="hidden w-32 text-center sm:block">Public</span>
         <span className="w-8" />
       </div>
-      <ul className="divide-y">
+      <ul className="divide-y [&>li]:border-0">
         {rows.map((row) => {
           const visibility = typeVisibility(row);
           const units = unitCounts?.get(row._id) ?? 0;
           const capabilities = row.capabilities.map((key) => capabilityLabels.get(key) ?? key);
           return (
-            <li
+            <ListRow
               key={row._id}
               data-testid={`type-row-${row._id}`}
-              className="flex items-center gap-2 pr-1 pl-3 text-sm"
-            >
-              <Checkbox
-                aria-label={`Select ${row.name}`}
-                checked={selected.has(row._id)}
-                onCheckedChange={(checked) => toggle(row._id, checked === true)}
-              />
-              <button
-                type="button"
-                className="flex min-w-0 flex-1 items-center gap-2 py-2.5 text-left hover:bg-muted/30"
-                data-testid="type-row-open"
-                onClick={() => onOpen(row)}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">
-                    {categoryLabels.get(row.category) ?? row.category}
-                  </p>
-                  <p className="truncate font-medium">{formatTypeDisplay(row)}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {capabilities.length ? capabilities.join(" · ") : "No capabilities"}
-                  </p>
-                </div>
-                <span className="hidden w-20 shrink-0 text-right tabular-nums md:block">
-                  {formatCurrency(row.nonSubsidizedRentalPriceUsd ?? row.rentalPriceUsd)}
-                </span>
-                <span
-                  className={
-                    units === 0 && unitCounts && !unitsTruncated
-                      ? "w-20 shrink-0 text-right text-muted-foreground tabular-nums"
-                      : "w-20 shrink-0 text-right tabular-nums"
-                  }
-                  data-testid="type-row-units"
-                >
-                  {unitCounts ? formatUnitCount(units, unitsTruncated) : "…"}
-                </span>
-                <StatusPill
-                  tone={TYPE_VISIBILITY_TONES[visibility]}
-                  className="hidden h-6 w-32 shrink-0 justify-center sm:inline-flex"
-                >
-                  {TYPE_VISIBILITY_LABELS[visibility]}
-                </StatusPill>
-              </button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${row.name}`}>
-                    <DotsThreeIcon weight="bold" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52">
+              onOpen={() => onOpen(row)}
+              leading={
+                <Checkbox
+                  aria-label={`Select ${row.name}`}
+                  checked={selected.has(row._id)}
+                  onCheckedChange={(checked) => toggle(row._id, checked === true)}
+                />
+              }
+              actions={
+                <RowMenu label={`More for ${row.name}`}>
                   <DropdownMenuItem onSelect={() => onOpen(row)}>Open details</DropdownMenuItem>
                   {visibility === "hidden" ? (
                     <DropdownMenuItem onSelect={() => onSetVisibility(row, { publicListing: true })}>
@@ -148,9 +103,32 @@ export function TypesTable({
                   <DropdownMenuItem variant="destructive" onSelect={() => onDelete(row)}>
                     Delete type
                   </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </li>
+                </RowMenu>
+              }
+            >
+              <RowText
+                eyebrow={categoryLabels.get(row.category) ?? row.category}
+                title={formatTypeDisplay(row)}
+                detail={capabilities.length ? capabilities.join(" · ") : "No capabilities"}
+              />
+              <RowCell className="w-20" hideBelow="md">
+                {formatCurrency(row.nonSubsidizedRentalPriceUsd ?? row.rentalPriceUsd)}
+              </RowCell>
+              <RowCell className="w-20">
+                <span
+                  data-testid="type-row-units"
+                  className={units === 0 && unitCounts && !unitsTruncated ? "text-muted-foreground" : undefined}
+                >
+                  {unitCounts ? formatUnitCount(units, unitsTruncated) : "…"}
+                </span>
+              </RowCell>
+              <StatusPill
+                tone={TYPE_VISIBILITY_TONES[visibility]}
+                className="hidden h-6 w-32 shrink-0 justify-center sm:inline-flex"
+              >
+                {TYPE_VISIBILITY_LABELS[visibility]}
+              </StatusPill>
+            </ListRow>
           );
         })}
       </ul>

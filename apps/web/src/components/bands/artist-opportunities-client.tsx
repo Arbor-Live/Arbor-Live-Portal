@@ -1,5 +1,6 @@
 "use client";
 
+import { SheetSection } from "@/components/list-page";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
@@ -317,17 +318,6 @@ function OpportunitySheet({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="space-y-3 border-t px-4 py-4">
-      <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        {title}
-      </h3>
-      {children}
-    </section>
-  );
-}
-
 function OpportunitySheetBody({
   row,
   onClose,
@@ -371,7 +361,7 @@ function OpportunitySheetBody({
         />
       </div>
 
-      <Section title="When and where">
+      <SheetSection title="When and where">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm">
           <MetaItem icon={CalendarBlankIcon}>{formatDate(row.startAt)}</MetaItem>
           <MetaItem icon={MapPinIcon}>{row.venueName || "Venue TBD"}</MetaItem>
@@ -386,9 +376,9 @@ function OpportunitySheetBody({
               : "Not set yet"}
           </dd>
         </dl>
-      </Section>
+      </SheetSection>
 
-      <Section title="What they're looking for">
+      <SheetSection title="What they're looking for">
         <dl className="grid grid-cols-[6rem_1fr] gap-x-3 gap-y-1.5 text-sm">
           <dt className="text-muted-foreground">Position</dt>
           <dd>{row.label.trim() || "Open position"}</dd>
@@ -401,15 +391,15 @@ function OpportunitySheetBody({
             </>
           ) : null}
         </dl>
-      </Section>
+      </SheetSection>
 
       {row.description ? (
-        <Section title="About the show">
+        <SheetSection title="About the show">
           <p className="text-sm whitespace-pre-wrap text-muted-foreground">{row.description}</p>
-        </Section>
+        </SheetSection>
       ) : null}
 
-      <Section title="Your request">
+      <SheetSection title="Your request">
         {row.alreadyInquired ? (
           <p className="text-sm text-muted-foreground">
             You&apos;ve already requested this show. Operations will follow up.
@@ -430,7 +420,7 @@ function OpportunitySheetBody({
             </Button>
           </div>
         )}
-      </Section>
+      </SheetSection>
 
       {row.publicEventUrl ? (
         <SheetFooter className="flex-row justify-end border-t">
