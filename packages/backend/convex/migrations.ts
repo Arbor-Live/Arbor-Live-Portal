@@ -110,7 +110,8 @@ export const backfillUnassignedEventsToPublic = migrations.define({
 /** Backfill invoice numbers to ALINV-XXXXXXX. */
 export const migrateInvoiceReferenceIds = migrations.define({
   table: "invoices",
-  batchSize: 25,
+  // Each invoice reads its days plus Day 1's blocks, shifts and positions.
+  batchSize: 10,
   migrateOne: async (ctx, invoice) => {
     if (isInvoiceReferenceId(invoice.invoiceNumber)) return;
     const invoiceNumber = await allocateInvoiceNumber(ctx);
@@ -778,7 +779,8 @@ export const backfillEventGroupKinds = migrations.define({
  */
 export const groupMultiDayBookings = migrations.define({
   table: "invoices",
-  batchSize: 25,
+  // Each invoice reads its days plus Day 1's blocks, shifts and positions.
+  batchSize: 10,
   migrateOne: async (ctx, invoice) => {
     await syncMultiDayGroupForInvoice(ctx, invoice._id, Date.now());
   },

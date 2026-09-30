@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Doc, Id } from "../_generated/dataModel";
 import { groupTitleFromDayTitles, planMultiDayMembership } from "./eventGroups";
 import { selectDaysInScope } from "./eventGroupTemplates";
+import { shiftsToTemplates } from "./eventSeriesGeneration";
 import {
   artistLineAppliesToEvent,
   artistLineDayScope,
@@ -156,5 +157,43 @@ describe("artist line day scope", () => {
     expect(
       artistLineAppliesToEvent({ lineEventId: eventId("d1"), eventId: eventId("d2"), scope }),
     ).toBe(false);
+  });
+});
+
+describe("shiftsToTemplates for copying a day", () => {
+  const HOUR = 60 * 60 * 1000;
+  const start = 1_000_000_000;
+  const blockId = "block" as Id<"eventScheduleBlocks">;
+  const blocks = [{ _id: blockId, startsAt: start }];
+  const blockTemplates = [
+    { blockType: "setup" as const, label: "Setup", dayIndex: 0, offsetMs: 0, durationMs: 2 * HOUR },
+  ];
+  const staffed = {
+    role: "Audio",
+    scheduleBlockId: blockId,
+    userId: "user-1",
+    startsAt: start,
+    endsAt: start + 2 * HOUR,
+    hours: 3,
+    timesOverridden: true,
+  };
+
+  it("imports only open slots by default", () => {
+    expect(shiftsToTemplates([staffed], blocks, blockTemplates, start)).toEqual([]);
+  });
+
+  it("captures staffed shifts as open slots with their billed hours", () => {
+    const [template] = shiftsToTemplates([staffed], blocks, blockTemplates, start, {
+      includeAssigned: true,
+    });
+    expect(template).toMatchObject({
+      role: "Audio",
+      blockTemplateIndex: 0,
+      offsetMs: 0,
+      durationMs: 2 * HOUR,
+      hours: 3,
+      timesOverridden: true,
+    });
+    expect(template).not.toHaveProperty("userId");
   });
 });

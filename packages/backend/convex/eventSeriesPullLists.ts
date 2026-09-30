@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { isMultiDayGroup } from "./lib/eventGroupKind";
 import {
   perOccurrencePullQuantity,
   resolveBillableOccurrenceCount,
@@ -29,6 +30,10 @@ export const scaffoldFromInvoice = mutation({
     await requireArborInternalContext(ctx);
     const series = await ctx.db.get(args.seriesId);
     if (!series) throw new Error("Event series not found.");
+    if (isMultiDayGroup(series)) {
+      // A booking's equipment is per day; there's no per-occurrence split.
+      throw new Error("Pull list templates from the invoice are for recurring series.");
+    }
     if (!series.invoiceId) {
       throw new Error("Link an invoice to this series before scaffolding pull list templates.");
     }

@@ -30,6 +30,7 @@ import {
   assertValidReferenceIndex,
   captureDayTemplates,
   copyPullListBetweenDays,
+  copyUnlinkedShiftsBetweenDays,
   listGroupDays,
   selectDaysInScope,
 } from "./lib/eventGroupTemplates";
@@ -78,6 +79,8 @@ const shiftTemplateValue = v.object({
   blockTemplateIndex: v.number(),
   offsetMs: v.number(),
   durationMs: v.number(),
+  hours: v.optional(v.number()),
+  timesOverridden: v.optional(v.boolean()),
   estimatedHourlyRateUsd: v.optional(v.number()),
   notes: v.optional(v.string()),
 });
@@ -614,6 +617,10 @@ export const applyDaySetup = mutation({
     const defaultHourlyRateUsd = parts.crew ? await resolveDefaultCrewHourlyRateUsd(ctx) : undefined;
     for (const target of targets) {
       await applyGroupTemplatesToDay(ctx, group, target, parts, { now, defaultHourlyRateUsd });
+      if (parts.crew) {
+        await copyUnlinkedShiftsBetweenDays(ctx, source, target, now);
+        await syncEventCrewCostUsd(ctx, target._id, now);
+      }
       if (args.pullList !== false) {
         await copyPullListBetweenDays(ctx, sourcePullList, target._id, now);
       }
@@ -637,15 +644,23 @@ export const addDay = mutation({
     if (!isMultiDayGroup(group)) {
       throw new Error("Add occurrences to a recurring series from its rule instead.");
     }
+    const invoice = group.invoiceId ? await ctx.db.get(group.invoiceId) : null;
+    if (!invoice) {
+      throw new Error("A booking's days share its invoice; link one before adding a day.");
+    }
     const days = await listGroupDays(ctx, args.id);
     if (days.some((day) => pacificDateKey(day.startAt) === pacificDateKey(args.startAt))) {
       throw new Error("This booking already has a day on that date.");
     }
     const now = Date.now();
     const eventId = await materializeOccurrence(ctx, group, days.length, args.startAt, now);
-    if (group.invoiceId) {
-      await syncMultiDayGroupForInvoice(ctx, group.invoiceId, now);
+    // A new day takes the booking's visibility (a private booking stays off the
+    // public calendar); its status follows the invoice, as on every linked day.
+    const model = days.find((day) => day.status !== "cancelled") ?? days[0];
+    if (model && model.visibility !== "public") {
+      await ctx.db.patch(eventId, { visibility: model.visibility });
     }
+    await syncMultiDayGroupForInvoice(ctx, invoice._id, now);
     return eventId;
   },
 });
@@ -728,6 +743,9 @@ export const cancelFuture = mutation({
       });
       cancelledCount += 1;
     }
+    if (isMultiDayGroup(series) && series.invoiceId) {
+      await syncMultiDayGroupForInvoice(ctx, series.invoiceId, now);
+    }
     return { cancelledCount };
   },
 });
@@ -773,7 +791,8 @@ export const reattachOccurrence = mutation({
         now,
       );
       await syncEventCrewCostUsd(ctx, args.eventId, now);
-    } else {
+    } else if (!isMultiDayGroup(series)) {
+      // A multi-day day keeps its own crew cost; only a series has a template budget.
       await ctx.db.patch(args.eventId, {
         crewCostUsd: series.occurrenceBudgetCrewCostUsd,
         updatedAt: now,
