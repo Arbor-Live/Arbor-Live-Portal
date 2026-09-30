@@ -3,6 +3,13 @@ import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireAuth } from "./lib/auth";
+import {
+  FILTER_SCAN_WINDOW,
+  isActiveFilter,
+  listFilter,
+  matchesListFilter,
+  type ListFilter,
+} from "./lib/listFilters";
 import { assetIdLookupCandidates, canonicalizeAssetIdTag } from "./lib/assetScan";
 import { resolveInventoryItemByScan } from "./lib/rentalFulfillment";
 
@@ -93,16 +100,28 @@ async function hydrateInventoryItems(ctx: QueryCtx, items: Doc<"inventoryItems">
   }));
 }
 
+type InventoryItemFilters = {
+  search?: string;
+  category?: ListFilter;
+  type?: ListFilter;
+  location?: ListFilter;
+  container?: ListFilter;
+  tag?: ListFilter;
+};
+
+/** `location` uses `"none"` for unassigned; `container` and `tag` are yes/no chips. */
 function matchesInventoryFilters(
-  item: {
-    assetId?: string;
-    serialNumber?: string;
+  item: Doc<"inventoryItems"> & {
     type: { category: string; model: string; name: string } | null;
   },
-  args: { category?: string; search?: string },
+  args: InventoryItemFilters,
 ) {
   if (!item.type) return false;
-  if (args.category && item.type.category !== args.category) return false;
+  if (!matchesListFilter(args.category, [item.type.category])) return false;
+  if (!matchesListFilter(args.type, [item.typeId])) return false;
+  if (!matchesListFilter(args.location, [item.storageLocationId ?? "none"])) return false;
+  if (!matchesListFilter(args.container, [item.containedInAssetId ? "inside" : "top"])) return false;
+  if (!matchesListFilter(args.tag, [item.assetId ? "tagged" : "serial_only"])) return false;
   const loweredSearch = args.search?.trim().toLowerCase();
   if (!loweredSearch) return true;
   return (
@@ -116,41 +135,49 @@ function matchesInventoryFilters(
 /**
  * Paginated inventory list for the items manager.
  *
- * Category/search cannot use an items-table index (category lives on the type;
- * search spans assetId, serial, and type fields). Filtering the paginated page
- * hid newer rows — same failure inventoryTypes.list had. Filtered reads scan a
- * bounded window, filter with light type lookups, then hydrate only the matches
- * (type/location/parent — not per-row children). Unfiltered reads still paginate.
+ * None of the filters can use an items-table index (category lives on the
+ * type; search spans assetId, serial, and type fields). Filtering the paginated
+ * page hid newer rows — same failure inventoryTypes.list had. Filtered reads
+ * scan the table a `FILTER_SCAN_WINDOW` at a time on the client's cursor,
+ * filter with light type lookups, then hydrate only the matches
+ * (type/location/parent — not per-row children). Unfiltered reads still
+ * paginate normally.
+ *
+ * Each filter is a filter-bar chip (`is` / `is not` any of several values).
  */
 export const list = query({
   args: {
     paginationOpts: paginationOptsValidator,
-    category: v.optional(v.string()),
     search: v.optional(v.string()),
+    category: listFilter,
+    type: listFilter,
+    location: listFilter,
+    container: listFilter,
+    tag: listFilter,
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
 
     const hasInMemoryFilter =
-      Boolean(args.search?.trim()) || Boolean(args.category);
+      Boolean(args.search?.trim()) ||
+      [args.category, args.type, args.location, args.container, args.tag].some(isActiveFilter);
 
     if (hasInMemoryFilter) {
-      const candidates = await ctx.db.query("inventoryItems").take(MAX_LIST_LIMIT);
-      const typeIds = Array.from(new Set(candidates.map((item) => item.typeId)));
+      const scanned = await ctx.db
+        .query("inventoryItems")
+        .paginate({ ...args.paginationOpts, numItems: FILTER_SCAN_WINDOW });
+      const typeIds = Array.from(new Set(scanned.page.map((item) => item.typeId)));
       const types = await Promise.all(typeIds.map((id) => ctx.db.get(id)));
       const typeById = new Map(typeIds.map((id, index) => [id, types[index] ?? null]));
 
-      const matched = candidates
+      const matched = scanned.page
         .filter((item) =>
-          matchesInventoryFilters(
-            { ...item, type: typeById.get(item.typeId) ?? null },
-            args,
-          ),
+          matchesInventoryFilters({ ...item, type: typeById.get(item.typeId) ?? null }, args),
         )
         .sort((a, b) => itemSortKey(a).localeCompare(itemSortKey(b)));
 
       const page = await hydrateInventoryItems(ctx, matched);
-      return { page, isDone: true, continueCursor: "" };
+      return { ...scanned, page };
     }
 
     const result = await ctx.db.query("inventoryItems").paginate(args.paginationOpts);

@@ -10,7 +10,6 @@ import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
@@ -19,8 +18,23 @@ import {
 } from "@/lib/validations/inventory";
 import { formatCurrency, inventoryItemLabel } from "./constants";
 import { FileUploadField } from "@/components/files/file-upload-field";
-import { MultiSelectFilter } from "./multi-select-filter";
-import { FilterField, FilterNativeSelect } from "./filter-controls";
+import {
+  activeFilters,
+  FilterBar,
+  matchesFilter,
+  type FilterDefinition,
+  type FilterState,
+} from "@/components/filter-bar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { CaretDownIcon } from "@phosphor-icons/react";
 import {
   PackageItemsEditor,
   useSuggestedPackagePricing,
@@ -37,6 +51,23 @@ import {
 } from "./package-section-utils";
 import { cn } from "@/lib/utils";
 import { StoredAssetImage } from "@/components/files/stored-asset-image";
+
+const SORT_LABELS = {
+  section: "Section",
+  name: "Name",
+  price: "Price",
+  value: "Est. value",
+} as const;
+
+const STATUS_OPTIONS = [
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+];
+
+const PUBLIC_OPTIONS = [
+  { value: "listed", label: "Listed publicly" },
+  { value: "hidden", label: "Hidden" },
+];
 
 const defaultPackageValues: InventoryPackageFormValues = {
   name: "",
@@ -134,9 +165,7 @@ function packageSection(pkg: {
 export function PackagesManager() {
   const { confirm } = useAppDialog();
   const [search, setSearch] = useState("");
-  const [sectionFilterIds, setSectionFilterIds] = useState<PublicPackageBucket[]>([]);
-  const [typeFilterIds, setTypeFilterIds] = useState<string[]>([]);
-  const [itemFilterIds, setItemFilterIds] = useState<string[]>([]);
+  const [filters, setFilters] = useState<FilterState>({});
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -230,15 +259,11 @@ export function PackagesManager() {
     return map;
   }, [types]);
 
-  const itemFilterTypeIds = useMemo(() => {
-    if (!itemFilterIds.length) return new Set<string>();
-    const ids = new Set<string>();
-    for (const itemId of itemFilterIds) {
-      const item = (inventoryItems ?? []).find((row) => row._id === itemId);
-      if (item?.typeId) ids.add(item.typeId);
-    }
-    return ids;
-  }, [inventoryItems, itemFilterIds]);
+  /** Item ids → their type ids: a package "has" an item when one of its lines uses that item's type. */
+  const itemTypeById = useMemo(
+    () => new Map((inventoryItems ?? []).map((item) => [item._id as string, item.typeId as string])),
+    [inventoryItems],
+  );
 
   const typeOptions = useMemo(
     () =>
@@ -262,29 +287,41 @@ export function PackagesManager() {
     [inventoryItems],
   );
 
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () => [
+      { id: "section", label: "Section", options: sectionFilterOptions },
+      { id: "type", label: "Type", options: typeOptions },
+      { id: "item", label: "Inventory item", options: inventoryItemOptions },
+      { id: "status", label: "Status", options: STATUS_OPTIONS, single: true },
+      { id: "public", label: "Public", options: PUBLIC_OPTIONS, single: true },
+    ],
+    [inventoryItemOptions, typeOptions],
+  );
+
   const filteredPackages = useMemo(() => {
     const loweredSearch = search.trim().toLowerCase();
+    // Everything is loaded (the list is bounded), so filters run here.
+    const itemFilter = filters.item
+      ? {
+          ...filters.item,
+          values: filters.item.values.map((id) => itemTypeById.get(id)).filter((id): id is string => Boolean(id)),
+        }
+      : undefined;
     const rows = [...(packages ?? [])].filter((pkg) => {
       if (loweredSearch && !pkg.name.toLowerCase().includes(loweredSearch)) return false;
-      const section = packageSection(pkg, categories);
-      if (sectionFilterIds.length && !sectionFilterIds.includes(section)) return false;
-      const packageTypeIds = new Set([
-        ...pkg.items.map((row) => row.typeId),
+      const packageTypeIds = [
+        ...pkg.items.map((row) => row.typeId as string),
         ...(pkg.contents ?? []).flatMap((unit) =>
-          unit.options.flatMap((option) => option.items.map((item) => item.typeId)),
+          unit.options.flatMap((option) => option.items.map((item) => item.typeId as string)),
         ),
-      ]);
-      if (typeFilterIds.length) {
-        if (!typeFilterIds.some((typeId) => packageTypeIds.has(typeId as Id<"inventoryTypes">))) {
-          return false;
-        }
-      }
-      if (itemFilterTypeIds.size) {
-        if (![...itemFilterTypeIds].some((typeId) => packageTypeIds.has(typeId as Id<"inventoryTypes">))) {
-          return false;
-        }
-      }
-      return true;
+      ];
+      return (
+        matchesFilter(filters.section, packageSection(pkg, categories)) &&
+        matchesFilter(filters.type, packageTypeIds) &&
+        matchesFilter(itemFilter, packageTypeIds) &&
+        matchesFilter(filters.status, pkg.active ? "active" : "inactive") &&
+        matchesFilter(filters.public, pkg.publicListing ? "listed" : "hidden")
+      );
     });
 
     rows.sort((a, b) => {
@@ -303,7 +340,7 @@ export function PackagesManager() {
       return a.name.localeCompare(b.name) * direction;
     });
     return rows;
-  }, [categories, itemFilterTypeIds, packages, search, sectionFilterIds, sortBy, sortDir, typeFilterIds]);
+  }, [categories, filters, itemTypeById, packages, search, sortBy, sortDir]);
 
   const groupedPackages = useMemo(() => {
     if (sortBy !== "section") return null;
@@ -315,14 +352,7 @@ export function PackagesManager() {
     );
   }, [categories, filteredPackages, sortBy]);
 
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (search.trim()) count += 1;
-    if (sectionFilterIds.length) count += 1;
-    if (typeFilterIds.length) count += 1;
-    if (itemFilterIds.length) count += 1;
-    return count;
-  }, [itemFilterIds.length, search, sectionFilterIds.length, typeFilterIds.length]);
+  const activeFilterCount = (search.trim() ? 1 : 0) + Object.keys(activeFilters(filters)).length;
 
   const suggestedPricing = useSuggestedPackagePricing(contentUnits, typeLookup);
   const packageValues = packageForm.watch();
@@ -378,9 +408,7 @@ export function PackagesManager() {
 
   function clearFilters() {
     setSearch("");
-    setSectionFilterIds([]);
-    setTypeFilterIds([]);
-    setItemFilterIds([]);
+    setFilters({});
   }
 
   function renderPackageCard(pkg: NonNullable<typeof packages>[number]) {
@@ -500,72 +528,42 @@ export function PackagesManager() {
         <CardHeader>
           <CardTitle>Packages</CardTitle>
           <div className="space-y-3">
-            <FilterField label="Search" className="w-full">
-              <Input
-                placeholder="Search packages"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </FilterField>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <MultiSelectFilter
-                label="Sections"
-                placeholder="Search sections…"
-                values={sectionFilterIds}
-                onChange={(values) => setSectionFilterIds(values as PublicPackageBucket[])}
-                options={sectionFilterOptions}
-                emptyLabel="All sections"
-              />
-              <MultiSelectFilter
-                label="Types"
-                placeholder="Search types…"
-                values={typeFilterIds}
-                onChange={setTypeFilterIds}
-                options={typeOptions}
-                emptyLabel="All types"
-              />
-              <MultiSelectFilter
-                label="Inventory items"
-                placeholder="Search asset IDs…"
-                values={itemFilterIds}
-                onChange={setItemFilterIds}
-                options={inventoryItemOptions}
-                emptyLabel="All items"
-              />
-            </div>
-            <div className="flex flex-wrap items-end gap-3">
-              <FilterNativeSelect
-                label="Sort by"
-                className="w-full sm:w-44"
-                value={sortBy}
-                onChange={(value) => setSortBy(value as typeof sortBy)}
-              >
-                <option value="section">Section</option>
-                <option value="name">Name</option>
-                <option value="price">Price</option>
-                <option value="value">Est. value</option>
-              </FilterNativeSelect>
-              <FilterNativeSelect
-                label="Order"
-                className="w-full sm:w-32"
-                value={sortDir}
-                onChange={(value) => setSortDir(value as typeof sortDir)}
-              >
-                <option value="asc">Ascending</option>
-                <option value="desc">Descending</option>
-              </FilterNativeSelect>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!activeFilterCount}
-                onClick={clearFilters}
-              >
-                Clear filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
-              </Button>
-              <span className="pb-2 text-sm text-muted-foreground">
-                {filteredPackages.length} package{filteredPackages.length === 1 ? "" : "s"}
-              </span>
-            </div>
+            <FilterBar
+              search={search}
+              onSearchChange={setSearch}
+              searchPlaceholder="Search packages"
+              searchLabel="Search packages"
+              filters={filterDefinitions}
+              value={filters}
+              onChange={setFilters}
+            >
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="outline" className="font-normal">
+                    Sort: {SORT_LABELS[sortBy]}, {sortDir === "asc" ? "ascending" : "descending"}
+                    <CaretDownIcon className="size-3" aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-48">
+                  <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
+                    {(Object.keys(SORT_LABELS) as (keyof typeof SORT_LABELS)[]).map((key) => (
+                      <DropdownMenuRadioItem key={key} value={key}>
+                        {SORT_LABELS[key]}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuRadioGroup value={sortDir} onValueChange={(value) => setSortDir(value as typeof sortDir)}>
+                    <DropdownMenuRadioItem value="asc">Ascending</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="desc">Descending</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </FilterBar>
+            <p className="text-sm text-muted-foreground" data-testid="packages-summary">
+              {filteredPackages.length} package{filteredPackages.length === 1 ? "" : "s"}
+            </p>
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
@@ -583,9 +581,18 @@ export function PackagesManager() {
         </CardHeader>
         <CardContent className="space-y-6">
           {!filteredPackages.length ? (
-            <p className="text-sm text-muted-foreground">
-              {activeFilterCount ? "No packages match the current filters." : "No packages found."}
-            </p>
+            <div className="space-y-2 border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+              <p>
+                {activeFilterCount
+                  ? "No packages match this search and these filters."
+                  : "No packages yet. Create one to bundle types into a rentable kit."}
+              </p>
+              {activeFilterCount ? (
+                <Button type="button" variant="outline" size="sm" onClick={clearFilters}>
+                  Clear search and filters
+                </Button>
+              ) : null}
+            </div>
           ) : groupedPackages ? (
             groupedPackages.map((group) => (
               <section key={group.section} className="space-y-3">

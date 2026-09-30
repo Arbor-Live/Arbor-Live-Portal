@@ -165,7 +165,8 @@ export async function searchTypes(page: Page, query: string) {
 export async function addFilter(
   page: Page,
   filter: string,
-  options: string[],
+  /** Exact option labels, or a pattern for labels with extra text ("Name / Model"). */
+  options: (string | RegExp)[],
   operator: "is" | "is not" = "is",
 ) {
   await page.getByTestId("filter-bar").getByRole("button", { name: /^Filter/ }).click();
@@ -175,9 +176,11 @@ export async function addFilter(
   if (operator === "is not") await menu.getByRole("radio", { name: "is not" }).click();
   for (const option of options) {
     const search = menu.getByRole("textbox");
-    if (await search.count()) await search.fill(option);
+    if (typeof option === "string" && (await search.count())) await search.fill(option);
     // `click`, not `check`: a single-value chip closes as soon as it's picked.
-    await menu.getByRole("checkbox", { name: option, exact: true }).click();
+    await menu
+      .getByRole("checkbox", typeof option === "string" ? { name: option, exact: true } : { name: option })
+      .click();
   }
   if (await menu.count()) await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0, { timeout: 20_000 });

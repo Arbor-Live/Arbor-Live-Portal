@@ -8,7 +8,21 @@ import { DamageReportSheet } from "@/components/inventory/damage-report-sheet";
 import { DamageReportWizard } from "@/components/inventory/damage-report-wizard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  activeFilters,
+  FilterBar,
+  matchesFilter,
+  type FilterDefinition,
+  type FilterState,
+} from "@/components/filter-bar";
 import { formatDateTime } from "@/lib/format";
+
+const SEVERITY_OPTIONS = [1, 2, 3, 4, 5].map((level) => ({ value: String(level), label: `${level} of 5` }));
+
+const OPERABILITY_OPTIONS = [
+  { value: "functional", label: "Still works" },
+  { value: "needs_repair", label: "Needs repair" },
+];
 
 export function DamageQueueManager() {
   const router = useRouter();
@@ -17,11 +31,63 @@ export function DamageQueueManager() {
     "open",
   );
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<FilterState>({});
   const reports = useQuery(api.damageReports.list, {
     status: statusFilter === "all" ? undefined : statusFilter,
   });
 
-  const rows = useMemo(() => reports ?? [], [reports]);
+  const allRows = useMemo(() => reports ?? [], [reports]);
+  // The list is bounded (newest 500 per status), so the extra filters run here.
+  const filterDefinitions = useMemo<FilterDefinition[]>(() => {
+    const distinct = (entries: Array<[string, string]>) =>
+      [...new Map(entries).entries()]
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    return [
+      { id: "severity", label: "Severity", options: SEVERITY_OPTIONS },
+      { id: "operability", label: "Operability", options: OPERABILITY_OPTIONS, single: true },
+      {
+        id: "type",
+        label: "Type",
+        options: distinct(
+          allRows.filter((row) => row.typeId).map((row) => [row.typeId!, row.typeName ?? "Unknown type"]),
+        ),
+      },
+      {
+        id: "event",
+        label: "Event",
+        options: [
+          { value: "none", label: "Not linked to an event" },
+          ...distinct(
+            allRows.filter((row) => row.eventId).map((row) => [row.eventId!, row.eventTitle ?? "Unknown event"]),
+          ),
+        ],
+      },
+      {
+        id: "reporter",
+        label: "Reported by",
+        options: distinct(allRows.map((row) => [row.reportedByUserId, row.reportedByName])),
+      },
+    ];
+  }, [allRows]);
+
+  const rows = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return allRows.filter(
+      (report) =>
+        (!needle ||
+          [report.assetId, report.typeName, report.eventTitle, report.reportedByName, report.notes].some((field) =>
+            field?.toLowerCase().includes(needle),
+          )) &&
+        matchesFilter(filters.severity, String(report.severity)) &&
+        matchesFilter(filters.operability, report.operability) &&
+        matchesFilter(filters.type, report.typeId ?? "") &&
+        matchesFilter(filters.event, report.eventId ?? "none") &&
+        matchesFilter(filters.reporter, report.reportedByUserId),
+    );
+  }, [allRows, filters, search]);
+  const narrowed = Boolean(search.trim()) || Object.keys(activeFilters(filters)).length > 0;
 
   // `?report=` is what the mention email links to, so the open report is derived
   // from the URL rather than mirrored into state — a deep link and an in-page
@@ -65,21 +131,35 @@ export function DamageQueueManager() {
         </Button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {(["open", "in_progress", "resolved", "all"] as const).map((value) => (
-          <Button
-            key={value}
-            type="button"
-            size="sm"
-            variant={statusFilter === value ? "default" : "outline"}
-            onClick={() => setStatusFilter(value)}
-          >
-            <span className="capitalize">
-              {value === "all" ? "All" : value.replace("_", " ")}
-            </span>
-          </Button>
-        ))}
-      </div>
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search asset, type, event, reporter, notes…"
+        searchLabel="Search damage reports"
+        filters={filterDefinitions}
+        value={filters}
+        onChange={setFilters}
+      >
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Status">
+          {(["open", "in_progress", "resolved", "all"] as const).map((value) => (
+            <Button
+              key={value}
+              type="button"
+              size="sm"
+              variant={statusFilter === value ? "default" : "outline"}
+              onClick={() => setStatusFilter(value)}
+            >
+              <span className="capitalize">
+                {value === "all" ? "All" : value.replace("_", " ")}
+              </span>
+            </Button>
+          ))}
+        </div>
+      </FilterBar>
+      <p className="text-sm text-muted-foreground" data-testid="damage-summary">
+        {rows.length} report{rows.length === 1 ? "" : "s"}
+        {narrowed ? ` of ${allRows.length} ${statusFilter === "all" ? "in total" : statusFilter.replace("_", " ")}` : ""}
+      </p>
 
       <div className="grid gap-3">
         {rows.map((report) => {
@@ -132,7 +212,22 @@ export function DamageQueueManager() {
           );
         })}
         {!rows.length ? (
-          <p className="text-sm text-muted-foreground">No damage reports in this filter.</p>
+          <div className="space-y-2 border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+            <p>{narrowed ? "No reports match this search and these filters." : "No damage reports in this status."}</p>
+            {narrowed ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearch("");
+                  setFilters({});
+                }}
+              >
+                Clear search and filters
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </div>
 

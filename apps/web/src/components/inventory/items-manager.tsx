@@ -6,27 +6,18 @@ import type { FunctionReturnType } from "convex/server";
 import { createColumnHelper, type RowSelectionState } from "@tanstack/react-table";
 import {
   CameraIcon,
-  CaretDownIcon,
-  CheckIcon,
-  MagnifyingGlassIcon,
   PencilSimpleIcon,
   PlusIcon,
   TrashIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
+import { activeFilters, FilterBar, type FilterDefinition, type FilterState } from "@/components/filter-bar";
 import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
 import { type DataTableFeatures } from "@/components/ui/data-table-features";
-import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { getConvexErrorMessage } from "@/lib/convex-error";
@@ -35,7 +26,6 @@ import { CreateAssetWizard } from "./create-asset-wizard";
 import { DamageReportWizard } from "./damage-report-wizard";
 import { InventoryItemEditor } from "./inventory-item-editor";
 import { inventoryItemLabel, toCategoryOptions } from "./constants";
-import { cn } from "@/lib/utils";
 
 const defaultForm = {
   assetId: "",
@@ -46,6 +36,16 @@ const defaultForm = {
   status: "",
   notes: "",
 };
+
+const CONTAINER_OPTIONS = [
+  { value: "inside", label: "Inside a container" },
+  { value: "top", label: "Not inside anything" },
+];
+
+const TAG_OPTIONS = [
+  { value: "tagged", label: "Has an asset tag" },
+  { value: "serial_only", label: "Serial only" },
+];
 
 function formatTypeDisplay(type: { manufacturer?: string; name: string; model: string } | null | undefined) {
   if (!type) return "Unknown type";
@@ -63,7 +63,7 @@ export function ItemsManager() {
   const { alert } = useAppDialog();
   const siteBase = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("");
+  const [filters, setFilters] = useState<FilterState>({});
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editorInitial, setEditorInitial] = useState(defaultForm);
@@ -84,7 +84,7 @@ export function ItemsManager() {
     api.inventoryItems.list,
     {
       search: search || undefined,
-      category: category || undefined,
+      ...activeFilters(filters),
     },
     { initialNumItems: 100 },
   );
@@ -142,10 +142,31 @@ export function ItemsManager() {
     return map;
   }, [itemSummaries]);
 
-  const categoryLabel = useMemo(() => {
-    if (!category) return "All Categories";
-    return toCategoryOptions(categories).find((entry) => entry.value === category)?.label ?? category;
-  }, [categories, category]);
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () => [
+      {
+        id: "category",
+        label: "Category",
+        options: toCategoryOptions(categories).map((entry) => ({ value: entry.value, label: entry.label })),
+      },
+      {
+        id: "type",
+        label: "Type",
+        options: (types ?? []).map((type) => ({ value: type._id, label: formatTypeDisplay(type) })),
+      },
+      {
+        id: "location",
+        label: "Location",
+        options: [
+          { value: "none", label: "Unassigned" },
+          ...(locations ?? []).map((location) => ({ value: location._id, label: location.path })),
+        ],
+      },
+      { id: "container", label: "Container", options: CONTAINER_OPTIONS, single: true },
+      { id: "tag", label: "Asset tag", options: TAG_OPTIONS, single: true },
+    ],
+    [categories, locations, types],
+  );
 
   async function bulkDeleteSelected() {
     try {
@@ -190,7 +211,7 @@ export function ItemsManager() {
     }
     setScanError(null);
     setSearch(scanResolved.assetId);
-    setCategory("");
+    setFilters({});
     setPendingSelectId(scanResolved._id);
     setScanRaw("");
     setScanOpen(false);
@@ -379,16 +400,15 @@ export function ItemsManager() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Inventory Items</CardTitle>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-56 flex-1">
-                <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="pl-9"
-                  placeholder="Search by asset ID, serial, model"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </div>
+            <FilterBar
+              search={search}
+              onSearchChange={setSearch}
+              searchPlaceholder="Search by asset ID, serial, model"
+              searchLabel="Search items"
+              filters={filterDefinitions}
+              value={filters}
+              onChange={setFilters}
+            >
               <Button
                 type="button"
                 variant="outline"
@@ -397,37 +417,6 @@ export function ItemsManager() {
                 <CameraIcon className="size-4" />
                 Scan
               </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="outline" className="gap-1.5">
-                    {categoryLabel}
-                    <CaretDownIcon className="size-3 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="max-h-80">
-                  <DropdownMenuItem
-                    onClick={() => setCategory("")}
-                    className={cn(!category && "bg-accent")}
-                  >
-                    {category === "" ? <CheckIcon className="size-3.5" /> : <span className="size-3.5" />}
-                    All Categories
-                  </DropdownMenuItem>
-                  {toCategoryOptions(categories).map((entry) => (
-                    <DropdownMenuItem
-                      key={entry.value}
-                      onClick={() => setCategory(entry.value)}
-                      className={cn(category === entry.value && "bg-accent")}
-                    >
-                      {category === entry.value ? (
-                        <CheckIcon className="size-3.5" />
-                      ) : (
-                        <span className="size-3.5" />
-                      )}
-                      {entry.label}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
               <Button type="button" onClick={() => setWizardOpen(true)}>
                 <PlusIcon className="size-4" />
                 New Item
@@ -447,7 +436,7 @@ export function ItemsManager() {
                 </TooltipTrigger>
                 <TooltipContent>Delete selected items</TooltipContent>
               </Tooltip>
-            </div>
+            </FilterBar>
             {scanOpen ? (
               <div className="rounded-md border bg-muted/30 p-3">
                 <AssetScanner onSubmit={(raw) => setScanRaw(raw)} autoFocus />

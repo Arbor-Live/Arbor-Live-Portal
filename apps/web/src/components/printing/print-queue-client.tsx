@@ -3,8 +3,15 @@
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { createColumnHelper } from "@tanstack/react-table";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PrinterIcon } from "@phosphor-icons/react";
+import {
+  activeFilters,
+  FilterBar,
+  matchesFilter,
+  type FilterDefinition,
+  type FilterState,
+} from "@/components/filter-bar";
 import { api } from "@/lib/convex-api";
 import { formatDateTime } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
@@ -101,6 +108,42 @@ function PrinterCard({ printer, now }: { printer: PrinterRow; now: number }) {
 export function PrintQueueClient() {
   const printers = useQuery(api.printAgent.listPrinters, {});
   const jobs = useQuery(api.printJobs.listRecent, { limit: 100 });
+  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<FilterState>({});
+  // The 100 most recent jobs are all on the page, so filters run here.
+  const filterDefinitions = useMemo<FilterDefinition[]>(() => {
+    const distinct = (values: string[]) =>
+      [...new Set(values)].sort((a, b) => a.localeCompare(b)).map((value) => ({ value, label: value }));
+    return [
+      {
+        id: "status",
+        label: "Status",
+        options: (Object.keys(JOB_STATUS_LABELS) as JobRow["status"][]).map((value) => ({
+          value,
+          label: JOB_STATUS_LABELS[value],
+        })),
+      },
+      { id: "printer", label: "Printer", options: distinct((jobs ?? []).map((job) => job.printerName)) },
+      {
+        id: "event",
+        label: "Event",
+        options: [...new Map((jobs ?? []).map((job) => [job.eventId as string, job.eventTitle])).entries()]
+          .map(([value, label]) => ({ value, label }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+      },
+    ];
+  }, [jobs]);
+  const shownJobs = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return (jobs ?? []).filter(
+      (job) =>
+        (!needle || [job.eventTitle, job.fileName].some((field) => field.toLowerCase().includes(needle))) &&
+        matchesFilter(filters.status, job.status) &&
+        matchesFilter(filters.printer, job.printerName) &&
+        matchesFilter(filters.event, job.eventId),
+    );
+  }, [filters, jobs, search]);
+  const narrowed = Boolean(search.trim()) || Object.keys(activeFilters(filters)).length > 0;
   const reprint = useMutation(api.printJobs.reprintJob);
   const { alert } = useAppDialog();
   const [reprintingId, setReprintingId] = useState<string | null>(null);
@@ -222,14 +265,27 @@ export function PrintQueueClient() {
         <CardHeader>
           <CardTitle>Recent print jobs</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          <FilterBar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search event or file…"
+            searchLabel="Search print jobs"
+            filters={filterDefinitions}
+            value={filters}
+            onChange={setFilters}
+          />
           <DataTable
             columns={columns}
-            data={jobs ?? []}
+            data={shownJobs}
             getRowId={(row) => row._id}
             initialSorting={[{ id: "queued", desc: true }]}
             emptyMessage={
-              jobs === undefined ? "Loading jobs…" : "No briefs have been queued yet."
+              jobs === undefined
+                ? "Loading jobs…"
+                : narrowed
+                  ? "No print jobs match this search and these filters."
+                  : "No briefs have been queued yet."
             }
             getRowProps={(row) => ({ "data-testid": `print-job-${row.original._id}` })}
           />
