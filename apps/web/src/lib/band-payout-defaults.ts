@@ -20,11 +20,9 @@ export type ResolvedPayoutDefaults = {
   performanceHours: string;
   memberCount: string;
   fixedTotalUsd: string;
-  source: "invoice" | "band_profile" | "fallback";
+  source: "band_profile" | "invoice" | "none";
 };
 
-const FALLBACK_RATE = "150";
-const FALLBACK_MEMBERS = "4";
 const FALLBACK_HOURS = "1";
 
 function positiveNumber(value: number | null | undefined): number | null {
@@ -33,49 +31,36 @@ function positiveNumber(value: number | null | undefined): number | null {
 }
 
 /**
- * Invoice artist line wins, then band profile rate/members, then hardcoded fallbacks.
+ * The artist org profile is the source of truth for a payout, so its rate and
+ * member count win over the event invoice artist line (a snapshot taken when
+ * the line was billed). The invoice line only fills gaps. Whatever neither
+ * knows stays empty, rather than inventing a rate or headcount.
  */
 export function resolvePayoutDefaults(args: {
   invoiceLine?: InvoiceArtistLineDefaults | null;
   bandProfile?: BandProfileDefaults | null;
 }): ResolvedPayoutDefaults {
-  const invoice = args.invoiceLine;
-  const invoiceRate = positiveNumber(invoice?.rateUsd ?? null);
-  const invoiceHours = positiveNumber(invoice?.performanceHours ?? null);
-  const invoiceMembers = positiveNumber(invoice?.memberCount ?? null);
+  const profileRate = positiveNumber(args.bandProfile?.performerHourlyRateUsd ?? null);
+  const profileMembers = positiveNumber(args.bandProfile?.memberCount ?? null);
+  const invoiceRate = positiveNumber(args.invoiceLine?.rateUsd ?? null);
+  const invoiceMembers = positiveNumber(args.invoiceLine?.memberCount ?? null);
+  const invoiceHours = positiveNumber(args.invoiceLine?.performanceHours ?? null);
 
-  if (invoice && (invoiceRate || invoiceHours || invoiceMembers)) {
-    return {
-      pricingMode: "per_member_hourly",
-      ratePerMemberPerHourUsd: String(invoiceRate ?? positiveNumber(args.bandProfile?.performerHourlyRateUsd) ?? 150),
-      performanceHours: String(invoiceHours ?? 1),
-      memberCount: String(
-        invoiceMembers ?? positiveNumber(args.bandProfile?.memberCount) ?? 4,
-      ),
-      fixedTotalUsd: "0",
-      source: "invoice",
-    };
-  }
-
-  const bandRate = positiveNumber(args.bandProfile?.performerHourlyRateUsd ?? null);
-  const bandMembers = positiveNumber(args.bandProfile?.memberCount ?? null);
-  if (bandRate || bandMembers) {
-    return {
-      pricingMode: "per_member_hourly",
-      ratePerMemberPerHourUsd: String(bandRate ?? 150),
-      performanceHours: FALLBACK_HOURS,
-      memberCount: String(bandMembers ?? 4),
-      fixedTotalUsd: "0",
-      source: "band_profile",
-    };
-  }
+  const rate = profileRate ?? invoiceRate;
+  const members = profileMembers ?? invoiceMembers;
+  const source =
+    profileRate || profileMembers
+      ? "band_profile"
+      : invoiceRate || invoiceMembers || invoiceHours
+        ? "invoice"
+        : "none";
 
   return {
     pricingMode: "per_member_hourly",
-    ratePerMemberPerHourUsd: FALLBACK_RATE,
-    performanceHours: FALLBACK_HOURS,
-    memberCount: FALLBACK_MEMBERS,
+    ratePerMemberPerHourUsd: rate != null ? String(rate) : "",
+    performanceHours: invoiceHours != null ? String(invoiceHours) : FALLBACK_HOURS,
+    memberCount: members != null ? String(members) : "",
     fixedTotalUsd: "0",
-    source: "fallback",
+    source,
   };
 }
