@@ -236,13 +236,13 @@ function PersonRow({
     <li
       data-testid={`user-row-${user.id}`}
       className={cn(
-        "flex items-center gap-2 border pr-1 pl-3 text-sm",
+        "flex items-center gap-2 border pr-1 pl-3 text-sm transition-colors hover:bg-muted/30",
         user.status !== "active" && "text-muted-foreground",
       )}
     >
       <button
         type="button"
-        className="flex min-w-0 flex-1 items-center gap-3 py-2 text-left hover:bg-muted/30"
+        className="flex min-w-0 flex-1 items-center gap-3 py-2 text-left"
         onClick={onOpen}
       >
         <UserAvatar name={user.name} email={user.email} userId={user.id} size="sm" />
