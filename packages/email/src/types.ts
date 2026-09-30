@@ -265,6 +265,8 @@ export type BandPaymentPayeeRequiredEmailProps = {
 export type OnboardingCompletedEmailProps = {
   crewName: string;
   crewEmail: string;
+  studentTypeLabel: string;
+  payrollTypeLabel: string;
   hasFederalWorkStudy: boolean;
   hasValidDriversLicense: boolean;
   signatureLegalName: string;

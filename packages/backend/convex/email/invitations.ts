@@ -66,6 +66,7 @@ export async function upsertPendingInviteToken(
     assignableAsCrew?: boolean;
     showOnPublicCrewPage?: boolean;
     gradYear?: number;
+    stanfordPosition?: "undergrad" | "coterm" | "masters" | "phd" | "postdoc" | "other";
     expiresAt: number;
   },
 ) {
@@ -95,6 +96,7 @@ export async function upsertPendingInviteToken(
     assignableAsCrew: args.assignableAsCrew,
     showOnPublicCrewPage: args.showOnPublicCrewPage,
     gradYear: args.gradYear,
+    stanfordPosition: args.stanfordPosition,
     expiresAt: args.expiresAt,
     createdAt: now,
   };
@@ -130,6 +132,7 @@ export async function scheduleUserInviteEmail(
     assignableAsCrew?: boolean;
     showOnPublicCrewPage?: boolean;
     gradYear?: number;
+    stanfordPosition?: "undergrad" | "coterm" | "masters" | "phd" | "postdoc" | "other";
     isExistingUser: boolean;
     resendKey?: string;
   },
@@ -169,6 +172,7 @@ export async function scheduleUserInviteEmail(
       assignableAsCrew: args.assignableAsCrew,
       showOnPublicCrewPage: args.showOnPublicCrewPage,
       gradYear: args.gradYear,
+      stanfordPosition: args.stanfordPosition,
       expiresAt: args.expiresAt,
     });
     inviteUrl = inviteAcceptUrl(token);

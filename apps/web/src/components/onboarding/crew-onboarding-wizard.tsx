@@ -32,6 +32,11 @@ import {
   OnboardingYesNoChoice,
 } from "@/components/onboarding/onboarding-ui";
 import { CONTRACTOR_PAY_INFO, FWS_JOB_INFO, ONBOARDING_LINKS } from "@/lib/onboarding-links";
+import {
+  STANFORD_POSITION_LABELS,
+  STANFORD_POSITION_OPTIONS,
+  type StanfordPositionOption,
+} from "@/lib/validations/users";
 import { pacificDateAndTimeToMs, pacificDateKey } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useDevPreviewReady } from "@/hooks/use-dev-preview";
@@ -100,6 +105,7 @@ type CrewOnboardingData = {
     username?: string;
     pronouns?: string;
     gradYear?: number;
+    stanfordPosition?: StanfordPositionOption;
   };
 };
 
@@ -159,6 +165,7 @@ type FormState = {
   username: string;
   pronouns: string;
   gradYear: string;
+  stanfordPosition: StanfordPositionOption | "";
   whatsappAcknowledged: boolean;
   instagramAcknowledged: boolean;
   hasFederalWorkStudy: boolean | null;
@@ -192,6 +199,7 @@ const EMPTY_FORM: FormState = {
   username: "",
   pronouns: "",
   gradYear: "",
+  stanfordPosition: "",
   whatsappAcknowledged: false,
   instagramAcknowledged: false,
   hasFederalWorkStudy: null,
@@ -261,6 +269,7 @@ export function CrewOnboardingWizard() {
       pronouns: onboarding.profile.pronouns ?? "",
       username: onboarding.profile.username ?? "",
       gradYear: onboarding.profile.gradYear != null ? String(onboarding.profile.gradYear) : "",
+      stanfordPosition: onboarding.profile.stanfordPosition ?? "",
       whatsappAcknowledged: Boolean(onboarding.whatsappAcknowledgedAt),
       instagramAcknowledged: Boolean(onboarding.instagramAcknowledgedAt),
       hasFederalWorkStudy: onboarding.hasFederalWorkStudy ?? null,
@@ -343,6 +352,10 @@ export function CrewOnboardingWizard() {
           setFieldError("Enter your phone number.");
           return false;
         }
+        if (!form.stanfordPosition) {
+          setFieldError("Select your student type.");
+          return false;
+        }
         const trimmedGradYear = form.gradYear.trim();
         if (trimmedGradYear && !/^\d{4}$/.test(trimmedGradYear)) {
           setFieldError("Enter a 4-digit graduation year.");
@@ -366,6 +379,7 @@ export function CrewOnboardingWizard() {
           username: trimmedUsername,
           pronouns: form.pronouns.trim() || undefined,
           gradYear: trimmedGradYear ? Number(trimmedGradYear) : undefined,
+          stanfordPosition: form.stanfordPosition || undefined,
         });
         return true;
       }
@@ -829,6 +843,27 @@ function StepBody({
                 placeholder="2027"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="crew-student-type">Student type</Label>
+            <select
+              id="crew-student-type"
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+              value={form.stanfordPosition}
+              onChange={(event) =>
+                patch({ stanfordPosition: event.target.value as StanfordPositionOption | "" })
+              }
+            >
+              <option value="" disabled>
+                Select…
+              </option>
+              {STANFORD_POSITION_OPTIONS.map((position) => (
+                <option key={position} value={position}>
+                  {STANFORD_POSITION_LABELS[position]}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-2">

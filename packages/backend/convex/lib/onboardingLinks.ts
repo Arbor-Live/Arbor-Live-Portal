@@ -46,11 +46,18 @@ export const CONTRACTOR_PAY_INFO = {
   invoiceCadence: "every two weeks",
 } as const;
 
-/** Recipients notified when crew finish onboarding / for FWS questions. */
+/** Recipients notified whenever crew finish onboarding. */
 export const ONBOARDING_LEADERSHIP_EMAILS = [
   "emorenoa@stanford.edu",
   "selise@stanford.edu",
   "luciano8@stanford.edu",
+] as const;
+
+/**
+ * Stanford HR / Federal Work-Study recipients. Only notified for Stanford
+ * payroll hires — external (contractor) crew are not processed through HR.
+ */
+export const ONBOARDING_FWS_EMAILS = [
   "leilani1@stanford.edu",
   "sky3@stanford.edu",
 ] as const;

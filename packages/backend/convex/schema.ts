@@ -65,6 +65,15 @@ const userCompensationRateModeValue = v.union(
   v.literal("custom"),
 );
 const payrollMethodValue = v.union(v.literal("stanford"), v.literal("external"));
+/** Mirrors the crew application `stanfordPosition` field. */
+const stanfordPositionValue = v.union(
+  v.literal("undergrad"),
+  v.literal("coterm"),
+  v.literal("masters"),
+  v.literal("phd"),
+  v.literal("postdoc"),
+  v.literal("other"),
+);
 const discountTypeValue = v.union(v.literal("amount"), v.literal("percent"));
 
 const invoiceLineSectionValue = v.union(
@@ -987,6 +996,8 @@ export default defineSchema({
     pronouns: v.optional(v.string()),
     /** Graduation year (e.g. 2027). */
     gradYear: v.optional(v.number()),
+    /** Stanford student position (grad/undergrad), mirrors crew applications. */
+    stanfordPosition: v.optional(stanfordPositionValue),
     /** @deprecated Use verticals + disciplines. Kept for migration reads. */
     teams: v.optional(v.array(userTeamValue)),
     verticals: v.optional(v.array(userVerticalValue)),
@@ -1493,6 +1504,7 @@ export default defineSchema({
     showOnPublicCrewPage: v.optional(v.boolean()),
     /** Arbor Live crew invites converted from a crew application, when present. */
     gradYear: v.optional(v.number()),
+    stanfordPosition: v.optional(stanfordPositionValue),
     expiresAt: v.number(),
     createdAt: v.number(),
   })
@@ -2169,14 +2181,7 @@ export default defineSchema({
     crewAvailabilityDays: v.optional(
       v.array(v.union(v.literal("friday"), v.literal("saturday"))),
     ),
-    stanfordPosition: v.union(
-      v.literal("undergrad"),
-      v.literal("coterm"),
-      v.literal("masters"),
-      v.literal("phd"),
-      v.literal("postdoc"),
-      v.literal("other"),
-    ),
+    stanfordPosition: stanfordPositionValue,
     gradYear: v.optional(v.number()),
     submittedAt: v.number(),
     reviewedAt: v.optional(v.number()),

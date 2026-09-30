@@ -24,6 +24,23 @@ export const DISCIPLINES_BY_VERTICAL: Record<
 export const CREW_RATE_MODE_OPTIONS = ["normal", "lead", "custom"] as const;
 export const PAYROLL_METHOD_OPTIONS = ["stanford", "external"] as const;
 export const USER_INVITE_KIND_OPTIONS = ["crew", "advisor"] as const;
+/** Mirrors the crew application `stanfordPosition` field. */
+export const STANFORD_POSITION_OPTIONS = [
+  "undergrad",
+  "coterm",
+  "masters",
+  "phd",
+  "postdoc",
+  "other",
+] as const;
+export const STANFORD_POSITION_LABELS: Record<(typeof STANFORD_POSITION_OPTIONS)[number], string> = {
+  undergrad: "Undergrad",
+  coterm: "Coterm",
+  masters: "Master's",
+  phd: "PhD",
+  postdoc: "Postdoc",
+  other: "Other",
+};
 
 /** @deprecated Use USER_VERTICAL_OPTIONS / USER_DISCIPLINE_OPTIONS */
 export const ADMIN_TEAM_OPTIONS = ["Sound", "Lights", "Design", "Marketing", "Operations"] as const;
@@ -33,12 +50,14 @@ export const userDisciplineOptionSchema = z.enum(USER_DISCIPLINE_OPTIONS);
 export const crewRateModeSchema = z.enum(CREW_RATE_MODE_OPTIONS);
 export const payrollMethodSchema = z.enum(PAYROLL_METHOD_OPTIONS);
 export const userInviteKindSchema = z.enum(USER_INVITE_KIND_OPTIONS);
+export const stanfordPositionSchema = z.enum(STANFORD_POSITION_OPTIONS);
 
 export type UserVerticalOption = z.infer<typeof userVerticalOptionSchema>;
 export type UserDisciplineOption = z.infer<typeof userDisciplineOptionSchema>;
 export type CrewRateModeOption = z.infer<typeof crewRateModeSchema>;
 export type PayrollMethodOption = z.infer<typeof payrollMethodSchema>;
 export type UserInviteKindOption = z.infer<typeof userInviteKindSchema>;
+export type StanfordPositionOption = z.infer<typeof stanfordPositionSchema>;
 
 /** Every discipline available across the given verticals, in canonical order. */
 export function disciplinesForVerticals(

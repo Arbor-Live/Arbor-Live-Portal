@@ -53,6 +53,7 @@ test.describe("crew onboarding wizard", () => {
     await expect(page.getByLabel("Full name")).toBeVisible({ timeout: 20_000 });
     await page.getByLabel("Full name").fill(onboardingCrewName);
     await page.getByLabel("Phone number").fill("6505550144");
+    await page.locator("#crew-student-type").selectOption("undergrad");
     await next(page);
 
     // Passkey is optional — skip enrollment in CI.
@@ -111,6 +112,7 @@ test.describe("crew onboarding wizard", () => {
       narcanCompleted: boolean;
       studentId: string | null;
       i9Acknowledged: boolean;
+      stanfordPosition: string | null;
     }>(
       "e2eHelpers:getCrewOnboardingState",
       { userId: crew.userId },
@@ -122,6 +124,7 @@ test.describe("crew onboarding wizard", () => {
     expect(state.narcanCompleted).toBe(true);
     expect(state.studentId).toBe("12345678");
     expect(state.i9Acknowledged).toBe(true);
+    expect(state.stanfordPosition).toBe("undergrad");
 
     // Completed onboarding sends the wizard back to the dashboard.
     await page.waitForURL(/\/dashboard/, { timeout: 30_000 });
