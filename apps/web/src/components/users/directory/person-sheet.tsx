@@ -117,7 +117,8 @@ export function usePersonActions() {
 function valuesFromUser(user: AdminUser): UserAdminRowFormValues {
   const verticals = (user.verticals ?? []) as UserVerticalOption[];
   return {
-    role: user.role || "member",
+    // Better Auth defaults new accounts to "user"; the picker offers Member / Admin.
+    role: user.role === "admin" ? "admin" : "member",
     name: user.name,
     username: user.username ?? "",
     requiresOnboarding: user.requiresOnboarding ?? true,
@@ -234,9 +235,11 @@ function PersonSheetBody({
 
   const onSave = form.submitMutation(
     async (values) => {
+      // Leave a "user" role as-is unless the admin actually picks one.
+      const role = form.formState.dirtyFields.role ? values.role : user.role || values.role;
       await updateUser({
         userId: user.id,
-        role: values.role,
+        role,
         name: values.name,
         username: values.username,
         requiresOnboarding: values.requiresOnboarding,
@@ -259,7 +262,7 @@ function PersonSheetBody({
           values.rateMode === "custom" ? Number(values.hourlyRateUsd || "0") : undefined,
         payrollMethod: values.payrollMethod,
         organizationMemberships: values.defaultOrganizationId
-          ? [{ organizationId: values.defaultOrganizationId, role: values.role }]
+          ? [{ organizationId: values.defaultOrganizationId, role }]
           : undefined,
       });
       return values;
@@ -443,7 +446,7 @@ function PersonSheetBody({
             ))}
           </ul>
         )}
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_9rem_auto]">
+        <div className="space-y-2">
           <SearchableSelect
             value={membershipOrgId}
             onChange={(value) => {
@@ -454,26 +457,28 @@ function PersonSheetBody({
             placeholder="Search organizations…"
             emptyLabel="Add to organization"
           />
-          <Select value={membershipRole} onValueChange={setMembershipRole} disabled={!membershipOrgId}>
-            <SelectTrigger aria-label="Membership role">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {getRoleOptionsForOrg(orgOptions, membershipOrgId).map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy || !membershipOrgId}
-            onClick={() => void onAddMembership()}
-          >
-            Add membership
-          </Button>
+          <div className="flex gap-2">
+            <Select value={membershipRole} onValueChange={setMembershipRole} disabled={!membershipOrgId}>
+              <SelectTrigger aria-label="Membership role" className="flex-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {getRoleOptionsForOrg(orgOptions, membershipOrgId).map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || !membershipOrgId}
+              onClick={() => void onAddMembership()}
+            >
+              Add membership
+            </Button>
+          </div>
         </div>
       </SheetSection>
 

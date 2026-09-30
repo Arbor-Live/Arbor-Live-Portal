@@ -245,7 +245,7 @@ function InviteRowItem({
             {invite.createdAt ? ` · ${formatDate(invite.createdAt)}` : ""}
           </p>
         </div>
-        <span className="hidden w-32 shrink-0 text-right text-xs text-muted-foreground tabular-nums md:block">
+        <span className="hidden w-44 shrink-0 text-right text-xs whitespace-nowrap text-muted-foreground tabular-nums md:block">
           {pending && invite.expiresAt ? `Expires ${formatDate(invite.expiresAt)}` : null}
         </span>
         <span

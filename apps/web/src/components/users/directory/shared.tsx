@@ -70,6 +70,8 @@ export const FLAG_CLASS =
   "rounded-md bg-status-amber-500/15 px-2 py-0.5 text-xs text-status-amber-800 dark:text-status-amber-200";
 
 const ROLE_LABELS: Record<string, string> = {
+  // Better Auth's default role; the app treats it as a plain member.
+  user: "Member",
   member: "Member",
   admin: "Admin",
   org_member: "Org Member",
@@ -185,27 +187,31 @@ export function VerticalsAndDisciplines({
   idPrefix: string;
 }) {
   const disciplineOptions = disciplinesForVerticals(verticals);
+  // Sized to its container, not the viewport: side by side in the Add person
+  // dialog, stacked in a side panel where two columns would crowd the labels.
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <OptionCheckboxes
-        label="Verticals"
-        options={USER_VERTICAL_OPTIONS}
-        values={verticals}
-        onChange={(next) => {
-          onVerticalsChange(next);
-          onDisciplinesChange(pruneDisciplinesForVerticals(next, disciplines));
-        }}
-        idPrefix={`${idPrefix}-vertical`}
-      />
-      {disciplineOptions.length > 0 ? (
+    <div className="@container/teams">
+      <div className="grid gap-4 @lg/teams:grid-cols-2">
         <OptionCheckboxes
-          label="Disciplines"
-          options={disciplineOptions}
-          values={disciplines}
-          onChange={onDisciplinesChange}
-          idPrefix={`${idPrefix}-discipline`}
+          label="Verticals"
+          options={USER_VERTICAL_OPTIONS}
+          values={verticals}
+          onChange={(next) => {
+            onVerticalsChange(next);
+            onDisciplinesChange(pruneDisciplinesForVerticals(next, disciplines));
+          }}
+          idPrefix={`${idPrefix}-vertical`}
         />
-      ) : null}
+        {disciplineOptions.length > 0 ? (
+          <OptionCheckboxes
+            label="Disciplines"
+            options={disciplineOptions}
+            values={disciplines}
+            onChange={onDisciplinesChange}
+            idPrefix={`${idPrefix}-discipline`}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }
