@@ -1,14 +1,33 @@
+import Link from "next/link";
+import { ArrowSquareOutIcon, SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr";
 import { EventRequestsInbox } from "@/components/events/event-requests-inbox";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
 
 export default function EventRequestsPage() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-24">
       <PageHeader
         back={{ href: "/dashboard/financial-hub", label: "Ops Center" }}
         title="Booking Requests"
-        description="Review inbound booking requests and convert them into tentative events."
+        description="Inbound booking requests, from first ask to event. Answer what needs you, and convert accepted requests into tentative events."
+        actions={
+          <>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/dashboard/financial-hub/requests/settings">
+                <SlidersHorizontalIcon />
+                Round-robin settings
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/request" target="_blank">
+                Open public form
+                <ArrowSquareOutIcon className="size-3" aria-hidden />
+              </Link>
+            </Button>
+          </>
+        }
       />
       <ArborOnlyGuard>
         <EventRequestsInbox />
