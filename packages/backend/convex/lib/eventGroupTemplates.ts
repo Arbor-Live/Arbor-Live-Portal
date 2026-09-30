@@ -131,7 +131,7 @@ export async function captureDayTemplates(
         .withIndex("by_eventId", (q) => q.eq("eventId", day._id))
         .take(500);
       captured.shiftTemplates = shiftsToTemplates(shifts, blocks, blockTemplates, day.startAt, {
-        includeAssigned: true,
+        copyingDay: true,
       });
     }
   }

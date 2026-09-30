@@ -14,6 +14,7 @@ import {
   EVENT_TIMEZONE,
   groupDayStartAt,
   materializeOccurrence,
+  withSharedDayFields,
   propagateInvoiceIdToSeriesOccurrences,
   replaceEmptyShiftsFromTemplates,
   replaceScheduleBlocksFromTemplates,
@@ -80,7 +81,6 @@ const shiftTemplateValue = v.object({
   offsetMs: v.number(),
   durationMs: v.number(),
   hours: v.optional(v.number()),
-  timesOverridden: v.optional(v.boolean()),
   estimatedHourlyRateUsd: v.optional(v.number()),
   notes: v.optional(v.string()),
 });
@@ -357,6 +357,9 @@ export const unlinkInvoice = mutation({
 
 const groupApplyScopeValue = v.union(v.literal("future"), v.literal("all"));
 
+/** Pull-list rows copied per day; matches the pull list's own read cap. */
+const MAX_PULL_LIST_ROWS = 500;
+
 async function requireGroup(ctx: MutationCtx, id: Id<"eventSeries">) {
   const series = await ctx.db.get(id);
   if (!series) throw new Error("Event series not found.");
@@ -581,47 +584,90 @@ export const applyDaySetup = mutation({
       source = await ctx.db.get(args.eventId);
     }
     if (!source?.seriesId) throw new Error("This event has no other days to apply its setup to.");
-    const groupId = source.seriesId;
-    const parts = {
-      schedule: args.schedule !== false,
-      crew: args.schedule !== false,
-      positions: args.positions !== false,
-    };
-    const sourceIndex = source.occurrenceIndex ?? 0;
+    const sourceDay = source;
+    const groupId = sourceDay.seriesId!;
+    if (!isMultiDayGroup(await requireGroup(ctx, groupId))) {
+      // A series already has its templates; copying one occurrence over them
+      // would rewrite the series. Edit the templates on the series page.
+      throw new Error("Apply a series' setup from its templates on the series page.");
+    }
+    // Days that already happened keep their record (pull progress, crew).
     const targets = selectDaysInScope(
       await listGroupDays(ctx, groupId),
       args.scope,
-      sourceIndex,
+      sourceDay.occurrenceIndex ?? 0,
       now,
-    ).filter((day) => day._id !== source._id);
+    ).filter((day) => day._id !== sourceDay._id && day.endAt >= now);
     if (targets.length === 0) {
       throw new Error(
         args.scope === "future"
-          ? "There are no later days to apply this day's setup to."
-          : "There are no other days to apply this day's setup to.",
+          ? "There are no later upcoming days to apply this day's setup to."
+          : "There are no other upcoming days to apply this day's setup to.",
       );
     }
     for (const target of targets) {
       await requireEventEditAccess(ctx, target._id);
     }
 
-    const captured = await captureDayTemplates(ctx, source, parts, now);
-    await ctx.db.patch(groupId, { ...captured, updatedAt: now });
+    const wanted = {
+      schedule: args.schedule !== false,
+      crew: args.schedule !== false,
+      positions: args.positions !== false,
+    };
+    const captured = await captureDayTemplates(ctx, sourceDay, wanted, now);
+    const sourcePullList =
+      args.pullList !== false
+        ? await ctx.db
+            .query("eventPullListItems")
+            .withIndex("by_eventId", (q) => q.eq("eventId", sourceDay._id))
+            .take(MAX_PULL_LIST_ROWS + 1)
+        : [];
+    if (sourcePullList.length > MAX_PULL_LIST_ROWS) {
+      throw new Error(
+        `This day's pull list is too long to copy (max ${MAX_PULL_LIST_ROWS} rows, got more).`,
+      );
+    }
+    const hasUnlinkedShifts = wanted.crew
+      ? (
+          await ctx.db
+            .query("eventCrewShifts")
+            .withIndex("by_eventId", (q) => q.eq("eventId", sourceDay._id))
+            .take(500)
+        ).some((shift) => !shift.scheduleBlockId)
+      : false;
+    // A part this day has nothing for is skipped, never used to wipe the
+    // other days (e.g. no Run of Show yet must not clear their crew slots).
+    const hasSchedule =
+      (captured.blockTemplates?.length ?? 0) > 0 ||
+      (captured.shiftTemplates?.length ?? 0) > 0 ||
+      hasUnlinkedShifts;
+    const parts = {
+      schedule: wanted.schedule && hasSchedule,
+      crew: wanted.crew && hasSchedule,
+      positions: wanted.positions && (captured.positionTemplates?.length ?? 0) > 0,
+    };
+    const copyPullList = sourcePullList.length > 0;
+    if (!parts.schedule && !parts.positions && !copyPullList) {
+      throw new Error(
+        "This day has nothing to apply yet: no Run of Show, crew, positions or pull list.",
+      );
+    }
+    await ctx.db.patch(groupId, {
+      ...(parts.schedule
+        ? { blockTemplates: captured.blockTemplates, shiftTemplates: captured.shiftTemplates }
+        : {}),
+      ...(parts.positions ? { positionTemplates: captured.positionTemplates } : {}),
+      updatedAt: now,
+    });
     const group = await requireGroup(ctx, groupId);
-    const sourcePullList = args.pullList !== false
-      ? await ctx.db
-          .query("eventPullListItems")
-          .withIndex("by_eventId", (q) => q.eq("eventId", source._id))
-          .take(500)
-      : [];
     const defaultHourlyRateUsd = parts.crew ? await resolveDefaultCrewHourlyRateUsd(ctx) : undefined;
     for (const target of targets) {
       await applyGroupTemplatesToDay(ctx, group, target, parts, { now, defaultHourlyRateUsd });
       if (parts.crew) {
-        await copyUnlinkedShiftsBetweenDays(ctx, source, target, now);
+        await copyUnlinkedShiftsBetweenDays(ctx, sourceDay, target, now);
         await syncEventCrewCostUsd(ctx, target._id, now);
       }
-      if (args.pullList !== false) {
+      if (copyPullList) {
         await copyPullListBetweenDays(ctx, sourcePullList, target._id, now);
       }
       await ctx.db.patch(target._id, { updatedAt: now });
@@ -654,11 +700,24 @@ export const addDay = mutation({
     }
     const now = Date.now();
     const eventId = await materializeOccurrence(ctx, group, days.length, args.startAt, now);
-    // A new day takes the booking's visibility (a private booking stays off the
-    // public calendar); its status follows the invoice, as on every linked day.
+    // A new day looks like the booking's live days today (venue, host, people,
+    // visibility), not the group's snapshot from when it formed. Budget and
+    // costs are per day: the group's budget is the whole booking's. Its status
+    // follows the invoice, as on every linked day.
     const model = days.find((day) => day.status !== "cancelled") ?? days[0];
-    if (model && model.visibility !== "public") {
-      await ctx.db.patch(eventId, { visibility: model.visibility });
+    const created = await ctx.db.get(eventId);
+    if (created) {
+      const next = withSharedDayFields(
+        { ...created, visibility: model?.visibility ?? created.visibility },
+        model ?? created,
+      );
+      delete next.budgetUsd;
+      delete next.bandsCostUsd;
+      delete next.externalRentalsCostUsd;
+      delete next.otherCostUsd;
+      delete next.crewCostUsd;
+      await ctx.db.replace(eventId, next);
+      if ((group.shiftTemplates?.length ?? 0) > 0) await syncEventCrewCostUsd(ctx, eventId, now);
     }
     await syncMultiDayGroupForInvoice(ctx, invoice._id, now);
     return eventId;

@@ -28,6 +28,7 @@ import { copyDaySetupToTargets, listSiblingDayEvents } from "./lib/copyDaySetup"
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
 import { deleteEventRecord } from "./lib/bookingChainDelete";
 import {
+  editedSharedDayFields,
   propagateInvoiceIdToSeriesOccurrences,
   propagateSharedDayFields,
   propagateOverviewToSeriesOccurrences,
@@ -36,7 +37,12 @@ import {
   type SeriesOverviewOverride,
 } from "./lib/eventSeriesGeneration";
 import { isMultiDayGroup } from "./lib/eventGroupKind";
-import { syncMultiDayGroupForInvoice, syncMultiDayGroupsForInvoices } from "./lib/eventGroups";
+import {
+  dissolveMultiDayGroupsForInvoice,
+  findMultiDayGroupForInvoice,
+  syncMultiDayGroupForInvoice,
+  syncMultiDayGroupsForInvoices,
+} from "./lib/eventGroups";
 import { listGroupDays } from "./lib/eventGroupTemplates";
 import { resolveSeriesMetadataForInvoice } from "./lib/invoiceSeries";
 import { assertNoOpenMicOverlap } from "./lib/openMicAddon";
@@ -802,11 +808,15 @@ export const update = mutation({
       await ctx.db.patch(args.id, patch);
       if (args.invoiceId !== undefined) {
         if (scope === "all" && group) {
-          // The whole booking moves: the group (and its templates) moves with it.
-          const moved = { ...group, updatedAt: now };
-          if (nextInvoiceId) moved.invoiceId = nextInvoiceId;
-          else delete moved.invoiceId;
-          await ctx.db.replace(existing.seriesId, moved);
+          if (!nextInvoiceId) {
+            // No invoice, no booking: the days become plain events.
+            await dissolveMultiDayGroupsForInvoice(ctx, existing.invoiceId ?? group.invoiceId!);
+          } else if (!(await findMultiDayGroupForInvoice(ctx, nextInvoiceId))) {
+            // The whole booking moves: the group (and its templates) moves with
+            // it. Onto an invoice that already has a booking, the sync merges
+            // these days into that one instead.
+            await ctx.db.patch(existing.seriesId, { invoiceId: nextInvoiceId, updatedAt: now });
+          }
         }
         await propagateInvoiceIdToSeriesOccurrences(
           ctx,
@@ -950,6 +960,7 @@ export const update = mutation({
           scope,
           now,
           overrides,
+          editedSharedDayFields(args),
         );
         affectedOccurrences = [...affectedOccurrences, ...propagated];
       }
@@ -980,11 +991,13 @@ export const update = mutation({
     for (const occ of affectedOccurrences) {
       if (seen.has(occ.id)) continue;
       seen.add(occ.id);
+      // Days a multi-day edit only touched keep their own status.
+      const occStatus = occ.nextStatus ?? nextStatus;
       if (occ.invoiceId) {
-        await syncEventStatusForLinkedInvoice(ctx, occ.id, occ.invoiceId, nextStatus);
+        await syncEventStatusForLinkedInvoice(ctx, occ.id, occ.invoiceId, occStatus);
       }
 
-      if (nextStatus === "cancelled" && normalizeEventStatus(occ.prevStatus) !== "cancelled") {
+      if (occStatus === "cancelled" && normalizeEventStatus(occ.prevStatus) !== "cancelled") {
         await scheduleEventCancelledEmails(ctx, occ.id, now);
       }
     }
