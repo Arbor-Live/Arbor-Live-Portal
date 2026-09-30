@@ -200,7 +200,7 @@ export function EventSeriesScheduleEditor({
         eventId: importOccurrenceId as Id<"events">,
       });
       onMessage(
-        `Imported ${result.templateCount} block${result.templateCount === 1 ? "" : "s"} into the series template.`,
+        `Imported ${result.templateCount} block${result.templateCount === 1 ? "" : "s"} into the ${kind === "multi_day" ? "booking" : "series"} template.`,
       );
     });
   }
@@ -219,7 +219,7 @@ export function EventSeriesScheduleEditor({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Series schedule template</CardTitle>
+          <CardTitle>{kind === "multi_day" ? "Booking Run of Show template" : "Series schedule template"}</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
@@ -234,7 +234,7 @@ export function EventSeriesScheduleEditor({
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Series schedule template</CardTitle>
+          <CardTitle>{kind === "multi_day" ? "Booking Run of Show template" : "Series schedule template"}</CardTitle>
           <p className="text-sm text-muted-foreground">
             Edit once, then apply to many {groupDayNoun(kind, true)}. Acts&apos; soundchecks and sets stay
             on each {groupDayNoun(kind)}.

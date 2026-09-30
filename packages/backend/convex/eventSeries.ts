@@ -169,11 +169,13 @@ export const get = query({
     );
     const totalOccurrences = series.occurrenceCount ?? occurrences.length;
     const costSummary = computeSeriesCostSummary(series, occurrences);
+    const invoice = series.invoiceId ? await ctx.db.get(series.invoiceId) : null;
     return {
       series,
       occurrences: occurrencesWithStats,
       totalOccurrences,
       costSummary,
+      invoiceNumber: invoice?.invoiceNumber,
     };
   },
 });

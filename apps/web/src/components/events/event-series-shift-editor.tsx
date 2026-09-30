@@ -105,12 +105,16 @@ export function EventSeriesShiftEditor({
   occurrences,
   onMessage,
   onShiftDraftsChange,
-  title = "Series crew shift template",
-  description = "Define empty shifts once for cost estimation. Applying syncs schedule blocks and replaces unassigned shifts on selected occurrences; staffed shifts are kept.",
+  title,
+  description,
   billableOccurrenceCount = 1,
   embedded = false,
 }: EventSeriesShiftEditorProps) {
   const cardClassName = embedded ? EMBEDDED_CARD : undefined;
+  const cardTitle = title ?? (kind === "multi_day" ? "Booking crew template" : "Series crew shift template");
+  const cardDescription =
+    description ??
+    `Define open crew slots once for cost estimation. Applying syncs the Run of Show sections and replaces open slots on the selected ${groupDayNoun(kind, true)}; staffed shifts are kept.`;
   const invoiceSettings = useQuery(api.invoiceSettings.get, {});
   const regenerateShifts = useMutation(api.eventSeries.regenerateFutureShifts);
   const importShifts = useMutation(api.eventSeries.importShiftsFromOccurrence);
@@ -269,7 +273,7 @@ export function EventSeriesShiftEditor({
         eventId: importOccurrenceId as Id<"events">,
       });
       onMessage(
-        `Imported ${result.templateCount} empty shift${result.templateCount === 1 ? "" : "s"} into the series template.`,
+        `Imported ${result.templateCount} empty shift${result.templateCount === 1 ? "" : "s"} into the ${kind === "multi_day" ? "booking" : "series"} template.`,
       );
     });
   }
@@ -288,7 +292,7 @@ export function EventSeriesShiftEditor({
     return (
       <Card className={cardClassName}>
         <CardHeader>
-          <CardTitle>{title}</CardTitle>
+          <CardTitle>{cardTitle}</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
@@ -303,8 +307,8 @@ export function EventSeriesShiftEditor({
     <>
       <Card className={cardClassName}>
         <CardHeader>
-          <CardTitle>{title}</CardTitle>
-          <p className="text-sm text-muted-foreground">{description}</p>
+          <CardTitle>{cardTitle}</CardTitle>
+          <p className="text-sm text-muted-foreground">{cardDescription}</p>
         </CardHeader>
         <CardContent className="space-y-4">
           <Form {...form}>

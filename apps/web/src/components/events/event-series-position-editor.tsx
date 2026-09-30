@@ -180,7 +180,7 @@ export function EventSeriesPositionEditor({
         eventId: importOccurrenceId as Id<"events">,
       });
       onMessage(
-        `Imported ${result.templateCount} position${result.templateCount === 1 ? "" : "s"} into the series template.`,
+        `Imported ${result.templateCount} position${result.templateCount === 1 ? "" : "s"} into the ${kind === "multi_day" ? "booking" : "series"} template.`,
       );
     });
   }
@@ -199,7 +199,7 @@ export function EventSeriesPositionEditor({
           <div className="space-y-1">
             <CardTitle className="flex items-center gap-2">
               <MicrophoneStageIcon className="size-4 text-muted-foreground" aria-hidden />
-              Series positions
+              {kind === "multi_day" ? "Booking positions" : "Series positions"}
             </CardTitle>
           </div>
           <Button type="button" size="sm" variant="outline" onClick={addDraft}>

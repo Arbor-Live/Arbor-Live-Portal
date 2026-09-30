@@ -112,8 +112,7 @@ export function EventGroupBudgetTab() {
     (row) => !row.seriesDetached && row.status !== "cancelled",
   ).length;
   const invoiceLinkId = invoiceLinkOverride ?? series.invoiceId ?? "";
-  const linkedInvoiceNumber =
-    (invoices ?? []).find((row) => row._id === series.invoiceId)?.invoiceNumber ?? "Linked invoice";
+  const linkedInvoiceNumber = data.invoiceNumber ?? "Linked invoice";
 
   const onSaveCosts = costsForm.submitMutation(async (values) => {
     await updateSeriesCosts({
