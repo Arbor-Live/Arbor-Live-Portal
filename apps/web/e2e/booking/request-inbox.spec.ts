@@ -56,7 +56,7 @@ test.describe("booking request inbox", () => {
 
     // Pending client stays in the open list but collapsed by default.
     await expect(page.getByText(seeds.pendingClient.requestNumber)).toHaveCount(0);
-    const pendingToggle = page.getByRole("button", { name: /Pending client response/i });
+    const pendingToggle = page.getByTestId("request-group-pending_client").getByRole("button", { name: "Show" });
     await expect(pendingToggle).toBeVisible();
     await pendingToggle.click();
     await expect(page.getByText(seeds.pendingClient.requestNumber).first()).toBeVisible();

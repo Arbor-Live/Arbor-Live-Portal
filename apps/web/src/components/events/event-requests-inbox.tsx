@@ -3,14 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
-import { CaretRightIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   activeFilters,
   FilterBar,
@@ -19,7 +13,12 @@ import {
   type FilterState,
 } from "@/components/filter-bar";
 import { formatDateTime, pacificDateKey } from "@/lib/format";
-import { eventRequestStatusLabel } from "@/lib/event-request-status";
+import { eventRequestStatusLabel, eventRequestStatusTone } from "@/lib/event-request-status";
+import { EmptyState, ListSummary, RowCell, RowGroup, RowMenu, RowText } from "@/components/list-page";
+import { ListRow } from "@/components/list-row";
+import { StatusPill } from "@/components/page-header";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const REQUESTS_BASE = "/dashboard/financial-hub/requests";
 
@@ -65,27 +64,11 @@ type RequestRow = {
   expectedTurnout: number;
   eventCategory: string;
   submittedAt: number;
+  assigneeUserId?: string;
   assigneeName: string | null;
   convertedEventId?: string;
   convertedEventIds?: string[];
 };
-
-function statusBadgeClass(status: string) {
-  switch (status) {
-    case "submitted":
-    case "action_required":
-    case "in_review":
-      return "border border-status-amber-500/30 bg-status-amber-500/10 text-status-amber-700";
-    case "pending_client":
-      return "border border-status-sky-500/30 bg-status-sky-500/10 text-status-sky-700";
-    case "converted":
-      return "border border-status-emerald-500/30 bg-status-emerald-500/10 text-status-emerald-700";
-    case "declined":
-      return "border border-status-rose-500/30 bg-status-rose-500/10 text-status-rose-700";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-}
 
 function daysAgoLabel(submittedAt: number) {
   const submittedKey = pacificDateKey(submittedAt);
@@ -101,73 +84,70 @@ function daysAgoLabel(submittedAt: number) {
   return `${days} days ago`;
 }
 
-function RequestCard({ row }: { row: RequestRow }) {
+/** Who acts next, in the order the inbox shows them. */
+const GROUPS: { id: string; label: string; description: string; statuses: string[] }[] = [
+  {
+    id: "needs_you",
+    label: "Needs you",
+    description: "New requests and ones waiting on an answer from Arbor.",
+    statuses: ["submitted", "action_required", "in_review"],
+  },
+  {
+    id: "pending_client",
+    label: "Pending client response",
+    description: "Arbor has replied; the requester's move.",
+    statuses: ["pending_client"],
+  },
+  { id: "converted", label: "Converted", description: "Became events.", statuses: ["converted"] },
+  { id: "declined", label: "Declined", description: "Arbor said no.", statuses: ["declined"] },
+];
+
+function RequestRowItem({ row }: { row: RequestRow }) {
   const ago = daysAgoLabel(row.submittedAt);
+  const events = row.convertedEventIds?.length ? row.convertedEventIds : row.convertedEventId ? [row.convertedEventId] : [];
+  const title = row.eventName?.trim() || row.eventCategory;
   return (
-    <div className="rounded-md border p-3">
-      <div className="flex flex-wrap items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="font-medium">
-            {row.requestNumber ? `${row.requestNumber} · ` : ""}
-            {row.firstName} {row.lastName}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {row.email} · {row.phone}
-          </p>
-          <p className="mt-1 text-sm">
-            {row.eventName ? (
-              <>
-                <span className="font-medium">{row.eventName}</span>
-                <span className="text-muted-foreground"> · {row.eventCategory}</span>
-              </>
-            ) : (
-              row.eventCategory
-            )}
-            {row.venueName ? ` · ${row.venueName}` : ""}
-          </p>
-          <p className="text-xs text-muted-foreground">Event date: {row.eventDateText}</p>
-          <div className="mt-2 flex flex-wrap gap-2 text-xs">
-            <span className={`rounded-full px-2 py-0.5 ${statusBadgeClass(row.status)}`}>
-              {eventRequestStatusLabel(row.status)}
-            </span>
-            <span className="rounded bg-muted px-2 py-0.5">Turnout: {row.expectedTurnout}</span>
-            <span className="rounded bg-muted px-2 py-0.5">{row.sponsorType}</span>
-            {row.organization ? (
-              <span className="rounded bg-muted px-2 py-0.5">{row.organization}</span>
-            ) : null}
-            <span className="rounded bg-muted px-2 py-0.5">
-              Assignee: {row.assigneeName ?? "Unassigned"}
-            </span>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild type="button" variant="outline" size="sm">
-            <Link href={`${REQUESTS_BASE}/${row._id}`}>Open</Link>
-          </Button>
-          {row.convertedEventIds && row.convertedEventIds.length > 0 ? (
-            row.convertedEventIds.length > 1 ? (
-              <Button asChild type="button" variant="outline" size="sm">
-                <Link href={`${REQUESTS_BASE}/${row._id}`}>
-                  View {row.convertedEventIds.length} events
-                </Link>
-              </Button>
-            ) : (
-              <Button asChild type="button" variant="outline" size="sm">
-                <Link href={`/dashboard/events/${row.convertedEventIds[0]}`}>View event</Link>
-              </Button>
-            )
-          ) : row.convertedEventId ? (
-            <Button asChild type="button" variant="outline" size="sm">
-              <Link href={`/dashboard/events/${row.convertedEventId}`}>View event</Link>
-            </Button>
+    <ListRow
+      data-testid={`request-row-${row._id}`}
+      href={`${REQUESTS_BASE}/${row._id}`}
+      actions={
+        <RowMenu label={`More for ${row.requestNumber || title}`}>
+          <DropdownMenuItem asChild>
+            <Link href={`${REQUESTS_BASE}/${row._id}`}>Open request</Link>
+          </DropdownMenuItem>
+          {events.length === 1 ? (
+            <DropdownMenuItem asChild>
+              <Link href={`/dashboard/events/${events[0]}`}>View event</Link>
+            </DropdownMenuItem>
           ) : null}
-        </div>
-      </div>
-      <p className="mt-2 text-xs text-muted-foreground">
-        Submitted {formatDateTime(row.submittedAt)}
-        {ago ? ` · ${ago}` : ""}
-      </p>
-    </div>
+          <DropdownMenuItem asChild>
+            <a href={`mailto:${row.email}`}>Email {row.firstName}</a>
+          </DropdownMenuItem>
+        </RowMenu>
+      }
+    >
+      <RowText
+        eyebrow={`${row.requestNumber ? `${row.requestNumber} · ` : ""}${row.eventDateText}`}
+        title={`${title} · ${row.firstName} ${row.lastName}`}
+        detail={[
+          row.eventName ? row.eventCategory : null,
+          row.venueName,
+          row.organization ?? row.sponsorType,
+          `${row.expectedTurnout} expected`,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+      />
+      <RowCell className="w-32" align="left" hideBelow="lg" muted>
+        {row.assigneeName ?? "Unassigned"}
+      </RowCell>
+      <RowCell className="w-24" hideBelow="md" muted>
+        {ago ?? formatDateTime(row.submittedAt)}
+      </RowCell>
+      <StatusPill tone={eventRequestStatusTone(row.status)} className="hidden h-6 w-32 shrink-0 justify-center sm:inline-flex">
+        {eventRequestStatusLabel(row.status)}
+      </StatusPill>
+    </ListRow>
   );
 }
 
@@ -239,61 +219,96 @@ export function EventRequestsInbox() {
 
   // The open view keeps "waiting on the client" out of the way, collapsed.
   const isDefaultOpenView = isOpenView(filters) && !search.trim();
-  const followUpRows = shownRows.filter((row) => row.status !== "pending_client");
-  const pendingClientRows = isDefaultOpenView ? shownRows.filter((row) => row.status === "pending_client") : [];
-  const visibleRows = isDefaultOpenView ? followUpRows : shownRows;
+  // Oldest first within a group: the longest-waiting request is the one to answer.
+  const groupRows = (id: string) => {
+    const statuses = GROUPS.find((group) => group.id === id)?.statuses ?? [];
+    return shownRows.filter((row) => statuses.includes(row.status)).sort((a, b) => a.submittedAt - b.submittedAt);
+  };
+  const unassigned = shownRows.filter(
+    (row) => !row.assigneeUserId && !["converted", "declined"].includes(row.status),
+  ).length;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <FilterBar
-            search={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Search number, name, email, venue…"
-            searchLabel="Search booking requests"
-            filters={filterDefinitions}
-            value={filters}
-            onChange={setFilters}
-          />
-        </div>
-        <Button asChild variant="outline">
-          <Link href={`${REQUESTS_BASE}/settings`}>Round-robin settings</Link>
-        </Button>
-        <Button asChild>
-          <Link href="/request" target="_blank">
-            Open public form
-          </Link>
-        </Button>
-      </div>
+    <div className="space-y-4" data-testid="requests-inbox">
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search number, name, email, venue…"
+        searchLabel="Search booking requests"
+        filters={filterDefinitions}
+        value={filters}
+        onChange={setFilters}
+      />
 
-      <div className="space-y-2">
-        {visibleRows.map((row) => (
-          <RequestCard key={row._id} row={row} />
-        ))}
-        {rows && visibleRows.length === 0 && pendingClientRows.length === 0 ? (
-          <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-            {isDefaultOpenView ? "No open booking requests." : "No booking requests match this search and these filters."}
-          </p>
-        ) : null}
-        {isDefaultOpenView && pendingClientRows.length > 0 ? (
-          <Collapsible open={pendingOpen} onOpenChange={setPendingOpen}>
-            <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md border border-dashed px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted/40">
-              <CaretRightIcon
-                className={`size-3.5 shrink-0 transition-transform ${pendingOpen ? "rotate-90" : ""}`}
-              />
-              <span>
-                Pending client response ({pendingClientRows.length})
-              </span>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="mt-2 space-y-2">
-              {pendingClientRows.map((row) => (
-                <RequestCard key={row._id} row={row} />
-              ))}
-            </CollapsibleContent>
-          </Collapsible>
-        ) : null}
-      </div>
+      {rows === undefined ? (
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-72" />
+          <Skeleton className="h-48 w-full" />
+        </div>
+      ) : (
+        <>
+          <ListSummary testId="requests-summary" order="Grouped by who acts next; oldest request first, so nothing waits too long.">
+            {shownRows.length} request{shownRows.length === 1 ? "" : "s"} · {groupRows("needs_you").length} need you ·{" "}
+            {groupRows("pending_client").length} waiting on the requester
+            {unassigned ? ` · ${unassigned} unassigned` : ""}
+          </ListSummary>
+          {shownRows.length === 0 ? (
+            <EmptyState
+              action={
+                isDefaultOpenView ? null : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearch("");
+                      setFilters(OPEN_VIEW);
+                    }}
+                  >
+                    Back to open requests
+                  </Button>
+                )
+              }
+            >
+              {isDefaultOpenView ? "No open booking requests." : "No booking requests match this search and these filters."}
+            </EmptyState>
+          ) : (
+            <div className="space-y-4">
+              {GROUPS.map((group) => {
+                const items = groupRows(group.id);
+                if (items.length === 0 && group.id !== "needs_you") return null;
+                // Waiting on the requester stays out of the way in the open view.
+                const collapsible = group.id === "pending_client" && isDefaultOpenView;
+                const collapsed = collapsible && !pendingOpen;
+                return (
+                  <RowGroup
+                    key={group.id}
+                    testId={`request-group-${group.id}`}
+                    className="border"
+                    title={group.label}
+                    count={items.length}
+                    tone={group.id === "needs_you" ? (items.length ? "amber" : "emerald") : "neutral"}
+                    description={group.description}
+                    aside={
+                      collapsible && items.length ? (
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setPendingOpen((open) => !open)}>
+                          {pendingOpen ? "Hide" : "Show"}
+                        </Button>
+                      ) : null
+                    }
+                  >
+                    {items.length === 0 ? (
+                      <li className="px-3 py-3 text-sm text-muted-foreground">Nothing new. You&apos;re caught up.</li>
+                    ) : collapsed ? null : (
+                      items.map((row) => <RequestRowItem key={row._id} row={row} />)
+                    )}
+                  </RowGroup>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

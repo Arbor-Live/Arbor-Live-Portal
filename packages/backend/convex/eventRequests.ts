@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { pacificDateAndTimeToMs, pacificDayIndexFromAnchor } from "@arbor/format";
 import { mutation, query } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { getUserId, requireArborInternalContext, requireAuth, findAuthUsersByIds } from "./lib/auth";
 import { normalizeEventStatus } from "./lib/eventStatus";
@@ -910,41 +910,31 @@ export const list = query({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const includeTerminal = args.includeTerminal === true;
-    let rows;
+    // Open statuses read oldest first: that's the queue order, and they stay
+    // small. Converted and declined only grow, so they read newest first, or a
+    // request closed today would fall outside the window behind years of history.
+    const byStatus = (status: Doc<"eventRequests">["status"]) => {
+      const terminal = status === "converted" || status === "declined";
+      return ctx.db
+        .query("eventRequests")
+        .withIndex("by_status_and_submittedAt", (q) => q.eq("status", status))
+        .order(terminal ? "desc" : "asc")
+        .take(100);
+    };
+    let rows: Doc<"eventRequests">[];
     if (args.status) {
-      rows = await ctx.db
-        .query("eventRequests")
-        .withIndex("by_status_and_submittedAt", (q) => q.eq("status", args.status!))
-        .order("asc")
-        .take(100);
-    } else if (!includeTerminal) {
-      const submitted = await ctx.db
-        .query("eventRequests")
-        .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "submitted"))
-        .order("asc")
-        .take(100);
-      const actionRequired = await ctx.db
-        .query("eventRequests")
-        .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "action_required"))
-        .order("asc")
-        .take(100);
-      const pendingClient = await ctx.db
-        .query("eventRequests")
-        .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "pending_client"))
-        .order("asc")
-        .take(100);
-      // Legacy rows may still say in_review until the migration finishes.
-      const legacyInReview = await ctx.db
-        .query("eventRequests")
-        .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "in_review"))
-        .order("asc")
-        .take(100);
-      rows = [...submitted, ...actionRequired, ...pendingClient, ...legacyInReview]
-        .sort((a, b) => a.submittedAt - b.submittedAt)
-        .slice(0, 100);
+      rows = await byStatus(args.status);
     } else {
-      rows = await ctx.db.query("eventRequests").order("asc").take(100);
-      rows = [...rows].sort((a, b) => a.submittedAt - b.submittedAt);
+      // Legacy rows may still say in_review until the migration finishes.
+      const open = (
+        await Promise.all(
+          (["submitted", "action_required", "pending_client", "in_review"] as const).map(byStatus),
+        )
+      ).flat();
+      const closed = includeTerminal
+        ? (await Promise.all((["converted", "declined"] as const).map(byStatus))).flat()
+        : [];
+      rows = [...open, ...closed].sort((a, b) => a.submittedAt - b.submittedAt);
     }
     const assigneeIds = rows.map((row) => row.assigneeUserId).filter(Boolean) as string[];
     const userByKey = await findAuthUsersByIds(ctx, assigneeIds);
