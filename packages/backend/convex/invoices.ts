@@ -1069,10 +1069,6 @@ export const get = query({
   },
 });
 
-/**
- * How artist lines scope to days on this invoice: the fallback day for unscoped
- * lines (the first linked event) and whether one recurring series owns every day.
- */
 /** The quote's versions, newest first: approvals and every change after one. */
 export const listRevisions = query({
   args: { id: v.id("invoices") },
@@ -1135,6 +1131,10 @@ export const previewApprovedChange = query({
   },
 });
 
+/**
+ * How artist lines scope to days on this invoice: the fallback day for unscoped
+ * lines (the first linked event) and whether one recurring series owns every day.
+ */
 export const getArtistLineDayScope = query({
   args: { invoiceId: v.id("invoices") },
   returns: v.object({
