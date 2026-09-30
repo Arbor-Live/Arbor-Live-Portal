@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowSquareOutIcon, CheckIcon } from "@phosphor-icons/react";
 import { BandPaymentAgreementPdfButton } from "@/components/financial/band-payment-agreement-pdf-button";
-import { EventBandPaymentForm } from "@/components/events/lineup/lineup-forms";
+import { EditPayoutDialog } from "@/components/financial/band-payout-dialogs";
 import { StatusPill } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -156,47 +156,28 @@ function PayoutSheetBody({
       ) : null}
 
       <SheetSection title="Payout">
-        {editing ? (
-          <EventBandPaymentForm
-            embedded
-            eventId={row.eventId}
-            organizationId={row.organizationId}
-            payment={row}
-            organizationLocked
-            excludedOrganizationIds={[]}
-            showPayee={false}
-            onSaved={() => {
-              notify.success("Payout updated.");
-              setEditing(false);
-            }}
-            onCancel={() => setEditing(false)}
-          />
-        ) : (
-          <>
-            <dl className="space-y-2">
-              <SheetField label="Amount">
-                <span className="font-medium tabular-nums">{formatUsd(row.totalUsd)}</span>
-              </SheetField>
-              <SheetField label="Pricing">{pricingSummary(row)}</SheetField>
-              <SheetField label="Payment ID">
-                <span className="tabular-nums">{row.confirmationToken}</span>
-              </SheetField>
-              {row.servicePaymentNumber ? (
-                <SheetField label="Transfer #">
-                  <span className="tabular-nums">{row.servicePaymentNumber}</span>
-                </SheetField>
-              ) : null}
-            </dl>
-            {row.canDownloadAgreementPdf ? (
-              <BandPaymentAgreementPdfButton paymentId={row._id} label="Agreement PDF" />
-            ) : null}
-            {row.status !== "paid" ? (
-              <Button type="button" size="sm" variant="outline" onClick={() => setEditing(true)}>
-                Edit payout
-              </Button>
-            ) : null}
-          </>
-        )}
+        <dl className="space-y-2">
+          <SheetField label="Amount">
+            <span className="font-medium tabular-nums">{formatUsd(row.totalUsd)}</span>
+          </SheetField>
+          <SheetField label="Pricing">{pricingSummary(row)}</SheetField>
+          <SheetField label="Payment ID">
+            <span className="tabular-nums">{row.confirmationToken}</span>
+          </SheetField>
+          {row.servicePaymentNumber ? (
+            <SheetField label="Transfer #">
+              <span className="tabular-nums">{row.servicePaymentNumber}</span>
+            </SheetField>
+          ) : null}
+        </dl>
+        {row.canDownloadAgreementPdf ? (
+          <BandPaymentAgreementPdfButton paymentId={row._id} label="Agreement PDF" />
+        ) : null}
+        {row.status !== "paid" ? (
+          <Button type="button" size="sm" variant="outline" onClick={() => setEditing(true)}>
+            Edit payout
+          </Button>
+        ) : null}
       </SheetSection>
 
       <SheetSection title="Payee">
@@ -288,6 +269,17 @@ function PayoutSheetBody({
           </Button>
         ) : null}
       </SheetFooter>
+
+      <EditPayoutDialog
+        row={editing ? row : null}
+        onOpenChange={(open) => {
+          if (!open) setEditing(false);
+        }}
+        onSaved={() => {
+          notify.success("Payout updated.");
+          setEditing(false);
+        }}
+      />
     </>
   );
 }

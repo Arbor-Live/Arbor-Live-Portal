@@ -125,11 +125,14 @@ test.describe("band payouts queue", () => {
     await expect(sheet).toBeVisible({ timeout: 15_000 });
     await sheet.getByRole("button", { name: "Edit payout" }).click();
 
-    await sheet.getByLabel("Total payout (USD)").fill("425");
-    await sheet.getByRole("button", { name: "Save payout" }).click();
+    const dialog = page.getByTestId("payout-edit-dialog");
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    await dialog.getByLabel("Total payout (USD)").fill("425");
+    await dialog.getByRole("button", { name: "Save payout" }).click();
 
-    // The panel returns to its read view once the save resolves.
-    await expect(sheet.getByRole("button", { name: "Edit payout" })).toBeVisible({ timeout: 15_000 });
+    // The dialog closes once the save resolves and the panel shows the new amount.
+    await expect(dialog).toBeHidden({ timeout: 15_000 });
+    await expect(sheet.getByText("$425.00")).toBeVisible({ timeout: 15_000 });
     const state = await pollConvex<PaymentState>(
       "e2eHelpers:getBandPaymentState",
       { paymentId: seeded.paymentId },

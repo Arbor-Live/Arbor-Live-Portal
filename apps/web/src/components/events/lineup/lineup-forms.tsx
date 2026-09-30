@@ -395,6 +395,7 @@ export function EventBandPaymentForm({
   invoiceDefaultsReady = true,
   embedded = false,
   showPayee = true,
+  showStatus = true,
   onSaved,
   onCancel,
 }: {
@@ -412,6 +413,8 @@ export function EventBandPaymentForm({
   embedded?: boolean;
   /** Hide the read-only payee block where the surrounding panel already shows payee details. */
   showPayee?: boolean;
+  /** Hide the status card where the surrounding panel already shows payout status. */
+  showStatus?: boolean;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -544,7 +547,7 @@ export function EventBandPaymentForm({
         <p className="text-sm font-medium">{payment ? "Edit payout" : "Add payout"}</p>
       )}
 
-      {payment ? (
+      {payment && showStatus ? (
         <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
           <p>
             <span className="font-medium">Status:</span> {payment.statusLabel}
@@ -655,7 +658,7 @@ export function EventBandPaymentForm({
             </div>
           </>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-1 md:col-span-2">
             <Label htmlFor="band-payment-total">Total payout (USD)</Label>
             <Input
               id="band-payment-total"
@@ -669,9 +672,11 @@ export function EventBandPaymentForm({
           </div>
         )}
 
-        <div className="rounded-md border px-3 py-2 text-sm md:col-span-2">
-          <span className="font-medium">Computed total:</span> {formatUsd(computedTotal)}
-        </div>
+        {pricingMode === "per_member_hourly" ? (
+          <p className="text-sm text-muted-foreground md:col-span-2">
+            Computed total: <span className="font-medium text-foreground">{formatUsd(computedTotal)}</span>
+          </p>
+        ) : null}
 
         {showPayee ? (
           <div className="space-y-2 md:col-span-2">
