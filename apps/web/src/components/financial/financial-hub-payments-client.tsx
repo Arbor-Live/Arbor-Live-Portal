@@ -1,8 +1,15 @@
 "use client";
 
+import {
+  activeFilters,
+  FilterBar,
+  matchesFilter,
+  type FilterDefinition,
+  type FilterState,
+} from "@/components/filter-bar";
 import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,9 +25,52 @@ const QUEUE_LABELS: Record<PaymentQueue, string> = {
   overdue: "Overdue",
 };
 
+const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
+
+const FILTERS: FilterDefinition[] = [
+  {
+    id: "due",
+    label: "Due",
+    options: [
+      { value: "overdue", label: "Overdue" },
+      { value: "soon", label: "Within 2 weeks" },
+      { value: "later", label: "Later" },
+    ],
+  },
+  {
+    id: "proof",
+    label: "Proof",
+    single: true,
+    options: [
+      { value: "attached", label: "Proof attached" },
+      { value: "none", label: "No proof yet" },
+    ],
+  },
+];
+
 export function FinancialHubPaymentsClient() {
   const [queue, setQueue] = useState<PaymentQueue>("payment_pending");
-  const rows = useQuery(api.paymentProof.listByQueue, { queue });
+  const queueRows = useQuery(api.paymentProof.listByQueue, { queue });
+  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<FilterState>({});
+  const [nowMs] = useState(() => Date.now());
+  // Each queue is loaded in full, so search and filters run here.
+  const rows = useMemo(() => {
+    if (!queueRows) return undefined;
+    const needle = search.trim().toLowerCase();
+    return queueRows.filter((row) => {
+      const due = row.isOverdue ? "overdue" : row.dueAt - nowMs <= TWO_WEEKS_MS ? "soon" : "later";
+      return (
+        (!needle ||
+          [row.invoiceNumber, row.eventTitle, row.clientContactName, row.clientEmail].some((field) =>
+            field?.toLowerCase().includes(needle),
+          )) &&
+        matchesFilter(filters.due, due) &&
+        matchesFilter(filters.proof, row.submission ? "attached" : "none")
+      );
+    });
+  }, [filters, nowMs, queueRows, search]);
+  const narrowed = Boolean(search.trim()) || Object.keys(activeFilters(filters)).length > 0;
   const markReceived = useMutation(
     api.paymentProof.markPaymentReceived,
   ).withOptimisticUpdate(optimisticMarkPaymentReceived);
@@ -75,25 +125,37 @@ export function FinancialHubPaymentsClient() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {(Object.keys(QUEUE_LABELS) as PaymentQueue[]).map((key) => (
-          <Button
-            key={key}
-            type="button"
-            size="sm"
-            variant={queue === key ? "default" : "outline"}
-            onClick={() => setQueue(key)}
-          >
-            {QUEUE_LABELS[key]}
-          </Button>
-        ))}
-      </div>
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search invoice, event, client…"
+        searchLabel="Search payments"
+        filters={FILTERS}
+        value={filters}
+        onChange={setFilters}
+      >
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Queue">
+          {(Object.keys(QUEUE_LABELS) as PaymentQueue[]).map((key) => (
+            <Button
+              key={key}
+              type="button"
+              size="sm"
+              variant={queue === key ? "default" : "outline"}
+              onClick={() => setQueue(key)}
+            >
+              {QUEUE_LABELS[key]}
+            </Button>
+          ))}
+        </div>
+      </FilterBar>
 
       {rows === undefined ? (
         <p className="text-sm text-muted-foreground">Loading payments…</p>
       ) : rows.length === 0 ? (
         <Card>
-          <CardContent className="py-8 text-sm text-muted-foreground">No invoices in this queue.</CardContent>
+          <CardContent className="py-8 text-sm text-muted-foreground">
+            {narrowed ? "No invoices in this queue match this search and these filters." : "No invoices in this queue."}
+          </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">

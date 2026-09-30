@@ -11,7 +11,6 @@ import {
   CurrencyDollarIcon,
   DotsThreeIcon,
   EnvelopeSimpleIcon,
-  MagnifyingGlassIcon,
   MicrophoneStageIcon,
   SignatureIcon,
 } from "@phosphor-icons/react";
@@ -23,6 +22,13 @@ import {
 } from "@/components/financial/band-payout-dialogs";
 import { PayoutSheet, type PayoutSheetHandlers } from "@/components/financial/band-payout-sheet";
 import { ListRow } from "@/components/list-row";
+import {
+  activeFilters,
+  FilterBar,
+  matchesFilter,
+  type FilterDefinition,
+  type FilterState,
+} from "@/components/filter-bar";
 import { MetaItem, PageHeader, StatusPill } from "@/components/page-header";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
@@ -37,7 +43,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
@@ -116,6 +121,16 @@ function matchesSearch(row: PayoutRow, needle: string) {
   ].some((value) => value?.toLowerCase().includes(needle));
 }
 
+const PAYEE_OPTIONS = [
+  { value: "complete", label: "Complete" },
+  { value: "incomplete", label: "Incomplete" },
+];
+
+const PRICING_OPTIONS = [
+  { value: "fixed", label: "Fixed total" },
+  { value: "hourly", label: "Per member, hourly" },
+];
+
 function countLabel(count: number, noun: string) {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
@@ -144,6 +159,7 @@ export function FinancialHubBandPayoutsClient() {
   const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("payout"));
   const [checked, setChecked] = useState<Set<Id<"eventBandPayments">>>(() => new Set());
   const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortKey>("waiting");
   const [paidOpen, setPaidOpen] = useState(false);
   const [sendRows, setSendRows] = useState<PayoutRow[] | null>(null);
@@ -156,18 +172,58 @@ export function FinancialHubBandPayoutsClient() {
 
   const allRows = useMemo(() => [...(active ?? []), ...(paid?.rows ?? [])], [active, paid]);
   const needle = search.trim().toLowerCase();
+  const applied = activeFilters(filters);
+  // Search or any chip: empty states then talk about "matches", not "nothing yet".
+  const narrowed = Boolean(needle) || Object.keys(applied).length > 0;
+
+  const filterDefinitions = useMemo<FilterDefinition[]>(() => {
+    const distinct = (entries: Array<[string, string]>) =>
+      [...new Map(entries).entries()]
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    return [
+      {
+        id: "stage",
+        label: "Stage",
+        options: PAYOUT_STAGES.map((stage) => ({ value: stage, label: PAYOUT_STAGE_LABELS[stage] })),
+      },
+      {
+        id: "artist",
+        label: "Artist",
+        options: distinct(allRows.map((row) => [row.organizationId as string, row.bandName])),
+      },
+      {
+        id: "event",
+        label: "Event",
+        options: distinct(
+          allRows.map((row) => [row.eventId as string, `${formatDate(row.eventStartAt)} · ${row.eventTitle}`]),
+        ),
+      },
+      { id: "payee", label: "Payee info", options: PAYEE_OPTIONS, single: true },
+      { id: "pricing", label: "Pricing", options: PRICING_OPTIONS, single: true },
+    ];
+  }, [allRows]);
 
   const stages = useMemo(() => {
     const grouped = new Map<PayoutStage, PayoutRow[]>(PAYOUT_STAGES.map((stage) => [stage, []]));
     for (const row of allRows) {
       if (!row.stage || !matchesSearch(row, needle)) continue;
+      if (
+        !matchesFilter(applied.stage, row.stage) ||
+        !matchesFilter(applied.artist, row.organizationId) ||
+        !matchesFilter(applied.event, row.eventId) ||
+        !matchesFilter(applied.payee, row.payeeComplete ? "complete" : "incomplete") ||
+        !matchesFilter(applied.pricing, row.pricingMode === "per_member_hourly" ? "hourly" : "fixed")
+      ) {
+        continue;
+      }
       grouped.get(row.stage)!.push(row);
     }
     return PAYOUT_STAGES.map((stage) => {
       const rows = sortRows(grouped.get(stage)!, stage, sort);
       return { stage, rows, total: rows.reduce((sum, row) => sum + row.totalUsd, 0) };
     });
-  }, [allRows, needle, sort]);
+  }, [allRows, applied.artist, applied.event, applied.payee, applied.pricing, applied.stage, needle, sort]);
 
   const stagesById = new Map(stages.map((group) => [group.stage, group]));
   const groups = PAYOUT_GROUPS;
@@ -488,22 +544,23 @@ export function FinancialHubBandPayoutsClient() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full sm:max-w-xs">
-          <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              // A selection made under another search could hide rows that are
-              // still checked; start over so a batch only covers what's shown.
-              setChecked(new Set());
-            }}
-            placeholder="Search artist, event, payee, ID…"
-            aria-label="Search payouts"
-            className="pl-9"
-          />
-        </div>
+      <FilterBar
+        search={search}
+        onSearchChange={(next) => {
+          setSearch(next);
+          // A selection made under another search could hide rows that are
+          // still checked; start over so a batch only covers what's shown.
+          setChecked(new Set());
+        }}
+        searchPlaceholder="Search artist, event, payee, ID…"
+        searchLabel="Search payouts"
+        filters={filterDefinitions}
+        value={filters}
+        onChange={(next) => {
+          setFilters(next);
+          setChecked(new Set());
+        }}
+      >
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button type="button" variant="outline" size="sm">
@@ -522,7 +579,7 @@ export function FinancialHubBandPayoutsClient() {
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-      </div>
+      </FilterBar>
 
       {active === undefined ? (
         <div className="space-y-2">
@@ -542,14 +599,30 @@ export function FinancialHubBandPayoutsClient() {
           </p>
 
           {/* All-time paid count, so older paid history outside the default range stays reachable. */}
-          {activeRows.length === 0 && !needle && (paid?.rows.length ?? 0) === 0 && counts?.paid === 0 ? (
+          {activeRows.length === 0 && !narrowed && (paid?.rows.length ?? 0) === 0 && counts?.paid === 0 ? (
             <p className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
               No artist payouts yet. Add one from an event&apos;s Lineup (open the act, then Add payout).
             </p>
-          ) : needle && stages.every((group) => group.rows.length === 0) ? (
-            <p className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-              No payouts match &ldquo;{search.trim()}&rdquo;.
-            </p>
+          ) : narrowed && stages.every((group) => group.rows.length === 0) ? (
+            <div className="space-y-2 border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+              <p>
+                {Object.keys(applied).length
+                  ? "No payouts match this search and these filters."
+                  : <>No payouts match &ldquo;{search.trim()}&rdquo;.</>}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearch("");
+                  setFilters({});
+                  setChecked(new Set());
+                }}
+              >
+                Clear search and filters
+              </Button>
+            </div>
           ) : (
             <div className="space-y-6" data-testid="payout-pipeline">
               {groups.map((group) => {
@@ -573,7 +646,7 @@ export function FinancialHubBandPayoutsClient() {
                       </div>
                       <span className="text-sm font-medium tabular-nums">{formatUsd(groupTotal)}</span>
                     </div>
-                    {actionNeeded && groupRows.length === 0 && !needle ? (
+                    {actionNeeded && groupRows.length === 0 && !narrowed ? (
                       <p className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
                         Nothing needs Arbor right now. Payouts land here once the artist has their payee info in,
                         and again once they&apos;ve signed.

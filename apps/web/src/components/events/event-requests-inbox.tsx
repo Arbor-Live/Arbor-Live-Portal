@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
@@ -11,21 +11,43 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { SearchableSelect } from "@/components/inventory/searchable-select";
+import {
+  activeFilters,
+  FilterBar,
+  matchesFilter,
+  type FilterDefinition,
+  type FilterState,
+} from "@/components/filter-bar";
 import { formatDateTime, pacificDateKey } from "@/lib/format";
 import { eventRequestStatusLabel } from "@/lib/event-request-status";
 
 const REQUESTS_BASE = "/dashboard/financial-hub/requests";
 
-const STATUS_OPTIONS = [
-  { value: "", label: "Open (hide completed)" },
+type RequestStatus = "submitted" | "action_required" | "pending_client" | "converted" | "declined";
+
+const STATUS_OPTIONS: { value: RequestStatus; label: string }[] = [
   { value: "submitted", label: "Submitted" },
   { value: "action_required", label: "Action required" },
-  { value: "pending_client", label: "Pending" },
+  { value: "pending_client", label: "Pending client" },
   { value: "converted", label: "Converted" },
   { value: "declined", label: "Declined" },
-  { value: "all", label: "All statuses" },
-] as const;
+];
+
+const COMPLETED: RequestStatus[] = ["converted", "declined"];
+
+/** The inbox's starting view: everything still open. */
+const OPEN_VIEW: FilterState = { status: { operator: "is_not", values: COMPLETED } };
+
+function isOpenView(filters: FilterState) {
+  const applied = activeFilters(filters);
+  const status = applied.status;
+  return (
+    Object.keys(applied).length === 1 &&
+    status?.operator === "is_not" &&
+    status.values.length === COMPLETED.length &&
+    COMPLETED.every((value) => status.values.includes(value))
+  );
+}
 
 type RequestRow = {
   _id: string;
@@ -150,33 +172,92 @@ function RequestCard({ row }: { row: RequestRow }) {
 }
 
 export function EventRequestsInbox() {
-  const [status, setStatus] = useState<(typeof STATUS_OPTIONS)[number]["value"]>("");
+  // Starts on the open view, shown as a chip so completed requests are one click away.
+  const [filters, setFilters] = useState<FilterState>(OPEN_VIEW);
+  const [search, setSearch] = useState("");
   const [pendingOpen, setPendingOpen] = useState(false);
+  const applied = activeFilters(filters);
+  const status = applied.status;
+  // A single `is` status reads through the status index; otherwise completed
+  // requests load only when the chip lets them through.
   const rows = useQuery(api.eventRequests.list, {
-    status: status && status !== "all" ? status : undefined,
-    includeTerminal: status === "all" || status === "converted" || status === "declined",
+    status: status?.operator === "is" && status.values.length === 1 ? (status.values[0] as RequestStatus) : undefined,
+    includeTerminal: COMPLETED.some((value) => matchesFilter(status, value)),
   });
 
-  const isDefaultOpenView = status === "";
-  const followUpRows =
-    rows?.filter((row) => row.status !== "pending_client") ?? [];
-  const pendingClientRows =
-    isDefaultOpenView ? (rows?.filter((row) => row.status === "pending_client") ?? []) : [];
-  const visibleRows = isDefaultOpenView ? followUpRows : (rows ?? []);
+  const filterDefinitions = useMemo<FilterDefinition[]>(() => {
+    const distinct = (entries: Array<[string, string]>) =>
+      [...new Map(entries).entries()]
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    return [
+      { id: "status", label: "Status", options: STATUS_OPTIONS },
+      {
+        id: "assignee",
+        label: "Assignee",
+        options: [
+          { value: "none", label: "Unassigned" },
+          ...distinct(
+            (rows ?? [])
+              .filter((row) => row.assigneeUserId)
+              .map((row) => [row.assigneeUserId!, row.assigneeName ?? "Unknown"]),
+          ),
+        ],
+      },
+      {
+        id: "category",
+        label: "Category",
+        options: distinct((rows ?? []).map((row) => [row.eventCategory, row.eventCategory])),
+      },
+      {
+        id: "sponsor",
+        label: "Sponsor",
+        options: distinct((rows ?? []).map((row) => [row.sponsorType, row.sponsorType])),
+      },
+    ];
+  }, [rows]);
+
+  const shownRows = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return (rows ?? []).filter(
+      (row) =>
+        (!needle ||
+          [
+            row.requestNumber,
+            `${row.firstName} ${row.lastName}`,
+            row.email,
+            row.organization,
+            row.venueName,
+            row.eventName,
+          ].some((field) => field?.toLowerCase().includes(needle))) &&
+        matchesFilter(applied.status, row.status) &&
+        matchesFilter(applied.assignee, row.assigneeUserId ?? "none") &&
+        matchesFilter(applied.category, row.eventCategory) &&
+        matchesFilter(applied.sponsor, row.sponsorType),
+    );
+  }, [applied.assignee, applied.category, applied.sponsor, applied.status, rows, search]);
+
+  // The open view keeps "waiting on the client" out of the way, collapsed.
+  const isDefaultOpenView = isOpenView(filters) && !search.trim();
+  const followUpRows = shownRows.filter((row) => row.status !== "pending_client");
+  const pendingClientRows = isDefaultOpenView ? shownRows.filter((row) => row.status === "pending_client") : [];
+  const visibleRows = isDefaultOpenView ? followUpRows : shownRows;
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="w-65">
-          <SearchableSelect
-            value={status}
-            onChange={(value) => setStatus(value as (typeof STATUS_OPTIONS)[number]["value"])}
-            options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-            placeholder="Filter status..."
-            emptyLabel="Open (hide completed)"
+      <div className="flex flex-wrap items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <FilterBar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search number, name, email, venue…"
+            searchLabel="Search booking requests"
+            filters={filterDefinitions}
+            value={filters}
+            onChange={setFilters}
           />
         </div>
-        <Button asChild className="ml-auto" variant="outline">
+        <Button asChild variant="outline">
           <Link href={`${REQUESTS_BASE}/settings`}>Round-robin settings</Link>
         </Button>
         <Button asChild>
@@ -192,7 +273,7 @@ export function EventRequestsInbox() {
         ))}
         {rows && visibleRows.length === 0 && pendingClientRows.length === 0 ? (
           <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-            No open booking requests.
+            {isDefaultOpenView ? "No open booking requests." : "No booking requests match this search and these filters."}
           </p>
         ) : null}
         {isDefaultOpenView && pendingClientRows.length > 0 ? (
