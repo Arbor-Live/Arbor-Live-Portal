@@ -64,13 +64,13 @@ the URL looks like cloud.
 | Invite accept → onboarding | Covered | `smoke/invite.spec.ts` |
 | Email queue (mocked Resend) | Covered | `email/email-queue.spec.ts` (no UI) |
 | First-admin `/setup` | None | Dev-only unlock exists; not e2e’d |
-| Users invite UI (`/dashboard/users/access`) | Covered | `users/user-invite-lifecycle.spec.ts` (Batch 9) — invite → edit role → resend → cancel, plus the declined confirm |
+| Users invite UI (`/dashboard/users/invitations`, Add person dialog) | Covered | `users/user-invite-lifecycle.spec.ts` (Batch 9) — invite → edit role in the invite panel → resend → cancel, plus the declined confirm from the row menu |
 | Direct user create (`createUserAdmin`) | Covered | `users/user-create-and-promote.spec.ts` (Batch 9) |
 | Role grant flips an admin refusal | Covered | `users/user-create-and-promote.spec.ts` (Batch 9) — member refused → promoted → same session admitted → demoted → refused again |
 | Remove access / reactivate | Covered | `users/user-access-remove-reactivate.spec.ts` (Batch 9) — asserts the `banned` flag as well as the table filter |
 | Admin cannot remove their own access | Covered | `users/user-access-remove-reactivate.spec.ts` (Batch 9) — driven as a second, throwaway admin |
 | Org memberships add / remove | Covered | `users/user-membership-edit.spec.ts` (Batch 9) — includes the default-org removal refusal |
-| Non-admin refused on Users sub-routes | Covered | `users/user-create-and-promote.spec.ts` (Batch 9) — `/users/access`, `/users/organizations`, `/users/crew-rates` |
+| Non-admin refused on Users sub-routes | Covered | `users/user-create-and-promote.spec.ts` (Batch 9) — `/users/access` (redirects to `/users`), `/users/invitations`, `/users/organizations`, `/users/crew-rates` |
 | Full crew `/onboarding` completion | Covered | `crew/crew-onboarding-complete.spec.ts` (Batch 4) |
 | Full band `/onboarding/artist` completion | Covered | `bands/band-onboarding-complete.spec.ts` (Batch 4) |
 | Non-admin refused on admin routes | Covered | `auth/admin-route-guards.spec.ts` (Batch 7) |
@@ -172,7 +172,7 @@ the URL looks like cloud.
 | Band payouts admin queue UI | Covered | `bands/band-payouts-queue.spec.ts` — send signature request + mark paid |
 | Band portal beyond e-sign | Partial | Onboarding (Batch 4) + shows home + artist-page invite resend/remove; payee settings still light |
 | Artist org invite resend / remove (`/dashboard/artists`) | Covered | `bands/artist-invite-lifecycle.spec.ts` — invite → resend same row → remove, dismissed confirm, and refused access-level mismatch |
-| Band org profile admin birdseye (`/users/organizations`) | Covered | `users/band-org-profile.spec.ts` (Batch 12) — admin edits the display name, asserts via `getBandOrganizationProfileByDisplayName` |
+| Band org profile admin birdseye (`/users/organizations`) | Covered | `users/band-org-profile.spec.ts` (Batch 12) — admin edits the display name in the organization panel, asserts via `getBandOrganizationProfileByDisplayName` |
 
 ### Marketing and public site
 

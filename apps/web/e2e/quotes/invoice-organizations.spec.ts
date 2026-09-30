@@ -81,7 +81,7 @@ test.describe("invoice host organizations and contacts", () => {
     const contactEmail = `e2e-host-${stamp}@example.com`;
 
     await page.goto("/dashboard/financial-hub/organizations");
-    await expect(page.getByText("Host organizations").first()).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText("Billing hosts").first()).toBeVisible({ timeout: 25_000 });
 
     // Create the host as non-subsidized so its pricing mode is distinguishable
     // from the "subsidized" default.
@@ -209,7 +209,7 @@ test.describe("invoice host organizations and contacts", () => {
     const victimName = `E2E Merge Victim ${stamp}`;
 
     await page.goto("/dashboard/financial-hub/organizations");
-    await expect(page.getByText("Host organizations").first()).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText("Billing hosts").first()).toBeVisible({ timeout: 25_000 });
 
     const createForm = page.locator("form").filter({ has: page.getByPlaceholder("New host name") });
     await createForm.getByPlaceholder("New host name").fill(survivorName);

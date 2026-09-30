@@ -11,23 +11,25 @@ test.describe("band organization profile (admin birdseye)", () => {
     const originalName = e2eEnv.bandOrgName;
 
     await page.goto("/dashboard/users/organizations");
-    await expect(page.getByText("Artist Organizations")).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(page.getByTestId("organizations-summary")).toBeVisible({ timeout: 30_000 });
 
     const bandRow = page
-      .locator("tr")
-      .filter({ has: page.locator("p").filter({ hasText: originalName }) })
+      .locator("li[data-testid^='org-row-']")
+      .filter({ has: page.getByText(originalName, { exact: true }) })
       .first();
     await expect(bandRow).toBeVisible({ timeout: 15_000 });
+    await bandRow.getByRole("button").first().click();
 
-    const displayNameInput = bandRow.locator("td").nth(1).locator("input");
+    const sheet = page.getByTestId("organization-sheet");
+    await expect(sheet).toBeVisible({ timeout: 20_000 });
+    const displayNameInput = sheet.getByLabel("Display name");
+    const saveButton = sheet.getByRole("button", { name: "Save changes", exact: true });
+
     await displayNameInput.fill(updatedName);
-
-    const saveButton = bandRow.getByRole("button", { name: "Save", exact: true });
-    await expect(saveButton).toBeVisible({ timeout: 10_000 });
+    await expect(saveButton).toBeEnabled({ timeout: 10_000 });
     await saveButton.click();
-    await expect(saveButton).not.toBeVisible({ timeout: 20_000 });
+    // Save is enabled only while the form is dirty, so disabled means it landed.
+    await expect(saveButton).toBeDisabled({ timeout: 20_000 });
 
     const updated = await pollConvex<{ displayName: string | null }>(
       "e2eHelpers:getBandOrganizationProfileByDisplayName",
@@ -36,9 +38,10 @@ test.describe("band organization profile (admin birdseye)", () => {
     );
     expect(updated.displayName).toBe(updatedName);
 
+    // The panel is keyed on the org, so it stays open across the rename.
     await displayNameInput.fill(originalName);
-    await expect(saveButton).toBeVisible({ timeout: 10_000 });
+    await expect(saveButton).toBeEnabled({ timeout: 10_000 });
     await saveButton.click();
-    await expect(saveButton).not.toBeVisible({ timeout: 20_000 });
+    await expect(saveButton).toBeDisabled({ timeout: 20_000 });
   });
 });

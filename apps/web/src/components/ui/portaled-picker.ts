@@ -5,6 +5,7 @@ const PORTED_PICKER_SELECTOR = [
   "[data-slot=combobox-item]",
   "[data-slot=select-content]",
   "[data-slot=popover-content]",
+  "[data-slot=dropdown-menu-content]",
   "[data-testid=searchable-select-menu]",
 ].join(",");
 

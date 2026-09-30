@@ -194,7 +194,7 @@ export function FinancialHubOrganizationsClient() {
     <div className="space-y-4 pb-24">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle>Host organizations</CardTitle>
+          <CardTitle>Billing hosts</CardTitle>
           <label className="flex items-center gap-2 text-sm text-muted-foreground">
             <input
               type="checkbox"
@@ -259,7 +259,7 @@ export function FinancialHubOrganizationsClient() {
 
           <div className="space-y-2">
             {groupRows.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No host organizations yet.</p>
+              <p className="text-sm text-muted-foreground">No billing hosts yet.</p>
             ) : (
               groupRows.map((group) => (
                 <button

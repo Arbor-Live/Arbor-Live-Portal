@@ -78,84 +78,91 @@ export function listInvitationsByEmail(email: string) {
 }
 
 /**
- * Open `/dashboard/users/access` and return the seeded user's table row.
+ * Open the Users page's People tab and return the seeded user's row.
  *
  * The row is addressed by id rather than by matching text: the shared
  * deployment accumulates users, and several of them are named `E2E ...`.
+ * The tab lists Active people by default; switch `accessFilter` to reach
+ * anyone else.
  */
 export async function openUserRow(page: Page, userId: string): Promise<Locator> {
-  await page.goto("/dashboard/users/access");
-  await expect(page.getByText("User Access & Invitations")).toBeVisible({ timeout: 30_000 });
+  await page.goto("/dashboard/users");
+  await expect(page.getByTestId("people-summary")).toBeVisible({ timeout: 30_000 });
   const row = page.getByTestId(`user-row-${userId}`);
   await expect(row).toBeVisible({ timeout: 30_000 });
   return row;
 }
 
-/**
- * Cells of a Users table row, by the column headers the table itself renders:
- * Name, Email, Role, Onboarding, Status, Options.
- *
- * Title / Phone / Username / Hourly Rate / Default Org live in the expanded
- * details panel (`user-details-{id}` / `user-rate-{id}`).
- */
-export const userRowCell = {
-  name: (row: Locator) => row.locator("td").nth(0),
-  role: (row: Locator) => row.locator("td").nth(2),
-  status: (row: Locator) => row.locator("td").nth(4),
-  options: (row: Locator) => row.locator("td").nth(5),
-};
-
-export function userDetailsPanel(page: Page, userId: string) {
-  return page.getByTestId(`user-details-${userId}`);
+/** Open a People row's side panel (profile, access, memberships, crew, email). */
+export async function openPersonSheet(page: Page, row: Locator): Promise<Locator> {
+  // The row's first button is its main area; the last is the `⋯` menu.
+  await row.getByRole("button").first().click();
+  const sheet = page.getByTestId("person-sheet");
+  await expect(sheet).toBeVisible({ timeout: 20_000 });
+  return sheet;
 }
 
-export function userRatePanel(page: Page, userId: string) {
-  return page.getByTestId(`user-rate-${userId}`);
+/** Open the user's row and then their side panel. */
+export async function openUserSheet(page: Page, userId: string) {
+  const row = await openUserRow(page, userId);
+  const sheet = await openPersonSheet(page, row);
+  return { row, sheet };
 }
 
-/** The row's Save button, which only exists while the row form is dirty. */
-export function userRowSave(row: Locator) {
-  return userRowCell.options(row).getByRole("button", { name: "Save", exact: true });
+/** Close whichever side panel is open. */
+export async function closeSheet(page: Page, sheet: Locator) {
+  await page.keyboard.press("Escape");
+  await expect(sheet).toHaveCount(0, { timeout: 20_000 });
 }
 
-/**
- * The row's "Select..." menu (reset password, show details, waive onboarding).
- * Drive it with `chooseRowAction`, not `pickSelectOption` — its value is pinned
- * to `""`, so the trigger text never changes.
- */
-export function userRowActionMenu(row: Locator) {
-  return userRowCell.options(row).locator("[data-slot='select-trigger']");
+/** The status chip at the end of a People row (Active / Inactive / Alumni). */
+export function userRowStatus(row: Locator) {
+  return row.getByTestId("user-status");
 }
 
-/** The Role select in a Users table row. */
-export function userRowRoleSelect(row: Locator) {
-  return userRowCell.role(row).locator("[data-slot='select-trigger']");
+/** The panel's Save changes button, enabled only while the panel form is dirty. */
+export function personSheetSave(sheet: Locator) {
+  return sheet.getByRole("button", { name: "Save changes", exact: true });
 }
 
-/** The Status select (Active / Inactive / Alumni) in a Users table row. */
-export function userRowStatusSelect(row: Locator) {
-  return userRowCell.status(row).locator("[data-slot='select-trigger']");
+/** The panel's Hourly rate block, which shows "$X/hr (synced)" for a pinned rate. */
+export function personRatePanel(sheet: Locator) {
+  return sheet.getByTestId("person-rate");
 }
 
 /**
- * Pick a status from the row's Status select. Changing status opens a confirm
- * dialog, so this does NOT wait for the trigger text to change (the caller must
- * accept the dialog, which is what commits the change).
+ * Pick an access status from the panel header's status pill. Changing status
+ * opens a confirm dialog, so the caller must accept or dismiss it — that is
+ * what commits (or abandons) the change.
  */
-export async function chooseRowStatus(page: Page, row: Locator, statusName: string) {
-  await userRowStatusSelect(row).click();
-  const option = page.getByRole("option", { name: statusName, exact: true });
+export async function chooseAccessStatus(page: Page, sheet: Locator, statusName: string) {
+  await sheet.getByRole("button", { name: /^Access:/ }).click();
+  const option = page.getByRole("menuitemradio", { name: statusName, exact: true });
   await expect(option).toBeVisible({ timeout: 20_000 });
   await option.click();
-  await expect(page.getByRole("option", { name: statusName, exact: true })).toHaveCount(0, {
-    timeout: 20_000,
-  });
 }
 
-/** The "Access" filter above the Users table (All / Active / Inactive / Alumni). */
-export function accessFilterSelect(page: Page) {
-  return page
-    .locator("div.space-y-1")
-    .filter({ has: page.getByText("Access", { exact: true }) })
-    .locator("[data-slot='select-trigger']");
+/** A button in one of the toggle-group filters above a Users tab list. */
+export function toggleFilter(page: Page, groupName: string, optionName: string) {
+  return page.getByRole("radiogroup", { name: groupName }).getByRole("radio", { name: optionName, exact: true });
+}
+
+/** The People tab's access filter (Active / Inactive / Alumni / All). */
+export async function setAccessFilter(page: Page, optionName: string) {
+  const option = toggleFilter(page, "Access", optionName);
+  await option.click();
+  await expect(option).toHaveAttribute("aria-checked", "true");
+}
+
+/** The organization filter shared by the People and Invitations tabs. */
+export function orgFilter(page: Page) {
+  return page.getByTestId("org-filter").getByTestId("searchable-select-trigger");
+}
+
+/** Open the header's Add person dialog (invite or create an account). */
+export async function openAddPersonDialog(page: Page): Promise<Locator> {
+  await page.getByRole("button", { name: "Add person" }).click();
+  const dialog = page.getByTestId("add-person-dialog");
+  await expect(dialog).toBeVisible({ timeout: 20_000 });
+  return dialog;
 }
