@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { fileStem } from "@arbor/show-file";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
   internalQuery,
@@ -11,6 +11,12 @@ import {
 } from "./_generated/server";
 import { RENTAL_EVENT_TYPES } from "./eventPullLists";
 import { requireArborInternalContext } from "./lib/auth";
+import {
+  MAX_POSTER_COPIES,
+  printableFormatFromContentType,
+  printableFormatFromName,
+} from "./lib/printable";
+import { resolveStoredR2AssetUrl } from "./inventoryR2";
 
 /**
  * Briefs print for events starting inside this window. The cron runs in the
@@ -106,25 +112,21 @@ async function ensurePrintJob(
   const event = await ctx.db.get(eventId);
   if (!event) return null;
 
-  const printer = (
-    await ctx.db
-      .query("printers")
-      .withIndex("by_enabled", (q) => q.eq("enabled", true))
-      .take(1)
-  )[0];
+  const printer = await firstEnabledPrinter(ctx);
   if (!printer) {
     console.warn(`[printJobs] no enabled printer; skipped brief for event ${eventId}`);
     return null;
   }
 
   const sourceUpdatedAt = await briefSourceUpdatedAt(ctx, eventId);
-  const latest = (
-    await ctx.db
-      .query("printJobs")
-      .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-      .order("desc")
-      .take(1)
-  )[0];
+  // File and poster prints share the event's job history; only a brief counts
+  // as "already printed" here.
+  const recent = await ctx.db
+    .query("printJobs")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .order("desc")
+    .take(50);
+  const latest = recent.find((job) => (job.kind ?? "brief") === "brief");
   if (
     !force &&
     latest &&
@@ -148,6 +150,19 @@ async function ensurePrintJob(
   await ctx.scheduler.runAfter(0, internal.printRender.run, { jobId });
   return jobId;
 }
+
+async function firstEnabledPrinter(ctx: MutationCtx): Promise<Doc<"printers"> | null> {
+  return (
+    (
+      await ctx.db
+        .query("printers")
+        .withIndex("by_enabled", (q) => q.eq("enabled", true))
+        .take(1)
+    )[0] ?? null
+  );
+}
+
+const UNPRINTABLE_FILE_MESSAGE = "Only PDF, PNG, and JPEG files can be printed.";
 
 /** Daily sweep: schedule a brief check for events coming up in the print window. */
 export const enqueueDue = internalMutation({
@@ -236,6 +251,155 @@ export const reprint = mutation({
   },
 });
 
+/** Queues an event file's attachment (PDF or image) for the warehouse printer. */
+export const printEventFile = mutation({
+  args: { artifactId: v.id("eventArtifacts") },
+  returns: v.union(v.id("printJobs"), v.null()),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const artifact = await ctx.db.get(args.artifactId);
+    if (!artifact) throw new Error("File not found.");
+    if (artifact.linkUrl) {
+      if (!printableFormatFromName(artifact.linkUrl)) throw new Error(UNPRINTABLE_FILE_MESSAGE);
+    } else if (artifact.storageFileId) {
+      const metadata = await ctx.db.system.get("_storage", artifact.storageFileId);
+      if (!printableFormatFromContentType(metadata?.contentType)) {
+        throw new Error(UNPRINTABLE_FILE_MESSAGE);
+      }
+    } else {
+      throw new Error("This file has no attachment to print.");
+    }
+
+    const printer = await firstEnabledPrinter(ctx);
+    if (!printer) return null;
+    const now = Date.now();
+    const jobId = await ctx.db.insert("printJobs", {
+      eventId: artifact.eventId,
+      printerId: printer._id,
+      status: "pending",
+      kind: "event_file",
+      artifactId: artifact._id,
+      copies: 1,
+      sourceUpdatedAt: artifact.updatedAt,
+      fileName: `${fileStem(artifact.title)}.pdf`,
+      attempts: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.scheduler.runAfter(0, internal.printRender.run, { jobId });
+    return jobId;
+  },
+});
+
+/** Queues copies of an event's saved marketing poster for the warehouse printer. */
+export const printPoster = mutation({
+  args: { designId: v.id("eventMarketingDesigns"), copies: v.number() },
+  returns: v.union(v.id("printJobs"), v.null()),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    if (!Number.isInteger(args.copies) || args.copies < 1 || args.copies > MAX_POSTER_COPIES) {
+      throw new Error(`Choose between 1 and ${MAX_POSTER_COPIES} copies.`);
+    }
+    const design = await ctx.db.get(args.designId);
+    if (!design?.imageUrl?.trim()) throw new Error("Save a poster image before printing.");
+    if (!printableFormatFromName(design.imageUrl)) {
+      throw new Error("Only PNG, JPEG, and PDF posters can be printed.");
+    }
+    const event = await ctx.db.get(design.eventId);
+    if (!event) throw new Error("Event not found.");
+
+    const printer = await firstEnabledPrinter(ctx);
+    if (!printer) return null;
+    const now = Date.now();
+    const jobId = await ctx.db.insert("printJobs", {
+      eventId: design.eventId,
+      printerId: printer._id,
+      status: "pending",
+      kind: "poster",
+      designId: design._id,
+      copies: args.copies,
+      sourceUpdatedAt: design.updatedAt,
+      fileName: `${fileStem(event.title)}-poster.pdf`,
+      attempts: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.scheduler.runAfter(0, internal.printRender.run, { jobId });
+    return jobId;
+  },
+});
+
+/** Reprints a job from the queue page as the same kind, source, and copy count. */
+export const reprintJob = mutation({
+  args: { jobId: v.id("printJobs") },
+  returns: v.union(v.id("printJobs"), v.null()),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const job = await ctx.db.get(args.jobId);
+    if (!job) throw new Error("Print job not found.");
+    if ((job.kind ?? "brief") === "brief") return await ensurePrintJob(ctx, job.eventId, true);
+
+    const printer = await firstEnabledPrinter(ctx);
+    if (!printer) return null;
+    const now = Date.now();
+    const jobId = await ctx.db.insert("printJobs", {
+      eventId: job.eventId,
+      printerId: printer._id,
+      status: "pending",
+      kind: job.kind,
+      artifactId: job.artifactId,
+      designId: job.designId,
+      copies: job.copies,
+      sourceUpdatedAt: job.sourceUpdatedAt,
+      fileName: job.fileName,
+      attempts: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.scheduler.runAfter(0, internal.printRender.run, { jobId });
+    return jobId;
+  },
+});
+
+/**
+ * Where the render action reads a file or poster job's bytes: a Convex storage
+ * blob, or a fetchable URL (R2 or external). Null when the source is gone.
+ */
+export const getFileSource = internalQuery({
+  args: { jobId: v.id("printJobs") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      storageId: v.optional(v.id("_storage")),
+      url: v.optional(v.string()),
+      /** Name to fall back on when the response has no usable content type. */
+      name: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) return null;
+    if (job.kind === "event_file" && job.artifactId) {
+      const artifact = await ctx.db.get(job.artifactId);
+      if (!artifact) return null;
+      if (artifact.linkUrl) {
+        const url = await resolveStoredR2AssetUrl(artifact.linkUrl);
+        return url ? { url, name: artifact.linkUrl } : null;
+      }
+      return artifact.storageFileId
+        ? { storageId: artifact.storageFileId, name: artifact.title }
+        : null;
+    }
+    if (job.kind === "poster" && job.designId) {
+      const design = await ctx.db.get(job.designId);
+      if (!design?.imageUrl) return null;
+      const url = await resolveStoredR2AssetUrl(design.imageUrl);
+      return url ? { url, name: design.imageUrl } : null;
+    }
+    return null;
+  },
+});
+
 export const listRecent = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -251,6 +415,8 @@ export const listRecent = query({
       rows.push({
         _id: job._id,
         status: job.status,
+        kind: job.kind ?? "brief",
+        copies: job.copies ?? 1,
         eventId: job.eventId,
         eventTitle: event?.title ?? "Unknown event",
         printerName: printer?.name ?? printer?.queueName ?? "Printer",

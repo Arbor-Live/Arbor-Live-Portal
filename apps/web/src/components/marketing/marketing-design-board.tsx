@@ -22,6 +22,7 @@ import {
   type EventVisibility,
 } from "@/lib/event-visibility";
 import { cn } from "@/lib/utils";
+import { PrintPosterButton } from "@/components/printing/print-poster-button";
 
 type PosterWorkView = "unassigned" | "mine" | "all";
 
@@ -257,6 +258,7 @@ export function MarketingDesignBoard() {
                 <Button type="button" onClick={() => void handleMarkReady()}>
                   Mark ready & publish
                 </Button>
+                <PrintPosterButton designId={selectedDesign?._id} savedImageUrl={selectedDesign?.imageUrl} />
               </div>
             </>
           )}

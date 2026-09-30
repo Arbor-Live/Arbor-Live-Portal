@@ -9,6 +9,7 @@ import {
   NoteIcon,
   PaperclipIcon,
   PlusIcon,
+  PrinterIcon,
   TrashIcon,
   XIcon,
   type Icon,
@@ -20,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { EventArtifactUploadField } from "@/components/files/file-upload-field";
 import { StoredAssetImage, StoredAssetLink } from "@/components/files/stored-asset-image";
 import { useAppDialog } from "@/components/ui/app-dialog";
-import { isImageAssetReference } from "@/lib/r2-assets";
+import { isImageAssetReference, isPrintableAssetReference } from "@/lib/r2-assets";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -144,9 +145,27 @@ export function EventFilesCard({
   artifacts: Artifact[];
   canEdit: boolean;
 }) {
-  const { confirm } = useAppDialog();
+  const { alert, confirm } = useAppDialog();
   const removeArtifact = useMutation(api.eventArtifacts.remove);
+  const printEventFile = useMutation(api.printJobs.printEventFile);
   const [adding, setAdding] = useState(false);
+  const [printingId, setPrintingId] = useState<Id<"eventArtifacts"> | null>(null);
+
+  async function print(artifact: Artifact) {
+    setPrintingId(artifact._id);
+    try {
+      const jobId = await printEventFile({ artifactId: artifact._id });
+      if (jobId) {
+        notify.success(`“${artifact.title}” queued for printing.`);
+      } else {
+        await alert("No enabled printer is configured yet, so the file wasn’t queued.");
+      }
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Couldn’t queue the file for printing."));
+    } finally {
+      setPrintingId(null);
+    }
+  }
 
   async function remove(artifact: Artifact) {
     const ok = await confirm({
@@ -206,6 +225,19 @@ export function EventFilesCard({
                     ) : null}
                     <ArtifactAttachment artifact={artifact} />
                   </div>
+                  {isPrintableAssetReference(artifact.linkUrl) ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Print ${artifact.title}`}
+                      title="Print"
+                      disabled={printingId === artifact._id}
+                      onClick={() => void print(artifact)}
+                    >
+                      <PrinterIcon />
+                    </Button>
+                  ) : null}
                   {canEdit ? (
                     <Button
                       type="button"

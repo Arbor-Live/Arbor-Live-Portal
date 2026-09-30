@@ -47,3 +47,15 @@ export function defaultAcceptForPurpose(
       return "image/jpeg,image/png,image/webp,image/gif,image/svg+xml,application/pdf,.pdf,.zip,.md,.txt,.doc,.docx,.xls,.xlsx";
   }
 }
+
+/** Max copies per poster print job. Mirrors `MAX_POSTER_COPIES` in packages/backend/convex/lib/printable.ts. */
+export const MAX_POSTER_COPIES = 30;
+
+/**
+ * True when the warehouse printer can take this file: PDF, PNG, or JPEG.
+ * Mirrors `printableFormatFromName` in packages/backend/convex/lib/printable.ts.
+ */
+export function isPrintableAssetReference(value: string | undefined): boolean {
+  const path = value?.trim().split(/[?#]/)[0]?.toLowerCase() ?? "";
+  return /\.(pdf|png|jpe?g)$/.test(path);
+}

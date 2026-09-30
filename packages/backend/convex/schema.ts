@@ -181,6 +181,13 @@ const printJobStatusValue = v.union(
   v.literal("failed"),
 );
 
+/** What a print job prints. Absent on rows from before files and posters could print. */
+const printJobKindValue = v.union(
+  v.literal("brief"),
+  v.literal("event_file"),
+  v.literal("poster"),
+);
+
 const rentalFulfillmentModeValue = v.union(v.literal("delivery"), v.literal("will_call"));
 
 /** Stage box an instrument group plugs into (AES50 A / B). */
@@ -2188,11 +2195,22 @@ export default defineSchema({
     .index("by_queueName", ["queueName"])
     .index("by_enabled", ["enabled"]),
 
-  /** One print of one event brief. Re-enqueued when the brief source changes. */
+  /**
+   * One print of one event document: the brief (re-enqueued when its source
+   * changes), an event file attachment, or the event's marketing poster.
+   */
   printJobs: defineTable({
     eventId: v.id("events"),
     printerId: v.id("printers"),
     status: printJobStatusValue,
+    /** Missing means "brief". */
+    kind: v.optional(printJobKindValue),
+    /** Set for `event_file` jobs. */
+    artifactId: v.optional(v.id("eventArtifacts")),
+    /** Set for `poster` jobs. */
+    designId: v.optional(v.id("eventMarketingDesigns")),
+    /** Copies to print; missing means 1. */
+    copies: v.optional(v.number()),
     /** Max updatedAt across the event + brief-relevant children. */
     sourceUpdatedAt: v.number(),
     fileName: v.string(),
