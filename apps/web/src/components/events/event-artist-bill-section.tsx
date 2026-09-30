@@ -10,6 +10,7 @@ import {
   PlusIcon,
 } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
+import { ListRow } from "@/components/list-row";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -434,112 +435,110 @@ function EventArtistBillPanel({
               const openInquiries =
                 row.slot?.inquiries.filter((inquiry) => inquiry.status === "submitted").length ?? 0;
               return (
-                <li
+                <ListRow
                   key={row.key}
                   data-testid="bill-card"
-                  className="flex items-center gap-2 border pr-1 pl-3 text-sm"
-                >
-                  <span
-                    className="w-5 shrink-0 text-right text-xs text-muted-foreground tabular-nums"
-                    title={setStart != null ? "Show order" : "No set time yet"}
-                  >
-                    {setStart != null ? index + 1 : "–"}
-                  </span>
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-3 py-2.5 text-left hover:bg-muted/30"
-                    onClick={() => setSelectedKey(row.key)}
-                  >
-                    <div className="min-w-0 flex-1">
-                      {row.slot?.label.trim() || !actName ? (
-                        <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">
-                          {row.slot?.label.trim() || (row.slot ? "Open position" : "No position")}
-                        </p>
-                      ) : null}
-                      {actName ? (
-                        <p className="truncate font-medium">{actName}</p>
-                      ) : (
-                        <p className="truncate text-muted-foreground">
-                          Open · {TYPE_LABELS[row.slot?.artistType ?? "no_preference"]}
-                          {row.slot?.genres.trim() ? ` · ${row.slot.genres.trim()}` : ""}
-                        </p>
-                      )}
-                    </div>
-                    <div className="hidden shrink-0 flex-wrap items-center justify-end gap-1.5 sm:flex">
-                      {openInquiries > 0 ? (
-                        <span className="rounded-md bg-status-amber-500/15 px-2 py-0.5 text-xs text-status-amber-800 dark:text-status-amber-200">
-                          {openInquiries} inquir{openInquiries === 1 ? "y" : "ies"}
-                        </span>
-                      ) : null}
-                      {row.performer?.awaitingOnboarding ? (
-                        <span className="rounded-md bg-status-amber-500/15 px-2 py-0.5 text-xs text-status-amber-800 dark:text-status-amber-200">
-                          Onboarding
-                        </span>
-                      ) : null}
-                      {row.performer ? (
-                        <span
-                          className={cn(
-                            "rounded-md px-2 py-0.5 text-xs",
-                            rider?.rider?.status === "published"
-                              ? "bg-muted text-foreground"
-                              : "bg-muted text-muted-foreground",
-                          )}
-                        >
-                          {rider?.rider?.status === "published" ? "Rider" : "No rider"}
-                        </span>
-                      ) : null}
-                    </div>
-                    <span className="hidden w-32 shrink-0 text-right text-xs text-muted-foreground tabular-nums md:block">
-                      {setStart != null && setEnd != null
-                        ? `${formatTime(setStart)} – ${formatTime(setEnd)}`
-                        : "No set time"}
-                    </span>
-                    <span className="hidden w-36 shrink-0 text-right text-xs tabular-nums lg:block">
-                      {row.performer?.payment ? (
-                        <>
-                          {formatUsd(row.performer.payment.totalUsd)}
-                          <span className="text-muted-foreground"> · {row.performer.payment.statusLabel}</span>
-                        </>
-                      ) : row.performer ? (
-                        <span className="text-muted-foreground">No payout</span>
-                      ) : null}
-                    </span>
+                  onOpen={() => setSelectedKey(row.key)}
+                  leading={
                     <span
-                      data-testid="artist-need-status"
-                      className={cn(
-                        // Fixed width keeps the time and payout columns aligned across rows.
-                        "w-20 shrink-0 rounded-md py-0.5 text-center text-xs font-medium",
-                        effectiveStatusClass(status),
-                      )}
+                      className="w-5 shrink-0 text-right text-xs text-muted-foreground tabular-nums"
+                      title={setStart != null ? "Show order" : "No set time yet"}
                     >
-                      {effectiveStatusLabel(status)}
+                      {setStart != null ? index + 1 : "–"}
                     </span>
-                    <CaretRightIcon className="size-4 shrink-0 text-muted-foreground" />
-                  </button>
-                  {canEdit ? (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${actName ?? "this position"}`}>
-                          <DotsThreeIcon className="size-4" weight="bold" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={() => setSelectedKey(row.key)}>Open details</DropdownMenuItem>
-                        {row.performer?.payment?.status !== "paid" ? (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onSelect={() => void handlers.removePosition(row)}
-                            >
-                              Remove from bill
-                            </DropdownMenuItem>
-                          </>
-                        ) : null}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  ) : null}
-                </li>
+                  }
+                  actions={
+                    canEdit ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${actName ?? "this position"}`}>
+                            <DotsThreeIcon className="size-4" weight="bold" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => setSelectedKey(row.key)}>Open details</DropdownMenuItem>
+                          {row.performer?.payment?.status !== "paid" ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => void handlers.removePosition(row)}
+                              >
+                                Remove from bill
+                              </DropdownMenuItem>
+                            </>
+                          ) : null}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : null
+                  }
+                >
+                  <div className="min-w-0 flex-1">
+                    {row.slot?.label.trim() || !actName ? (
+                      <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">
+                        {row.slot?.label.trim() || (row.slot ? "Open position" : "No position")}
+                      </p>
+                    ) : null}
+                    {actName ? (
+                      <p className="truncate font-medium">{actName}</p>
+                    ) : (
+                      <p className="truncate text-muted-foreground">
+                        Open · {TYPE_LABELS[row.slot?.artistType ?? "no_preference"]}
+                        {row.slot?.genres.trim() ? ` · ${row.slot.genres.trim()}` : ""}
+                      </p>
+                    )}
+                  </div>
+                  <div className="hidden shrink-0 flex-wrap items-center justify-end gap-1.5 sm:flex">
+                    {openInquiries > 0 ? (
+                      <span className="rounded-md bg-status-amber-500/15 px-2 py-0.5 text-xs text-status-amber-800 dark:text-status-amber-200">
+                        {openInquiries} inquir{openInquiries === 1 ? "y" : "ies"}
+                      </span>
+                    ) : null}
+                    {row.performer?.awaitingOnboarding ? (
+                      <span className="rounded-md bg-status-amber-500/15 px-2 py-0.5 text-xs text-status-amber-800 dark:text-status-amber-200">
+                        Onboarding
+                      </span>
+                    ) : null}
+                    {row.performer ? (
+                      <span
+                        className={cn(
+                          "rounded-md px-2 py-0.5 text-xs",
+                          rider?.rider?.status === "published"
+                            ? "bg-muted text-foreground"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {rider?.rider?.status === "published" ? "Rider" : "No rider"}
+                      </span>
+                    ) : null}
+                  </div>
+                  <span className="hidden w-32 shrink-0 text-right text-xs text-muted-foreground tabular-nums md:block">
+                    {setStart != null && setEnd != null
+                      ? `${formatTime(setStart)} – ${formatTime(setEnd)}`
+                      : "No set time"}
+                  </span>
+                  <span className="hidden w-36 shrink-0 text-right text-xs tabular-nums lg:block">
+                    {row.performer?.payment ? (
+                      <>
+                        {formatUsd(row.performer.payment.totalUsd)}
+                        <span className="text-muted-foreground"> · {row.performer.payment.statusLabel}</span>
+                      </>
+                    ) : row.performer ? (
+                      <span className="text-muted-foreground">No payout</span>
+                    ) : null}
+                  </span>
+                  <span
+                    data-testid="artist-need-status"
+                    className={cn(
+                      // Fixed width keeps the time and payout columns aligned across rows.
+                      "w-20 shrink-0 rounded-md py-0.5 text-center text-xs font-medium",
+                      effectiveStatusClass(status),
+                    )}
+                  >
+                    {effectiveStatusLabel(status)}
+                  </span>
+                  <CaretRightIcon className="size-4 shrink-0 text-muted-foreground" />
+                </ListRow>
               );
             })}
           </ol>

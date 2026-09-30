@@ -6,6 +6,7 @@ import { CaretRightIcon, DotsThreeIcon, MagnifyingGlassIcon } from "@phosphor-ic
 import { api } from "@/lib/convex-api";
 import { cn } from "@/lib/utils";
 import { UserAvatar } from "@/components/account/user-avatar";
+import { ListRow } from "@/components/list-row";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -233,69 +234,63 @@ function PersonRow({
   const teams = [...user.verticals, ...user.disciplines].join(" · ") || user.title;
   const onboardingLeft = isOnboardingIncomplete(onboarding);
   return (
-    <li
+    <ListRow
       data-testid={`user-row-${user.id}`}
-      className={cn(
-        "flex items-center gap-2 border pr-1 pl-3 text-sm",
-        user.status !== "active" && "text-muted-foreground",
-      )}
+      onOpen={onOpen}
+      className={user.status !== "active" ? "text-muted-foreground" : undefined}
+      actions={
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${user.name}`}>
+              <DotsThreeIcon className="size-4" weight="bold" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onOpen}>Open details</DropdownMenuItem>
+            <DropdownMenuItem onSelect={onPasswordReset}>Send password reset</DropdownMenuItem>
+            {onboardingLeft ? (
+              <DropdownMenuItem onSelect={onWaiveOnboarding}>Waive onboarding</DropdownMenuItem>
+            ) : null}
+            {user.status !== "alumni" ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onSelect={onMarkAlumni}>
+                  Close access (alumni)
+                </DropdownMenuItem>
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      }
     >
-      <button
-        type="button"
-        className="flex min-w-0 flex-1 items-center gap-3 py-2 text-left hover:bg-muted/30"
-        onClick={onOpen}
-      >
-        <UserAvatar name={user.name} email={user.email} userId={user.id} size="sm" />
-        <div className="min-w-0 flex-1">
-          {teams ? (
-            <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">
-              {teams}
-            </p>
-          ) : null}
-          <p className="truncate font-medium">{user.name}</p>
-          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-        </div>
-        {onboardingLeft ? (
-          <span className={cn(FLAG_CLASS, "hidden shrink-0 sm:inline")}>
-            Onboarding · {onboarding?.incompleteStepCount ?? "?"} left
-          </span>
+      <UserAvatar name={user.name} email={user.email} userId={user.id} size="sm" />
+      <div className="min-w-0 flex-1">
+        {teams ? (
+          <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">
+            {teams}
+          </p>
         ) : null}
-        <span className="hidden w-20 shrink-0 text-right text-xs text-muted-foreground md:block">
-          {roleLabel(user.role)}
+        <p className="truncate font-medium">{user.name}</p>
+        <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+      </div>
+      {onboardingLeft ? (
+        <span className={cn(FLAG_CLASS, "hidden shrink-0 sm:inline")}>
+          Onboarding · {onboarding?.incompleteStepCount ?? "?"} left
         </span>
-        <span
-          data-testid="user-status"
-          className={cn(
-            "w-20 shrink-0 rounded-md py-0.5 text-center text-xs font-medium",
-            STATUS_CHIP[status.tone],
-          )}
-        >
-          {status.label}
-        </span>
-        <CaretRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-      </button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${user.name}`}>
-            <DotsThreeIcon className="size-4" weight="bold" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={onOpen}>Open details</DropdownMenuItem>
-          <DropdownMenuItem onSelect={onPasswordReset}>Send password reset</DropdownMenuItem>
-          {onboardingLeft ? (
-            <DropdownMenuItem onSelect={onWaiveOnboarding}>Waive onboarding</DropdownMenuItem>
-          ) : null}
-          {user.status !== "alumni" ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onSelect={onMarkAlumni}>
-                Close access (alumni)
-              </DropdownMenuItem>
-            </>
-          ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </li>
+      ) : null}
+      <span className="hidden w-20 shrink-0 text-right text-xs text-muted-foreground md:block">
+        {roleLabel(user.role)}
+      </span>
+      <span
+        data-testid="user-status"
+        className={cn(
+          "w-20 shrink-0 rounded-md py-0.5 text-center text-xs font-medium",
+          STATUS_CHIP[status.tone],
+        )}
+      >
+        {status.label}
+      </span>
+      <CaretRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+    </ListRow>
   );
 }

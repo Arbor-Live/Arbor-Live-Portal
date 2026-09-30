@@ -22,6 +22,7 @@ import {
   type MarkPaidEntry,
 } from "@/components/financial/band-payout-dialogs";
 import { PayoutSheet, type PayoutSheetHandlers } from "@/components/financial/band-payout-sheet";
+import { ListRow } from "@/components/list-row";
 import { MetaItem, PageHeader, StatusPill } from "@/components/page-header";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
@@ -641,83 +642,88 @@ function PayoutListRow({
   const stage = row.stage ?? "upcoming";
   const primary = payoutPrimaryAction(row.status);
   return (
-    <li data-testid="payout-row" data-status={row.status} className="flex items-center gap-2 pr-1 pl-3 text-sm">
-      {selectable ? (
-        <Checkbox
-          aria-label={`Select ${row.bandName} (${row.eventTitle})`}
-          checked={checked}
-          onCheckedChange={(value) => onCheckedChange(value === true)}
-        />
-      ) : (
-        <span className="w-4 shrink-0" />
-      )}
-      <button
-        type="button"
-        className="flex min-w-0 flex-1 items-center gap-3 py-2.5 text-left hover:bg-muted/30"
-        onClick={onOpen}
-      >
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">
-            {formatDate(row.eventStartAt)} · {row.eventTitle}
-          </p>
-          <p className="truncate font-medium">{row.bandName}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {row.designatedPayeeName ? `Payee: ${row.designatedPayeeName}` : "No payee yet"}
-          </p>
-        </div>
-        {!row.payeeComplete && stage !== "upcoming" && stage !== "paid" ? (
-          <span className="hidden shrink-0 rounded-md bg-status-amber-500/15 px-2 py-0.5 text-xs text-status-amber-800 sm:inline dark:text-status-amber-200">
-            Payee incomplete
-          </span>
-        ) : null}
-        <span className="hidden w-32 shrink-0 text-right text-xs text-muted-foreground md:block">
-          {payoutAgeLabel(row, nowMs)}
-        </span>
-        <span className="w-24 shrink-0 text-right tabular-nums">{formatUsd(row.totalUsd)}</span>
-        <StatusPill tone={payoutStageTone(stage)} className="hidden h-6 w-36 justify-center sm:inline-flex">
-          {payoutStatusLabel(row.status)}
-        </StatusPill>
-      </button>
-      <div className="hidden w-48 shrink-0 justify-end md:flex">
-        {primary ? (
-          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onPrimary}>
-            {primary.label}
-          </Button>
-        ) : null}
-      </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${row.bandName}'s payout`}>
-            <DotsThreeIcon weight="bold" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem onSelect={onOpen}>Open details</DropdownMenuItem>
-          {primary ? (
-            // The row's action button drops on narrow screens; keep it reachable here.
-            <DropdownMenuItem className="md:hidden" disabled={busy} onSelect={onPrimary}>
-              {primary.label}
-            </DropdownMenuItem>
-          ) : null}
-          {row.canDownloadAgreementPdf ? (
-            <DropdownMenuItem onSelect={onDownloadAgreement}>Agreement PDF</DropdownMenuItem>
-          ) : null}
-          <DropdownMenuItem asChild>
-            <Link href={payoutLineupHref(row)}>Open in Lineup</Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href={`/dashboard/events/${row.eventId}`}>Open event</Link>
-          </DropdownMenuItem>
-          {row.status !== "paid" ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onSelect={onRemove}>
-                Remove payout
+    <ListRow
+      data-testid="payout-row"
+      data-status={row.status}
+      onOpen={onOpen}
+      className="border-0"
+      leading={
+        selectable ? (
+          <Checkbox
+            aria-label={`Select ${row.bandName} (${row.eventTitle})`}
+            checked={checked}
+            onCheckedChange={(value) => onCheckedChange(value === true)}
+          />
+        ) : (
+          <span className="w-4 shrink-0" />
+        )
+      }
+      actions={
+        <>
+          <div className="hidden w-48 shrink-0 justify-end md:flex">
+            {primary ? (
+              <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onPrimary}>
+                {primary.label}
+              </Button>
+            ) : null}
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${row.bandName}'s payout`}>
+                <DotsThreeIcon weight="bold" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onSelect={onOpen}>Open details</DropdownMenuItem>
+              {primary ? (
+                // The row's action button drops on narrow screens; keep it reachable here.
+                <DropdownMenuItem className="md:hidden" disabled={busy} onSelect={onPrimary}>
+                  {primary.label}
+                </DropdownMenuItem>
+              ) : null}
+              {row.canDownloadAgreementPdf ? (
+                <DropdownMenuItem onSelect={onDownloadAgreement}>Agreement PDF</DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem asChild>
+                <Link href={payoutLineupHref(row)}>Open in Lineup</Link>
               </DropdownMenuItem>
-            </>
-          ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </li>
+              <DropdownMenuItem asChild>
+                <Link href={`/dashboard/events/${row.eventId}`}>Open event</Link>
+              </DropdownMenuItem>
+              {row.status !== "paid" ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onSelect={onRemove}>
+                    Remove payout
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      }
+    >
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">
+          {formatDate(row.eventStartAt)} · {row.eventTitle}
+        </p>
+        <p className="truncate font-medium">{row.bandName}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {row.designatedPayeeName ? `Payee: ${row.designatedPayeeName}` : "No payee yet"}
+        </p>
+      </div>
+      {!row.payeeComplete && stage !== "upcoming" && stage !== "paid" ? (
+        <span className="hidden shrink-0 rounded-md bg-status-amber-500/15 px-2 py-0.5 text-xs text-status-amber-800 sm:inline dark:text-status-amber-200">
+          Payee incomplete
+        </span>
+      ) : null}
+      <span className="hidden w-32 shrink-0 text-right text-xs text-muted-foreground md:block">
+        {payoutAgeLabel(row, nowMs)}
+      </span>
+      <span className="w-24 shrink-0 text-right tabular-nums">{formatUsd(row.totalUsd)}</span>
+      <StatusPill tone={payoutStageTone(stage)} className="hidden h-6 w-36 justify-center sm:inline-flex">
+        {payoutStatusLabel(row.status)}
+      </StatusPill>
+    </ListRow>
   );
 }
