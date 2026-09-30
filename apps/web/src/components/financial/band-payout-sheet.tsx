@@ -170,13 +170,17 @@ function PayoutSheetBody({
             </SheetField>
           ) : null}
         </dl>
-        {row.canDownloadAgreementPdf ? (
-          <BandPaymentAgreementPdfButton paymentId={row._id} label="Agreement PDF" />
-        ) : null}
-        {row.status !== "paid" ? (
-          <Button type="button" size="sm" variant="outline" onClick={() => setEditing(true)}>
-            Edit payout
-          </Button>
+        {row.canDownloadAgreementPdf || row.status !== "paid" ? (
+          <div className="flex flex-wrap gap-2">
+            {row.canDownloadAgreementPdf ? (
+              <BandPaymentAgreementPdfButton paymentId={row._id} label="Agreement PDF" />
+            ) : null}
+            {row.status !== "paid" ? (
+              <Button type="button" size="sm" variant="outline" onClick={() => setEditing(true)}>
+                Edit payout
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </SheetSection>
 
