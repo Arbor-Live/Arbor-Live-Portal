@@ -10,7 +10,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ARTIST_TYPES, ARTIST_TYPE_LABELS } from "@/lib/artist-types";
+import { ARTIST_TYPES, ARTIST_TYPE_LABELS, type ArtistType } from "@/lib/artist-types";
+
+/**
+ * The artist-type select is uncontrolled-ish at the DOM level: the native
+ * `<select>` shim Radix renders fires `onChange` once on mount with `""` (no
+ * option matches the pre-hydration empty value). Treating that as a user edit
+ * dirties the form the moment an artist is loaded, so the save bar shows
+ * "Unsaved changes" on load. Empty is never a selectable type, so ignore it.
+ */
+function isArtistType(value: string): value is ArtistType {
+  return (ARTIST_TYPES as readonly string[]).includes(value);
+}
 
 /** Fields shown on the public artists directory and profile page. */
 export function BandPublicListingFields() {
@@ -24,7 +35,13 @@ export function BandPublicListingFields() {
         render={({ field }) => (
           <div className="space-y-2">
             <Label>Artist type</Label>
-            <Select value={field.value ?? ""} onValueChange={field.onChange}>
+            <Select
+              value={field.value ?? ""}
+              onValueChange={(value) => {
+                if (!isArtistType(value)) return;
+                field.onChange(value);
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select a type" />
               </SelectTrigger>

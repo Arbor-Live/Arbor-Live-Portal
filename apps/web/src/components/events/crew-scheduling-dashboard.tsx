@@ -303,6 +303,11 @@ export function CrewSchedulingDashboard() {
             <div className="border px-3 py-2">
               <p className="text-xs text-muted-foreground">Events needing crew</p>
               <p className="text-sm font-semibold tabular-nums">{kpis.unconfirmedEvents}</p>
+              {kpis.noSlotEvents > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {kpis.noSlotEvents} with no slots yet
+                </p>
+              ) : null}
             </div>
           </div>
         ) : null}

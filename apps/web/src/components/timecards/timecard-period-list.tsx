@@ -66,14 +66,20 @@ export function TimecardPeriodList({ periods }: { periods: TimecardPeriod[] }) {
                   Due {formatDate(period.dueMs)} · {period.daysWorked} days worked
                 </p>
               </div>
-              <span
-                className={cn(
-                  "rounded-full px-2 py-0.5 text-xs font-medium",
-                  statusBadgeClass(period.status),
-                )}
-              >
-                {statusLabel(period.status)}
-              </span>
+              {period.daysWorked > 0 ? (
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-xs font-medium",
+                    statusBadgeClass(period.status),
+                  )}
+                >
+                  {statusLabel(period.status)}
+                </span>
+              ) : (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                  No days
+                </span>
+              )}
             </CardHeader>
             <CardContent className="space-y-3">
               <button

@@ -97,11 +97,16 @@ export function BandSelfServiceClient() {
 
   const watched = profileForm.watch();
   const heroUrl = useResolvedAssetUrl(watched.publicHeroImageUrl);
-  const { markSlugTouched, syncSlugTouchedFromForm } = useBandPublicSlugAutofill(profileForm);
+  const { markSlugTouched, syncSlugTouchedFromForm, resetSlugTouched } =
+    useBandPublicSlugAutofill(profileForm);
 
+  // Hydrate from the server only (no form dirty state). The loaded row is
+  // normalized the same way a save normalizes it, so the form is not
+  // perpetually dirty, and a stuck "touched" latch from a stale render cannot
+  // leave the slug out of sync.
   useEffect(() => {
-    if (!profile) return;
-    if (profileForm.formState.isDirty) return;
+    if (profile === undefined) return;
+    resetSlugTouched();
     profileForm.reset({
       displayName: profile.displayName ?? "",
       bio: profile.bio ?? "",
@@ -113,7 +118,7 @@ export function BandSelfServiceClient() {
       publicHeroImageUrl: profile.publicHeroImageUrl ?? "",
     });
     syncSlugTouchedFromForm();
-  }, [profile, profileForm, syncSlugTouchedFromForm]);
+  }, [profile, profileForm, resetSlugTouched, syncSlugTouchedFromForm]);
 
   const persistProfile = async (values: BandProfileFormValues) => {
     const payload = ensureBandPublicSlug(values);
@@ -144,6 +149,7 @@ export function BandSelfServiceClient() {
     {
       onSuccess: (values) => {
         profileForm.reset(values);
+        syncSlugTouchedFromForm();
       },
     },
   );
@@ -224,6 +230,7 @@ export function BandSelfServiceClient() {
 
   function resetProfileForm() {
     if (!profile) return;
+    resetSlugTouched();
     profileForm.reset({
       displayName: profile.displayName ?? "",
       bio: profile.bio ?? "",

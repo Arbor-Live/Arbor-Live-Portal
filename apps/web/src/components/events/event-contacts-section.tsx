@@ -120,10 +120,12 @@ export function EventContactsSection({
     if (board?.invoice) rows.push({ key: "invoice", ...board.invoice });
     for (const [index, row] of (bandRows ?? []).entries()) {
       const rider = row.rider;
-      const name = rider?.contactName?.trim() || row.contact?.name?.trim();
+      // Profile main contact is the booking contact and wins; the rider's
+      // day-of contact is only a fallback when the profile has none.
+      const name = row.contact?.name?.trim() || rider?.contactName?.trim();
       const contact =
-        (rider ? joinContact(rider.contactEmail, rider.contactPhone) : undefined) ||
-        joinContact(row.contact?.email, row.contact?.phone);
+        joinContact(row.contact?.email, row.contact?.phone) ||
+        (rider ? joinContact(rider.contactEmail, rider.contactPhone) : undefined);
       if (!name && !contact) continue;
       rows.push({
         key: `band-${index}`,

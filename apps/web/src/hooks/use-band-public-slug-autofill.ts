@@ -24,9 +24,23 @@ export function useBandPublicSlugAutofill<T extends FieldValues & SlugAutofillFi
     slugTouchedRef.current = true;
   }, []);
 
+  /**
+   * Re-latch "touched" to whatever the form now holds. Called after
+   * `form.reset(...)` so a later hydrate only receives the latch back when the
+   * server itself has a slug.
+   */
   const syncSlugTouchedFromForm = useCallback(() => {
     slugTouchedRef.current = Boolean(String(form.getValues(slugFieldName) ?? "").trim());
   }, [form, slugFieldName]);
+
+  /**
+   * Drop the latch, so the name → slug autofill runs again. Called when a
+   * profile is replaced by one for a different artist (or after a save) so a
+   * blank slug still tracks the display name.
+   */
+  const resetSlugTouched = useCallback(() => {
+    slugTouchedRef.current = false;
+  }, []);
 
   useEffect(() => {
     if (slugTouchedRef.current) return;
@@ -53,5 +67,6 @@ export function useBandPublicSlugAutofill<T extends FieldValues & SlugAutofillFi
   return {
     markSlugTouched,
     syncSlugTouchedFromForm,
+    resetSlugTouched,
   };
 }
