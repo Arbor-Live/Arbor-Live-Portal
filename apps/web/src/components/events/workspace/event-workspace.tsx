@@ -58,7 +58,11 @@ function SeriesEditScopeDialog() {
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {multiDay ? <CalendarDotsIcon className="size-4" /> : <RepeatIcon className="size-4" />}
+            {multiDay ? (
+              <CalendarDotsIcon className="size-4" aria-hidden />
+            ) : (
+              <RepeatIcon className="size-4" aria-hidden />
+            )}
             {multiDay ? "Apply changes to other days?" : "Apply changes to series?"}
           </DialogTitle>
           <DialogDescription>

@@ -48,6 +48,8 @@ type EventSeriesPositionEditorProps = {
   positionTemplates?: SeriesPositionTemplate[];
   occurrences: Array<{ _id: Id<"events">; occurrenceIndex?: number; startAt: number }>;
   onMessage: (message: string) => void;
+  /** Reports unsaved edits (the group page marks the tab). */
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 function emptyDraft(clientId: string): SeriesPositionTemplateDraft {
@@ -70,6 +72,7 @@ function emptyDraft(clientId: string): SeriesPositionTemplateDraft {
  * and removed; filled positions are never touched.
  */
 export function EventSeriesPositionEditor({
+  onDirtyChange,
   seriesId,
   kind = "recurring",
   positionTemplates,
@@ -125,6 +128,10 @@ export function EventSeriesPositionEditor({
   const selectedDraft = drafts.find((draft) => draft.clientId === selectedClientId) ?? null;
   const positionCount = drafts.length;
   const isDirty = form.formState.isDirty || draftsDirty;
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   function updateDraft(clientId: string, patch: Partial<SeriesPositionTemplateDraft>) {
     setDraftsDirty(true);
@@ -301,6 +308,7 @@ export function EventSeriesPositionEditor({
       </Card>
 
       <PositionTemplateSheet
+        kind={kind}
         draft={selectedDraft}
         onOpenChange={(open) => {
           if (!open) setSelectedClientId(null);
@@ -333,11 +341,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function PositionTemplateSheet({
+  kind,
   draft,
   onOpenChange,
   onChange,
   onRemove,
 }: {
+  kind: EventGroupKind;
   draft: SeriesPositionTemplateDraft | null;
   onOpenChange: (open: boolean) => void;
   onChange: (clientId: string, patch: Partial<SeriesPositionTemplateDraft>) => void;
@@ -349,6 +359,7 @@ function PositionTemplateSheet({
         {draft ? (
           <PositionTemplateBody
             key={draft.clientId}
+            kind={kind}
             draft={draft}
             onChange={onChange}
             onRemove={onRemove}
@@ -361,11 +372,13 @@ function PositionTemplateSheet({
 }
 
 function PositionTemplateBody({
+  kind,
   draft,
   onChange,
   onRemove,
   onClose,
 }: {
+  kind: EventGroupKind;
   draft: SeriesPositionTemplateDraft;
   onChange: (clientId: string, patch: Partial<SeriesPositionTemplateDraft>) => void;
   onRemove: (clientId: string) => void;
