@@ -1,9 +1,15 @@
 import { test, expect } from "@playwright/test";
 import { formField } from "../helpers/form";
-import { pickSearchableOption } from "../helpers/select";
+import { pickSelectOption, pickSearchableOption } from "../helpers/select";
 import {
+  addFilter,
+  confirmAppDialog,
   deleteInventoryFixtures,
+  deleteTypeFromRow,
   getInventoryType,
+  gotoTypes,
+  openNewType,
+  openTypeSettings,
   saveTypeForm,
   searchTypes,
   typeRow,
@@ -28,6 +34,8 @@ const typeName = `E2E Taxonomy Type ${stamp}`;
  * bucket its types are grouped under. Both are also the only mutations in the
  * inventory area guarded by `requireAdmin` rather than `requireAuth`, which is
  * what the `/dashboard/inventory/types` route's `AdminOnlyGuard` exists for.
+ *
+ * Both are managed from the page's Settings dialog.
  */
 test.describe.serial("inventory taxonomy", () => {
   test.setTimeout(180_000);
@@ -41,58 +49,55 @@ test.describe.serial("inventory taxonomy", () => {
   });
 
   test("admin adds a category and a capability key", async ({ page }) => {
-    await page.goto("/dashboard/inventory/types");
-    await expect(page.getByText("Manage Categories")).toBeVisible({ timeout: 30_000 });
+    await gotoTypes(page);
+    const dialog = await openTypeSettings(page, "Categories");
 
     // `ensureDefaults` is idempotent and back-fills the `publicBucket` of any
     // default category that drifted, so a run on a fresh deployment starts from
     // the same taxonomy as the shared one.
-    await page.getByRole("button", { name: "Seed Default Categories" }).click();
-    await expect(page.getByTestId("category-row-lighting")).toBeVisible({ timeout: 30_000 });
+    await dialog.getByRole("button", { name: "Restore default categories" }).click();
+    await expect(dialog.getByTestId("category-row-lighting")).toBeVisible({ timeout: 30_000 });
 
-    const categoriesCard = page
-      .locator("[data-slot='card']")
-      .filter({ hasText: "Manage Categories" });
-    await categoriesCard.getByPlaceholder("key (e.g. backline)").fill(categoryKey);
-    await categoriesCard.getByPlaceholder("Label").fill(categoryLabel);
-    await categoriesCard.locator("select").first().selectOption("environmental");
-    await categoriesCard.getByRole("button", { name: "Add Category", exact: true }).click();
+    const categoryForm = dialog.getByTestId("category-add-form");
+    await categoryForm.getByLabel("Key").fill(categoryKey);
+    await categoryForm.getByLabel("Label").fill(categoryLabel);
+    await pickSelectOption(page, categoryForm.getByLabel("Public bucket"), "Environmental");
+    await categoryForm.getByRole("button", { name: "Add category", exact: true }).click();
 
-    const categoryRow = page.getByTestId(`category-row-${categoryKey}`);
+    const categoryRow = dialog.getByTestId(`category-row-${categoryKey}`);
     await expect(categoryRow).toBeVisible({ timeout: 30_000 });
     await expect(categoryRow).toContainText(categoryLabel);
-    await expect(categoryRow.locator("select")).toHaveValue("environmental");
+    await expect(categoryRow.getByRole("combobox")).toHaveText("Environmental");
 
-    const capabilitiesCard = page
-      .locator("[data-slot='card']")
-      .filter({ hasText: "Add Capability Key" });
-    await capabilitiesCard.getByPlaceholder("key (e.g. wireless)").fill(capabilityKey);
-    await capabilitiesCard.getByPlaceholder("Label").fill(capabilityLabel);
-    await capabilitiesCard.getByRole("button", { name: "Add Capability" }).click();
+    await dialog.getByRole("radio", { name: "Capabilities" }).click();
+    const capabilityForm = dialog.getByTestId("capability-add-form");
+    await capabilityForm.getByLabel("Key").fill(capabilityKey);
+    await capabilityForm.getByLabel("Label").fill(capabilityLabel);
+    await capabilityForm.getByRole("button", { name: "Add capability", exact: true }).click();
 
-    await expect(page.getByTestId(`capability-row-${capabilityKey}`)).toBeVisible({
+    await expect(dialog.getByTestId(`capability-row-${capabilityKey}`)).toBeVisible({
       timeout: 30_000,
     });
   });
 
   test("the new category and capability are usable on a type", async ({ page }) => {
-    await page.goto("/dashboard/inventory/types");
-    await expect(page.getByText("Model Types")).toBeVisible({ timeout: 30_000 });
+    await gotoTypes(page);
 
-    const form = page.locator("form");
+    const form = await openNewType(page);
     await formField(form, "Name").fill(typeName);
     await formField(form, "Model").fill("E2E-TAX-1");
     await pickSearchableOption(
       page,
-      page.getByTestId("type-category-field").getByTestId("searchable-select-trigger"),
+      form.getByTestId("type-category-field").getByTestId("searchable-select-trigger"),
       categoryLabel,
       categoryLabel,
     );
 
-    await page.getByTestId("type-capability-picker").click();
+    await form.getByTestId("type-capability-picker").click();
     await page.getByPlaceholder("Search capabilities...").fill(capabilityLabel);
-    await page.locator("label").filter({ hasText: capabilityLabel }).locator("input").check();
-    await page.getByTestId("type-capability-picker").click();
+    await page.getByRole("checkbox", { name: capabilityLabel }).check();
+    await page.keyboard.press("Escape");
+    await expect(page.getByPlaceholder("Search capabilities...")).toHaveCount(0);
 
     await saveTypeForm(page, "create");
 
@@ -104,65 +109,63 @@ test.describe.serial("inventory taxonomy", () => {
   test("the capability filter narrows the types list to that type", async ({ page }) => {
     const created = await waitForInventoryType(typeName, (state) => Boolean(state?.typeId));
 
-    await page.goto("/dashboard/inventory/types");
-    await expect(page.getByText("Model Types")).toBeVisible({ timeout: 30_000 });
+    await gotoTypes(page);
 
     // Two filters at once, both server-side arguments to `inventoryTypes.list`.
     await searchTypes(page, typeName);
-    await pickSearchableOption(
-      page,
-      page
-        .locator("div.space-y-1")
-        .filter({ has: page.getByText("Capability", { exact: true }) })
-        .getByTestId("searchable-select-trigger"),
-      capabilityLabel,
-      capabilityLabel,
-    );
+    await addFilter(page, "Capability", [capabilityLabel]);
 
     await expect(typeRow(page, created.typeId)).toBeVisible({ timeout: 30_000 });
-    // The filter counter is the page's own statement that a filter is applied.
-    await expect(page.getByRole("button", { name: /^Clear filters \(2\)$/ })).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(typeRow(page, created.typeId)).toContainText(capabilityLabel);
+    // The chip is the page's own statement that the filter is applied.
+    await expect(page.getByTestId("filter-chip-capability")).toContainText(`Capability is ${capabilityLabel}`);
   });
 
   test("a category in use cannot be deleted", async ({ page }) => {
-    await page.goto("/dashboard/inventory/types");
-    const categoryRow = page.getByTestId(`category-row-${categoryKey}`);
+    await gotoTypes(page);
+    const dialog = await openTypeSettings(page, "Categories");
+    const categoryRow = dialog.getByTestId(`category-row-${categoryKey}`);
     await expect(categoryRow).toBeVisible({ timeout: 30_000 });
 
-    await categoryRow.getByRole("button", { name: "Delete", exact: true }).click();
+    await categoryRow.getByRole("button", { name: `Delete the ${categoryLabel} category` }).click();
+    await confirmAppDialog(page, "Delete category");
 
     // `inventoryCategories.remove` refuses while any type still names the key —
     // deleting it would leave those types un-editable, because `update`
     // re-validates the category on every save.
     await page.waitForTimeout(3_000);
-    await expect(page.getByTestId(`category-row-${categoryKey}`)).toBeVisible();
+    await expect(dialog.getByTestId(`category-row-${categoryKey}`)).toBeVisible();
     expect(getInventoryType(typeName)?.category).toBe(categoryKey);
   });
 
   test("the category frees up once its last type is gone", async ({ page }) => {
     const created = await waitForInventoryType(typeName, (state) => Boolean(state?.typeId));
 
-    await page.goto("/dashboard/inventory/types");
-    await expect(page.getByText("Model Types")).toBeVisible({ timeout: 30_000 });
+    await gotoTypes(page);
     await searchTypes(page, typeName);
-    const row = typeRow(page, created.typeId);
-    await expect(row).toBeVisible({ timeout: 30_000 });
-    await row.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(typeRow(page, created.typeId)).toBeVisible({ timeout: 30_000 });
+    await deleteTypeFromRow(page, created.typeId);
     await expect(typeRow(page, created.typeId)).toHaveCount(0, { timeout: 30_000 });
 
-    const categoryRow = page.getByTestId(`category-row-${categoryKey}`);
-    await categoryRow.getByRole("button", { name: "Delete", exact: true }).click();
-    await expect(page.getByTestId(`category-row-${categoryKey}`)).toHaveCount(0, {
+    const dialog = await openTypeSettings(page, "Categories");
+    await dialog
+      .getByTestId(`category-row-${categoryKey}`)
+      .getByRole("button", { name: `Delete the ${categoryLabel} category` })
+      .click();
+    await confirmAppDialog(page, "Delete category");
+    await expect(dialog.getByTestId(`category-row-${categoryKey}`)).toHaveCount(0, {
       timeout: 30_000,
     });
 
     // Capabilities have no such guard — `capabilityDefinitions.remove` deletes
     // unconditionally — so this one only has to disappear.
-    const capabilityRow = page.getByTestId(`capability-row-${capabilityKey}`);
-    await capabilityRow.getByRole("button", { name: "Delete", exact: true }).click();
-    await expect(page.getByTestId(`capability-row-${capabilityKey}`)).toHaveCount(0, {
+    await dialog.getByRole("radio", { name: "Capabilities" }).click();
+    await dialog
+      .getByTestId(`capability-row-${capabilityKey}`)
+      .getByRole("button", { name: `Delete the ${capabilityLabel} capability` })
+      .click();
+    await confirmAppDialog(page, "Delete capability");
+    await expect(dialog.getByTestId(`capability-row-${capabilityKey}`)).toHaveCount(0, {
       timeout: 30_000,
     });
   });

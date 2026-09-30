@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { normalizeAssetScanInput } from "@/lib/asset-scan";
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/sheet";
 import { toCategoryOptions } from "./constants";
 import { ContainsEditor } from "./contains-editor";
+import type { ScanOutcome } from "./use-barcode-camera";
 import {
   InventoryItemDetails,
   type ItemDetailsContainerOption,
@@ -33,12 +34,6 @@ type WizardTag = {
   status: string;
   notes: string;
   contains: string[];
-};
-
-type PendingResolve = {
-  tagLocalId: string;
-  field: "containedIn" | "contains";
-  raw: string;
 };
 
 type TypeDraft = {
@@ -88,7 +83,6 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
   });
   const [typeDraftError, setTypeDraftError] = useState<string | null>(null);
   const [typeDraftBusy, setTypeDraftBusy] = useState(false);
-  const [pendingResolve, setPendingResolve] = useState<PendingResolve | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -100,10 +94,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
   const types = useQuery(api.inventoryTypes.listOptions, {});
   const locations = useQuery(api.storageLocations.list, {});
   const itemSummaries = useQuery(api.inventoryItems.listSummaries, {});
-  const resolveResult = useQuery(
-    api.inventoryItems.resolveByScan,
-    pendingResolve ? { raw: pendingResolve.raw } : "skip",
-  );
+  const convex = useConvex();
   const createType = useMutation(api.inventoryTypes.create);
   const createMany = useMutation(api.inventoryItems.createMany);
   const ensureDefaultCategories = useMutation(api.inventoryCategories.ensureDefaults);
@@ -215,44 +206,42 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
     updateTag(localId, { serialNumber: raw.trim() });
   }
 
-  function onScanContainedIn(localId: string, raw: string) {
+  /**
+   * A scanned code as an asset ID: a tag in this batch or a known item first,
+   * then the server. Awaited, so a batch camera waits for it before the next read.
+   */
+  async function resolveScannedAssetId(raw: string): Promise<string | null> {
     const known = matchKnownAssetId(raw);
-    if (known) {
-      setScanError(null);
-      updateTag(localId, { containedInAssetId: known });
-      return;
+    if (known) return known;
+    const resolved = await convex.query(api.inventoryItems.resolveByScan, { raw });
+    return resolved?.assetId ?? null;
+  }
+
+  function reportUnknownScan(raw: string) {
+    setScanError(`No item found for “${raw.trim()}”. Type an existing asset tag or pick one.`);
+  }
+
+  async function onScanContainedIn(localId: string, raw: string): Promise<ScanOutcome> {
+    const assetId = await resolveScannedAssetId(raw);
+    if (!assetId) {
+      reportUnknownScan(raw);
+      return "rejected";
     }
     setScanError(null);
-    setPendingResolve({ tagLocalId: localId, field: "containedIn", raw });
+    updateTag(localId, { containedInAssetId: assetId });
+    return "accepted";
   }
 
-  function onScanContains(localId: string, raw: string) {
-    const known = matchKnownAssetId(raw);
-    if (known) {
-      addContains(localId, known);
-      return;
+  async function onScanContains(localId: string, raw: string): Promise<ScanOutcome> {
+    const assetId = await resolveScannedAssetId(raw);
+    if (!assetId) {
+      reportUnknownScan(raw);
+      return "rejected";
     }
-    setPendingResolve({ tagLocalId: localId, field: "contains", raw });
+    setScanError(null);
+    addContains(localId, assetId);
+    return "accepted";
   }
-
-  useEffect(() => {
-    if (!pendingResolve) return;
-    if (resolveResult === null) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- consume the one-shot scan resolution
-      setScanError(`No item found for “${pendingResolve.raw}”. Type an existing asset tag or pick one.`);
-      setPendingResolve(null);
-      return;
-    }
-    if (resolveResult) {
-      if (pendingResolve.field === "containedIn") {
-        updateTag(pendingResolve.tagLocalId, { containedInAssetId: resolveResult.assetId });
-      } else {
-        addContains(pendingResolve.tagLocalId, resolveResult.assetId);
-      }
-      setPendingResolve(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to the resolution result
-  }, [resolveResult]);
 
   async function createNewType() {
     if (!typeDraft.name.trim() || !typeDraft.model.trim() || !effectiveTypeDraftCategory) {

@@ -4,10 +4,15 @@ import { formField, formTextarea } from "../helpers/form";
 import { pickSearchableOption } from "../helpers/select";
 import {
   deleteInventoryFixtures,
+  deleteTypeFromRow,
   getInventoryType,
+  gotoTypes,
+  openNewType,
+  openTypeRow,
   saveTypeForm,
   searchTypes,
   typeRow,
+  typeSheet,
   waitForInventoryType,
 } from "../helpers/inventory";
 
@@ -57,10 +62,10 @@ test.describe.serial("inventory type CRUD", () => {
   });
 
   test("admin creates a type and the server fills in the derived rates", async ({ page }) => {
-    await page.goto("/dashboard/inventory/types");
-    await expect(page.getByText("Model Types")).toBeVisible({ timeout: 30_000 });
+    await gotoTypes(page);
+    await searchTypes(page, "E2E-no-such-type");
 
-    const form = page.locator("form");
+    const form = await openNewType(page);
     await formField(form, "Name").fill(typeName);
     await formField(form, "Model").fill("E2E-MODEL-1");
     await formField(form, "Manufacturer").fill("E2E Optics");
@@ -82,16 +87,15 @@ test.describe.serial("inventory type CRUD", () => {
     expect(created.rentalPriceUsd).toBe(200);
     expect(created.publicListing).toBe(false);
 
-    // A successful create resets the form, which is how the operator knows the
-    // next thing they type is a new type rather than an edit of this one.
-    await expect(formField(form, "Name")).toHaveValue("", { timeout: 20_000 });
+    // The panel closes on success, and the list keeps the search it had — the
+    // point of editing in a panel is that the list never loses its place.
+    await expect(page.getByRole("textbox", { name: "Search types" })).toHaveValue("E2E-no-such-type");
   });
 
-  test("admin edits the type through the save bar", async ({ page }) => {
+  test("admin edits the type in its side panel", async ({ page }) => {
     const created = await waitForInventoryType(typeName, (state) => Boolean(state?.typeId));
 
-    await page.goto("/dashboard/inventory/types");
-    await expect(page.getByText("Model Types")).toBeVisible({ timeout: 30_000 });
+    await gotoTypes(page);
     await searchTypes(page, typeName);
 
     // Asserted directly rather than paged to. A filtered `inventoryTypes.list`
@@ -99,12 +103,7 @@ test.describe.serial("inventory type CRUD", () => {
     // moment ago has to be on screen as soon as the search settles — if this
     // ever needs a Load more, the filter has regressed to running against the
     // page rather than the table.
-    const row = typeRow(page, created.typeId);
-    await expect(row).toBeVisible({ timeout: 30_000 });
-    await row.getByRole("button", { name: "Edit", exact: true }).click();
-
-    const form = page.locator("form");
-    await expect(page.getByText("Edit Type")).toBeVisible({ timeout: 20_000 });
+    const form = await openTypeRow(page, created.typeId);
     await expect(formField(form, "Name")).toHaveValue(typeName, { timeout: 20_000 });
 
     await formField(form, "Name").fill(renamedTypeName);
@@ -124,6 +123,10 @@ test.describe.serial("inventory type CRUD", () => {
     // MSRP is untouched, so the subsidized rate stays where the 5% rule put it.
     expect(edited.subsidizedRentalPriceUsd).toBe(100);
     expect(getInventoryType(typeName)).toBeNull();
+
+    // `?type=<id>` opens the panel straight from a link.
+    await gotoTypes(page, `type=${created.typeId}`);
+    await expect(formField(typeSheet(page), "Name")).toHaveValue(renamedTypeName, { timeout: 20_000 });
   });
 
   test("delete is refused while an inventory item still points at the type", async ({ page }) => {
@@ -137,13 +140,15 @@ test.describe.serial("inventory type CRUD", () => {
       (state) => state?.linkedItemCount === 1,
     );
 
-    await page.goto("/dashboard/inventory/types");
-    await expect(page.getByText("Model Types")).toBeVisible({ timeout: 30_000 });
+    await gotoTypes(page);
     await searchTypes(page, guardedTypeName);
 
-    const row = typeRow(page, guarded.typeId);
-    await expect(row).toBeVisible({ timeout: 30_000 });
-    await row.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(typeRow(page, guarded.typeId)).toBeVisible({ timeout: 30_000 });
+    // The row counts its units from inventory.
+    await expect(typeRow(page, guarded.typeId).getByTestId("type-row-units")).toHaveText("1 unit", {
+      timeout: 30_000,
+    });
+    await deleteTypeFromRow(page, guarded.typeId);
 
     // `inventoryTypes.remove` throws rather than orphaning the item, so the row
     // has to survive. Convex pushes list updates over the socket, so a broken
@@ -158,19 +163,28 @@ test.describe.serial("inventory type CRUD", () => {
     expect(edited.linkedItemCount).toBe(0);
     expect(edited.packageLineCount).toBe(0);
 
-    await page.goto("/dashboard/inventory/types");
-    await expect(page.getByText("Model Types")).toBeVisible({ timeout: 30_000 });
+    await gotoTypes(page);
     await searchTypes(page, renamedTypeName);
 
-    const row = typeRow(page, edited.typeId);
-    await expect(row).toBeVisible({ timeout: 30_000 });
-    await row.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(typeRow(page, edited.typeId)).toBeVisible({ timeout: 30_000 });
+    await deleteTypeFromRow(page, edited.typeId);
 
     await expect(typeRow(page, edited.typeId)).toHaveCount(0, { timeout: 30_000 });
     expect(getInventoryType(renamedTypeName)).toBeNull();
   });
+
+  test("a link to a deleted type says so and drops the param", async ({ page }) => {
+    const deleted = await waitForInventoryType(guardedTypeName, (state) => Boolean(state?.typeId));
+    // A well-formed id that no longer exists, and one that was never an id.
+    for (const id of [`${deleted.typeId.slice(0, -1)}x`, "not-a-type"]) {
+      await gotoTypes(page, `type=${id}`);
+      await expect(page.getByText("That type doesn't exist anymore")).toBeVisible({ timeout: 20_000 });
+      await expect(page).not.toHaveURL(/type=/);
+      await expect(typeSheet(page)).toHaveCount(0);
+    }
+  });
 });
 
 function categoryTrigger(page: Page) {
-  return page.getByTestId("type-category-field").getByTestId("searchable-select-trigger");
+  return typeSheet(page).getByTestId("type-category-field").getByTestId("searchable-select-trigger");
 }

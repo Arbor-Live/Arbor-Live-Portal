@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
 import { Form } from "@/components/ui/form";
@@ -14,6 +14,7 @@ import {
 } from "@/lib/validations/inventory";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { inventoryItemLabel } from "./constants";
+import type { ScanOutcome } from "./use-barcode-camera";
 import { ContainsEditor, type ContainsOption } from "./contains-editor";
 import { InventoryItemDetails } from "./inventory-item-details";
 
@@ -57,13 +58,9 @@ export function InventoryItemEditor({
   const updateItem = useMutation(api.inventoryItems.update);
   const replaceContainedAssets = useMutation(api.inventoryItems.replaceContainedAssets);
   const children = useQuery(api.inventoryItems.getChildren, editingId ? { id: editingId } : "skip");
-  const [containsScanRaw, setContainsScanRaw] = useState("");
   const [containsScanError, setContainsScanError] = useState<string | null>(null);
   const [containsError, setContainsError] = useState<string | null>(null);
-  const containsScan = useQuery(
-    api.inventoryItems.resolveByScan,
-    containsScanRaw.trim() ? { raw: containsScanRaw } : "skip",
-  );
+  const convex = useConvex();
 
   const form = useConvexForm<InventoryItemFormValues>({
     schema: inventoryItemSchema,
@@ -100,33 +97,32 @@ export function InventoryItemEditor({
   };
 
   async function setChildren(childIds: string[]) {
-    if (!editingId) return;
+    if (!editingId) return false;
     setContainsError(null);
     try {
       await replaceContainedAssets({
         containerId: editingId,
         childIds: childIds as Id<"inventoryItems">[],
       });
+      return true;
     } catch (error) {
       setContainsError(getConvexErrorMessage(error, "Could not update contained assets."));
+      return false;
     }
   }
 
-  useEffect(() => {
-    if (!containsScanRaw.trim()) return;
-    if (containsScan === null) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- consume the one-shot contains-scan resolution
-      setContainsScanError(`No item found for “${containsScanRaw.trim()}”.`);
-      setContainsScanRaw("");
-      return;
+  /** Resolve and save a scanned child; awaited, so a batch camera waits for it before the next read. */
+  async function scanContains(raw: string): Promise<ScanOutcome> {
+    const found = await convex.query(api.inventoryItems.resolveByScan, { raw });
+    if (!found) {
+      setContainsScanError(`No item found for “${raw.trim()}”.`);
+      return "rejected";
     }
-    if (containsScan) {
-      const ids = (children ?? []).map((child) => child._id);
-      if (!ids.includes(containsScan._id)) void setChildren([...ids, containsScan._id]);
-      setContainsScanRaw("");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- react to the scan result only
-  }, [containsScan]);
+    setContainsScanError(null);
+    const ids = (children ?? []).map((child) => child._id);
+    if (ids.includes(found._id)) return "accepted";
+    return (await setChildren([...ids, found._id])) ? "accepted" : "rejected";
+  }
 
   const values = form.watch();
   const onDetailsChange = (patch: Partial<InventoryItemFormValues>) => {
@@ -208,7 +204,7 @@ export function InventoryItemEditor({
                 value={(children ?? []).map((child) => child._id)}
                 onChange={setChildren}
                 options={containsOptions}
-                onScan={(raw) => setContainsScanRaw(raw)}
+                onScan={scanContains}
                 title={`Contains (${children?.length ?? 0})`}
                 emptyLabel="Nothing inside yet — scan or add the contents"
               />

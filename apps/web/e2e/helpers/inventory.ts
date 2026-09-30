@@ -151,15 +151,89 @@ export function deleteInventoryFixtures(args: {
   return runConvex("e2eHelpers:deleteInventoryCatalogFixtures", args);
 }
 
-/** The types manager's search box (a `FilterField` labelled "Search"). */
+/** The types page's search box. */
 export async function searchTypes(page: Page, query: string) {
-  const search = page
-    .locator("div.space-y-1")
-    .filter({ has: page.getByText("Search", { exact: true }) })
-    .locator("input")
-    .first();
+  const search = page.getByRole("textbox", { name: "Search types" });
   await search.fill(query);
   return search;
+}
+
+/**
+ * Add a filter chip through the shared `FilterBar`: open "Filter", pick the
+ * filter, optionally switch to "is not", tick each option, then close the chip.
+ */
+export async function addFilter(
+  page: Page,
+  filter: string,
+  options: string[],
+  operator: "is" | "is not" = "is",
+) {
+  await page.getByTestId("filter-bar").getByRole("button", { name: /^Filter/ }).click();
+  await page.getByRole("menuitem", { name: filter, exact: true }).click();
+  const menu = page.locator("[data-testid^='filter-menu-']");
+  await expect(menu).toBeVisible({ timeout: 20_000 });
+  if (operator === "is not") await menu.getByRole("radio", { name: "is not" }).click();
+  for (const option of options) {
+    const search = menu.getByRole("textbox");
+    if (await search.count()) await search.fill(option);
+    // `click`, not `check`: a single-value chip closes as soon as it's picked.
+    await menu.getByRole("checkbox", { name: option, exact: true }).click();
+  }
+  if (await menu.count()) await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0, { timeout: 20_000 });
+}
+
+/** Load the types page and wait for its list (or empty state) to render. */
+export async function gotoTypes(page: Page, query?: string) {
+  await page.goto(query ? `/dashboard/inventory/types?${query}` : "/dashboard/inventory/types");
+  await expect(page.getByTestId("types-summary")).toBeVisible({ timeout: 30_000 });
+}
+
+/** The type editor side panel. */
+export function typeSheet(page: Page): Locator {
+  return page.getByTestId("type-sheet");
+}
+
+/** Open the empty panel through the header's New type button. */
+export async function openNewType(page: Page) {
+  await page.getByRole("button", { name: "New type", exact: true }).click();
+  const sheet = typeSheet(page);
+  await expect(sheet.getByText("New type", { exact: true })).toBeVisible({ timeout: 20_000 });
+  return sheet;
+}
+
+/** Open a row's panel by clicking the row. */
+export async function openTypeRow(page: Page, typeId: string) {
+  const row = typeRow(page, typeId);
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.getByTestId("type-row-open").click();
+  const sheet = typeSheet(page);
+  await expect(sheet.getByRole("button", { name: "Save changes" })).toBeVisible({ timeout: 20_000 });
+  return sheet;
+}
+
+/** Delete a type from its row menu, accepting the confirm. */
+export async function deleteTypeFromRow(page: Page, typeId: string) {
+  await typeRow(page, typeId).getByRole("button", { name: /^More for / }).click();
+  await page.getByRole("menuitem", { name: "Delete type" }).click();
+  await confirmAppDialog(page, "Delete type");
+}
+
+/** Accept the shared app confirm dialog by its verb. */
+export async function confirmAppDialog(page: Page, confirmLabel: string) {
+  const dialog = page.getByTestId("app-dialog");
+  await expect(dialog).toBeVisible({ timeout: 20_000 });
+  await dialog.getByRole("button", { name: confirmLabel, exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+}
+
+/** Open the Settings dialog (categories and capability keys) on one of its sections. */
+export async function openTypeSettings(page: Page, section: "Categories" | "Capabilities") {
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const dialog = page.getByTestId("type-settings-dialog");
+  await expect(dialog).toBeVisible({ timeout: 20_000 });
+  await dialog.getByRole("radio", { name: section }).click();
+  return dialog;
 }
 
 /** The types table row for a seeded type id. */
@@ -197,23 +271,22 @@ export async function revealRow(page: Page, row: Locator) {
 }
 
 /**
- * Submit the type form.
+ * Submit the type panel and wait for it to close.
  *
- * The two paths do not share a button. Creating has an in-form `type="submit"`
- * *and* a save bar whose label is also "Create", so an unscoped name matches
- * twice; editing renders no in-form submit at all and only goes through the
- * bar. Assert the result by polling Convex rather than by watching the bar:
- * `persistType` resets the form after a create but not after an edit, so the
- * edit path stays dirty — and its bar stays on screen — even on success.
+ * The panel closes only once the mutation succeeds, so a closed panel is the
+ * page's own statement that the save went through; callers still poll Convex
+ * for what was written.
  */
 export async function saveTypeForm(page: Page, mode: "create" | "edit") {
-  const button =
-    mode === "create"
-      ? page.locator("form").getByRole("button", { name: "Create", exact: true })
-      : formSaveBar(page).getByRole("button", { name: "Save", exact: true });
-  await expect(button).toBeVisible({ timeout: 20_000 });
+  const sheet = typeSheet(page);
+  const button = sheet.getByRole("button", {
+    name: mode === "create" ? "Create type" : "Save changes",
+    exact: true,
+  });
+  await expect(button).toBeEnabled({ timeout: 20_000 });
   await button.scrollIntoViewIfNeeded();
   await button.click();
+  await expect(sheet).toHaveCount(0, { timeout: 30_000 });
 }
 
 /** The `FormSaveBar` — `role="status"`, portalled into the page's bar stack. */

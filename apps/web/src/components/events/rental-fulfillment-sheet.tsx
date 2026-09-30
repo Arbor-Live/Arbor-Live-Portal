@@ -307,10 +307,13 @@ export function RentalFulfillmentSheet({
             : `Checked in ${result.assetId}`,
         );
       }
+      return true;
     } catch (err) {
       const message = getConvexErrorMessage(err);
       setLocalError(message);
       onError?.(message);
+      // Tells the scanner the read failed, so it doesn't confirm it.
+      return false;
     } finally {
       setBusy(false);
     }
@@ -518,7 +521,7 @@ export function RentalFulfillmentSheet({
                         </div>
                       )}
                       {!isExceptions ? (
-                        <AssetScanner onSubmit={handleScan} disabled={busy} autoFocus />
+                        <AssetScanner onSubmit={handleScan} disabled={busy} autoFocus keepCameraOpen />
                       ) : null}
                     </>
                   ) : null}

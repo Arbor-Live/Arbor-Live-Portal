@@ -39,27 +39,41 @@ function canUseCameraScanner() {
 
 /**
  * Live camera barcode/QR scanning loop. On every detected code, `onDetect` is
- * awaited with the raw value; repeated scans of the same value within 2s are
- * suppressed so a held-up label fires once. Shared by the scan inputs and the
- * asset scanner so camera handling lives in exactly one place.
+ * awaited with the raw value. A code only fires again once it has been out of
+ * view for 2s, so a label held in front of the camera fires once. Shared by the
+ * scan inputs and the asset scanner so camera handling lives in exactly one
+ * place.
  *
  * Only one camera session is active app-wide: opening a new one closes others.
  * Pass `closeOnDetect: true` for single-field scanners so the preview shuts
- * after a successful read.
+ * after a successful read. Batch scanners (checking gear out, filling a case)
+ * leave it off so the camera stays up between reads; `lastDetected` lets them
+ * confirm each read, since the preview closing no longer does.
  *
  * Uses the native `BarcodeDetector` where available and `@zxing/browser`
  * everywhere else (Safari / iOS), so the same component works on an iPhone.
  */
+/**
+ * What happened to a read. `void` counts as accepted.
+ * - `"dropped"`: not taken (the form was busy), so the same code may fire again.
+ * - `"rejected"`: taken but it failed (the caller shows the error). No "Read …"
+ *   confirmation, and the code stays suppressed so a held label doesn't repeat
+ *   the error every frame.
+ */
+export type ScanOutcome = "accepted" | "dropped" | "rejected";
+
 export function useBarcodeCamera(
-  onDetect: (raw: string) => void | Promise<void>,
+  onDetect: (raw: string) => void | ScanOutcome | Promise<void | ScanOutcome>,
   options?: { closeOnDetect?: boolean },
 ) {
   const sessionId = useId();
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [lastDetected, setLastDetected] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const lastScanRef = useRef<{ value: string; at: number }>({ value: "", at: 0 });
+  const inFlightRef = useRef(false);
   const onDetectRef = useRef(onDetect);
   const closeOnDetectRef = useRef(Boolean(options?.closeOnDetect));
 
@@ -104,6 +118,7 @@ export function useBarcodeCamera(
       return;
     }
     setCameraError(null);
+    setLastDetected(null);
     claimBarcodeCameraSession(sessionId);
     setCameraOn(true);
   }
@@ -117,13 +132,34 @@ export function useBarcodeCamera(
     /** De-dupe and forward a raw scan to the caller. */
     async function handleRaw(value: string) {
       const raw = value.trim();
-      if (!raw) return;
+      // One read at a time: ZXing fires per frame without waiting for the last read.
+      if (!raw || inFlightRef.current) return;
       const now = Date.now();
       if (raw === lastScanRef.current.value && now - lastScanRef.current.at <= 2000) {
+        // Still in view: slide the window so it can't re-fire while held up.
+        lastScanRef.current.at = now;
         return;
       }
       lastScanRef.current = { value: raw, at: now };
-      await onDetectRef.current(raw);
+      inFlightRef.current = true;
+      let outcome: void | ScanOutcome;
+      try {
+        outcome = await onDetectRef.current(raw);
+      } finally {
+        // Restart the window from when the read finished, so a save slower
+        // than 2s doesn't let the still-held code fire again.
+        lastScanRef.current = { value: raw, at: Date.now() };
+        inFlightRef.current = false;
+      }
+      if (outcome === "dropped") {
+        lastScanRef.current = { value: "", at: 0 };
+        return;
+      }
+      if (outcome === "rejected") return;
+      if (!closeOnDetectRef.current && !cancelled) {
+        setLastDetected(raw);
+        navigator.vibrate?.(40);
+      }
       if (closeOnDetectRef.current && !cancelled) {
         releaseBarcodeCameraSession(sessionId);
         setCameraOn(false);
@@ -216,5 +252,5 @@ export function useBarcodeCamera(
     };
   }, [cameraOn, sessionId]);
 
-  return { cameraOn, toggleCamera, closeCamera, cameraError, videoRef, supported };
+  return { cameraOn, toggleCamera, closeCamera, cameraError, videoRef, supported, lastDetected };
 }

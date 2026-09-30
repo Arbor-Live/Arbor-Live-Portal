@@ -12,7 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { SearchableSelect } from "./searchable-select";
 import { ScanInput } from "./scan-input";
-import { useBarcodeCamera } from "./use-barcode-camera";
+import { useBarcodeCamera, type ScanOutcome } from "./use-barcode-camera";
 
 export type ItemDetailsValues = {
   assetId: string;
@@ -47,7 +47,8 @@ type InventoryItemDetailsProps = {
   /** Fired with the raw scan when the operator uses the asset-id camera. */
   onScanAssetId?: (raw: string) => void;
   onScanSerial?: (raw: string) => void;
-  onScanContainedIn?: (raw: string) => void;
+  /** Resolve `"rejected"` for an unknown code; the camera then stays open for another try. */
+  onScanContainedIn?: (raw: string) => void | ScanOutcome | Promise<void | ScanOutcome>;
   /** Enter on Asset ID — wizard advances to serial. */
   onEnterAssetId?: () => void;
   /** Enter on Serial — wizard creates the next asset card. */
@@ -90,7 +91,7 @@ export function InventoryItemDetails({
   disabled,
 }: InventoryItemDetailsProps) {
   const { cameraOn, toggleCamera, cameraError, videoRef, supported } = useBarcodeCamera(
-    (raw) => void onScanContainedIn?.(raw),
+    (raw) => onScanContainedIn?.(raw),
     { closeOnDetect: true },
   );
 

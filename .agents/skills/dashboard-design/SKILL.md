@@ -108,6 +108,16 @@ row (`flex flex-row flex-wrap items-start justify-between gap-2`). A card is a
 Every list of things (positions, payouts, users, types, requests) follows the
 Lineup:
 
+- **Search and filters: use `FilterBar`** (`components/filter-bar.tsx`), never
+  a row of selects. It's a search box, a **Filter** menu that adds a filter as
+  a chip ("Category is Lighting, Sound ×"), and **Clear all**. Only filters in
+  use take up room. Each chip matches rows where any of its values applies, or
+  none does once flipped to "is not"; pass `single` for yes/no filters ("Units:
+  Has units"). The page owns the `FilterState`: send `activeFilters(state)` to
+  the query (the server should filter the whole table, not the loaded page;
+  see `inventoryTypes.list`), or use `matchesFilter` on rows it already has in
+  full. Clear the row selection when filters change. Types
+  (`inventory/types-manager.tsx`) is the working example.
 - **A summary line** above the list, `text-sm`, in plain words, joined with
   ` · `: "3 positions · 2 booked · 1 open · $1,200 in payouts (1 unpaid)".
   Give it a `data-testid`.
@@ -292,6 +302,7 @@ labels (`TAB_ICONS` in `event-workspace-nav.tsx`, `MOMENT_ICONS` in
 | Opens elsewhere / new tab | `ArrowSquareOutIcon` (`size-3`, after the label) |
 | Copy | `CopyIcon` |
 | Email / invite | `EnvelopeSimpleIcon` |
+| Filter (the FilterBar button) | `FunnelSimpleIcon` |
 | Search | `MagnifyingGlassIcon` (inside the input: `pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground`, input gets `pl-9`) |
 | Needs attention (inline, with a count) | `WarningIcon` |
 | Error / blocking alert | `WarningCircleIcon` (in `Alert`s) |
@@ -315,6 +326,7 @@ table in the same PR.
 - [ ] Details open in a keyed `Sheet` with uppercase section headings, a
       deep-link param, and close-on-success only.
 - [ ] Every destructive action confirms, with a specific title and verb.
+- [ ] Lists search and filter through `FilterBar`, filtering server-side.
 - [ ] Only design-system controls; labels wired to inputs; dropdowns don't
       shift the layout.
 - [ ] Icons follow [Icons](#icons): Phosphor, the concept table, no size

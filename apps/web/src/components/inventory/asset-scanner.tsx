@@ -5,13 +5,20 @@ import { CameraIcon, KeyboardIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useBarcodeCamera } from "./use-barcode-camera";
+import { useBarcodeCamera, type ScanOutcome } from "./use-barcode-camera";
 
 type AssetScannerProps = {
-  onSubmit: (raw: string) => void | Promise<void>;
+  /** Resolve `false` when the scan failed (the caller shows why). */
+  onSubmit: (raw: string) => void | boolean | Promise<void | boolean>;
   disabled?: boolean;
   placeholder?: string;
   autoFocus?: boolean;
+  /**
+   * Keep the camera open after each read, for scanning a batch of assets in a
+   * row (checking gear out or back in). Off by default: a single lookup closes
+   * the camera once it has a code.
+   */
+  keepCameraOpen?: boolean;
 };
 
 export function AssetScanner({
@@ -19,19 +26,23 @@ export function AssetScanner({
   disabled,
   placeholder = "Scan or type ALE-0041 / arbor.st/e/…",
   autoFocus,
+  keepCameraOpen = false,
 }: AssetScannerProps) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
-  const { cameraOn, toggleCamera, cameraError, videoRef, supported } =
-    useBarcodeCamera(handleSubmit, { closeOnDetect: true });
+  const { cameraOn, toggleCamera, cameraError, videoRef, supported, lastDetected } =
+    useBarcodeCamera(handleSubmit, { closeOnDetect: !keepCameraOpen });
 
-  async function handleSubmit(raw: string) {
+  async function handleSubmit(raw: string): Promise<ScanOutcome> {
     const trimmed = raw.trim();
-    if (!trimmed || busy || disabled) return;
+    if (!trimmed || busy || disabled) return "dropped";
     setBusy(true);
     try {
-      await onSubmit(trimmed);
+      const ok = await onSubmit(trimmed);
+      if (ok === false) return "rejected";
+      // Keep typed text after a failure so it can be corrected.
       setValue("");
+      return "accepted";
     } finally {
       setBusy(false);
     }
@@ -76,6 +87,13 @@ export function AssetScanner({
           muted
           playsInline
         />
+      ) : null}
+      {cameraOn && keepCameraOpen ? (
+        <p className="text-xs text-muted-foreground" aria-live="polite" data-testid="asset-scanner-last">
+          {lastDetected
+            ? `Read ${lastDetected}. Keep scanning, or hide the camera when you're done.`
+            : "The camera stays open, so you can scan one asset after another."}
+        </p>
       ) : null}
     </div>
   );

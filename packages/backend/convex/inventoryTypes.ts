@@ -1,6 +1,6 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { requireAuth } from "./lib/auth";
 import {
@@ -149,30 +149,41 @@ function matchesInventoryTypeSearch(type: Doc<"inventoryTypes">, loweredSearch: 
 
 const MAX_TYPE_OPTIONS = 2000;
 
+/** A filter-bar chip: the row matches when any of `values` applies (`is`) or none does (`is_not`). */
+const listFilter = v.optional(
+  v.object({
+    operator: v.union(v.literal("is"), v.literal("is_not")),
+    values: v.array(v.string()),
+  }),
+);
+
+type ListFilter = { operator: "is" | "is_not"; values: string[] };
+
+function matchesListFilter(filter: ListFilter | undefined, candidates: string[]) {
+  if (!filter || filter.values.length === 0) return true;
+  const hit = candidates.some((candidate) => filter.values.includes(candidate));
+  return filter.operator === "is" ? hit : !hit;
+}
+
+function typeVisibilityKey(type: Doc<"inventoryTypes">) {
+  if (!type.publicListing) return "hidden";
+  return type.publicProfile ? "profile" : "listing";
+}
+
 function matchesInventoryTypeFilters(
   type: Doc<"inventoryTypes">,
   args: {
-    capability?: string;
-    manufacturer?: string;
-    publicListing?: boolean;
-    publicProfile?: boolean;
+    category?: ListFilter;
+    capability?: ListFilter;
+    manufacturer?: ListFilter;
+    visibility?: ListFilter;
     search?: string;
   },
 ) {
-  if (args.capability && !type.capabilities.includes(args.capability)) return false;
-  if (args.publicListing !== undefined && Boolean(type.publicListing) !== args.publicListing) {
-    return false;
-  }
-  if (args.publicProfile !== undefined && Boolean(type.publicProfile) !== args.publicProfile) {
-    return false;
-  }
-  const loweredManufacturer = args.manufacturer?.trim().toLowerCase();
-  if (
-    loweredManufacturer &&
-    (type.manufacturer ?? "").trim().toLowerCase() !== loweredManufacturer
-  ) {
-    return false;
-  }
+  if (!matchesListFilter(args.category, [type.category])) return false;
+  if (!matchesListFilter(args.capability, type.capabilities)) return false;
+  if (!matchesListFilter(args.manufacturer, [(type.manufacturer ?? "").trim()])) return false;
+  if (!matchesListFilter(args.visibility, [typeVisibilityKey(type)])) return false;
   const loweredSearch = args.search?.trim().toLowerCase();
   if (!loweredSearch) return true;
   return matchesInventoryTypeSearch(type, loweredSearch);
@@ -195,50 +206,75 @@ function matchesInventoryTypeFilters(
  * Load more twice. Pagination is by `_creationTime` ascending, so the rows this
  * hid were always the newest ones — the same failure #65 fixed in six other
  * admin lists.
+ *
+ * Filtered pages each scan up to `MAX_TYPE_OPTIONS` rows (whatever the client
+ * asked for), so past that size the matches arrive over several pages.
+ *
+ * Each filter is a filter-bar chip (`is` / `is not` any of several values).
+ * `units` takes `"has"` or `"none"` and checks `inventoryItems` per type.
  */
 export const list = query({
   args: {
     paginationOpts: paginationOptsValidator,
-    category: v.optional(v.string()),
-    capability: v.optional(v.string()),
-    manufacturer: v.optional(v.string()),
-    publicListing: v.optional(v.boolean()),
-    publicProfile: v.optional(v.boolean()),
     search: v.optional(v.string()),
+    category: listFilter,
+    capability: listFilter,
+    manufacturer: listFilter,
+    visibility: listFilter,
+    units: listFilter,
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
 
-    // `category` is excluded: it is served by `by_category`, so it narrows the
-    // paginated query itself rather than the page it produced.
+    const active = (filter: ListFilter | undefined) => Boolean(filter?.values.length);
+    // A single `is` category is served by `by_category`, so on its own it can
+    // still paginate.
+    const indexedCategory =
+      args.category?.operator === "is" && args.category.values.length === 1
+        ? args.category.values[0]
+        : undefined;
     const hasInMemoryFilter =
       Boolean(args.search?.trim()) ||
-      Boolean(args.capability) ||
-      Boolean(args.manufacturer?.trim()) ||
-      args.publicListing !== undefined ||
-      args.publicProfile !== undefined;
+      (active(args.category) && !indexedCategory) ||
+      active(args.capability) ||
+      active(args.manufacturer) ||
+      active(args.visibility) ||
+      active(args.units);
 
     if (hasInMemoryFilter) {
-      const candidates = args.category
+      // Scan the table a window at a time on the client's cursor, so a catalog
+      // past the window pages on with Load more instead of being cut off.
+      const scanOpts = { ...args.paginationOpts, numItems: MAX_TYPE_OPTIONS };
+      const scanned = indexedCategory
         ? await ctx.db
             .query("inventoryTypes")
-            .withIndex("by_category", (q) => q.eq("category", args.category!))
-            .take(MAX_TYPE_OPTIONS)
-        : await ctx.db.query("inventoryTypes").take(MAX_TYPE_OPTIONS);
+            .withIndex("by_category", (q) => q.eq("category", indexedCategory))
+            .paginate(scanOpts)
+        : await ctx.db.query("inventoryTypes").paginate(scanOpts);
 
-      const page = candidates
-        .filter((type) => matchesInventoryTypeFilters(type, args))
-        .sort((a, b) => a.name.localeCompare(b.name));
+      const matches = scanned.page.filter((type) => matchesInventoryTypeFilters(type, args));
+      const page: Doc<"inventoryTypes">[] = [];
+      for (const type of matches) {
+        if (active(args.units)) {
+          const unit = await ctx.db
+            .query("inventoryItems")
+            .withIndex("by_typeId", (q) => q.eq("typeId", type._id))
+            .first();
+          if (!matchesListFilter(args.units, [unit ? "has" : "none"])) continue;
+        }
+        page.push(type);
+      }
+      page.sort((a, b) => a.name.localeCompare(b.name));
 
-      // One page, already complete: `usePaginatedQuery` must not offer a Load
-      // more button that would page past a result set it has all of.
-      return { page, isDone: true, continueCursor: "" };
+      // The matches from this window, with the scan's own cursor: in any
+      // catalog under the window size that's one finished page.
+      return { ...scanned, page };
     }
 
-    const result = args.category
+    const result = indexedCategory
       ? await ctx.db
           .query("inventoryTypes")
-          .withIndex("by_category", (q) => q.eq("category", args.category!))
+          .withIndex("by_category", (q) => q.eq("category", indexedCategory))
           .paginate(args.paginationOpts)
       : await ctx.db.query("inventoryTypes").paginate(args.paginationOpts);
 
@@ -341,11 +377,36 @@ export const listManufacturers = query({
   },
 });
 
+const MAX_UNIT_SCAN = 5000;
+
+/**
+ * Units per type for the types list. `inventoryItems` has no per-type counter,
+ * so this scans a bounded window of the table and groups it; `truncated` says
+ * the counts are a floor rather than exact.
+ */
+export const unitCounts = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAuth(ctx);
+    const items = await ctx.db.query("inventoryItems").take(MAX_UNIT_SCAN + 1);
+    const counts = new Map<Id<"inventoryTypes">, number>();
+    for (const item of items.slice(0, MAX_UNIT_SCAN)) {
+      counts.set(item.typeId, (counts.get(item.typeId) ?? 0) + 1);
+    }
+    return {
+      counts: [...counts].map(([typeId, units]) => ({ typeId, units })),
+      truncated: items.length > MAX_UNIT_SCAN,
+    };
+  },
+});
+
+/** One type by id. Takes a plain string so a stale or mistyped `?type=` link reads as "not found". */
 export const get = query({
-  args: { id: v.id("inventoryTypes") },
+  args: { id: v.string() },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
-    return await ctx.db.get(args.id);
+    const id = ctx.db.normalizeId("inventoryTypes", args.id);
+    return id ? await ctx.db.get(id) : null;
   },
 });
 
