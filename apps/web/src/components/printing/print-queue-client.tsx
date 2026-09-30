@@ -25,8 +25,8 @@ import type { DataTableFeatures } from "@/components/ui/data-table-features";
 type PrinterRow = FunctionReturnType<typeof api.printAgent.listPrinters>[number];
 type JobRow = FunctionReturnType<typeof api.printJobs.listRecent>[number];
 
-/** The agent heartbeats each minute; two missed beats reads as offline. */
-const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+/** The agent heartbeats about every 10 min (jittered); allow a missed beat. */
+const ONLINE_WINDOW_MS = 15 * 60 * 1000;
 
 const jobColumnHelper = createColumnHelper<DataTableFeatures, JobRow>();
 

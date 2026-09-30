@@ -265,7 +265,7 @@ export const fail = mutation({
   },
 });
 
-/** Printer status for the dashboard (online = heartbeat within the last 5 min). */
+/** Printer status for the dashboard (online = heartbeat within the last 15 min). */
 export const listPrinters = query({
   args: {},
   handler: async (ctx) => {
