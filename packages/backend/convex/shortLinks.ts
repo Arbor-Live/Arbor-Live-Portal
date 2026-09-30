@@ -8,6 +8,8 @@ import {
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getUserId, requireVerticalOrAdmin } from "./lib/auth";
+import { buildPublicEventUrl, isPubliclyListableEvent } from "./lib/publicEvents";
+import { SITE_URL } from "./email/constants";
 import { assertUniqueShortLinkSlug, normalizeShortLinkSlug } from "./lib/shortLinkSlug";
 import {
   isShortLinkExpired,
@@ -128,6 +130,36 @@ export const list = query({
     return links.map((link) =>
       toListRow(link, link.eventId ? (titles.get(link.eventId) ?? null) : null, now),
     );
+  },
+});
+
+/**
+ * An event's short links, for the card on its Promo tab. Short links are a
+ * Marketing tool, so anyone else gets null and the card stays hidden instead
+ * of erroring the event page. `publicEventUrl` is the event's public page
+ * when it has one: the natural destination for a new link.
+ */
+export const listForEvent = query({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    try {
+      await requireVerticalOrAdmin(ctx, "Marketing");
+    } catch {
+      return null;
+    }
+    const event = await ctx.db.get(args.eventId);
+    if (!event) return null;
+    const links = await ctx.db
+      .query("shortLinks")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(SHORT_LINK_LIST_LIMIT);
+    const now = Date.now();
+    return {
+      links: links
+        .map((link) => toListRow(link, event.title, now))
+        .sort((a, b) => b.updatedAt - a.updatedAt),
+      publicEventUrl: isPubliclyListableEvent(event) ? buildPublicEventUrl(String(event._id), SITE_URL) : null,
+    };
   },
 });
 

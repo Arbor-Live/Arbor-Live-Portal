@@ -2,13 +2,27 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, CaretRightIcon, MapPinIcon, PlusIcon } from "@phosphor-icons/react";
+import {
+  DetailSheet,
+  DetailSheetHeader,
+  EmptyState,
+  ListSummary,
+  RowCell,
+  RowMenu,
+  RowText,
+} from "@/components/list-page";
+import { ListRow } from "@/components/list-row";
+import { MetaItem, PageHeader } from "@/components/page-header";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useSheetParam } from "@/hooks/use-sheet-param";
+import { notify } from "@/lib/notify";
 import { api, type Id } from "@/lib/convex-api";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { EMPTY_LEXICAL_STATE } from "@/components/editor/lexical-theme";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   activeFilters,
   FilterBar,
@@ -19,8 +33,10 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { VenueEditor } from "./venue-editor";
@@ -182,22 +198,28 @@ function collectParentIds(nodes: VenueTreeNode[]): Set<string> {
 }
 
 export function VenuesManager() {
-  const { alert } = useAppDialog();
+  const { confirm } = useAppDialog();
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<FilterState>({});
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [editingId, setEditingId] = useState<Id<"venues"> | null>(null);
+  // `?venue=<id>` opens a venue; `?venue=new` opens an empty one.
+  const [panel, setPanel] = useSheetParam("venue");
+  const [newParentId, setNewParentId] = useState("");
   /** null = not initialized yet; once set, user/search control expansion. */
   const [expandedIds, setExpandedIds] = useState<Set<string> | null>(null);
   const venues = useQuery(api.venues.list, {});
   const removeVenue = useMutation(api.venues.remove);
 
+  const editingId = panel && panel !== "new" ? (panel as Id<"venues">) : null;
+  const editingVenue = editingId ? (venues?.find((row) => row._id === editingId) ?? null) : null;
   const editorInitial = useMemo(() => {
-    if (!editingId) return emptyVenueForm();
-    const venue = venues?.find((row) => row._id === editingId);
-    return venue ? toFormValues(venue) : emptyVenueForm();
-  }, [editingId, venues]);
+    if (editingVenue) return toFormValues(editingVenue as VenueRow);
+    // A space inside a building is a room, not another building.
+    return newParentId
+      ? { ...emptyVenueForm(), parentId: newParentId, kind: "indoor" as const, venueType: "Common Space" }
+      : emptyVenueForm();
+  }, [editingVenue, newParentId]);
 
   const narrowed = Boolean(search.trim()) || Object.keys(activeFilters(filters)).length > 0;
 
@@ -233,10 +255,7 @@ export function VenuesManager() {
   }, [filters, narrowed, venues, search, sortDir]);
 
   // Default: expand every parent so the tree is obvious on first load.
-  const resolvedExpandedIds = useMemo(() => {
-    if (expandedIds) return expandedIds;
-    return collectParentIds(tree);
-  }, [expandedIds, tree]);
+  const resolvedExpandedIds = useMemo(() => expandedIds ?? collectParentIds(tree), [expandedIds, tree]);
 
   // While narrowed, open every branch that survived so each match is on screen.
   const displayExpandedIds = useMemo(() => {
@@ -244,31 +263,60 @@ export function VenuesManager() {
     return new Set([...resolvedExpandedIds, ...collectParentIds(tree)]);
   }, [narrowed, resolvedExpandedIds, tree]);
 
-  const visibleIds = useMemo(
-    () => flattenVisibleIds(tree, displayExpandedIds),
-    [tree, displayExpandedIds],
-  );
+  const visibleIds = useMemo(() => flattenVisibleIds(tree, displayExpandedIds), [tree, displayExpandedIds]);
+  const buildings = (venues ?? []).filter((venue) => !venue.parentId).length;
 
   function toggleExpanded(id: string) {
     setExpandedIds((prev) => {
-      const base = prev ?? collectParentIds(tree);
-      const next = new Set(base);
+      const next = new Set(prev ?? collectParentIds(tree));
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
   }
 
-  async function bulkDeleteSelected() {
+  function openNew(parentId = "") {
+    setNewParentId(parentId);
+    setPanel("new");
+  }
+
+  async function deleteVenue(venue: { _id: Id<"venues">; name: string }) {
+    const ok = await confirm({
+      title: `Delete ${venue.name}?`,
+      description:
+        "It leaves the venue list and event pickers. A venue with spaces inside it, or events booked in it, can't be deleted.",
+      destructive: true,
+      confirmLabel: "Delete venue",
+    });
+    if (!ok) return false;
     try {
-      await Promise.all(selectedIds.map((id) => removeVenue({ id: id as Id<"venues"> })));
-      setSelectedIds([]);
-      if (editingId && selectedIds.includes(editingId)) {
-        setEditingId(null);
-      }
+      await removeVenue({ id: venue._id });
+      notify.success(`Deleted ${venue.name}.`);
+      if (editingId === venue._id) setPanel(null);
+      return true;
     } catch (error) {
-      await alert(getConvexErrorMessage(error, "Could not delete selected venues."));
+      notify.error(getConvexErrorMessage(error, "Could not delete the venue."));
+      return false;
     }
+  }
+
+  async function bulkDelete() {
+    const ok = await confirm({
+      title: `Delete ${selectedIds.length} venue${selectedIds.length === 1 ? "" : "s"}?`,
+      description: "Venues with spaces inside or events booked are skipped with an error; the rest are deleted.",
+      destructive: true,
+      confirmLabel: "Delete venues",
+    });
+    if (!ok) return;
+    const outcomes = await Promise.allSettled(selectedIds.map((id) => removeVenue({ id: id as Id<"venues"> })));
+    const failed = outcomes.filter((outcome) => outcome.status === "rejected");
+    if (outcomes.length - failed.length) notify.success(`Deleted ${outcomes.length - failed.length} venues.`);
+    if (failed.length) {
+      notify.error(
+        `${failed.length} couldn't be deleted: ${getConvexErrorMessage((failed[0] as PromiseRejectedResult).reason)}`,
+      );
+    }
+    setSelectedIds([]);
   }
 
   function renderRows(nodes: VenueTreeNode[], depth: number): ReactNode[] {
@@ -278,212 +326,249 @@ export function VenuesManager() {
       const hasChildren = node.children.length > 0;
       const isExpanded = hasChildren && displayExpandedIds.has(venue._id);
       const descendantCount = hasChildren ? countDescendants(node) : 0;
-
       rows.push(
-        <tr key={venue._id} className="border-t">
-          <td className="p-2">
-            <input
-              type="checkbox"
-              checked={selectedIds.includes(venue._id)}
-              onChange={(event) =>
-                setSelectedIds((prev) =>
-                  event.target.checked
-                    ? [...prev, venue._id]
-                    : prev.filter((id) => id !== venue._id),
-                )
-              }
-            />
-          </td>
-          <td className="p-2">
-            <div
-              className="flex items-start gap-1"
-              style={{ paddingLeft: `${depth * 1.5}rem` }}
-            >
+        <ListRow
+          key={venue._id}
+          data-testid={`venue-row-${venue._id}`}
+          onOpen={() => setPanel(venue._id)}
+          className={editingId === venue._id ? "bg-muted/40" : undefined}
+          leading={
+            <div className="flex items-center gap-1" style={{ paddingLeft: `${depth * 1.5}rem` }}>
+              <Checkbox
+                aria-label={`Select ${venue.name}`}
+                checked={selectedIds.includes(venue._id)}
+                onCheckedChange={(checked) =>
+                  setSelectedIds((prev) =>
+                    checked === true ? [...prev, venue._id] : prev.filter((id) => id !== venue._id),
+                  )
+                }
+              />
               {hasChildren ? (
-                <button
+                <Button
                   type="button"
-                  className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                  aria-label={isExpanded ? "Collapse" : "Expand"}
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={isExpanded ? `Collapse ${venue.name}` : `Expand ${venue.name}`}
                   aria-expanded={isExpanded}
                   onClick={() => toggleExpanded(venue._id)}
                 >
-                  {isExpanded ? (
-                    <CaretDownIcon className="size-3.5" weight="bold" />
-                  ) : (
-                    <CaretRightIcon className="size-3.5" weight="bold" />
-                  )}
-                </button>
+                  {isExpanded ? <CaretDownIcon weight="bold" /> : <CaretRightIcon weight="bold" />}
+                </Button>
               ) : (
-                <span
-                  className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center text-muted-foreground/50"
-                  aria-hidden
-                >
-                  {depth > 0 ? "·" : null}
-                </span>
+                <span className="size-6 shrink-0" aria-hidden />
               )}
-              <div
-                className={
-                  depth > 0
-                    ? "min-w-0 border-l-2 border-border/70 pl-2"
-                    : "min-w-0"
-                }
-              >
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <span className={depth === 0 ? "font-medium" : undefined}>
-                    {venue.name}
-                  </span>
-                  {hasChildren && !isExpanded ? (
-                    <span className="text-xs text-muted-foreground">
-                      {descendantCount} {descendantCount === 1 ? "space" : "spaces"}
-                    </span>
-                  ) : null}
-                </div>
-                {venue.nicknames?.length ? (
-                  <div className="text-xs text-muted-foreground">
-                    {venue.nicknames.join(" · ")}
-                  </div>
-                ) : null}
-              </div>
             </div>
-          </td>
-          <td className="p-2">
-            {formatVenueKindLabel(venue.kind as VenueKind)} · {venue.venueType}
-          </td>
-          <td className="p-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setEditingId(venue._id)}
-            >
-              Edit
-            </Button>
-          </td>
-        </tr>,
+          }
+          actions={
+            <RowMenu label={`More for ${venue.name}`}>
+              <DropdownMenuItem onSelect={() => setPanel(venue._id)}>Open details</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => openNew(venue._id)}>Add a space inside</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={() => void deleteVenue(venue)}>
+                Delete venue
+              </DropdownMenuItem>
+            </RowMenu>
+          }
+        >
+          <RowText
+            eyebrow={`${formatVenueKindLabel(venue.kind as VenueKind)} · ${venue.venueType}`}
+            title={venue.name}
+            detail={
+              [
+                venue.nicknames?.length ? venue.nicknames.join(" · ") : null,
+                hasChildren && !isExpanded ? `${descendantCount} ${descendantCount === 1 ? "space" : "spaces"} inside` : null,
+                depth === 0 ? venue.address?.split("\n")[0] : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || undefined
+            }
+          />
+          <RowCell className="w-24" hideBelow="md" muted>
+            {venue.capacity ? `${venue.capacity} cap.` : "—"}
+          </RowCell>
+          <RowCell className="w-28" hideBelow="lg" muted>
+            {venue.circuits?.length ? `${venue.circuits.length} circuit${venue.circuits.length === 1 ? "" : "s"}` : "No power info"}
+          </RowCell>
+        </ListRow>,
       );
-
-      if (hasChildren && isExpanded) {
-        rows.push(...renderRows(node.children, depth + 1));
-      }
+      if (hasChildren && isExpanded) rows.push(...renderRows(node.children, depth + 1));
     }
     return rows;
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <Card className="lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Venues</CardTitle>
-          <FilterBar
-            search={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Search name, path, nickname…"
-            searchLabel="Search venues"
-            filters={filterDefinitions}
-            value={filters}
-            onChange={setFilters}
-          >
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline" className="font-normal">
-                  Sort: {sortDir === "asc" ? "A to Z" : "Z to A"}
-                  <CaretDownIcon className="size-3" aria-hidden />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-40">
-                <DropdownMenuRadioGroup value={sortDir} onValueChange={(value) => setSortDir(value as typeof sortDir)}>
-                  <DropdownMenuRadioItem value="asc">A to Z</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="desc">Z to A</DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setExpandedIds(collectParentIds(tree))}
-            >
-              Expand All
-            </Button>
-            <Button type="button" variant="outline" onClick={() => setExpandedIds(new Set())}>
-              Collapse All
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={!selectedIds.length}
-              onClick={() => void bulkDeleteSelected()}
-            >
-              Delete Selected ({selectedIds.length})
-            </Button>
-            <Button type="button" variant="outline" onClick={() => setEditingId(null)}>
-              New Venue
-            </Button>
-          </FilterBar>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="overflow-auto rounded-md border">
-            <table className="min-w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="p-2 text-left">
-                    <input
-                      type="checkbox"
-                      checked={
-                        visibleIds.length > 0 &&
-                        visibleIds.every((id) => selectedIds.includes(id))
-                      }
-                      onChange={(event) =>
-                        setSelectedIds(event.target.checked ? [...visibleIds] : [])
-                      }
-                    />
-                  </th>
-                  <th className="p-2 text-left">Name</th>
-                  <th className="p-2 text-left">Kind / Type</th>
-                  <th className="p-2 text-left">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tree.length ? (
-                  renderRows(tree, 0)
-                ) : (
-                  <tr>
-                    <td className="p-4 text-muted-foreground" colSpan={4}>
-                      No venues yet. Create a building (e.g. Tresidder) then nest spaces under it.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <VenueEditor
-        key={editingId ?? "new-venue"}
-        editingId={editingId}
-        initial={editorInitial}
-        venues={(venues ?? []).map((venue) => ({
-          _id: venue._id,
-          name: venue.name,
-          path: venue.path,
-          parentId: venue.parentId,
-          address: venue.address,
-          googleMapsUrl: venue.googleMapsUrl,
-          contactName: venue.contactName,
-          contactEmail: venue.contactEmail,
-          contactPhone: venue.contactPhone,
-          documentationLinks: venue.documentationLinks,
-          files: venue.files,
-        }))}
-        onCancel={() => setEditingId(null)}
-        onSaved={(savedId) => {
-          if (!savedId) {
-            setEditingId(null);
-            return;
-          }
-          setEditingId(savedId);
-        }}
+    <div className="space-y-4 pb-24" data-testid="venues-page">
+      <PageHeader
+        title="Venues"
+        description="Buildings and the spaces inside them. Events pick a venue from here, and spaces inherit their building's address, contacts and files."
+        actions={
+          <Button type="button" size="sm" onClick={() => openNew()}>
+            <PlusIcon />
+            New venue
+          </Button>
+        }
+        meta={
+          venues ? (
+            <MetaItem icon={MapPinIcon}>
+              {buildings} top-level · {venues.length - buildings} spaces inside
+            </MetaItem>
+          ) : null
+        }
       />
+
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search name, path, nickname…"
+        searchLabel="Search venues"
+        filters={filterDefinitions}
+        value={filters}
+        onChange={setFilters}
+      >
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="outline" className="font-normal">
+              Sort: {sortDir === "asc" ? "A to Z" : "Z to A"}
+              <CaretDownIcon className="size-3" aria-hidden />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-44">
+            <DropdownMenuRadioGroup value={sortDir} onValueChange={(value) => setSortDir(value as typeof sortDir)}>
+              <DropdownMenuRadioItem value="asc">A to Z</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="desc">Z to A</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => setExpandedIds(collectParentIds(tree))}>Expand all</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setExpandedIds(new Set())}>Collapse all</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </FilterBar>
+
+      {venues === undefined ? (
+        <Skeleton className="h-64 w-full" />
+      ) : (
+        <>
+          <ListSummary testId="venues-summary" order="Buildings A to Z, with the spaces inside each one nested under it.">
+            {venues.length} venue{venues.length === 1 ? "" : "s"}
+            {narrowed ? ` · ${visibleIds.length} shown` : ""}
+          </ListSummary>
+
+          {selectedIds.length ? (
+            <div
+              className="flex flex-wrap items-center gap-2 border border-status-blue-500/40 bg-status-blue-500/10 px-3 py-2 text-sm"
+              data-testid="venues-bulk-bar"
+            >
+              <span className="mr-auto font-medium">
+                {selectedIds.length} venue{selectedIds.length === 1 ? "" : "s"} selected
+              </span>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedIds([])}>
+                Clear selection
+              </Button>
+              <Button type="button" size="sm" variant="destructive" onClick={() => void bulkDelete()}>
+                Delete selected
+              </Button>
+            </div>
+          ) : null}
+
+          {tree.length === 0 ? (
+            <EmptyState
+              action={
+                narrowed ? null : (
+                  <Button type="button" size="sm" variant="outline" onClick={() => openNew()}>
+                    Add a building
+                  </Button>
+                )
+              }
+            >
+              {narrowed
+                ? "No venues match this search and these filters."
+                : "No venues yet. Add a building (e.g. Tresidder), then nest its spaces under it."}
+            </EmptyState>
+          ) : (
+            <div className="border" data-testid="venues-list">
+              <div className="flex items-center gap-2 border-b bg-muted/20 py-2 pr-1 pl-3 text-xs font-medium text-muted-foreground">
+                <Checkbox
+                  aria-label="Select all venues shown"
+                  checked={
+                    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id))
+                      ? true
+                      : selectedIds.length
+                        ? "indeterminate"
+                        : false
+                  }
+                  onCheckedChange={(checked) => setSelectedIds(checked === true ? [...visibleIds] : [])}
+                />
+                <span className="w-6" />
+                <span className="flex-1">Venue</span>
+                <span className="hidden w-24 text-right md:block">Capacity</span>
+                <span className="hidden w-28 text-right lg:block">Power</span>
+                <span className="w-8" />
+              </div>
+              <ul className="divide-y [&>li]:border-0">{renderRows(tree, 0)}</ul>
+            </div>
+          )}
+        </>
+      )}
+
+      <DetailSheet
+        open={panel !== null && (panel === "new" || editingVenue !== null)}
+        onOpenChange={(open) => {
+          if (!open) setPanel(null);
+        }}
+        testId="venue-sheet"
+      >
+        <DetailSheetHeader
+          title={editingVenue ? editingVenue.name : "New venue"}
+          description={
+            editingVenue
+              ? editingVenue.path
+              : newParentId
+                ? `Inside ${venues?.find((venue) => venue._id === newParentId)?.path ?? "its building"}`
+                : "A building, or a standalone outdoor space. Add spaces inside it afterwards."
+          }
+        />
+        <VenueEditor
+          key={editingId ?? `new-${newParentId}`}
+          editingId={editingId}
+          initial={editorInitial}
+          venues={(venues ?? []).map((venue) => ({
+            _id: venue._id,
+            name: venue.name,
+            path: venue.path,
+            parentId: venue.parentId,
+            address: venue.address,
+            googleMapsUrl: venue.googleMapsUrl,
+            contactName: venue.contactName,
+            contactEmail: venue.contactEmail,
+            contactPhone: venue.contactPhone,
+            documentationLinks: venue.documentationLinks,
+            files: venue.files,
+          }))}
+          onCancel={() => setPanel(null)}
+          onSaved={() => {
+            notify.success(editingVenue ? `Saved ${editingVenue.name}.` : "Venue created.");
+            setPanel(null);
+          }}
+          footerStart={
+            editingVenue ? (
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive"
+                  onClick={() => void deleteVenue(editingVenue)}
+                >
+                  Delete
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => openNew(editingVenue._id)}>
+                  Add a space inside
+                </Button>
+              </div>
+            ) : undefined
+          }
+        />
+      </DetailSheet>
     </div>
   );
 }
