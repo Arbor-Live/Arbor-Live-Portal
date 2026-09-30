@@ -1,7 +1,5 @@
 "use client";
 
-import { useCallback } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
 import type { FunctionReturnType } from "convex/server";
 import type { api } from "@/lib/convex-api";
 import type { Tone } from "@/components/page-header";
@@ -234,27 +232,8 @@ export function SheetSection({
   );
 }
 
-/**
- * The open side panel, kept in the URL (`?user=<id>`) so a row deep-links and
- * other pages can link straight to it. `history.replaceState` updates
- * `useSearchParams` without a server round trip or a new history entry.
- */
-export function useSheetParam(name: string) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const value = searchParams.get(name);
-  const setValue = useCallback(
-    (next: string | null) => {
-      const params = new URLSearchParams(window.location.search);
-      if (next) params.set(name, next);
-      else params.delete(name);
-      const query = params.toString();
-      window.history.replaceState(null, "", query ? `${pathname}?${query}` : pathname);
-    },
-    [name, pathname],
-  );
-  return [value, setValue] as const;
-}
+/** The open side panel as a URL param (`?user=<id>`); shared with other list pages. */
+export { useSheetParam } from "@/hooks/use-sheet-param";
 
 /** Dashed empty state for a list, saying what to do next. */
 export function EmptyRows({ children }: { children: React.ReactNode }) {

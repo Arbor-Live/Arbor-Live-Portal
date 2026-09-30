@@ -267,11 +267,11 @@ export function FinancialHubAttention() {
         label: "Payment proof to verify",
         tone: "blue",
         count: proofRows.length,
-        href: "/dashboard/financial-hub/payments",
+        href: "/dashboard/financial-hub/invoices/payments",
         emptyLabel: "No payment proof is waiting to be verified.",
         items: proofRows.slice(0, 3).map((row): AttentionItem => ({
           id: row.invoiceId,
-          href: `/dashboard/financial-hub/invoices/${row.invoiceId}`,
+          href: `/dashboard/financial-hub/invoices/payments?invoice=${row.invoiceId}`,
           title: row.invoiceNumber,
           subtitle: row.clientContactName ?? row.clientEmail ?? row.eventTitle,
           amountUsd: row.totalUsd,

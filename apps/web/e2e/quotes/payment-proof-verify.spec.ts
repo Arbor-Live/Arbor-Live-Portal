@@ -2,26 +2,22 @@ import { test, expect } from "@playwright/test";
 import { pollConvex, runConvex } from "../helpers/convex";
 
 test.describe("staff payment proof verify", () => {
-  test("admin marks payment received from financial hub queue", async ({ page }) => {
+  test("admin marks payment received from the Payments tab", async ({ page }) => {
     const seeded = runConvex("e2eHelpers:seedApprovedQuoteWithLinkedEvent", {}) as {
       invoiceId: string;
       invoiceNumber: string;
     };
 
-    await page.goto("/dashboard/financial-hub/payments");
-    await expect(page.getByRole("button", { name: "Payment pending", exact: true }).first()).toBeVisible({
-      timeout: 25_000,
-    });
-    await page.getByRole("button", { name: "Payment pending", exact: true }).click();
+    await page.goto("/dashboard/financial-hub/invoices/payments");
+    const row = page.getByTestId("payment-group-pending").getByTestId(`payment-row-${seeded.invoiceId}`);
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await row.getByRole("button", { name: "Mark received", exact: true }).click();
 
-    const card = page.locator("[data-slot='card']").filter({ hasText: seeded.invoiceNumber });
-    await expect(card.getByText(seeded.invoiceNumber).first()).toBeVisible({ timeout: 30_000 });
-    await card.getByRole("button", { name: "Mark payment received", exact: true }).click();
-
-    await page.getByRole("button", { name: "Payment received", exact: true }).click();
-    await expect(
-      page.locator("[data-slot='card']").filter({ hasText: seeded.invoiceNumber }),
-    ).toBeVisible({ timeout: 25_000 });
+    // It moves to Received (collapsed by default).
+    await expect(row).toHaveCount(0, { timeout: 25_000 });
+    const received = page.getByTestId("payment-group-received");
+    await received.getByRole("button", { name: "Show", exact: true }).click();
+    await expect(received.getByTestId(`payment-row-${seeded.invoiceId}`)).toBeVisible({ timeout: 25_000 });
 
     const state = await pollConvex<{
       paymentReceivedAt: number | null;
@@ -29,9 +25,15 @@ test.describe("staff payment proof verify", () => {
     }>(
       "e2eHelpers:getInvoiceEditorState",
       { invoiceId: seeded.invoiceId },
-      (row) => row?.paymentReceivedAt != null,
+      (value) => value?.paymentReceivedAt != null,
     );
     expect(state.paymentReceivedAt).toBeTruthy();
     expect(state.invoiceNumber).toBe(seeded.invoiceNumber);
+  });
+
+  test("the old Payments URL lands on the Payments tab", async ({ page }) => {
+    await page.goto("/dashboard/financial-hub/payments");
+    await expect(page).toHaveURL(/\/dashboard\/financial-hub\/invoices\/payments/, { timeout: 30_000 });
+    await expect(page.getByTestId("payments-board")).toBeVisible({ timeout: 30_000 });
   });
 });
