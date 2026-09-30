@@ -123,8 +123,7 @@ export function usePaymentActions() {
         }}
       >
         <DialogContent
-          // Above the invoice side panel (z-60), which is where it's usually opened from.
-          className="z-70 sm:max-w-md"
+          className="sm:max-w-md"
           data-testid="invalidate-proof-dialog"
         >
           <DialogHeader>
