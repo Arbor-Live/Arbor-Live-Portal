@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Warehouse print agent. Runs on the Raspberry Pi next to the printer: it
-// claims rendered briefs from Convex and hands them to CUPS. Plain Node ESM so
+// claims rendered briefs, event files and posters from Convex and hands them to CUPS. Plain Node ESM so
 // the OS image needs no build step. See packages/print-agent/install.sh.
 
 import { execFile } from "node:child_process";
@@ -281,7 +281,9 @@ async function alreadyQueued(job) {
   return stdout.includes(`arbor-${job.jobId}`);
 }
 
-/** @param {{ jobId: string, url: string, fileName?: string, claimToken: string }} job */
+/**
+ * @param {{ jobId: string, url: string, fileName?: string, claimToken: string, copies?: number, oneSided?: boolean }} job
+ */
 async function printJob(job) {
   const dir = await mkdtemp(join(tmpdir(), "arbor-brief-"));
   const file = join(dir, job.fileName || `${job.jobId}.pdf`);
@@ -299,7 +301,7 @@ async function printJob(job) {
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     });
     if (!response.ok) {
-      throw new Error(`Brief download failed with HTTP ${response.status}.`);
+      throw new Error(`PDF download failed with HTTP ${response.status}.`);
     }
     await writeFile(file, Buffer.from(await response.arrayBuffer()));
 
@@ -321,9 +323,14 @@ async function printJob(job) {
     } else {
       try {
         // Title the CUPS job so a duplicate submission is identifiable at the sink.
-        await execFileAsync("lp", ["-d", QUEUE, "-t", `arbor-${job.jobId}`, file], {
-          timeout: LP_TIMEOUT_MS,
-        });
+        const copies = Math.max(1, Math.floor(job.copies ?? 1));
+        const options = ["-n", String(copies)];
+        if (job.oneSided) options.push("-o", "sides=one-sided");
+        await execFileAsync(
+          "lp",
+          ["-d", QUEUE, "-t", `arbor-${job.jobId}`, ...options, file],
+          { timeout: LP_TIMEOUT_MS },
+        );
       } catch (error) {
         const text = message(error);
         log(`failed job ${job.jobId}: ${text}`);

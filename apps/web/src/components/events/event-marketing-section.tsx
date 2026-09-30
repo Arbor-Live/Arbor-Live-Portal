@@ -21,6 +21,7 @@ import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import { formatDateTime } from "@/lib/format";
 import { formatEventVisibilityLabel, type EventVisibility } from "@/lib/event-visibility";
+import { PrintPosterButton } from "@/components/printing/print-poster-button";
 
 function statusLabel(status: "draft" | "ready" | "published" | null) {
   if (status === "published") return "Published (website + Instagram)";
@@ -225,6 +226,7 @@ export function EventMarketingSection({ eventId }: { eventId: Id<"events"> }) {
                 >
                   {publishing ? "Publishing…" : "Publish to Instagram"}
                 </Button>
+                <PrintPosterButton designId={design.designId} savedImageUrl={design.imageUrl} />
               </div>
               {!design.canPublish ? (
                 <p className="text-xs text-muted-foreground">
@@ -247,6 +249,7 @@ export function EventMarketingSection({ eventId }: { eventId: Id<"events"> }) {
                 readOnly
                 posterUpload={{ type: "event", eventId }}
               />
+              <PrintPosterButton designId={design.designId} savedImageUrl={design.imageUrl} />
               {design.assigneeName ? (
                 <p className="text-sm text-muted-foreground">Poster designer: {design.assigneeName}</p>
               ) : null}

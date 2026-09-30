@@ -31,6 +31,12 @@ const JOB_STATUS_LABELS: Record<JobRow["status"], string> = {
   failed: "Failed",
 };
 
+const JOB_KIND_LABELS: Record<JobRow["kind"], string> = {
+  brief: "Brief",
+  event_file: "Event file",
+  poster: "Poster",
+};
+
 function jobStatusBadgeClass(status: JobRow["status"]): string {
   switch (status) {
     case "printed":
@@ -95,7 +101,7 @@ function PrinterCard({ printer, now }: { printer: PrinterRow; now: number }) {
 export function PrintQueueClient() {
   const printers = useQuery(api.printAgent.listPrinters, {});
   const jobs = useQuery(api.printJobs.listRecent, { limit: 100 });
-  const reprint = useMutation(api.printJobs.reprint);
+  const reprint = useMutation(api.printJobs.reprintJob);
   const { alert } = useAppDialog();
   const [reprintingId, setReprintingId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -108,7 +114,7 @@ export function PrintQueueClient() {
   async function handleReprint(job: JobRow) {
     setReprintingId(job._id);
     try {
-      const jobId = await reprint({ eventId: job.eventId });
+      const jobId = await reprint({ jobId: job._id });
       if (!jobId) {
         await alert("No enabled printer is configured yet, so the reprint wasn't queued.");
       }
@@ -126,7 +132,10 @@ export function PrintQueueClient() {
       cell: ({ row }) => (
         <div>
           <div className="font-medium">{row.original.eventTitle}</div>
-          <div className="text-xs text-muted-foreground">{row.original.fileName}</div>
+          <div className="text-xs text-muted-foreground">
+            {JOB_KIND_LABELS[row.original.kind]} · {row.original.fileName}
+            {row.original.copies > 1 ? ` · ${row.original.copies} copies` : ""}
+          </div>
         </div>
       ),
     }),

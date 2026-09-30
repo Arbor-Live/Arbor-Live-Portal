@@ -3,7 +3,14 @@ import { pollConvex, runConvex } from "../helpers/convex";
 
 type PrintQueueState = {
   printers: Array<{ queueName: string; enabled: boolean; lastSeenAt?: number }>;
-  jobs: Array<{ _id: string; eventId: string; status: string; error?: string }>;
+  jobs: Array<{
+    _id: string;
+    eventId: string;
+    status: string;
+    kind: string;
+    copies: number;
+    error?: string;
+  }>;
 };
 
 test.describe("print queue", () => {
@@ -92,5 +99,30 @@ test.describe("print queue", () => {
       (row) => Boolean(row && row.jobs.length > 0),
     );
     expect(state.jobs.length).toBeGreaterThan(0);
+  });
+
+  test("prints copies of the event poster from the Promo tab", async ({ page }) => {
+    test.setTimeout(120_000);
+    runConvex("e2eHelpers:seedPrinter", { queueName: "e2e-wh1" });
+    const seeded = runConvex("e2eHelpers:seedCrewedEventWithSchedule", {
+      title: `E2E Poster Print ${Date.now()}`,
+      marketingCaption: "E2E poster print caption",
+      marketingImageUrl: `${process.env.E2E_BASE_URL ?? "http://localhost:3000"}/promo/coho.jpg`,
+    }) as { eventId: string; path: string };
+
+    await page.goto(`${seeded.path}/promo`);
+    const printButton = page.getByRole("button", { name: "Print poster" });
+    await expect(printButton).toBeEnabled({ timeout: 30_000 });
+    await printButton.click();
+    await page.getByRole("spinbutton", { name: "Copies" }).fill("3");
+    await page.getByRole("button", { name: "Print", exact: true }).click();
+
+    const state = await pollConvex<PrintQueueState>(
+      "e2eHelpers:getPrintQueueState",
+      { eventId: seeded.eventId },
+      (row) => Boolean(row?.jobs.some((job) => job.kind === "poster")),
+    );
+    const poster = state.jobs.find((job) => job.kind === "poster");
+    expect(poster?.copies).toBe(3);
   });
 });

@@ -6674,6 +6674,8 @@ export const getPrintQueueState = query({
         _id: v.id("printJobs"),
         eventId: v.id("events"),
         status: v.string(),
+        kind: v.string(),
+        copies: v.number(),
         error: v.optional(v.string()),
       }),
     ),
@@ -6698,6 +6700,8 @@ export const getPrintQueueState = query({
         _id: job._id,
         eventId: job.eventId,
         status: job.status,
+        kind: job.kind ?? "brief",
+        copies: job.copies ?? 1,
         error: job.error,
       })),
     };

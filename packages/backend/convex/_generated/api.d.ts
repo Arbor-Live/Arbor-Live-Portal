@@ -179,6 +179,7 @@ import type * as lib_otForecast from "../lib/otForecast.js";
 import type * as lib_packageBom from "../lib/packageBom.js";
 import type * as lib_packageContentMigration from "../lib/packageContentMigration.js";
 import type * as lib_paymentProof from "../lib/paymentProof.js";
+import type * as lib_printable from "../lib/printable.js";
 import type * as lib_publicArtistProfile from "../lib/publicArtistProfile.js";
 import type * as lib_publicCalendar from "../lib/publicCalendar.js";
 import type * as lib_publicEventContacts from "../lib/publicEventContacts.js";
@@ -432,6 +433,7 @@ declare const fullApi: ApiFromModules<{
   "lib/packageBom": typeof lib_packageBom;
   "lib/packageContentMigration": typeof lib_packageContentMigration;
   "lib/paymentProof": typeof lib_paymentProof;
+  "lib/printable": typeof lib_printable;
   "lib/publicArtistProfile": typeof lib_publicArtistProfile;
   "lib/publicCalendar": typeof lib_publicCalendar;
   "lib/publicEventContacts": typeof lib_publicEventContacts;

@@ -80,6 +80,9 @@ export const claimNext = mutation({
       url: v.string(),
       fileName: v.string(),
       claimToken: v.string(),
+      copies: v.number(),
+      /** Posters print one-sided so copies never land on each other's backs. */
+      oneSided: v.boolean(),
     }),
   ),
   handler: async (ctx, args) => {
@@ -150,7 +153,14 @@ export const claimNext = mutation({
       attempts: ready.attempts + 1,
       updatedAt: now,
     });
-    return { jobId: ready._id, url, fileName: ready.fileName, claimToken };
+    return {
+      jobId: ready._id,
+      url,
+      fileName: ready.fileName,
+      claimToken,
+      copies: ready.copies ?? 1,
+      oneSided: ready.kind === "poster",
+    };
   },
 });
 
