@@ -148,17 +148,18 @@ function OptionCheckboxes<T extends string>({
   return (
     <fieldset className="space-y-2">
       <legend className="text-sm font-medium">{label}</legend>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2">
         {options.map((option) => {
           const id = `${idPrefix}-${option}`;
           return (
-            <div key={id} className="flex items-center gap-2">
+            <div key={id} className="flex min-w-0 items-start gap-2">
               <Checkbox
+                className="mt-px"
                 id={id}
                 checked={values.includes(option)}
                 onCheckedChange={() => onChange(toggleOption(values, option))}
               />
-              <Label htmlFor={id} className="font-normal">
+              <Label htmlFor={id} className="min-w-0 leading-snug font-normal">
                 {option}
               </Label>
             </div>

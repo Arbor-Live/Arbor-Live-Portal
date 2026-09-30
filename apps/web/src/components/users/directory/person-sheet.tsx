@@ -428,7 +428,7 @@ function PersonSheetBody({
                     Inactive
                   </span>
                 ) : null}
-                <span className="w-24 shrink-0 text-right text-xs text-muted-foreground">
+                <span className="shrink-0 text-right text-xs text-muted-foreground">
                   {roleLabel(membership.role)}
                 </span>
                 <Button
@@ -598,17 +598,19 @@ function PersonSheetBody({
             {emailGroups.map(([group, entries]) => (
               <div key={group} className="space-y-2">
                 <p className="text-2xs font-medium tracking-wide text-muted-foreground uppercase">{group}</p>
-                <div className="grid gap-2 sm:grid-cols-2">
+                {/* One column: the labels are long enough to wrap in two. */}
+                <div className="space-y-2">
                   {entries.map((entry) => {
                     const id = field(`email-${entry.template}`);
                     return (
-                      <div key={entry.template} className="flex items-center gap-2">
+                      <div key={entry.template} className="flex items-start gap-2">
                         <Checkbox
+                          className="mt-px"
                           id={id}
                           checked={!emailOptOuts.includes(entry.template)}
                           onCheckedChange={(checked) => setEmailPreference(entry.template, checked === true)}
                         />
-                        <Label htmlFor={id} className="font-normal">
+                        <Label htmlFor={id} className="min-w-0 leading-snug font-normal">
                           {entry.label}
                         </Label>
                       </div>
