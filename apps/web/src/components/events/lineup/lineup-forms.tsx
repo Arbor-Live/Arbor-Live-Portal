@@ -394,12 +394,14 @@ export function EventBandPaymentForm({
   invoiceLine = null,
   invoiceDefaultsReady = true,
   embedded = false,
+  showPayee = true,
   onSaved,
   onCancel,
 }: {
   eventId: Id<"events">;
   organizationId?: string;
-  role: ParticipationRole;
+  /** Omitted when editing from the payout queue, where the participation role isn't known. */
+  role?: ParticipationRole;
   payment: PaymentFields | null;
   organizationLocked?: boolean;
   excludedOrganizationIds: string[];
@@ -408,6 +410,8 @@ export function EventBandPaymentForm({
   invoiceDefaultsReady?: boolean;
   /** Inside a dialog or side panel: no card border or heading. */
   embedded?: boolean;
+  /** Hide the read-only payee block where the surrounding panel already shows payee details. */
+  showPayee?: boolean;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -488,7 +492,9 @@ export function EventBandPaymentForm({
       pricingMode,
       ratePerMemberPerHourUsd,
       performanceHours,
-      memberCount,
+      // Member count only drives per-member pricing; satisfy the schema's
+      // minimum in fixed-total mode when the artist has none on file.
+      memberCount: pricingMode === "per_member_hourly" ? memberCount : memberCount || "1",
       fixedTotalUsd,
     });
     if (!payoutParsed.success) {
@@ -667,42 +673,44 @@ export function EventBandPaymentForm({
           <span className="font-medium">Computed total:</span> {formatUsd(computedTotal)}
         </div>
 
-        <div className="space-y-2 md:col-span-2">
-          <Label>Designated payee (from artist org profile)</Label>
-          {resolvedOrgId ? (
-            payeeComplete ? (
-              <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
-                <p>
-                  <span className="font-medium">Payee:</span> {displayPayeeName} (
-                  {displayPayeeEmail})
-                </p>
-                <p className="mt-1">
-                  <span className="font-medium">Payout method:</span>{" "}
-                  {formatBandPayeePayoutMethod(displayPayoutMethod)}
-                </p>
-                {displayPayeeAddress ? (
-                  <p className="mt-1 whitespace-pre-wrap text-muted-foreground">
-                    {displayPayeeAddress}
+        {showPayee ? (
+          <div className="space-y-2 md:col-span-2">
+            <Label>Designated payee (from artist org profile)</Label>
+            {resolvedOrgId ? (
+              payeeComplete ? (
+                <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                  <p>
+                    <span className="font-medium">Payee:</span> {displayPayeeName} (
+                    {displayPayeeEmail})
                   </p>
-                ) : null}
-              </div>
+                  <p className="mt-1">
+                    <span className="font-medium">Payout method:</span>{" "}
+                    {formatBandPayeePayoutMethod(displayPayoutMethod)}
+                  </p>
+                  {displayPayeeAddress ? (
+                    <p className="mt-1 whitespace-pre-wrap text-muted-foreground">
+                      {displayPayeeAddress}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed px-3 py-3 text-sm">
+                  <p className="text-muted-foreground">
+                    This artist has not configured a designated payee with mailing address and payout
+                    method. Confirmation emails cannot be sent until payee info is on file.
+                  </p>
+                  <Button asChild size="sm" variant="outline" className="mt-2">
+                    <Link href="/dashboard/artists/payments#payee">
+                      Open artist payee settings
+                    </Link>
+                  </Button>
+                </div>
+              )
             ) : (
-              <div className="rounded-md border border-dashed px-3 py-3 text-sm">
-                <p className="text-muted-foreground">
-                  This artist has not configured a designated payee with mailing address and payout
-                  method. Confirmation emails cannot be sent until payee info is on file.
-                </p>
-                <Button asChild size="sm" variant="outline" className="mt-2">
-                  <Link href="/dashboard/artists/payments#payee">
-                    Open artist payee settings
-                  </Link>
-                </Button>
-              </div>
-            )
-          ) : (
-            <p className="text-sm text-muted-foreground">Select an artist to view payee details.</p>
-          )}
-        </div>
+              <p className="text-sm text-muted-foreground">Select an artist to view payee details.</p>
+            )}
+          </div>
+        ) : null}
       </div>
 
 

@@ -3385,6 +3385,7 @@ export const getBandPaymentState = query({
       confirmationToken: v.string(),
       servicePaymentNumber: v.union(v.string(), v.null()),
       signatureTypedName: v.union(v.string(), v.null()),
+      totalUsd: v.number(),
     }),
   ),
   handler: async (ctx, args) => {
@@ -3396,6 +3397,7 @@ export const getBandPaymentState = query({
       confirmationToken: payment.confirmationToken,
       servicePaymentNumber: payment.servicePaymentNumber ?? null,
       signatureTypedName: payment.signatureTypedName ?? null,
+      totalUsd: payment.totalUsd,
     };
   },
 });

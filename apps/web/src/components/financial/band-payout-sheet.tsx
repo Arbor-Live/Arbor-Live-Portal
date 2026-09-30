@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowSquareOutIcon, CheckIcon } from "@phosphor-icons/react";
 import { BandPaymentAgreementPdfButton } from "@/components/financial/band-payment-agreement-pdf-button";
+import { EventBandPaymentForm } from "@/components/events/lineup/lineup-forms";
 import { StatusPill } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +26,7 @@ import {
   type PayoutRow,
 } from "@/lib/band-payout-stages";
 import { formatDate, formatDateTime, formatUsd } from "@/lib/format";
+import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
 export type PayoutSheetHandlers = {
@@ -126,6 +128,7 @@ function PayoutSheetBody({
   onClose: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [nowMs] = useState(() => Date.now());
   const primary = payoutPrimaryAction(row.status);
   const stage = row.stage ?? "upcoming";
@@ -170,23 +173,47 @@ function PayoutSheetBody({
       ) : null}
 
       <Section title="Payout">
-        <dl className="space-y-2">
-          <Field label="Amount">
-            <span className="font-medium tabular-nums">{formatUsd(row.totalUsd)}</span>
-          </Field>
-          <Field label="Pricing">{pricingSummary(row)}</Field>
-          <Field label="Payment ID">
-            <span className="tabular-nums">{row.confirmationToken}</span>
-          </Field>
-          {row.servicePaymentNumber ? (
-            <Field label="Transfer #">
-              <span className="tabular-nums">{row.servicePaymentNumber}</span>
-            </Field>
-          ) : null}
-        </dl>
-        {row.canDownloadAgreementPdf ? (
-          <BandPaymentAgreementPdfButton paymentId={row._id} label="Agreement PDF" />
-        ) : null}
+        {editing ? (
+          <EventBandPaymentForm
+            embedded
+            eventId={row.eventId}
+            organizationId={row.organizationId}
+            payment={row}
+            organizationLocked
+            excludedOrganizationIds={[]}
+            showPayee={false}
+            onSaved={() => {
+              notify.success("Payout updated.");
+              setEditing(false);
+            }}
+            onCancel={() => setEditing(false)}
+          />
+        ) : (
+          <>
+            <dl className="space-y-2">
+              <Field label="Amount">
+                <span className="font-medium tabular-nums">{formatUsd(row.totalUsd)}</span>
+              </Field>
+              <Field label="Pricing">{pricingSummary(row)}</Field>
+              <Field label="Payment ID">
+                <span className="tabular-nums">{row.confirmationToken}</span>
+              </Field>
+              {row.servicePaymentNumber ? (
+                <Field label="Transfer #">
+                  <span className="tabular-nums">{row.servicePaymentNumber}</span>
+                </Field>
+              ) : null}
+            </dl>
+            {row.canDownloadAgreementPdf ? (
+              <BandPaymentAgreementPdfButton paymentId={row._id} label="Agreement PDF" />
+            ) : null}
+            {row.status !== "paid" ? (
+              <Button type="button" size="sm" variant="outline" onClick={() => setEditing(true)}>
+                Edit payout
+              </Button>
+            ) : null}
+          </>
+        )}
       </Section>
 
       <Section title="Payee">

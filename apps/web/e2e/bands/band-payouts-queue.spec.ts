@@ -16,6 +16,7 @@ type PaymentState = {
   status: string;
   servicePaymentNumber: string | null;
   signatureTypedName: string | null;
+  totalUsd: number;
 };
 
 function ensurePayee(): BandPayee {
@@ -110,6 +111,31 @@ test.describe("band payouts queue", () => {
       paymentId: seeded.paymentId,
     }) as PaymentState;
     expect(state.status).toBe("pending_email");
+  });
+
+  test("admin can edit a payout's amount from the queue side panel", async ({ page }) => {
+    test.setTimeout(120_000);
+
+    const seeded = seedPayment("pending_email", "Edit");
+
+    const row = await openPayoutRow(page, seeded.eventTitle);
+    await row.click();
+
+    const sheet = page.getByTestId("payout-sheet");
+    await expect(sheet).toBeVisible({ timeout: 15_000 });
+    await sheet.getByRole("button", { name: "Edit payout" }).click();
+
+    await sheet.getByLabel("Total payout (USD)").fill("425");
+    await sheet.getByRole("button", { name: "Save payout" }).click();
+
+    // The panel returns to its read view once the save resolves.
+    await expect(sheet.getByRole("button", { name: "Edit payout" })).toBeVisible({ timeout: 15_000 });
+    const state = await pollConvex<PaymentState>(
+      "e2eHelpers:getBandPaymentState",
+      { paymentId: seeded.paymentId },
+      (row) => row?.totalUsd === 425,
+    );
+    expect(state.totalUsd).toBe(425);
   });
 
   test("admin can mark a signed payment paid from the pipeline", async ({ page }) => {
