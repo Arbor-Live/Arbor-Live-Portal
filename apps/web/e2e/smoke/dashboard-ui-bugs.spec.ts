@@ -34,7 +34,7 @@ test.describe("dashboard UI fixes", () => {
       .locator("div")
       .filter({ hasText: /^Events needing crew/ })
       .last();
-    await expect(eventsNeedingCrew.getByText(/[1-9]\d*/)).toBeVisible({ timeout: 30_000 });
+    await expect(eventsNeedingCrew.getByText(/^[1-9]\d*$/)).toBeVisible({ timeout: 30_000 });
     await expect(eventsNeedingCrew.getByText(/with no slots yet/)).toBeVisible({
       timeout: 30_000,
     });

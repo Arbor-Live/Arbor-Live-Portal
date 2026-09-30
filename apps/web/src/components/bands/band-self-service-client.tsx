@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Controller } from "react-hook-form";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
@@ -100,12 +100,15 @@ export function BandSelfServiceClient() {
   const { markSlugTouched, syncSlugTouchedFromForm, resetSlugTouched } =
     useBandPublicSlugAutofill(profileForm);
 
-  // Hydrate from the server only (no form dirty state). The loaded row is
-  // normalized the same way a save normalizes it, so the form is not
-  // perpetually dirty, and a stuck "touched" latch from a stale render cannot
-  // leave the slug out of sync.
+  // First load always hydrates (that is what clears the phantom dirty state);
+  // after that, a same-artist push must not clobber unsaved edits, so skip it
+  // while the form is dirty. `hasHydrated` is a ref so the decide-and-set is
+  // synchronous and unaffected by React re-renders.
+  const hasHydrated = useRef(false);
   useEffect(() => {
     if (profile === undefined) return;
+    if (hasHydrated.current && profileForm.formState.isDirty) return;
+    hasHydrated.current = true;
     resetSlugTouched();
     profileForm.reset({
       displayName: profile.displayName ?? "",
