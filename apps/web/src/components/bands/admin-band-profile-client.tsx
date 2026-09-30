@@ -118,16 +118,21 @@ export function AdminBandProfileClient() {
 
   const watched = form.watch();
   const heroUrl = useResolvedAssetUrl(watched.publicHeroImageUrl);
-  const { markSlugTouched, syncSlugTouchedFromForm } = useBandPublicSlugAutofill(form);
+  const { markSlugTouched, syncSlugTouchedFromForm, resetSlugTouched } =
+    useBandPublicSlugAutofill(form);
 
+  // Hydrate from the loaded row. Switching bands is authoritative even when the
+  // form is dirty, and the row is normalized the same way a save is, so the
+  // form does not load dirty.
   useEffect(() => {
     if (!organizationId || !org) return;
     const switchedBand = hydratedOrganizationId.current !== organizationId;
     if (!switchedBand && form.formState.isDirty) return;
     hydratedOrganizationId.current = organizationId;
+    resetSlugTouched();
     form.reset(valuesFromOrg(org));
     syncSlugTouchedFromForm();
-  }, [organizationId, org, form, syncSlugTouchedFromForm]);
+  }, [organizationId, org, form, resetSlugTouched, syncSlugTouchedFromForm]);
 
   const onSave = form.submitMutation(
     async (values) => {
@@ -160,6 +165,7 @@ export function AdminBandProfileClient() {
     {
       onSuccess: (values) => {
         form.reset(values);
+        syncSlugTouchedFromForm();
       },
     },
   );
@@ -304,7 +310,9 @@ export function AdminBandProfileClient() {
         onSave={() => void form.handleSubmit(onSave)()}
         onDiscard={() => {
           if (!org) return;
+          resetSlugTouched();
           form.reset(valuesFromOrg(org));
+          syncSlugTouchedFromForm();
         }}
         onRetry={() => void form.handleSubmit(onSave)()}
       />

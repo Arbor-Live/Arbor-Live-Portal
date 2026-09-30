@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Controller } from "react-hook-form";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
@@ -97,11 +97,19 @@ export function BandSelfServiceClient() {
 
   const watched = profileForm.watch();
   const heroUrl = useResolvedAssetUrl(watched.publicHeroImageUrl);
-  const { markSlugTouched, syncSlugTouchedFromForm } = useBandPublicSlugAutofill(profileForm);
+  const { markSlugTouched, syncSlugTouchedFromForm, resetSlugTouched } =
+    useBandPublicSlugAutofill(profileForm);
 
+  // First load always hydrates (that is what clears the phantom dirty state);
+  // after that, a same-artist push must not clobber unsaved edits, so skip it
+  // while the form is dirty. `hasHydrated` is a ref so the decide-and-set is
+  // synchronous and unaffected by React re-renders.
+  const hasHydrated = useRef(false);
   useEffect(() => {
-    if (!profile) return;
-    if (profileForm.formState.isDirty) return;
+    if (profile === undefined) return;
+    if (hasHydrated.current && profileForm.formState.isDirty) return;
+    hasHydrated.current = true;
+    resetSlugTouched();
     profileForm.reset({
       displayName: profile.displayName ?? "",
       bio: profile.bio ?? "",
@@ -113,7 +121,7 @@ export function BandSelfServiceClient() {
       publicHeroImageUrl: profile.publicHeroImageUrl ?? "",
     });
     syncSlugTouchedFromForm();
-  }, [profile, profileForm, syncSlugTouchedFromForm]);
+  }, [profile, profileForm, resetSlugTouched, syncSlugTouchedFromForm]);
 
   const persistProfile = async (values: BandProfileFormValues) => {
     const payload = ensureBandPublicSlug(values);
@@ -144,6 +152,7 @@ export function BandSelfServiceClient() {
     {
       onSuccess: (values) => {
         profileForm.reset(values);
+        syncSlugTouchedFromForm();
       },
     },
   );
@@ -224,6 +233,7 @@ export function BandSelfServiceClient() {
 
   function resetProfileForm() {
     if (!profile) return;
+    resetSlugTouched();
     profileForm.reset({
       displayName: profile.displayName ?? "",
       bio: profile.bio ?? "",

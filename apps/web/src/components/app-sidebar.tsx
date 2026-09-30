@@ -396,6 +396,12 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                   subItem.url === "/dashboard/artists/payments"
                 ),
             )
+            const activeSubItemUrl = (subItems ?? [])
+              .filter(
+                (subItem) =>
+                  pathname === subItem.url || pathname.startsWith(`${subItem.url}/`),
+              )
+              .sort((a, b) => b.url.length - a.url.length)[0]?.url
             const hasCollapsibleSubItems = Boolean(subItems && subItems.length > 1)
             const isParentActive =
               pathname === item.url ||
@@ -447,11 +453,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                             <SidebarMenuSubItem key={subItem.url}>
                               <SidebarMenuSubButton
                                 asChild
-                                isActive={
-                                  pathname === subItem.url ||
-                                  (subItem.url !== item.url &&
-                                    pathname.startsWith(`${subItem.url}/`))
-                                }
+                                isActive={subItem.url === activeSubItemUrl}
                               >
                                 <Link href={subItem.url}>
                                   <span>{subItem.title}</span>

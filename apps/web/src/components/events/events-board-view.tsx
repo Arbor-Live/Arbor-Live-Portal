@@ -39,6 +39,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DAYS_PER_WEEK = 7;
 const VISIBLE_WEEKS = 4;
 const VISIBLE_DAYS = VISIBLE_WEEKS * DAYS_PER_WEEK;
+// Full cards before a day collapses to "+N more". Keeps a busy week from
+// stacking every event full height and pushing the board thousands of px tall.
+const MAX_VISIBLE_DAY_EVENTS = 3;
 
 function dateKeyParts(key: string) {
   const [year, month, day] = key.split("-").map(Number);
@@ -189,9 +192,11 @@ function teamTagClass(team: string) {
 function EventBoardCard({
   event,
   compact,
+  showTime = true,
 }: {
   event: DashboardEvent;
   compact?: boolean;
+  showTime?: boolean;
 }) {
   const status = normalizeEventStatus(event.status);
   const tags = [
@@ -213,9 +218,11 @@ function EventBoardCard({
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-start justify-between gap-2">
             <p className="text-sm font-medium leading-snug text-foreground">{event.title}</p>
-            <p className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-              {formatBoardTime(event.scheduleSummary?.showAt ?? event.startAt)}
-            </p>
+            {showTime ? (
+              <p className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                {formatBoardTime(event.scheduleSummary?.showAt ?? event.startAt)}
+              </p>
+            ) : null}
           </div>
           <p className="text-2xs leading-snug text-muted-foreground">
             {formatBoardRange(event.startAt, event.endAt)}
@@ -252,6 +259,39 @@ function EventBoardCard({
         </div>
       </div>
     </Link>
+  );
+}
+
+/**
+ * A day column with many events collapses the extras into "+N more", so the
+ * column height stays bounded. When a day has no events there is nothing to
+ * overlap, so no time label is rendered.
+ */
+function DayCell({ events }: { events: DashboardEvent[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const overflow = Math.max(0, events.length - MAX_VISIBLE_DAY_EVENTS);
+  const shown = expanded ? events : events.slice(0, MAX_VISIBLE_DAY_EVENTS);
+
+  if (events.length === 0) {
+    return <p className="px-1 pt-2 text-2xs text-muted-foreground">No events</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {shown.map((event) => (
+        <EventBoardCard key={event._id} event={event} compact showTime={!expanded} />
+      ))}
+      {overflow > 0 ? (
+        <button
+          type="button"
+          className="w-full rounded-md px-1 py-1 text-left text-2xs font-medium text-primary hover:bg-accent/40"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? "Show fewer" : `+${overflow} more`}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -509,13 +549,7 @@ export function EventsBoardView({ events }: { events: DashboardEvent[] }) {
                       header.isToday && "bg-primary/[0.03]",
                     )}
                   >
-                    {dayEvents.length === 0 ? (
-                      <p className="px-1 pt-2 text-2xs text-muted-foreground">No events</p>
-                    ) : (
-                      dayEvents.map((event) => (
-                        <EventBoardCard key={event._id} event={event} compact />
-                      ))
-                    )}
+                    <DayCell events={dayEvents} />
                   </div>
                 );
               })}

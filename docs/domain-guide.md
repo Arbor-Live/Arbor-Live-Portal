@@ -53,6 +53,16 @@ canonical description of the domain itself.
   the band org (no auto public listing), invites the contact/members, and
   pre-stamps identity/members/socials so they only finish rates + payout in
   `/onboarding/artist`. Admin-invite onboarding for existing bands is unchanged.
+- **Band contact precedence.** An artist org has one booking contact — the
+  **Booking & contact** fields (`mainContactName/Email/Phone`) on its profile,
+  staff-only (never shown on public artist pages). A rider also carries its own
+  **Day-of contact** (`contactName/Email/Phone`). Whenever a band appears on an
+  event, the profile booking contact **wins** and the rider's day-of contact is
+  only a fallback for artists who never filled the profile. This rule lives in
+  `lib/eventContacts.ts` (`buildBandContacts`) and is mirrored in the event
+  Contacts card; it feeds the event brief, the public quote contacts, and the
+  event Contacts inherited rows. Per-rider day-of contact is still printed on the
+  rider itself and used where no event/band context exists.
 - Public self-serve crew applications: `/crew/apply` → `crewApplications`
   table → admin queue at `/dashboard/users/crew-applications`. Statuses:
   `submitted` → `closed` (farewell email), `trainee` (no Better Auth user —

@@ -72,9 +72,9 @@ export async function resolveInvoiceContact(
 }
 
 /**
- * One row per band on the event. Prefers the rider's contact and falls back to
- * the band profile's main contact so an assigned artist always has a contact
- * when one exists anywhere.
+ * One row per band on the event. The band profile's main contact is the booking
+ * contact and wins whenever it is set; the rider's own day-of contact is only a
+ * fallback for artists who never filled the profile.
  */
 export function buildBandContacts(
   rows: Array<{
@@ -93,10 +93,10 @@ export function buildBandContacts(
 ): EventContact[] {
   return rows.flatMap((row) => {
     const rider = row.rider;
-    const name = rider?.contactName?.trim() || row.contact?.name?.trim();
-    const contact =
-      (rider ? joinContact(rider.contactEmail, rider.contactPhone) : undefined) ||
-      joinContact(row.contact?.email, row.contact?.phone);
+    const profileName = row.contact?.name?.trim();
+    const profileContact = joinContact(row.contact?.email, row.contact?.phone);
+    const name = profileName || rider?.contactName?.trim();
+    const contact = profileContact || (rider ? joinContact(rider.contactEmail, rider.contactPhone) : undefined);
     if (!name && !contact) return [];
     return [
       {

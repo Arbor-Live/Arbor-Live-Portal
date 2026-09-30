@@ -290,6 +290,7 @@ export const getCrewSchedulingKpis = query({
     fillRate: v.union(v.number(), v.null()),
     unfilledShifts: v.number(),
     unconfirmedEvents: v.number(),
+    noSlotEvents: v.number(),
     truncated: v.boolean(),
   }),
   handler: async (ctx, args) => {
@@ -300,6 +301,9 @@ export const getCrewSchedulingKpis = query({
     let totalShifts = 0;
     let filledShifts = 0;
     let unconfirmedEvents = 0;
+    let noSlotEvents = 0;
+    let fillRateShifts = 0;
+    let fillRateFilledShifts = 0;
 
     for (const event of events) {
       const shifts = await ctx.db
@@ -310,12 +314,21 @@ export const getCrewSchedulingKpis = query({
       totalShifts += stats.totalShifts;
       filledShifts += stats.filledShifts;
       if (!stats.isCrewConfirmed) unconfirmedEvents += 1;
+      // An event with no staffing slots is not "100% filled" — it has nothing
+      // scheduled yet, so count it as needing crew and keep it out of the rate.
+      if (stats.totalShifts === 0) {
+        noSlotEvents += 1;
+      } else {
+        fillRateShifts += stats.totalShifts;
+        fillRateFilledShifts += stats.filledShifts;
+      }
     }
 
     return {
-      fillRate: totalShifts > 0 ? filledShifts / totalShifts : null,
+      fillRate: fillRateShifts > 0 ? fillRateFilledShifts / fillRateShifts : null,
       unfilledShifts: totalShifts - filledShifts,
       unconfirmedEvents,
+      noSlotEvents,
       truncated,
     };
   },
