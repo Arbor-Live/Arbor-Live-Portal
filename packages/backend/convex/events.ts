@@ -28,8 +28,8 @@ import { copyDaySetupToTargets, listSiblingDayEvents } from "./lib/copyDaySetup"
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
 import { deleteEventRecord } from "./lib/bookingChainDelete";
 import {
-  buildSharedGroupPatchFromDay,
   propagateInvoiceIdToSeriesOccurrences,
+  propagateSharedDayFields,
   propagateOverviewToSeriesOccurrences,
   type SeriesEditScope,
   type SeriesOverviewAffectedOccurrence,
@@ -794,27 +794,20 @@ export const update = mutation({
     const group = existing.seriesId ? await ctx.db.get(existing.seriesId) : null;
     const multiDayGroup = group !== null && isMultiDayGroup(group);
 
-    if (hasSeries && existing.seriesId && scope !== "this" && multiDayGroup) {
+    const propagateToOtherDays = hasSeries && existing.seriesId && scope !== "this" && multiDayGroup;
+    if (propagateToOtherDays && existing.seriesId) {
       // A multi-day booking's days keep their own title, times and costs: this
-      // day takes the whole edit, and only the shared fields reach the others.
+      // day takes the whole edit now; its shared fields reach the other days
+      // below, once explicit clears have landed on it.
       await ctx.db.patch(args.id, patch);
-      await ctx.db.patch(existing.seriesId, {
-        ...buildSharedGroupPatchFromDay(patch),
-        updatedAt: now,
-      });
-      const updatedGroup = await ctx.db.get(existing.seriesId);
-      if (!updatedGroup) throw new Error("Linked event series not found.");
-      const overrides: SeriesOverviewOverride = { status: nextStatus, visibility: patch.visibility };
-      const propagated = await propagateOverviewToSeriesOccurrences(
-        ctx,
-        updatedGroup,
-        existing.occurrenceIndex ?? 0,
-        scope,
-        now,
-        overrides,
-      );
-      affectedOccurrences = [...affectedOccurrences, ...propagated];
       if (args.invoiceId !== undefined) {
+        if (scope === "all" && group) {
+          // The whole booking moves: the group (and its templates) moves with it.
+          const moved = { ...group, updatedAt: now };
+          if (nextInvoiceId) moved.invoiceId = nextInvoiceId;
+          else delete moved.invoiceId;
+          await ctx.db.replace(existing.seriesId, moved);
+        }
         await propagateInvoiceIdToSeriesOccurrences(
           ctx,
           existing.seriesId,
@@ -942,6 +935,26 @@ export const update = mutation({
       }
     }
 
+    if (propagateToOtherDays && existing.seriesId) {
+      const editedDay = await ctx.db.get(args.id);
+      if (editedDay) {
+        // Only what this edit set: re-saving a venue must not reset every
+        // other day's status or visibility.
+        const overrides: SeriesOverviewOverride = {};
+        if (args.status !== undefined) overrides.status = nextStatus;
+        if (args.visibility !== undefined) overrides.visibility = patch.visibility;
+        const propagated = await propagateSharedDayFields(
+          ctx,
+          existing.seriesId,
+          editedDay,
+          scope,
+          now,
+          overrides,
+        );
+        affectedOccurrences = [...affectedOccurrences, ...propagated];
+      }
+    }
+
     // Additional invoices stay on this occurrence. The primary still propagates
     // with the series scope above.
     if (nextAdditionalInvoiceIds !== undefined) {
@@ -951,7 +964,8 @@ export const update = mutation({
     }
 
     // Moving a day between invoices (or its date) reshapes the bookings' groups.
-    if (args.invoiceId !== undefined || args.startAt !== undefined) {
+    // Cancelled days don't count toward a booking, so status reshapes it too.
+    if (args.invoiceId !== undefined || args.startAt !== undefined || prevStatus !== nextStatus) {
       await syncMultiDayGroupsForInvoices(ctx, [existing.invoiceId, nextInvoiceId], now);
     }
 
@@ -1018,6 +1032,10 @@ export const setStatus = mutation({
     }
     if (nextStatus === "cancelled" && !wasCancelled) {
       await scheduleEventCancelledEmails(ctx, args.id, now);
+    }
+    // Cancelled days don't count toward a multi-day booking.
+    if (prevStatus !== nextStatus && existing.invoiceId) {
+      await syncMultiDayGroupForInvoice(ctx, existing.invoiceId, now);
     }
   },
 });

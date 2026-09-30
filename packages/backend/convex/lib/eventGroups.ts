@@ -215,6 +215,35 @@ export async function syncMultiDayGroupForInvoice(
   return group._id;
 }
 
+/**
+ * The invoice is going away (deleted, or unlinked from its days): its
+ * multi-day group has nothing left to mirror. Release the days and delete the
+ * group with its pull-list template.
+ */
+export async function dissolveMultiDayGroupsForInvoice(
+  ctx: MutationCtx,
+  invoiceId: Id<"invoices">,
+) {
+  const groups = await ctx.db
+    .query("eventSeries")
+    .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
+    .take(10);
+  for (const group of groups) {
+    if (!isMultiDayGroup(group)) continue;
+    for (const member of await listGroupDays(ctx, group._id)) {
+      await releaseFromGroup(ctx, member._id);
+    }
+    const templateItems = await ctx.db
+      .query("eventSeriesPullListItems")
+      .withIndex("by_seriesId", (q) => q.eq("seriesId", group._id))
+      .take(500);
+    for (const item of templateItems) {
+      await ctx.db.delete(item._id);
+    }
+    await ctx.db.delete(group._id);
+  }
+}
+
 /** Sync each distinct invoice (skipping undefined), e.g. before and after a move. */
 export async function syncMultiDayGroupsForInvoices(
   ctx: MutationCtx,

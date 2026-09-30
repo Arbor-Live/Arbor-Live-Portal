@@ -5,7 +5,7 @@ import {
   deleteEventInvoiceLinksForInvoice,
 } from "./eventInvoiceLinks";
 import { listEventsByInvoiceId } from "./invoiceEvents";
-import { syncMultiDayGroupForInvoice } from "./eventGroups";
+import { dissolveMultiDayGroupsForInvoice, syncMultiDayGroupForInvoice } from "./eventGroups";
 
 const TAKE = 500;
 /**
@@ -67,6 +67,7 @@ export async function findRequestForInvoice(
 
 export async function deleteInvoiceRecord(ctx: MutationCtx, invoiceId: Id<"invoices">) {
   const drainRows = withCascadeBudget();
+  await dissolveMultiDayGroupsForInvoice(ctx, invoiceId);
   await deleteEventInvoiceLinksForInvoice(ctx, invoiceId);
 
   await drainRows(
@@ -347,6 +348,8 @@ export async function unlinkInvoicePeers(ctx: MutationCtx, invoiceId: Id<"invoic
     });
   }
 
+  // Without the invoice, its days are no longer one booking.
+  await dissolveMultiDayGroupsForInvoice(ctx, invoiceId);
   const events = await listEventsByInvoiceId(ctx, invoiceId);
   const now = Date.now();
   for (const event of events) {

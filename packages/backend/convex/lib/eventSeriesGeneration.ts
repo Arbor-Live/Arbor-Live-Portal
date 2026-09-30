@@ -42,6 +42,8 @@ export type EventSeriesShiftTemplate = {
   blockTemplateIndex: number;
   offsetMs: number;
   durationMs: number;
+  hours?: number;
+  timesOverridden?: boolean;
   estimatedHourlyRateUsd?: number;
   notes?: string;
 };
@@ -94,12 +96,19 @@ export function shiftsToTemplates(
     userId?: string;
     startsAt: number;
     endsAt: number;
+    hours?: number;
+    timesOverridden?: boolean;
     estimatedHourlyRateUsd?: number;
     notes?: string;
   }>,
   blocks: Array<{ _id: Id<"eventScheduleBlocks">; startsAt: number }>,
   blockTemplates: EventSeriesBlockTemplate[] | undefined,
   occurrenceStartAt: number,
+  /**
+   * Also capture staffed shifts, as open slots (the day's crew shape, never
+   * its people). Imports take only open slots; copying a day takes all.
+   */
+  options: { includeAssigned?: boolean } = {},
 ): EventSeriesShiftTemplate[] {
   if (!blockTemplates || blockTemplates.length === 0) return [];
   const blockIdToIndex = new Map<Id<"eventScheduleBlocks">, number>();
@@ -109,7 +118,7 @@ export function shiftsToTemplates(
   }
 
   return shifts
-    .filter((shift) => !shift.userId?.trim())
+    .filter((shift) => options.includeAssigned || !shift.userId?.trim())
     .slice()
     .sort((a, b) => a.startsAt - b.startsAt)
     .flatMap((shift) => {
@@ -122,6 +131,12 @@ export function shiftsToTemplates(
           blockTemplateIndex,
           offsetMs: shift.startsAt - occurrenceStartAt,
           durationMs: shift.endsAt - shift.startsAt,
+          hours:
+            shift.hours !== undefined && shift.hours > 0 &&
+            shift.hours !== hoursBetween(shift.startsAt, shift.endsAt)
+              ? shift.hours
+              : undefined,
+          timesOverridden: shift.timesOverridden === true ? true : undefined,
           estimatedHourlyRateUsd: shift.estimatedHourlyRateUsd,
           notes: shift.notes,
         },
@@ -148,9 +163,25 @@ export async function insertShiftsFromTemplates(
   ).filter((block) => !isActBlock(block));
   const blockIdByIndex = blockIdsByTemplateIndex(blocks, blockTemplates, occurrenceStartAt);
 
+  // A slot an assigned shift already fills (same role and times) stays filled:
+  // re-applying never adds an open duplicate next to staffed crew.
+  const covered = (
+    await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+      .take(500)
+  ).filter((shift) => Boolean(shift.userId?.trim()));
   for (const template of shiftTemplates) {
     const startsAt = occurrenceStartAt + template.offsetMs;
     const endsAt = startsAt + template.durationMs;
+    const role = template.role.trim();
+    const fillIndex = covered.findIndex(
+      (shift) => shift.role.trim() === role && shift.startsAt === startsAt && shift.endsAt === endsAt,
+    );
+    if (fillIndex >= 0) {
+      covered.splice(fillIndex, 1);
+      continue;
+    }
     const scheduleBlockId = blockIdByIndex.get(template.blockTemplateIndex);
     const estimatedHourlyRateUsd =
       template.estimatedHourlyRateUsd !== undefined && template.estimatedHourlyRateUsd > 0
@@ -164,7 +195,8 @@ export async function insertShiftsFromTemplates(
       role: template.role.trim(),
       startsAt,
       endsAt,
-      hours: hoursBetween(startsAt, endsAt),
+      hours: template.hours ?? hoursBetween(startsAt, endsAt),
+      timesOverridden: template.timesOverridden,
       estimatedHourlyRateUsd,
       postedToExpense: false,
       notes: template.notes?.trim() || undefined,
@@ -585,11 +617,55 @@ export function buildSharedDayPatchFromGroup(group: Doc<"eventSeries">): Partial
   return pickSharedDayFields(group);
 }
 
-/** The shared fields of a day edit, as a patch for its group. */
-export function buildSharedGroupPatchFromDay(
-  patch: Partial<Doc<"events">>,
-): Partial<Doc<"eventSeries">> {
-  return pickSharedDayFields(patch);
+/**
+ * Copy the shared fields from `source` onto `target`, dropping any the source
+ * doesn't have (for `replace`, so a cleared venue or lead clears everywhere).
+ */
+export function withSharedDayFields<T extends Partial<SharedDayFields>>(
+  target: T,
+  source: Partial<SharedDayFields>,
+): T {
+  const next = { ...target };
+  for (const field of SHARED_DAY_FIELDS) {
+    const value = source[field];
+    if (value === undefined) delete next[field];
+    else Object.assign(next, { [field]: value });
+  }
+  return next;
+}
+
+/**
+ * Multi-day "all days / this day and later" edit: the edited day's shared
+ * fields become the group's and reach the other days in scope. Each day keeps
+ * its own title, times and costs; `overrides` carries status/visibility only
+ * when the edit set them.
+ */
+export async function propagateSharedDayFields(
+  ctx: MutationCtx,
+  groupId: Id<"eventSeries">,
+  sourceDay: Doc<"events">,
+  scope: SeriesEditScope,
+  now: number,
+  overrides: SeriesOverviewOverride,
+): Promise<SeriesOverviewAffectedOccurrence[]> {
+  const group = await ctx.db.get(groupId);
+  if (!group) throw new Error("Event group not found.");
+  await ctx.db.replace(groupId, { ...withSharedDayFields(group, sourceDay), updatedAt: now });
+  const days = selectDaysInScope(
+    await listGroupDays(ctx, groupId),
+    scope,
+    sourceDay.occurrenceIndex ?? 0,
+    now,
+  ).filter((day) => day._id !== sourceDay._id);
+  const affected: SeriesOverviewAffectedOccurrence[] = [];
+  for (const day of days) {
+    await ctx.db.replace(day._id, {
+      ...withSharedDayFields({ ...day, ...overrides }, sourceDay),
+      updatedAt: now,
+    });
+    affected.push({ id: day._id, prevStatus: day.status, invoiceId: day.invoiceId });
+  }
+  return affected;
 }
 
 /** Where a group day starts: recurring days follow the rule; multi-day days are their own. */

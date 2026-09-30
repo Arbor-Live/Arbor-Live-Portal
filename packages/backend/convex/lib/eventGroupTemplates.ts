@@ -53,12 +53,14 @@ export async function applyGroupTemplatesToDay(
   if (parts.schedule && blockTemplates && blockTemplates.length > 0) {
     await replaceScheduleBlocksFromTemplates(ctx, day._id, day.startAt, blockTemplates, now);
   }
-  if (parts.crew && group.shiftTemplates && group.shiftTemplates.length > 0) {
+  // An empty crew template still clears the day's open slots: the template is
+  // the day's whole crew shape.
+  if (parts.crew) {
     await replaceEmptyShiftsFromTemplates(
       ctx,
       day._id,
       day.startAt,
-      group.shiftTemplates,
+      group.shiftTemplates ?? undefined,
       blockTemplates,
       options.defaultHourlyRateUsd,
       now,
@@ -128,7 +130,9 @@ export async function captureDayTemplates(
         .query("eventCrewShifts")
         .withIndex("by_eventId", (q) => q.eq("eventId", day._id))
         .take(500);
-      captured.shiftTemplates = shiftsToTemplates(shifts, blocks, blockTemplates, day.startAt);
+      captured.shiftTemplates = shiftsToTemplates(shifts, blocks, blockTemplates, day.startAt, {
+        includeAssigned: true,
+      });
     }
   }
   if (parts.positions) {
@@ -198,6 +202,55 @@ export async function copyPullListBetweenDays(
       excludedTypeIds: item.excludedTypeIds,
       sortOrder: item.sortOrder,
       notes: item.notes,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
+/**
+ * Crew shifts not tied to a Run of Show section (e.g. a load-in call) aren't
+ * part of the section-based crew template; copying a day carries them across
+ * as open slots, at the same offset from the day's start.
+ */
+export async function copyUnlinkedShiftsBetweenDays(
+  ctx: MutationCtx,
+  source: Pick<Doc<"events">, "_id" | "startAt">,
+  target: Pick<Doc<"events">, "_id" | "startAt">,
+  now: number,
+) {
+  const shifts = await ctx.db
+    .query("eventCrewShifts")
+    .withIndex("by_eventId", (q) => q.eq("eventId", source._id))
+    .take(500);
+  const deltaMs = target.startAt - source.startAt;
+  const staffed = (
+    await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", target._id))
+      .take(500)
+  ).filter((shift) => Boolean(shift.userId?.trim()));
+  for (const shift of shifts) {
+    if (shift.scheduleBlockId) continue;
+    const startsAt = shift.startsAt + deltaMs;
+    const endsAt = shift.endsAt + deltaMs;
+    const filled = staffed.findIndex(
+      (row) => row.role === shift.role && row.startsAt === startsAt && row.endsAt === endsAt,
+    );
+    if (filled >= 0) {
+      staffed.splice(filled, 1);
+      continue;
+    }
+    await ctx.db.insert("eventCrewShifts", {
+      eventId: target._id,
+      role: shift.role,
+      startsAt,
+      endsAt,
+      hours: shift.hours,
+      timesOverridden: shift.timesOverridden === true ? true : undefined,
+      estimatedHourlyRateUsd: shift.estimatedHourlyRateUsd,
+      postedToExpense: false,
+      notes: shift.notes,
       createdAt: now,
       updatedAt: now,
     });
