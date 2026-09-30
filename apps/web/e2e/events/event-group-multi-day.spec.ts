@@ -62,5 +62,22 @@ test.describe("event groups: multi-day booking", () => {
       const rows = runConvex("e2eHelpers:getEventPositions", { eventId }) as Position[];
       expect(rows).toHaveLength(1);
     }
+
+    // --- "Apply this day's setup" from Day 1 reaches Day 2 through the template ---
+    await page.goto(`/dashboard/events/${seeded.eventIds[0]}`);
+    await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 25_000 });
+    await page.getByRole("button", { name: "More event actions" }).click();
+    await page.getByRole("menuitem", { name: /Apply this day.s setup to other days/ }).click();
+    const dialog = page.getByTestId("apply-day-setup-dialog");
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    await dialog.getByRole("button", { name: "Apply setup" }).click();
+    await expect(dialog).toHaveCount(0, { timeout: 25_000 });
+    await expect(page.getByText(/Applied this day's setup to 1 other day/).first()).toBeVisible({
+      timeout: 25_000,
+    });
+    for (const eventId of seeded.eventIds) {
+      const rows = runConvex("e2eHelpers:getEventPositions", { eventId }) as Position[];
+      expect(rows.map((row) => row.label)).toEqual(["Headliner"]);
+    }
   });
 });
