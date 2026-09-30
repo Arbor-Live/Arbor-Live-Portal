@@ -110,8 +110,7 @@ export const backfillUnassignedEventsToPublic = migrations.define({
 /** Backfill invoice numbers to ALINV-XXXXXXX. */
 export const migrateInvoiceReferenceIds = migrations.define({
   table: "invoices",
-  // Each invoice reads its days plus Day 1's blocks, shifts and positions.
-  batchSize: 10,
+  batchSize: 25,
   migrateOne: async (ctx, invoice) => {
     if (isInvoiceReferenceId(invoice.invoiceNumber)) return;
     const invoiceNumber = await allocateInvoiceNumber(ctx);

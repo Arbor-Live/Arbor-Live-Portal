@@ -9,7 +9,11 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { syncEventCrewCostUsd } from "./crewCost";
 import { detachInvoiceFromAdditionalLinks } from "./eventInvoiceLinks";
-import { syncEventStatusForLinkedInvoice, type EventStatus } from "./eventStatus";
+import {
+  normalizeEventStatus,
+  syncEventStatusForLinkedInvoice,
+  type EventStatus,
+} from "./eventStatus";
 import {
   hasPendingInquiry,
   MAX_INQUIRIES_CHECKED,
@@ -43,7 +47,6 @@ export type EventSeriesShiftTemplate = {
   offsetMs: number;
   durationMs: number;
   hours?: number;
-  timesOverridden?: boolean;
   estimatedHourlyRateUsd?: number;
   notes?: string;
 };
@@ -105,10 +108,11 @@ export function shiftsToTemplates(
   blockTemplates: EventSeriesBlockTemplate[] | undefined,
   occurrenceStartAt: number,
   /**
-   * Also capture staffed shifts, as open slots (the day's crew shape, never
-   * its people). Imports take only open slots; copying a day takes all.
+   * Copying a day: also capture staffed shifts as open slots (the day's crew
+   * shape, never its people) and their billed hours. Imports take only open
+   * slots, sized by their times, like the crew editor.
    */
-  options: { includeAssigned?: boolean } = {},
+  options: { copyingDay?: boolean } = {},
 ): EventSeriesShiftTemplate[] {
   if (!blockTemplates || blockTemplates.length === 0) return [];
   const blockIdToIndex = new Map<Id<"eventScheduleBlocks">, number>();
@@ -118,7 +122,7 @@ export function shiftsToTemplates(
   }
 
   return shifts
-    .filter((shift) => options.includeAssigned || !shift.userId?.trim())
+    .filter((shift) => options.copyingDay || !shift.userId?.trim())
     .slice()
     .sort((a, b) => a.startsAt - b.startsAt)
     .flatMap((shift) => {
@@ -132,11 +136,12 @@ export function shiftsToTemplates(
           offsetMs: shift.startsAt - occurrenceStartAt,
           durationMs: shift.endsAt - shift.startsAt,
           hours:
-            shift.hours !== undefined && shift.hours > 0 &&
+            options.copyingDay &&
+            shift.hours !== undefined &&
+            shift.hours > 0 &&
             shift.hours !== hoursBetween(shift.startsAt, shift.endsAt)
               ? shift.hours
               : undefined,
-          timesOverridden: shift.timesOverridden === true ? true : undefined,
           estimatedHourlyRateUsd: shift.estimatedHourlyRateUsd,
           notes: shift.notes,
         },
@@ -196,7 +201,6 @@ export async function insertShiftsFromTemplates(
       startsAt,
       endsAt,
       hours: template.hours ?? hoursBetween(startsAt, endsAt),
-      timesOverridden: template.timesOverridden,
       estimatedHourlyRateUsd,
       postedToExpense: false,
       notes: template.notes?.trim() || undefined,
@@ -603,7 +607,17 @@ const SHARED_DAY_FIELDS = [
   "requiresShowWindow",
 ] as const satisfies ReadonlyArray<keyof Doc<"events"> & keyof Doc<"eventSeries">>;
 
-type SharedDayFields = Pick<Doc<"events">, (typeof SHARED_DAY_FIELDS)[number]>;
+export type SharedDayField = (typeof SHARED_DAY_FIELDS)[number];
+type SharedDayFields = Pick<Doc<"events">, SharedDayField>;
+
+/** The shared fields an event edit touched (args carry only what changed). */
+export function editedSharedDayFields(args: Partial<Record<string, unknown>>): SharedDayField[] {
+  const edited = new Set(SHARED_DAY_FIELDS.filter((field) => args[field] !== undefined));
+  // The venue and host names follow their links.
+  if (edited.has("venueId")) edited.add("venueName");
+  if (edited.has("hostGroupId")) edited.add("host");
+  return SHARED_DAY_FIELDS.filter((field) => edited.has(field));
+}
 
 function pickSharedDayFields(source: Partial<SharedDayFields>): Partial<SharedDayFields> {
   const out: Partial<SharedDayFields> = {};
@@ -624,9 +638,10 @@ export function buildSharedDayPatchFromGroup(group: Doc<"eventSeries">): Partial
 export function withSharedDayFields<T extends Partial<SharedDayFields>>(
   target: T,
   source: Partial<SharedDayFields>,
+  fields: readonly SharedDayField[] = SHARED_DAY_FIELDS,
 ): T {
   const next = { ...target };
-  for (const field of SHARED_DAY_FIELDS) {
+  for (const field of fields) {
     const value = source[field];
     if (value === undefined) delete next[field];
     else Object.assign(next, { [field]: value });
@@ -635,10 +650,11 @@ export function withSharedDayFields<T extends Partial<SharedDayFields>>(
 }
 
 /**
- * Multi-day "all days / this day and later" edit: the edited day's shared
- * fields become the group's and reach the other days in scope. Each day keeps
- * its own title, times and costs; `overrides` carries status/visibility only
- * when the edit set them.
+ * Multi-day "all days / this day and later" edit: the shared fields this edit
+ * touched (`fields`) become the group's and reach the other days in scope, as
+ * the edited day now has them (so a clear clears). Everything else on those
+ * days — other shared fields, title, times, costs — stays; `overrides` carries
+ * status/visibility only when the edit set them.
  */
 export async function propagateSharedDayFields(
   ctx: MutationCtx,
@@ -647,10 +663,17 @@ export async function propagateSharedDayFields(
   scope: SeriesEditScope,
   now: number,
   overrides: SeriesOverviewOverride,
+  fields: readonly SharedDayField[],
 ): Promise<SeriesOverviewAffectedOccurrence[]> {
   const group = await ctx.db.get(groupId);
   if (!group) throw new Error("Event group not found.");
-  await ctx.db.replace(groupId, { ...withSharedDayFields(group, sourceDay), updatedAt: now });
+  if (fields.length === 0 && overrides.status === undefined && overrides.visibility === undefined) {
+    return [];
+  }
+  await ctx.db.replace(groupId, {
+    ...withSharedDayFields(group, sourceDay, fields),
+    updatedAt: now,
+  });
   const days = selectDaysInScope(
     await listGroupDays(ctx, groupId),
     scope,
@@ -659,11 +682,14 @@ export async function propagateSharedDayFields(
   ).filter((day) => day._id !== sourceDay._id);
   const affected: SeriesOverviewAffectedOccurrence[] = [];
   for (const day of days) {
-    await ctx.db.replace(day._id, {
-      ...withSharedDayFields({ ...day, ...overrides }, sourceDay),
-      updatedAt: now,
+    const next = withSharedDayFields({ ...day, ...overrides }, sourceDay, fields);
+    await ctx.db.replace(day._id, { ...next, updatedAt: now });
+    affected.push({
+      id: day._id,
+      prevStatus: day.status,
+      nextStatus: normalizeEventStatus(next.status),
+      invoiceId: day.invoiceId,
     });
-    affected.push({ id: day._id, prevStatus: day.status, invoiceId: day.invoiceId });
   }
   return affected;
 }
@@ -752,6 +778,8 @@ export type SeriesOverviewOverride = {
 export type SeriesOverviewAffectedOccurrence = {
   id: Id<"events">;
   prevStatus: string;
+  /** The day's own status after the edit, when it can differ from the edited day's. */
+  nextStatus?: EventStatus;
   invoiceId: Id<"invoices"> | undefined;
 };
 

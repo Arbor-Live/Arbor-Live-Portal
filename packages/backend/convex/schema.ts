@@ -839,7 +839,6 @@ export default defineSchema({
           durationMs: v.number(),
           /** Billed hours when they differ from the slot's length (kept from a copied day). */
           hours: v.optional(v.number()),
-          timesOverridden: v.optional(v.boolean()),
           estimatedHourlyRateUsd: v.optional(v.number()),
           notes: v.optional(v.string()),
         }),

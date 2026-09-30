@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { Doc, Id } from "../_generated/dataModel";
 import { groupTitleFromDayTitles, planMultiDayMembership } from "./eventGroups";
 import { selectDaysInScope } from "./eventGroupTemplates";
-import { shiftsToTemplates } from "./eventSeriesGeneration";
+import {
+  editedSharedDayFields,
+  shiftsToTemplates,
+  withSharedDayFields,
+} from "./eventSeriesGeneration";
 import {
   artistLineAppliesToEvent,
   artistLineDayScope,
@@ -184,7 +188,7 @@ describe("shiftsToTemplates for copying a day", () => {
 
   it("captures staffed shifts as open slots with their billed hours", () => {
     const [template] = shiftsToTemplates([staffed], blocks, blockTemplates, start, {
-      includeAssigned: true,
+      copyingDay: true,
     });
     expect(template).toMatchObject({
       role: "Audio",
@@ -192,8 +196,28 @@ describe("shiftsToTemplates for copying a day", () => {
       offsetMs: 0,
       durationMs: 2 * HOUR,
       hours: 3,
-      timesOverridden: true,
     });
+    expect(template).not.toHaveProperty("timesOverridden");
     expect(template).not.toHaveProperty("userId");
+  });
+});
+
+describe("shared day fields on an 'all days' edit", () => {
+  it("only the fields the edit touched spread, with their linked names", () => {
+    expect(editedSharedDayFields({ venueId: null, title: "x", startAt: 1 })).toEqual([
+      "venueId",
+      "venueName",
+    ]);
+    expect(editedSharedDayFields({ dayOfLeadUserId: "" })).toEqual(["dayOfLeadUserId"]);
+    expect(editedSharedDayFields({ notes: "per day" })).toEqual([]);
+  });
+
+  it("copies edited fields, clears edited-away ones, and leaves the rest alone", () => {
+    const other = { venueName: "Old hall", dayOfLeadUserId: "lead-2", host: "Host B" };
+    const edited = { venueName: undefined, dayOfLeadUserId: "lead-1", host: "Host A" };
+    expect(withSharedDayFields(other, edited, ["venueName", "dayOfLeadUserId"])).toEqual({
+      dayOfLeadUserId: "lead-1",
+      host: "Host B",
+    });
   });
 });

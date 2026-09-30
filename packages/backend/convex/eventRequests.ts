@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
+import { syncMultiDayGroupForInvoice, syncMultiDayGroupsForInvoices } from "./lib/eventGroups";
 import { pacificDateAndTimeToMs, pacificDayIndexFromAnchor } from "@arbor/format";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -1343,13 +1343,15 @@ export const convertToEvent = mutation({
 
     if (existingPrimaryEventId) {
       const existingEvents = await listEventsLinkedToRequest(ctx, request);
+      const previousInvoiceIds = existingEvents.map((event) => event.invoiceId);
       for (const event of existingEvents) {
         await ctx.db.patch(event._id, {
           invoiceId,
           updatedAt: now,
         });
       }
-      await syncMultiDayGroupForInvoice(ctx, invoiceId, now);
+      // The days left their old quote: its booking group goes, the new one forms.
+      await syncMultiDayGroupsForInvoices(ctx, [...previousInvoiceIds, invoiceId], now);
       const nextStatus =
         request.status === "converted" || request.status === "declined"
           ? request.status
