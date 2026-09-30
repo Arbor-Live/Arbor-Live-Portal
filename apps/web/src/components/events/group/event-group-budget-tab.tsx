@@ -69,7 +69,12 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 /** Billing and budget for an event group (series costs, or a booking's total budget). */
-export function EventGroupBudgetTab() {
+export function EventGroupBudgetTab({
+  onDirtyChange,
+}: {
+  /** Reports unsaved budget edits (the group page marks the tab). */
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
   const { groupId, data, kind } = useEventGroup();
   const router = useRouter();
   const shell = useSessionShell();
@@ -93,6 +98,11 @@ export function EventGroupBudgetTab() {
     if (!series || costsForm.formState.isDirty) return;
     costsForm.reset(costsFromGroup(series));
   }, [series, costsForm]);
+
+  const costsDirty = costsForm.formState.isDirty;
+  useEffect(() => {
+    onDirtyChange?.(costsDirty);
+  }, [costsDirty, onDirtyChange]);
 
   const invoiceOptions = useMemo(
     () =>
@@ -127,6 +137,8 @@ export function EventGroupBudgetTab() {
       seriesOtherCostUsd: optionalNumber(values.seriesOtherCostUsd),
       propagateOccurrenceCosts: multiDay ? false : values.propagateOccurrenceCosts,
     });
+    // The saved values are the new baseline (clears the save bar).
+    costsForm.reset(values);
     notify.success("Budget saved.");
   });
 
@@ -171,11 +183,15 @@ export function EventGroupBudgetTab() {
                     variant="outline"
                     size="sm"
                     onClick={() =>
-                      void attempt(
-                        () => scaffoldPullList({ seriesId: groupId }),
-                        "Built the pull list template from the invoice.",
-                        "Failed to scaffold pull list.",
-                      )
+                      void scaffoldPullList({ seriesId: groupId })
+                        .then((result) =>
+                          notify.success(
+                            `Built the pull list template from the invoice (${result.templateCount} lines).`,
+                          ),
+                        )
+                        .catch((error) =>
+                          notify.error(getConvexErrorMessage(error, "Failed to scaffold pull list.")),
+                        )
                     }
                   >
                     Build pull list from invoice
@@ -221,7 +237,11 @@ export function EventGroupBudgetTab() {
               >
                 Create invoice for series
               </Button>
-              <div className="min-w-64 flex-1 space-y-2">
+              <div
+                className="min-w-64 flex-1 space-y-2"
+                role="group"
+                aria-labelledby="group-link-invoice-label"
+              >
                 <Label id="group-link-invoice-label">Link draft invoice</Label>
                 <SearchableSelect
                   value={invoiceLinkId}
@@ -306,11 +326,6 @@ export function EventGroupBudgetTab() {
             <CurrencyDollarIcon className="size-4 text-muted-foreground" aria-hidden />
             Budget and template costs
           </CardTitle>
-          {multiDay ? (
-            <p className="text-sm text-muted-foreground">
-              Each day keeps its own costs on its event page.
-            </p>
-          ) : null}
         </CardHeader>
         <CardContent>
           <Form {...costsForm}>

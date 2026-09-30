@@ -57,6 +57,8 @@ type EventSeriesShiftEditorProps = {
   shiftTemplates?: SeriesShiftTemplate[];
   occurrences: Array<{ _id: Id<"events">; occurrenceIndex?: number; startAt: number }>;
   onMessage: (message: string) => void;
+  /** Reports unsaved edits (the group page marks the tab). */
+  onDirtyChange?: (dirty: boolean) => void;
   /** Drop the card chrome when nested inside another section (the invoice Crew group). */
   embedded?: boolean;
   onShiftDraftsChange?: (drafts: SeriesShiftTemplateDraft[]) => void;
@@ -96,6 +98,7 @@ const EMBEDDED_CARD =
   "gap-3 bg-transparent py-0 ring-0 *:data-[slot=card-content]:px-0 *:data-[slot=card-header]:px-0";
 
 export function EventSeriesShiftEditor({
+  onDirtyChange,
   seriesId,
   kind = "recurring",
   anchorStartAt,
@@ -206,6 +209,10 @@ export function EventSeriesShiftEditor({
   );
   const estimatedSeriesTotal = estimatedPerOccurrence * Math.max(1, billableOccurrenceCount);
   const isDirty = form.formState.isDirty || shiftsDirty;
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   function updateShift(clientId: string, patch: Partial<SeriesShiftTemplateDraft>) {
     setShiftsDirty(true);

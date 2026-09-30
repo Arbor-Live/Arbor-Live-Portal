@@ -42,6 +42,8 @@ type SeriesScheduleEditorProps = {
   blockTemplates?: SeriesBlockTemplate[];
   occurrences: Array<{ _id: Id<"events">; occurrenceIndex?: number; startAt: number }>;
   onMessage: (message: string) => void;
+  /** Reports unsaved edits (the group page marks the tab). */
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 function normalizeEventType(value: string | undefined) {
@@ -77,6 +79,7 @@ function blocksFromTemplates(
 }
 
 export function EventSeriesScheduleEditor({
+  onDirtyChange,
   seriesId,
   kind = "recurring",
   anchorStartAt,
@@ -163,6 +166,10 @@ export function EventSeriesScheduleEditor({
         : "Quick Add: Setup + Show + Strike";
 
   const isDirty = form.formState.isDirty || blocksDirty;
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   async function applyTemplate(values: SeriesScheduleEditorFormValues) {
     if (blocks.length === 0) {

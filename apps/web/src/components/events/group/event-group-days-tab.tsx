@@ -123,7 +123,7 @@ export function EventGroupDaysTab() {
               {multiDay ? "Days" : "Occurrences"}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              {`In date order. Each ${noun} has its own crew, lineup and pull list; templates apply to every ${noun} that isn't detached or cancelled.`}
+              In date order.
             </p>
           </div>
         </CardHeader>
@@ -214,10 +214,6 @@ export function EventGroupDaysTab() {
                   Add day
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Starts at Day 1&apos;s time ({formatTime(series.anchorStartAt)}) and gets the
-                booking&apos;s templates. It joins the booking&apos;s invoice.
-              </p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -234,9 +230,6 @@ export function EventGroupDaysTab() {
                   Add
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Continues the rule after the last occurrence, with the series templates.
-              </p>
             </div>
           )}
           <div className="space-y-2">

@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { pollConvex, runConvex } from "../helpers/convex";
+import { acceptAppDialog } from "../helpers/auth";
+import { pickSearchableOption } from "../helpers/select";
 
 type SeededBooking = {
   invoiceId: string;
@@ -9,6 +11,7 @@ type SeededBooking = {
 };
 
 type Position = { label: string; templateKey: string | null };
+type GroupState = { kind: string; occurrenceCount: number; updatedAt: number };
 
 test.describe("event groups: multi-day booking", () => {
   test("a booking's days share a group, and a position template reaches every day once", async ({
@@ -56,8 +59,16 @@ test.describe("event groups: multi-day booking", () => {
     }
 
     // --- Re-applying is idempotent: still one position per day ---
+    const before = runConvex("e2eHelpers:getEventSeriesStateByEventId", {
+      eventId: seeded.eventIds[0],
+    }) as GroupState;
     await apply.click();
-    await expect(page.getByText(/applied it to 2 days/).first()).toBeVisible({ timeout: 25_000 });
+    // Wait for the second save itself to land, not the first save's toast.
+    await pollConvex<GroupState>(
+      "e2eHelpers:getEventSeriesStateByEventId",
+      { eventId: seeded.eventIds[0] },
+      (state) => (state?.updatedAt ?? 0) > before.updatedAt,
+    );
     for (const eventId of seeded.eventIds) {
       const rows = runConvex("e2eHelpers:getEventPositions", { eventId }) as Position[];
       expect(rows).toHaveLength(1);
@@ -79,5 +90,28 @@ test.describe("event groups: multi-day booking", () => {
       const rows = runConvex("e2eHelpers:getEventPositions", { eventId }) as Position[];
       expect(rows.map((row) => row.label)).toEqual(["Headliner"]);
     }
+
+    // --- Cancelling Day 2 keeps it in the booking, marked cancelled ---
+    await page.goto(seeded.groupPath);
+    await expect(page.getByTestId("event-group-days-summary")).toContainText("2 days", {
+      timeout: 25_000,
+    });
+    await pickSearchableOption(
+      page,
+      page.getByTestId("event-group-days").getByTestId("searchable-select-trigger"),
+      "Day 2",
+      /^Day 2 · /,
+    );
+    await page.getByRole("button", { name: "Cancel days" }).click();
+    await acceptAppDialog(page, "Cancel days");
+    await expect(page.getByTestId("event-group-days-summary")).toContainText("1 cancelled", {
+      timeout: 25_000,
+    });
+    const afterCancel = await pollConvex<GroupState>(
+      "e2eHelpers:getEventSeriesStateByEventId",
+      { eventId: seeded.eventIds[1] },
+      (state) => state?.occurrenceCount === 2,
+    );
+    expect(afterCancel.kind).toBe("multi_day");
   });
 });

@@ -7,7 +7,7 @@ import {
   BuildingsIcon,
   CalendarBlankIcon,
   CalendarDotsIcon,
-  CopySimpleIcon,
+  CopyIcon,
   GlobeIcon,
   InfoIcon,
   LockSimpleIcon,
@@ -91,7 +91,10 @@ export function EventWorkspaceHeader() {
     : undefined;
   const hasSiblingDays = (siblingDays?.length ?? 0) > 1;
   const multiDayGroup = seriesMeta?.kind === "multi_day";
-  const showMenu = hasSiblingDays || Boolean(seriesMeta) || isAdmin;
+  // A series applies its setup from its template tabs, not from one occurrence.
+  const canApplySetup = hasSiblingDays && seriesMeta?.kind !== "recurring";
+  const hasUnsavedEdits = workspace.dirty.size > 0;
+  const showMenu = canApplySetup || Boolean(seriesMeta) || isAdmin;
 
   return (
     <PageHeader
@@ -101,9 +104,13 @@ export function EventWorkspaceHeader() {
       menu={
         showMenu ? (
           <>
-            {hasSiblingDays ? (
-              <DropdownMenuItem disabled={readOnly} onSelect={() => workspace.setApplySetupOpen(true)}>
-                <CopySimpleIcon />
+            {canApplySetup ? (
+              <DropdownMenuItem
+                disabled={readOnly || hasUnsavedEdits}
+                title={hasUnsavedEdits ? "Save this day first: applying uses its saved setup." : undefined}
+                onSelect={() => workspace.setApplySetupOpen(true)}
+              >
+                <CopyIcon />
                 Apply this day&apos;s setup to other days…
               </DropdownMenuItem>
             ) : null}
@@ -125,7 +132,7 @@ export function EventWorkspaceHeader() {
             ) : null}
             {isAdmin ? (
               <>
-                {hasSiblingDays || seriesMeta ? <DropdownMenuSeparator /> : null}
+                {canApplySetup || seriesMeta ? <DropdownMenuSeparator /> : null}
                 <DropdownMenuItem variant="destructive" onSelect={() => void workspace.deleteEvent()}>
                   <TrashIcon />
                   {draft.status === "cancelled" ? "Delete event" : "Cancel & delete event"}

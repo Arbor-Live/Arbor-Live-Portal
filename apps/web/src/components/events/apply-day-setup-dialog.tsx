@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { CopySimpleIcon } from "@phosphor-icons/react";
+import { useEffect, useState } from "react";
+import { CopyIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -45,6 +45,16 @@ export function ApplyDaySetupDialog({
   const [positions, setPositions] = useState(true);
   const [pullList, setPullList] = useState(true);
   const [busy, setBusy] = useState(false);
+  // Each opening starts from the defaults, not the last run's choices.
+  useEffect(() => {
+    if (!open) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- reset the dialog when it opens */
+    setScope("all");
+    setSchedule(true);
+    setPositions(true);
+    setPullList(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [open]);
   const noun = groupDayNoun(kind);
   const nouns = groupDayNoun(kind, true);
   const nothingSelected = !schedule && !positions && !pullList;
@@ -64,7 +74,7 @@ export function ApplyDaySetupDialog({
       <DialogContent data-testid="apply-day-setup-dialog">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <CopySimpleIcon className="size-4" aria-hidden />
+            <CopyIcon className="size-4" aria-hidden />
             Apply this {noun}&apos;s setup
           </DialogTitle>
           <DialogDescription>
@@ -120,7 +130,7 @@ export function ApplyDaySetupDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button type="button" disabled={busy || nothingSelected} onClick={() => void handleApply()}>

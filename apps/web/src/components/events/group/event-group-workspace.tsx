@@ -2,16 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import {
   BuildingsIcon,
   CalendarBlankIcon,
   CalendarDotsIcon,
-  CurrencyDollarIcon,
   MapPinIcon,
   MicrophoneStageIcon,
+  ReceiptIcon,
   RepeatIcon,
-  SpeakerHighIcon,
   UsersThreeIcon,
   type Icon,
 } from "@phosphor-icons/react";
@@ -44,11 +44,11 @@ import {
 } from "@/lib/event-group-tabs";
 
 const TAB_ICONS: Record<EventGroupTabId, Icon> = {
-  days: CalendarDotsIcon,
-  "run-of-show": SpeakerHighIcon,
+  days: CalendarBlankIcon,
+  "run-of-show": CalendarDotsIcon,
   crew: UsersThreeIcon,
   positions: MicrophoneStageIcon,
-  budget: CurrencyDollarIcon,
+  budget: ReceiptIcon,
 };
 
 const GROUP_STATUS_TONES: Record<"active" | "paused" | "ended", Tone> = {
@@ -131,8 +131,8 @@ function EventGroupHeader() {
       title={series.title}
       description={
         multiDay
-          ? "Days that share one invoice. Set up the Run of Show, crew slots and positions once and apply them to all days, later days, or one day. Acts are booked per day."
-          : `${intervalLabel(series.intervalWeeks)} series. Set up the Run of Show, crew slots and positions once and apply them to every occurrence. Acts are booked per occurrence.`
+          ? "Days that share one invoice, set up once and applied to all days, later days, or one day."
+          : `${intervalLabel(series.intervalWeeks)} series, set up once and applied to every occurrence.`
       }
       meta={
         <>
@@ -154,7 +154,7 @@ function EventGroupHeader() {
 }
 
 function EventGroupNav({ activeTab }: { activeTab: EventGroupTabId }) {
-  const { groupId, data } = useEventGroup();
+  const { groupId, data, dirtyTabs } = useEventGroup();
   const dayCount = data?.occurrences.length ?? 0;
   const positionCount = data?.series.positionTemplates?.length ?? 0;
   function badgeFor(tab: EventGroupTabId) {
@@ -171,60 +171,77 @@ function EventGroupNav({ activeTab }: { activeTab: EventGroupTabId }) {
         icon: TAB_ICONS[tab],
         active: tab === activeTab,
         badge: badgeFor(tab),
+        dirty: dirtyTabs.has(tab),
       }))}
     />
   );
 }
 
-function EventGroupPanel({ activeTab }: { activeTab: EventGroupTabId }) {
-  const { groupId, data, kind } = useEventGroup();
+function EventGroupPanels({ activeTab }: { activeTab: EventGroupTabId }) {
+  const { groupId, data, kind, setTabDirty } = useEventGroup();
+  const dirtyHandlers = useMemo(
+    () =>
+      Object.fromEntries(
+        EVENT_GROUP_TABS.map((tab) => [tab, (dirty: boolean) => setTabDirty(tab, dirty)]),
+      ) as Record<EventGroupTabId, (dirty: boolean) => void>,
+    [setTabDirty],
+  );
   if (!data) return null;
   const { series, occurrences } = data;
-  switch (activeTab) {
-    case "days":
-      return <EventGroupDaysTab />;
-    case "run-of-show":
-      return (
-        <EventSeriesScheduleEditor
-          seriesId={groupId}
-          kind={kind}
-          anchorStartAt={series.anchorStartAt}
-          anchorEndAt={series.anchorEndAt}
-          eventType={series.eventType}
-          rentalFulfillmentMode={series.rentalFulfillmentMode}
-          blockTemplates={series.blockTemplates}
-          occurrences={occurrences}
-          onMessage={notify.success}
-        />
-      );
-    case "crew":
-      return (
-        <EventSeriesShiftEditor
-          seriesId={groupId}
-          kind={kind}
-          anchorStartAt={series.anchorStartAt}
-          anchorEndAt={series.anchorEndAt}
-          eventType={series.eventType}
-          rentalFulfillmentMode={series.rentalFulfillmentMode}
-          blockTemplates={series.blockTemplates}
-          shiftTemplates={series.shiftTemplates}
-          occurrences={occurrences}
-          onMessage={notify.success}
-        />
-      );
-    case "positions":
-      return (
-        <EventSeriesPositionEditor
-          seriesId={groupId}
-          kind={kind}
-          positionTemplates={series.positionTemplates}
-          occurrences={occurrences}
-          onMessage={notify.success}
-        />
-      );
-    case "budget":
-      return <EventGroupBudgetTab />;
-  }
+  const panels: Record<EventGroupTabId, React.ReactNode> = {
+    days: <EventGroupDaysTab />,
+    "run-of-show": (
+      <EventSeriesScheduleEditor
+        seriesId={groupId}
+        kind={kind}
+        anchorStartAt={series.anchorStartAt}
+        anchorEndAt={series.anchorEndAt}
+        eventType={series.eventType}
+        rentalFulfillmentMode={series.rentalFulfillmentMode}
+        blockTemplates={series.blockTemplates}
+        occurrences={occurrences}
+        onMessage={notify.success}
+        onDirtyChange={dirtyHandlers["run-of-show"]}
+      />
+    ),
+    crew: (
+      <EventSeriesShiftEditor
+        seriesId={groupId}
+        kind={kind}
+        anchorStartAt={series.anchorStartAt}
+        anchorEndAt={series.anchorEndAt}
+        eventType={series.eventType}
+        rentalFulfillmentMode={series.rentalFulfillmentMode}
+        blockTemplates={series.blockTemplates}
+        shiftTemplates={series.shiftTemplates}
+        occurrences={occurrences}
+        onMessage={notify.success}
+        onDirtyChange={dirtyHandlers.crew}
+      />
+    ),
+    positions: (
+      <EventSeriesPositionEditor
+        seriesId={groupId}
+        kind={kind}
+        positionTemplates={series.positionTemplates}
+        occurrences={occurrences}
+        onMessage={notify.success}
+        onDirtyChange={dirtyHandlers.positions}
+      />
+    ),
+    budget: <EventGroupBudgetTab onDirtyChange={dirtyHandlers.budget} />,
+  };
+  // Every tab stays mounted (inactive ones hidden, save bars included), so
+  // switching tabs never throws away a half-edited template.
+  return (
+    <>
+      {EVENT_GROUP_TABS.map((tab) => (
+        <div key={tab} hidden={tab !== activeTab} data-testid={`event-group-panel-${tab}`}>
+          {panels[tab]}
+        </div>
+      ))}
+    </>
+  );
 }
 
 /**
@@ -236,6 +253,16 @@ export function EventGroupWorkspace({ groupId }: { groupId: Id<"eventSeries"> })
   const pathname = usePathname();
   const data = useQuery(api.eventSeries.get, { id: groupId });
   const activeTab = activeGroupTabFromPathname(pathname, groupId);
+  const [dirtyTabs, setDirtyTabs] = useState<ReadonlySet<EventGroupTabId>>(() => new Set());
+  const setTabDirty = useCallback((tab: EventGroupTabId, dirty: boolean) => {
+    setDirtyTabs((current) => {
+      if (current.has(tab) === dirty) return current;
+      const next = new Set(current);
+      if (dirty) next.add(tab);
+      else next.delete(tab);
+      return next;
+    });
+  }, []);
 
   if (data === undefined) {
     return (
@@ -252,11 +279,13 @@ export function EventGroupWorkspace({ groupId }: { groupId: Id<"eventSeries"> })
   }
 
   return (
-    <EventGroupContext.Provider value={{ groupId, data, kind: eventGroupKind(data.series) }}>
+    <EventGroupContext.Provider
+      value={{ groupId, data, kind: eventGroupKind(data.series), dirtyTabs, setTabDirty }}
+    >
       <div className="space-y-4 pb-24" data-testid="event-group-workspace">
         <EventGroupHeader />
         <EventGroupNav activeTab={activeTab} />
-        <EventGroupPanel activeTab={activeTab} />
+        <EventGroupPanels activeTab={activeTab} />
       </div>
     </EventGroupContext.Provider>
   );

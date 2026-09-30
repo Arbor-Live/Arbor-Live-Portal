@@ -128,7 +128,8 @@ the URL looks like cloud.
 | Orphaned shifts (deleted blocks) surface as unlinked | Covered | `events/event-schedule-unlinked-shifts.spec.ts` |
 | Venue create + pick on event | Covered | `events/venue-create-pick.spec.ts` (Batch 3) |
 | Event series create/generate | Covered | `events/event-series-smoke.spec.ts` (Batch 5) |
-| Event series editors ("this occurrence" scope) | Covered | `events/event-series-edit-scope.spec.ts` (Batch 11 — pins the applyScope reset guard) |
+| Event series editors ("this occurrence" scope) | Covered | `events/event-series-edit-scope.spec.ts` (Batch 11 — pins the applyScope reset guard; navigates the group page's Run of Show template tab and uses the shared scope toggle) |
+| Event groups: multi-day booking (header pill, group page, position template on every day, idempotent re-apply, "Apply this day's setup", cancel from a day) | Covered | `events/event-group-multi-day.spec.ts` (#341) |
 | Crew scheduling board | Covered | `crew/crew-scheduling-board.spec.ts` (Batch 5) |
 | Open Mic public + runner | None | Deferred on product priority, not on difficulty — 575 lines and three routes, the largest untested module left. See the batch candidates |
 | FullCalendar drag/resize | Deferred | Flaky; keep unit/manual |
@@ -237,6 +238,7 @@ the URL looks like cloud.
 | `crew/crew-scheduling-board.spec.ts` | Scheduling board range/filter + assign link (Batch 5) |
 | `events/event-series-smoke.spec.ts` | Recurring series create + overview (Batch 5) |
 | `events/event-series-edit-scope.spec.ts` | Series scope isolation: "this occurrence" edit doesn't modify siblings (Batch 11) |
+| `events/event-group-multi-day.spec.ts` | Multi-day booking group: header pill, group page, position template across days, re-apply idempotency, apply a day's setup, cancel from a day (#341) |
 | `timecards/timecard-view.spec.ts` | Crew + admin timecard read path (Batch 6) |
 | `marketing/short-link-crud.spec.ts` | Short link create → delete (Batch 6) |
 | `inventory/lost-found-public.spec.ts` | Public `/e/{assetId}` found + not-found (Batch 6) |
