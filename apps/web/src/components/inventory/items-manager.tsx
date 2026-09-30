@@ -1,41 +1,27 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
-import type { FunctionReturnType } from "convex/server";
-import { createColumnHelper, type RowSelectionState } from "@tanstack/react-table";
-import {
-  CameraIcon,
-  PencilSimpleIcon,
-  PlusIcon,
-  TrashIcon,
-  WarningCircleIcon,
-} from "@phosphor-icons/react";
+import { CameraIcon, PackageIcon, PlusIcon } from "@phosphor-icons/react";
 import { activeFilters, FilterBar, type FilterDefinition, type FilterState } from "@/components/filter-bar";
-import { api } from "@/lib/convex-api";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DataTable } from "@/components/ui/data-table";
-import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
-import { type DataTableFeatures } from "@/components/ui/data-table-features";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { EmptyState, ListSummary, RowCell, RowMenu, RowText } from "@/components/list-page";
+import { ListRow } from "@/components/list-row";
+import { MetaItem, PageHeader } from "@/components/page-header";
 import { useAppDialog } from "@/components/ui/app-dialog";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useSheetParam } from "@/hooks/use-sheet-param";
+import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import { AssetScanner } from "./asset-scanner";
+import { inventoryItemLabel, toCategoryOptions } from "./constants";
 import { CreateAssetWizard } from "./create-asset-wizard";
 import { DamageReportWizard } from "./damage-report-wizard";
-import { InventoryItemEditor } from "./inventory-item-editor";
-import { inventoryItemLabel, toCategoryOptions } from "./constants";
-
-const defaultForm = {
-  assetId: "",
-  serialNumber: "",
-  typeId: "",
-  storageLocationId: "",
-  containedInAssetId: "",
-  status: "",
-  notes: "",
-};
+import { ItemSheet } from "./item-sheet";
+import { formatTypeDisplay } from "./package-section-utils";
 
 const CONTAINER_OPTIONS = [
   { value: "inside", label: "Inside a container" },
@@ -47,97 +33,45 @@ const TAG_OPTIONS = [
   { value: "serial_only", label: "Serial only" },
 ];
 
-function formatTypeDisplay(type: { manufacturer?: string; name: string; model: string } | null | undefined) {
-  if (!type) return "Unknown type";
-  const maker = type.manufacturer?.trim();
-  const sameNameModel = type.name.trim().toLowerCase() === type.model.trim().toLowerCase();
-  const core = sameNameModel ? type.name : `${type.name} / ${type.model}`;
-  return maker ? `${maker} ${core}` : core;
+function plural(count: number, noun: string) {
+  return `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
 }
 
-type InventoryItemRow = FunctionReturnType<typeof api.inventoryItems.list>["page"][number];
-
-const columnHelper = createColumnHelper<DataTableFeatures, InventoryItemRow>();
-
+/**
+ * Every unit of gear: filter, scan to find one, open it in a side panel to
+ * edit, nest or report damage. New units come in through the create wizard.
+ */
 export function ItemsManager() {
-  const { alert } = useAppDialog();
+  const { confirm } = useAppDialog();
   const siteBase = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<FilterState>({});
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editorInitial, setEditorInitial] = useState(defaultForm);
-  const [damageItemId, setDamageItemId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [selectedId, setSelectedId] = useSheetParam("item");
+  const [damageItemId, setDamageItemId] = useState<Id<"inventoryItems"> | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [scanRaw, setScanRaw] = useState("");
   const [scanError, setScanError] = useState<string | null>(null);
-  const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
-  const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
+  const [bulkPending, setBulkPending] = useState(false);
 
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: true });
-  const {
-    results: items,
-    status: itemsStatus,
-    loadMore,
-  } = usePaginatedQuery(
+  const { results: items, status, loadMore } = usePaginatedQuery(
     api.inventoryItems.list,
-    {
-      search: search || undefined,
-      ...activeFilters(filters),
-    },
+    { search: search || undefined, ...activeFilters(filters) },
     { initialNumItems: 100 },
   );
   const itemSummaries = useQuery(api.inventoryItems.listSummaries, {});
   const types = useQuery(api.inventoryTypes.listOptions, {});
   const locations = useQuery(api.storageLocations.list, {});
   const removeItem = useMutation(api.inventoryItems.remove);
-  const scanResolved = useQuery(
-    api.inventoryItems.resolveByScan,
-    scanRaw.trim() ? { raw: scanRaw } : "skip",
-  );
+  const scanResolved = useQuery(api.inventoryItems.resolveByScan, scanRaw.trim() ? { raw: scanRaw } : "skip");
 
-  const selectedIds = useMemo(
-    () => Object.keys(rowSelection).filter((id) => rowSelection[id]),
-    [rowSelection],
-  );
-
-  const itemLookup = useMemo(() => {
-    const map = new Map<
-      string,
-      { assetId: string; name: string; category: string }
-    >();
-    for (const item of items) {
-      map.set(item._id, {
-        assetId: inventoryItemLabel(item),
-        name: `${item.type?.name ?? "Unknown"} ${item.type?.model ?? ""}`.trim(),
-        category: item.type?.category ?? "unknown",
-      });
-    }
+  /** How many items each container holds, from summaries so the list query skips per-row child scans. */
+  const childCount = useMemo(() => {
+    const map = new Map<string, number>();
     for (const item of itemSummaries ?? []) {
-      if (map.has(item._id)) continue;
-      map.set(item._id, {
-        assetId: inventoryItemLabel(item),
-        name: `${item.type?.name ?? "Unknown"} ${item.type?.model ?? ""}`.trim(),
-        category: item.type?.category ?? "unknown",
-      });
-    }
-    return map;
-  }, [itemSummaries, items]);
-
-  /** Children by parent — from summaries so list query skips per-row child scans. */
-  const childrenByParentId = useMemo(() => {
-    const map = new Map<string, Array<{ _id: string; assetId?: string; serialNumber?: string }>>();
-    for (const item of itemSummaries ?? []) {
-      if (!item.containedInAssetId) continue;
-      const list = map.get(item.containedInAssetId) ?? [];
-      list.push({ _id: item._id, assetId: item.assetId, serialNumber: item.serialNumber });
-      map.set(item.containedInAssetId, list);
-    }
-    for (const [, list] of map) {
-      list.sort((a, b) =>
-        (a.assetId ?? a.serialNumber ?? "").localeCompare(b.assetId ?? b.serialNumber ?? ""),
-      );
+      if (item.containedInAssetId) map.set(item.containedInAssetId, (map.get(item.containedInAssetId) ?? 0) + 1);
     }
     return map;
   }, [itemSummaries]);
@@ -168,350 +102,294 @@ export function ItemsManager() {
     [categories, locations, types],
   );
 
-  async function bulkDeleteSelected() {
-    try {
-      await Promise.all(selectedIds.map((id) => removeItem({ id: id as never })));
-      setRowSelection({});
-    } catch (error) {
-      await alert(getConvexErrorMessage(error, "Could not delete selected items."));
-    }
-  }
-
-  function scrollToItemRow(itemId: string) {
-    const row = rowRefs.current.get(itemId);
-    if (!row) return;
-    row.scrollIntoView({ behavior: "smooth", block: "center" });
-    row.classList.add("bg-muted/70");
-    window.setTimeout(() => row.classList.remove("bg-muted/70"), 1200);
-  }
-
-  function beginEdit(item: InventoryItemRow) {
-    setEditingId(item._id);
-    setEditorInitial({
-      assetId: item.assetId ?? "",
-      serialNumber: item.serialNumber ?? "",
-      typeId: item.typeId,
-      storageLocationId: item.storageLocationId ?? "",
-      containedInAssetId: item.containedInAssetId ?? "",
-      status: item.status ?? "",
-      notes: item.notes ?? "",
-    });
-  }
-
-  /** Scan-to-select: resolve, focus the row, add to the selection. */
+  /** Scan to find: open the scanned item's panel, wherever it is in the list. */
   useEffect(() => {
-    if (!scanRaw.trim()) return;
-    if (scanResolved === undefined) return;
+    if (!scanRaw.trim() || scanResolved === undefined) return;
     if (scanResolved === null) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- consume the one-shot scan-to-select resolution
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- consume the one-shot scan resolution
       setScanError(`No item found for “${scanRaw.trim()}”.`);
       setScanRaw("");
-      setScanOpen(false);
       return;
     }
     setScanError(null);
+    // Narrow the list to it too, so the row is on screen and selected behind the panel.
     setSearch(scanResolved.assetId);
     setFilters({});
-    setPendingSelectId(scanResolved._id);
+    setSelected(new Set([scanResolved._id]));
+    setSelectedId(scanResolved._id);
     setScanRaw("");
     setScanOpen(false);
-  }, [scanResolved, scanRaw]);
+  }, [scanResolved, scanRaw, setSelectedId]);
 
-  useEffect(() => {
-    if (!pendingSelectId) return;
-    const row = rowRefs.current.get(pendingSelectId);
-    if (row) {
-      scrollToItemRow(pendingSelectId);
-      setRowSelection((prev) => ({ ...prev, [pendingSelectId]: true }));
-      setPendingSelectId(null);
-    }
-  }, [items, pendingSelectId]);
+  const selectedIds = items.filter((item) => selected.has(item._id)).map((item) => item._id);
+  const inContainers = items.filter((item) => item.containedInAssetId).length;
+  const unassigned = items.filter((item) => !item.storageLocationId).length;
+  const narrowed = Boolean(search.trim()) || Object.keys(activeFilters(filters)).length > 0;
+  const allSelected = items.length > 0 && items.every((item) => selected.has(item._id));
 
-  function renderItemChip(itemId: string, fallbackAssetId?: string) {
-    const details = itemLookup.get(itemId);
-    const assetLabel = details?.assetId ?? fallbackAssetId ?? "No ID";
-    return (
-      <button
-        type="button"
-        className="group relative rounded border px-1.5 py-0.5 text-xs hover:bg-muted"
-        onClick={() => scrollToItemRow(itemId)}
-      >
-        {assetLabel}
-        <div className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 hidden w-56 rounded-md border bg-popover p-2 text-left text-xs text-popover-foreground shadow-md group-hover:block">
-          <p className="font-medium">{assetLabel}</p>
-          <p className="text-muted-foreground">{details?.name ?? "Item details unavailable"}</p>
-          <p className="text-muted-foreground capitalize">{details?.category ?? "unknown"}</p>
-        </div>
-      </button>
-    );
+  function withClearedSelection<T>(setter: (value: T) => void) {
+    return (value: T) => {
+      setter(value);
+      setSelected(new Set());
+    };
   }
 
-  const columns = columnHelper.columns([
-    columnHelper.display({
-      id: "select",
-      enableHiding: false,
-      enableSorting: false,
-      header: ({ table }) => (
-        <input
-          type="checkbox"
-          checked={table.getIsAllRowsSelected()}
-          ref={(element) => {
-            if (element) element.indeterminate = table.getIsSomeRowsSelected();
-          }}
-          onChange={(event) => table.toggleAllRowsSelected(event.target.checked)}
-          aria-label="Select all"
-        />
-      ),
-      cell: ({ row }) => (
-        <input
-          type="checkbox"
-          checked={row.getIsSelected()}
-          onChange={(event) => row.toggleSelected(event.target.checked)}
-          aria-label="Select row"
-        />
-      ),
-    }),
-    columnHelper.accessor((row) => row.assetId ?? row.serialNumber ?? "", {
-      id: "assetId",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Asset" />,
-      cell: ({ row }) => {
-        const item = row.original;
-        return (
-          <div>
-            <div className="font-medium">{item.assetId ?? "No ID"}</div>
-            <div className="text-xs text-muted-foreground">Serial: {item.serialNumber || "-"}</div>
-            {item.assetId ? (
-              <div className="mt-1 text-xs">
-                <a
-                  className="underline"
-                  href={`${siteBase}/e/${encodeURIComponent(item.assetId)}`}
-                  target="_blank"
-                >
-                  Public /e link
-                </a>
-              </div>
-            ) : null}
-          </div>
-        );
-      },
-    }),
-    columnHelper.accessor((row) => row.type?.category ?? "", {
-      id: "category",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Type" />,
-      cell: ({ row }) => (
-        <div>
-          {formatTypeDisplay(row.original.type)}
-          <div className="text-xs text-muted-foreground">{row.original.type?.category}</div>
-        </div>
-      ),
-    }),
-    columnHelper.accessor((row) => row.location?.path ?? "", {
-      id: "location",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Location" />,
-      cell: ({ getValue }) => getValue() || "-",
-    }),
-    columnHelper.display({
-      id: "container",
-      enableSorting: false,
-      header: "Container",
-      cell: ({ row }) => {
-        const item = row.original;
-        const children = childrenByParentId.get(item._id) ?? [];
-        return (
-          <div>
-            <div>
-              In:{" "}
-              {item.containedInAsset
-                ? renderItemChip(item.containedInAsset._id, item.containedInAsset.assetId)
-                : "-"}
-            </div>
-            <div className="text-xs text-muted-foreground">Contains: {children.length}</div>
-            {children.length ? (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {children.map((child) => (
-                  <span key={child._id}>{renderItemChip(child._id, child.assetId)}</span>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        );
-      },
-    }),
-    columnHelper.display({
-      id: "actions",
-      enableHiding: false,
-      enableSorting: false,
-      header: "Actions",
-      cell: ({ row }) => {
-        const item = row.original;
-        return (
-          <div className="flex items-center gap-1.5">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="outline"
-                  aria-label="Edit"
-                  onClick={() => beginEdit(item)}
-                >
-                  <PencilSimpleIcon className="size-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Edit</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="outline"
-                  aria-label="Damage"
-                  onClick={() => setDamageItemId(item._id)}
-                >
-                  <WarningCircleIcon className="size-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Report damage</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="destructive"
-                  aria-label="Delete"
-                  onClick={() => void removeItem({ id: item._id })}
-                >
-                  <TrashIcon className="size-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Delete</TooltipContent>
-            </Tooltip>
-          </div>
-        );
-      },
-    }),
-  ]);
+  async function deleteItem(item: { _id: Id<"inventoryItems">; label: string }) {
+    const ok = await confirm({
+      title: `Delete ${item.label}?`,
+      description:
+        "The unit leaves inventory and its public page stops working. A container that still holds anything can't be deleted; move its contents out first.",
+      destructive: true,
+      confirmLabel: "Delete item",
+    });
+    if (!ok) return false;
+    try {
+      await removeItem({ id: item._id });
+      notify.success(`Deleted ${item.label}.`);
+      return true;
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Could not delete the item."));
+      return false;
+    }
+  }
+
+  async function bulkDelete() {
+    const ok = await confirm({
+      title: `Delete ${plural(selectedIds.length, "item")}?`,
+      description: "Containers that still hold anything are skipped with an error; the rest leave inventory.",
+      destructive: true,
+      confirmLabel: `Delete ${plural(selectedIds.length, "item")}`,
+    });
+    if (!ok) return;
+    setBulkPending(true);
+    const outcomes = await Promise.allSettled(selectedIds.map((id) => removeItem({ id })));
+    setBulkPending(false);
+    const failed = outcomes.filter((outcome) => outcome.status === "rejected");
+    if (outcomes.length - failed.length) notify.success(`Deleted ${plural(outcomes.length - failed.length, "item")}.`);
+    if (failed.length) {
+      notify.error(
+        `${plural(failed.length, "item")} couldn't be deleted: ${getConvexErrorMessage((failed[0] as PromiseRejectedResult).reason)}`,
+      );
+    }
+    setSelected(new Set());
+  }
 
   return (
-    <TooltipProvider delayDuration={0}>
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Inventory Items</CardTitle>
-            <FilterBar
-              search={search}
-              onSearchChange={setSearch}
-              searchPlaceholder="Search by asset ID, serial, model"
-              searchLabel="Search items"
-              filters={filterDefinitions}
-              value={filters}
-              onChange={setFilters}
+    <div className="space-y-4 pb-24" data-testid="items-page">
+      <PageHeader
+        title="Inventory Items"
+        description="Every unit of gear Arbor owns. Scan a tag to find one, open it to edit, nest it in a case, or report damage."
+        actions={
+          <>
+            <Button type="button" size="sm" variant="outline" onClick={() => setScanOpen((open) => !open)}>
+              <CameraIcon />
+              Scan
+            </Button>
+            <Button type="button" size="sm" onClick={() => setWizardOpen(true)}>
+              <PlusIcon />
+              New item
+            </Button>
+          </>
+        }
+        meta={
+          itemSummaries ? (
+            <MetaItem icon={PackageIcon}>{plural(itemSummaries.length, "unit")} in inventory</MetaItem>
+          ) : null
+        }
+      />
+
+      {scanOpen ? (
+        <div className="border bg-muted/20 p-3" data-testid="items-scanner">
+          <AssetScanner onSubmit={(raw) => setScanRaw(raw)} autoFocus />
+          {scanError ? <p className="mt-2 text-sm text-destructive">{scanError}</p> : null}
+        </div>
+      ) : null}
+
+      <FilterBar
+        search={search}
+        onSearchChange={withClearedSelection(setSearch)}
+        searchPlaceholder="Search by asset ID, serial, model"
+        searchLabel="Search items"
+        filters={filterDefinitions}
+        value={filters}
+        onChange={withClearedSelection(setFilters)}
+      />
+
+      {status === "LoadingFirstPage" ? (
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-72" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      ) : (
+        <>
+          <ListSummary testId="items-summary" order="By asset tag, then serial.">
+            {plural(items.length, "item")}
+            {status === "CanLoadMore" ? "+" : ""} · {inContainers} inside containers · {unassigned} without a location
+          </ListSummary>
+
+          {selectedIds.length ? (
+            <div
+              className="flex flex-wrap items-center gap-2 border border-status-blue-500/40 bg-status-blue-500/10 px-3 py-2 text-sm"
+              data-testid="items-bulk-bar"
             >
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setScanOpen((prev) => !prev)}
-              >
-                <CameraIcon className="size-4" />
-                Scan
+              <span className="mr-auto font-medium">{plural(selectedIds.length, "item")} selected</span>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                Clear selection
               </Button>
-              <Button type="button" onClick={() => setWizardOpen(true)}>
-                <PlusIcon className="size-4" />
-                New Item
+              <Button type="button" size="sm" variant="destructive" disabled={bulkPending} onClick={() => void bulkDelete()}>
+                Delete selected
               </Button>
-              <Tooltip>
-                <TooltipTrigger asChild>
+            </div>
+          ) : null}
+
+          {items.length === 0 ? (
+            <EmptyState
+              action={
+                narrowed ? (
                   <Button
                     type="button"
-                    variant="destructive"
-                    disabled={!selectedIds.length}
-                    aria-label="Delete selected items"
-                    onClick={() => void bulkDeleteSelected()}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearch("");
+                      setFilters({});
+                    }}
                   >
-                    <TrashIcon className="size-4" />
-                    {selectedIds.length ? ` (${selectedIds.length})` : ""}
+                    Clear search and filters
                   </Button>
-                </TooltipTrigger>
-                <TooltipContent>Delete selected items</TooltipContent>
-              </Tooltip>
-            </FilterBar>
-            {scanOpen ? (
-              <div className="rounded-md border bg-muted/30 p-3">
-                <AssetScanner onSubmit={(raw) => setScanRaw(raw)} autoFocus />
-                {scanError ? <p className="text-sm text-destructive">{scanError}</p> : null}
-              </div>
-            ) : null}
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <DataTable
-              columns={columns}
-              data={items}
-              getRowId={(row) => row._id}
-              enableRowSelection
-              enableColumnVisibility
-              rowSelection={rowSelection}
-              onRowSelectionChange={setRowSelection}
-              initialSorting={[{ id: "assetId", desc: false }]}
-              emptyMessage="No inventory items found."
-              getRowProps={(row) => ({
-                "data-testid": `item-row-${row.original._id}`,
-                ref: (element: HTMLTableRowElement | null) => {
-                  if (!element) {
-                    rowRefs.current.delete(row.original._id);
-                    return;
+                ) : (
+                  <Button type="button" size="sm" variant="outline" onClick={() => setWizardOpen(true)}>
+                    Add the first item
+                  </Button>
+                )
+              }
+            >
+              {status === "CanLoadMore"
+                ? "Nothing matches in the items checked so far. Load more to keep looking."
+                : narrowed
+                  ? "No items match this search and these filters."
+                  : "No inventory yet."}
+            </EmptyState>
+          ) : (
+            <div className="border" data-testid="items-list">
+              <div className="flex items-center gap-2 border-b bg-muted/20 py-2 pr-1 pl-3 text-xs font-medium text-muted-foreground">
+                <Checkbox
+                  aria-label="Select all items shown"
+                  checked={allSelected ? true : selectedIds.length ? "indeterminate" : false}
+                  onCheckedChange={(checked) =>
+                    setSelected(checked === true ? new Set(items.map((item) => item._id)) : new Set())
                   }
-                  rowRefs.current.set(row.original._id, element);
-                },
-              })}
-            />
-            {itemsStatus === "CanLoadMore" || itemsStatus === "LoadingMore" ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={itemsStatus === "LoadingMore"}
-                onClick={() => loadMore(100)}
-              >
-                {itemsStatus === "LoadingMore" ? "Loading…" : "Load more"}
-              </Button>
-            ) : null}
-          </CardContent>
-        </Card>
+                />
+                <span className="flex-1">Item</span>
+                <span className="hidden w-48 md:block">Location</span>
+                <span className="hidden w-36 lg:block">Container</span>
+                <span className="w-8" />
+              </div>
+              <ul className="divide-y [&>li]:border-0">
+                {items.map((item) => {
+                  const label = inventoryItemLabel(item);
+                  const holds = childCount.get(item._id) ?? 0;
+                  return (
+                    <ListRow
+                      key={item._id}
+                      data-testid={`item-row-${item._id}`}
+                      onOpen={() => setSelectedId(item._id)}
+                      className={selectedId === item._id ? "bg-muted/40" : undefined}
+                      leading={
+                        <Checkbox
+                          aria-label={`Select ${label}`}
+                          checked={selected.has(item._id)}
+                          onCheckedChange={(checked) =>
+                            setSelected((prev) => {
+                              const next = new Set(prev);
+                              if (checked === true) next.add(item._id);
+                              else next.delete(item._id);
+                              return next;
+                            })
+                          }
+                        />
+                      }
+                      actions={
+                        <RowMenu label={`More for ${label}`}>
+                          <DropdownMenuItem onSelect={() => setSelectedId(item._id)}>Open details</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setDamageItemId(item._id)}>Report damage</DropdownMenuItem>
+                          {item.assetId ? (
+                            <DropdownMenuItem asChild>
+                              <a href={`${siteBase}/e/${encodeURIComponent(item.assetId)}`} target="_blank" rel="noreferrer">
+                                Open public page
+                              </a>
+                            </DropdownMenuItem>
+                          ) : null}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem variant="destructive" onSelect={() => void deleteItem({ _id: item._id, label })}>
+                            Delete item
+                          </DropdownMenuItem>
+                        </RowMenu>
+                      }
+                    >
+                      <RowText
+                        eyebrow={item.type?.category ?? "Unknown category"}
+                        title={label}
+                        detail={[
+                          formatTypeDisplay(item.type ?? { name: "Unknown type", model: "Unknown type" }),
+                          item.assetId && item.serialNumber ? `SN ${item.serialNumber}` : null,
+                          item.status,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      />
+                      <RowCell className="w-48 truncate" align="left" hideBelow="md" muted>
+                        {item.location?.path ?? "No location"}
+                      </RowCell>
+                      <RowCell className="w-36 truncate" align="left" hideBelow="lg" muted>
+                        {item.containedInAsset
+                          ? `In ${inventoryItemLabel(item.containedInAsset)}`
+                          : holds
+                            ? `Holds ${holds}`
+                            : "—"}
+                      </RowCell>
+                    </ListRow>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
 
-        {editingId ? (
-          <InventoryItemEditor
-            editingId={editingId as never}
-            initial={editorInitial}
-            types={types ?? []}
-            locations={locations ?? []}
-            items={(itemSummaries ?? []).map((item) => ({
-              _id: item._id,
-              assetId: item.assetId,
-              serialNumber: item.serialNumber,
-              type: item.type ?? undefined,
-            }))}
-            siteBase={siteBase}
-            onCancel={() => {
-              setEditingId(null);
-              setEditorInitial(defaultForm);
-            }}
-            onSaved={() => {
-              if (!editingId) setEditorInitial(defaultForm);
-            }}
-          />
-        ) : null}
+          {status === "CanLoadMore" || status === "LoadingMore" ? (
+            <Button type="button" variant="outline" disabled={status === "LoadingMore"} onClick={() => loadMore(100)}>
+              {status === "LoadingMore" ? "Loading…" : "Load more"}
+            </Button>
+          ) : null}
+        </>
+      )}
 
-        <DamageReportWizard
-          open={Boolean(damageItemId)}
-          onOpenChange={(open) => {
-            if (!open) setDamageItemId(null);
-          }}
-          initialInventoryItemId={damageItemId as never}
-        />
-
-        <CreateAssetWizard open={wizardOpen} onOpenChange={setWizardOpen} />
-      </div>
-    </TooltipProvider>
+      <ItemSheet
+        itemId={selectedId}
+        onOpenChange={(open) => {
+          if (!open) setSelectedId(null);
+        }}
+        options={{
+          types: types ?? [],
+          locations: locations ?? [],
+          items: (itemSummaries ?? []).map((item) => ({
+            _id: item._id,
+            assetId: item.assetId,
+            serialNumber: item.serialNumber,
+            type: item.type ?? undefined,
+          })),
+        }}
+        siteBase={siteBase}
+        onReportDamage={(id) => setDamageItemId(id)}
+        onDelete={deleteItem}
+      />
+      <DamageReportWizard
+        open={Boolean(damageItemId)}
+        onOpenChange={(open) => {
+          if (!open) setDamageItemId(null);
+        }}
+        initialInventoryItemId={damageItemId ?? undefined}
+      />
+      <CreateAssetWizard open={wizardOpen} onOpenChange={setWizardOpen} />
+    </div>
   );
 }

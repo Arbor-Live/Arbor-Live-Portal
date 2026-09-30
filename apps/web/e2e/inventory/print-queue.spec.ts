@@ -37,17 +37,13 @@ test.describe("print queue", () => {
     );
 
     await page.goto("/dashboard/inventory/print-queue");
-    // The printer cards are nested inside the "Printers" card, so the queue-name
-    // filter matches both the wrapper and the card itself; drop the wrapper.
-    const printerCard = page
-      .locator('[data-slot="card"]')
-      .filter({ hasText: `Queue: ${queueName}` })
-      .filter({ hasNot: page.locator('[data-slot="card"]') });
-    await expect(printerCard).toBeVisible({ timeout: 30_000 });
-    await expect(printerCard.getByText(queueName, { exact: true })).toBeVisible();
-    await expect(printerCard.getByText("Online", { exact: true })).toBeVisible();
+    const printerRow = page.getByTestId(`printer-row-${queueName}`);
+    await expect(printerRow).toBeVisible({ timeout: 30_000 });
+    await expect(printerRow).toContainText(`Queue ${queueName}`);
+    await expect(printerRow.getByText("Online", { exact: true })).toBeVisible();
 
-    const row = page.getByRole("row").filter({ hasText: title });
+    const jobRows = page.locator("[data-testid^='print-job-']").filter({ hasText: title });
+    const row = jobRows.first();
     await expect(row).toBeVisible({ timeout: 20_000 });
     await expect(row.getByText(/Ready|Printed/)).toBeVisible();
 
@@ -57,9 +53,7 @@ test.describe("print queue", () => {
       { eventId: seeded.eventId },
       (state) => Boolean(state && state.jobs.length >= 2),
     );
-    await expect(page.getByRole("row").filter({ hasText: title })).toHaveCount(2, {
-      timeout: 20_000,
-    });
+    await expect(jobRows).toHaveCount(2, { timeout: 20_000 });
   });
 
   test("downloads the event brief from the editor", async ({ page }) => {

@@ -3,10 +3,9 @@
 import { useEffect, useState } from "react";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
-import { FormSaveBar } from "@/components/forms";
 import { Form } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DetailSheetFooter, SheetSection } from "@/components/list-page";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   inventoryItemSchema,
@@ -44,6 +43,7 @@ export function InventoryItemEditor({
   siteBase,
   onCancel,
   onSaved,
+  footerStart,
 }: {
   editingId: Id<"inventoryItems"> | null;
   initial: InventoryItemFormValues;
@@ -53,6 +53,8 @@ export function InventoryItemEditor({
   siteBase: string;
   onCancel: () => void;
   onSaved: () => void;
+  /** Left side of the panel footer: the item's destructive and secondary actions. */
+  footerStart?: React.ReactNode;
 }) {
   const createItem = useMutation(api.inventoryItems.create);
   const updateItem = useMutation(api.inventoryItems.update);
@@ -143,95 +145,79 @@ export function InventoryItemEditor({
     label: formatTypeDisplay(item.type),
   }));
 
-  const tier = "C";
+  const saving = form.saveStatus === "saving";
+  const submit = () => void form.handleSubmit((values) => form.runMutation(() => persist(values)))();
 
   return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle>{editingId ? "Edit Item" : "Create Item"}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit((values) => form.runMutation(() => persist(values)))}
-              className="space-y-3"
-            >
-              <InventoryItemDetails
-                values={{
-                  assetId: values.assetId ?? "",
-                  serialNumber: values.serialNumber ?? "",
-                  typeId: values.typeId,
-                  storageLocationId: values.storageLocationId ?? "",
-                  containedInAssetId: values.containedInAssetId ?? "",
-                  status: values.status ?? "",
-                  notes: values.notes ?? "",
-                }}
-                onChange={onDetailsChange}
-                errors={
-                  form.formState.errors.assetId
-                    ? {
-                        assetId:
-                          form.formState.errors.assetId.message ??
-                          "Add an Asset ID or Serial Number",
-                      }
-                    : undefined
-                }
-                types={types.map((type) => ({ value: type._id, label: `${type.name} - ${type.model}` }))}
-                locations={locations.map((location) => ({
-                  value: location._id,
-                  label: location.path,
-                }))}
-                containerOptions={containerOptions}
-                testIdPrefix="item"
-                siteBase={siteBase}
-              />
-              {tier === "C" ? (
-                <Button type="submit" disabled={form.saveStatus === "saving"}>
-                  {editingId ? "Save" : "Create"}
-                </Button>
-              ) : null}
-              {editingId ? (
-                <Button type="button" variant="outline" onClick={onCancel}>
-                  Cancel
-                </Button>
-              ) : null}
-            </form>
-          </Form>
-          {editingId ? (
-            <div className="space-y-3 border-t pt-3">
-              <ContainsEditor
-                value={(children ?? []).map((child) => child._id)}
-                onChange={setChildren}
-                options={containsOptions}
-                onScan={scanContains}
-                title={`Contains (${children?.length ?? 0})`}
-                emptyLabel="Nothing inside yet — scan or add the contents"
-              />
-              {containsScanError ? (
-                <p className="text-sm text-destructive">{containsScanError}</p>
-              ) : null}
-              {containsError ? (
-                <p className="text-sm text-destructive">{containsError}</p>
-              ) : null}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <FormSaveBar
-        tier={tier}
-        saveStatus={form.saveStatus}
-        saveError={form.saveError}
-        isDirty={form.formState.isDirty}
-        saveLabel={editingId ? "Save" : "Create"}
-        onSave={() => void form.handleSubmit((values) => form.runMutation(() => persist(values)))()}
-        onDiscard={() => {
-          form.reset(initial);
-          onCancel();
+    <Form {...form}>
+      <form
+        className="flex min-h-full flex-col"
+        data-testid="item-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
         }}
-        onRetry={() => void form.handleSubmit((values) => form.runMutation(() => persist(values)))()}
-      />
-    </>
+      >
+        <SheetSection title="Details">
+          <InventoryItemDetails
+            values={{
+              assetId: values.assetId ?? "",
+              serialNumber: values.serialNumber ?? "",
+              typeId: values.typeId,
+              storageLocationId: values.storageLocationId ?? "",
+              containedInAssetId: values.containedInAssetId ?? "",
+              status: values.status ?? "",
+              notes: values.notes ?? "",
+            }}
+            onChange={onDetailsChange}
+            errors={
+              form.formState.errors.assetId
+                ? {
+                    assetId: form.formState.errors.assetId.message ?? "Add an Asset ID or Serial Number",
+                  }
+                : undefined
+            }
+            types={types.map((type) => ({ value: type._id, label: `${type.name} - ${type.model}` }))}
+            locations={locations.map((location) => ({
+              value: location._id,
+              label: location.path,
+            }))}
+            containerOptions={containerOptions}
+            testIdPrefix="item"
+            siteBase={siteBase}
+          />
+        </SheetSection>
+        {editingId ? (
+          <SheetSection title="Contains">
+            <ContainsEditor
+              value={(children ?? []).map((child) => child._id)}
+              onChange={setChildren}
+              options={containsOptions}
+              onScan={scanContains}
+              title={`Contains (${children?.length ?? 0})`}
+              emptyLabel="Nothing inside yet — scan or add the contents"
+            />
+            {containsScanError ? <p className="text-sm text-destructive">{containsScanError}</p> : null}
+            {containsError ? <p className="text-sm text-destructive">{containsError}</p> : null}
+            <p className="text-xs text-muted-foreground">
+              Contents are saved as you add or remove them, and take this item&apos;s location.
+            </p>
+          </SheetSection>
+        ) : null}
+        <DetailSheetFooter start={footerStart}>
+          {form.saveError ? (
+            <span className="max-w-48 text-xs text-destructive" role="alert">
+              {form.saveError}
+            </span>
+          ) : null}
+          <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" size="sm" disabled={saving || (Boolean(editingId) && !form.formState.isDirty)}>
+            {saving ? "Saving…" : editingId ? "Save changes" : "Create item"}
+          </Button>
+        </DetailSheetFooter>
+      </form>
+    </Form>
   );
 }

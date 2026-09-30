@@ -40,7 +40,9 @@ export function ListRow({
   return (
     <li
       className={cn(
-        "flex items-center gap-2 border pr-1 pl-3 text-sm transition-colors hover:bg-muted/30",
+        // A trailing ⋯ menu brings its own inset; without one, match the left edge.
+        "flex items-center gap-2 border pl-3 text-sm transition-colors hover:bg-muted/30",
+        actions ? "pr-1" : "pr-3",
         className,
       )}
       {...liProps}
