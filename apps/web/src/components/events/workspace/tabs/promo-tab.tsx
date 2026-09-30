@@ -4,6 +4,7 @@ import { GlobeIcon, InfoIcon, LockSimpleIcon, type Icon } from "@phosphor-icons/
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EventMarketingSection } from "@/components/events/event-marketing-section";
 import { EventMediaSection } from "@/components/events/event-media-section";
+import { EventShortLinksCard } from "@/components/marketing/event-short-links-card";
 import type { EventVisibility } from "@/lib/event-visibility";
 import { cn } from "@/lib/utils";
 import { useEventWorkspace } from "@/components/events/workspace/event-workspace-provider";
@@ -78,6 +79,7 @@ export function PromoTab() {
         </CardContent>
       </Card>
       <EventMarketingSection eventId={eventId} />
+      <EventShortLinksCard eventId={eventId} eventTitle={draft.title} />
       <EventMediaSection eventId={eventId} />
     </div>
   );

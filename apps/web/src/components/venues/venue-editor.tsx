@@ -8,11 +8,12 @@ import { api, type Id } from "@/lib/convex-api";
 import { EMPTY_LEXICAL_STATE } from "@/components/editor/lexical-theme";
 import { VenueDocumentUploadButton } from "@/components/files/file-upload-field";
 import { StoredAssetLink } from "@/components/files/stored-asset-image";
-import { FormSaveBar } from "@/components/forms";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DetailSheetFooter } from "@/components/list-page";
+import { SearchableSelect } from "@/components/inventory/searchable-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Collapsible,
   CollapsibleContent,
@@ -193,12 +194,15 @@ export function VenueEditor({
   venues,
   onCancel,
   onSaved,
+  footerStart,
 }: {
   editingId: Id<"venues"> | null;
   initial: VenueFormValues;
   venues: VenueInheritableRow[];
   onCancel: () => void;
   onSaved: (savedId?: Id<"venues">) => void;
+  /** Left side of the panel footer: destructive and secondary actions. */
+  footerStart?: ReactNode;
 }) {
   const createVenue = useMutation(api.venues.create);
   const updateVenue = useMutation(api.venues.update);
@@ -309,23 +313,19 @@ export function VenueEditor({
     void form.handleSubmit((values) => form.runMutation(() => persist(values)))();
   }, [form, persist]);
 
-  const tier = editingId ? "C" : "C";
+  const saving = form.saveStatus === "saving";
 
   return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle>{editingId ? "Edit Venue" : "Create Venue"}</CardTitle>
-        </CardHeader>
-        <CardContent className="max-h-[80vh] space-y-4 overflow-auto">
-          <Form {...form}>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                runSave();
-              }}
-              className="space-y-4"
-            >
+    <Form {...form}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          runSave();
+        }}
+        className="flex min-h-full flex-col"
+        data-testid="venue-form"
+      >
+        <div className="space-y-4 border-t px-4 py-4">
               <TextFormField name="name" label="Name" />
 
               <div className="space-y-2">
@@ -373,61 +373,63 @@ export function VenueEditor({
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <Label>Kind</Label>
-                  <select
-                    className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  <Label htmlFor="venue-kind">Kind</Label>
+                  <Select
                     value={kind}
-                    onChange={(e) => {
-                      const next = e.target.value as VenueKind;
+                    onValueChange={(value) => {
+                      const next = value as VenueKind;
                       form.setValue("kind", next, { shouldDirty: true });
                       form.setValue("venueType", venueTypesForKind(next)[0]!, {
                         shouldDirty: true,
                       });
                     }}
                   >
-                    {VENUE_KINDS.map((k) => (
-                      <option key={k} value={k}>
-                        {formatVenueKindLabel(k)}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="venue-kind">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VENUE_KINDS.map((k) => (
+                        <SelectItem key={k} value={k}>
+                          {formatVenueKindLabel(k)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label>Type</Label>
-                  <select
-                    className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  <Label htmlFor="venue-type">Type</Label>
+                  <Select
                     value={form.watch("venueType")}
-                    onChange={(e) =>
-                      form.setValue("venueType", e.target.value, { shouldDirty: true })
-                    }
+                    onValueChange={(value) => form.setValue("venueType", value, { shouldDirty: true })}
                   >
-                    {venueTypesForKind(kind).map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="venue-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {venueTypesForKind(kind).map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
               <div className="space-y-1">
                 <Label>Parent</Label>
-                <select
-                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                <SearchableSelect
                   value={form.watch("parentId") ?? ""}
-                  onChange={(e) =>
-                    form.setValue("parentId", e.target.value, { shouldDirty: true })
-                  }
-                >
-                  <option value="">No parent (top-level / selectable area)</option>
-                  {venues
-                    .filter((venue) => venue._id !== editingId)
-                    .map((venue) => (
-                      <option key={venue._id} value={venue._id}>
-                        {venue.path}
-                      </option>
-                    ))}
-                </select>
+                  onChange={(value) => form.setValue("parentId", value, { shouldDirty: true })}
+                  options={[
+                    { value: "", label: "No parent (top-level / selectable area)" },
+                    ...venues
+                      .filter((venue) => venue._id !== editingId)
+                      .map((venue) => ({ value: venue._id, label: venue.path })),
+                  ]}
+                  placeholder="Search venues…"
+                  emptyLabel="No parent (top-level / selectable area)"
+                />
                 <p className="text-xs text-muted-foreground">
                   Nest under a building, or clear parent to make this top-level.
                 </p>
@@ -685,36 +687,21 @@ export function VenueEditor({
                 )}
               </div>
 
-              {!editingId ? (
-                <Button type="submit" disabled={form.saveStatus === "saving"}>
-                  Create
-                </Button>
-              ) : (
-                <Button type="button" variant="outline" onClick={onCancel}>
-                  Cancel
-                </Button>
-              )}
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
-
-      <FormSaveBar
-        tier={tier}
-        saveStatus={form.saveStatus}
-        saveError={form.saveError}
-        isDirty={form.formState.isDirty}
-        saveLabel={editingId ? "Save" : "Create"}
-        onSave={runSave}
-        onDiscard={() => {
-          form.reset({
-            ...initial,
-            notesJson: initial.notesJson || EMPTY_LEXICAL_STATE,
-          });
-          onCancel();
-        }}
-        onRetry={runSave}
-      />
-    </>
+        </div>
+        <DetailSheetFooter start={footerStart}>
+          {form.saveError ? (
+            <span className="max-w-48 text-xs text-destructive" role="alert">
+              {form.saveError}
+            </span>
+          ) : null}
+          <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" size="sm" disabled={saving || (Boolean(editingId) && !form.formState.isDirty)}>
+            {saving ? "Saving…" : editingId ? "Save changes" : "Create venue"}
+          </Button>
+        </DetailSheetFooter>
+      </form>
+    </Form>
   );
 }

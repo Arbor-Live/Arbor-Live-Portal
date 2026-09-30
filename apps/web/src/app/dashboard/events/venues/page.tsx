@@ -5,16 +5,7 @@ export default function VenuesPage() {
   return (
     <ArborOnlyGuard>
       <AdminOnlyGuard>
-        <div className="space-y-4">
-          <div>
-            <h1 className="text-xl font-semibold">Venues</h1>
-            <p className="text-sm text-muted-foreground">
-              Manage buildings and event spaces. Nest spaces under buildings, or keep standalone
-              outdoor locations. Admin only.
-            </p>
-          </div>
-          <VenuesManager />
-        </div>
+        <VenuesManager />
       </AdminOnlyGuard>
     </ArborOnlyGuard>
   );
