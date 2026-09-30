@@ -4705,6 +4705,49 @@ const e2eInvoiceLineValidator = v.object({
  * assert against this, not the DOM, so a divergence between the two shows up as
  * a failure instead of a passing test that only ever read one of them.
  */
+/** An invoice's approval and its versions, oldest first. */
+export const getInvoiceRevisionsState = query({
+  args: { invoiceId: v.id("invoices") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      clientApprovalStatus: v.string(),
+      totalUsd: v.number(),
+      approvedTotalUsd: v.union(v.number(), v.null()),
+      revisions: v.array(
+        v.object({
+          number: v.number(),
+          kind: v.string(),
+          totalUsd: v.number(),
+          note: v.union(v.string(), v.null()),
+          recordedLate: v.boolean(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) return null;
+    const revisions = await ctx.db
+      .query("invoiceRevisions")
+      .withIndex("by_invoiceId_and_number", (q) => q.eq("invoiceId", args.invoiceId))
+      .take(50);
+    return {
+      clientApprovalStatus: invoice.clientApprovalStatus ?? "pending",
+      totalUsd: invoice.totalUsd,
+      approvedTotalUsd: invoice.approvedTotalUsd ?? null,
+      revisions: revisions.map((revision) => ({
+        number: revision.number,
+        kind: revision.kind,
+        totalUsd: revision.totalUsd,
+        note: revision.note ?? null,
+        recordedLate: Boolean(revision.recordedLate),
+      })),
+    };
+  },
+});
+
 export const getInvoiceTotalsState = query({
   args: { invoiceId: v.id("invoices") },
   returns: v.union(

@@ -16,6 +16,8 @@ import { InvoiceLineItems } from "./invoice-line-items";
 import { InvoiceRequestSummary } from "./invoice-request-summary";
 import { InvoiceSummaryRail } from "./invoice-summary-rail";
 import { InvoiceTermsCard } from "./invoice-terms-card";
+import { ApprovedChangeDialog } from "./approved-change-dialog";
+import { InvoiceVersionsCard } from "./invoice-versions-card";
 import { useInvoiceDraft, type InvoiceDraft } from "./use-invoice-draft";
 
 /**
@@ -38,6 +40,8 @@ export function InvoiceEditor({
     lookupId ? { invoiceId: lookupId } : "skip",
   );
   const { activeInvoiceId, invoice } = draft;
+  const approvedTotalUsd =
+    invoice?.clientApprovalStatus === "approved" ? (invoice.approvedTotalUsd ?? invoice.totalUsd) : null;
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 pb-24" data-testid="invoice-editor">
@@ -50,6 +54,7 @@ export function InvoiceEditor({
           {sourceRequest ? <InvoiceRequestSummary request={sourceRequest} /> : null}
           <InvoiceLineItems draft={draft} />
           <InvoiceTermsCard draft={draft} />
+          <InvoiceVersionsCard draft={draft} />
           {activeInvoiceId && invoice ? (
             <InvoiceQuoteApprovalDetails
               key={[
@@ -81,12 +86,21 @@ export function InvoiceEditor({
         onSave={() => void draft.persistDraft(true)}
         onRetry={() => void draft.persistDraft(true)}
         summary={
-          <div>
-            <p className="text-xs text-muted-foreground">{draft.isDraftDirty ? "Draft total" : "Total"}</p>
-            <p className="font-semibold tabular-nums">{formatUsd(draft.draftTotals.totalUsd)}</p>
+          <div className="flex items-end gap-4">
+            {approvedTotalUsd != null && draft.isDraftDirty ? (
+              <div>
+                <p className="text-xs text-muted-foreground">Approved</p>
+                <p className="font-semibold tabular-nums text-muted-foreground">{formatUsd(approvedTotalUsd)}</p>
+              </div>
+            ) : null}
+            <div>
+              <p className="text-xs text-muted-foreground">{draft.isDraftDirty ? "Draft total" : "Total"}</p>
+              <p className="font-semibold tabular-nums">{formatUsd(draft.draftTotals.totalUsd)}</p>
+            </div>
           </div>
         }
       />
+      <ApprovedChangeDialog draft={draft} />
     </div>
   );
 }
@@ -108,7 +122,21 @@ function InvoiceEditorAlerts({ draft }: { draft: InvoiceDraft }) {
 
   const warnings: React.ReactNode[] = [];
   if (invoice?.clientApprovalStatus === "approved" && isDraftDirty) {
-    warnings.push(<span key="approved">This quote is approved. Saving changes may require client re-approval.</span>);
+    const approvedTotal = invoice.approvedTotalUsd ?? invoice.totalUsd;
+    const moved = Math.abs(draft.draftTotals.totalUsd - approvedTotal) >= 0.005;
+    warnings.push(
+      <span key="approved">
+        This quote is approved, and these changes aren&apos;t saved.
+        {moved
+          ? ` They'd move it from ${formatUsd(approvedTotal)} to ${formatUsd(draft.draftTotals.totalUsd)}.`
+          : ""}{" "}
+        When you save, you&apos;ll choose whether to send it back to the client for approval or keep the approval.
+      </span>,
+    );
+  } else if (invoice && isDraftDirty && !draft.autosaveEnabled) {
+    warnings.push(
+      <span key="sent">The client can see this quote, so changes don&apos;t save until you click Save.</span>,
+    );
   }
   if (draft.seriesOccurrenceStale) {
     warnings.push(

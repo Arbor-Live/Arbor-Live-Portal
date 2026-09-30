@@ -18,6 +18,7 @@ import { RunOfShowView } from "@/components/events/workspace/run-of-show/run-of-
 import { PublicEventCrew } from "@/components/public/public-event-crew";
 import { PublicEventContacts, buildInheritedContactRows } from "@/components/public/public-event-contacts";
 import { PublicQuoteFinancials } from "@/components/public/public-quote-financials";
+import { PublicQuoteHistory, PublicQuoteUpdatedBanner } from "./public-quote-history";
 import { PublicPaymentProofSection } from "@/components/public/public-payment-proof-section";
 import { PublicPaymentContactsSection } from "@/components/public/public-payment-contacts-section";
 import { PublicQuoteApprovalSection } from "@/components/public/public-quote-approval-section";
@@ -306,6 +307,11 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
             </div>
 
             <div className="space-y-4 lg:order-1">
+              <PublicQuoteUpdatedBanner
+                approvalStatus={data.invoice.clientApprovalStatus}
+                revisions={data.revisions}
+              />
+
               <PublicQuoteFinancials
                 lineItems={data.lineItems}
                 totals={{
@@ -330,6 +336,8 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
                   </CardContent>
                 </Card>
               ) : null}
+
+              <PublicQuoteHistory revisions={data.revisions} />
 
               <PublicQuoteApprovalSection
                 invoice={data.invoice}

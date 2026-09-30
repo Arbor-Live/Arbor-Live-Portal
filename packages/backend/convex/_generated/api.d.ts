@@ -60,6 +60,7 @@ import type * as email_postEventAlbumReminderActions from "../email/postEventAlb
 import type * as email_postEventAlbumReminders from "../email/postEventAlbumReminders.js";
 import type * as email_quoteApprovedEmails from "../email/quoteApprovedEmails.js";
 import type * as email_quoteChangesRequestedEmails from "../email/quoteChangesRequestedEmails.js";
+import type * as email_quoteUpdatedEmails from "../email/quoteUpdatedEmails.js";
 import type * as email_recipients from "../email/recipients.js";
 import type * as email_reminders from "../email/reminders.js";
 import type * as email_scheduleEmailData from "../email/scheduleEmailData.js";
@@ -164,6 +165,7 @@ import type * as lib_invoiceEvents from "../lib/invoiceEvents.js";
 import type * as lib_invoicePaymentStatus from "../lib/invoicePaymentStatus.js";
 import type * as lib_invoicePeople from "../lib/invoicePeople.js";
 import type * as lib_invoiceProfit from "../lib/invoiceProfit.js";
+import type * as lib_invoiceRevisions from "../lib/invoiceRevisions.js";
 import type * as lib_invoiceSeries from "../lib/invoiceSeries.js";
 import type * as lib_listFilters from "../lib/listFilters.js";
 import type * as lib_marketingContent from "../lib/marketingContent.js";
@@ -316,6 +318,7 @@ declare const fullApi: ApiFromModules<{
   "email/postEventAlbumReminders": typeof email_postEventAlbumReminders;
   "email/quoteApprovedEmails": typeof email_quoteApprovedEmails;
   "email/quoteChangesRequestedEmails": typeof email_quoteChangesRequestedEmails;
+  "email/quoteUpdatedEmails": typeof email_quoteUpdatedEmails;
   "email/recipients": typeof email_recipients;
   "email/reminders": typeof email_reminders;
   "email/scheduleEmailData": typeof email_scheduleEmailData;
@@ -420,6 +423,7 @@ declare const fullApi: ApiFromModules<{
   "lib/invoicePaymentStatus": typeof lib_invoicePaymentStatus;
   "lib/invoicePeople": typeof lib_invoicePeople;
   "lib/invoiceProfit": typeof lib_invoiceProfit;
+  "lib/invoiceRevisions": typeof lib_invoiceRevisions;
   "lib/invoiceSeries": typeof lib_invoiceSeries;
   "lib/listFilters": typeof lib_listFilters;
   "lib/marketingContent": typeof lib_marketingContent;

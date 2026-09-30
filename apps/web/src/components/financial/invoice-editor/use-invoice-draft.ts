@@ -15,7 +15,7 @@ import {
   type InvoiceCrewRow,
 } from "@/lib/invoice-crew-from-event";
 import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
-import { getConvexErrorMessage } from "@/lib/convex-error";
+import { getConvexAppErrorData, getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import { computeInvoiceDraftTotals } from "@/lib/compute-invoice-draft-totals";
 import {
@@ -43,6 +43,9 @@ import {
 } from "./invoice-draft-model";
 
 type SaveState = { status: "idle" | "saving" | "saved" | "error"; error: string | null };
+
+/** How to handle a save that changes what the client approved (see `invoices.updateDraft`). */
+export type ApprovedChange = { decision: "request_reapproval" | "keep_approval"; note?: string };
 
 /**
  * The quote editor's draft: server hydration, the dirty signature, autosave
@@ -78,6 +81,8 @@ export function useInvoiceDraft({
   const [invoiceFieldsHydrated, setInvoiceFieldsHydrated] = useState(() => !invoiceId);
   const [editorBaselineReady, setEditorBaselineReady] = useState(() => !invoiceId);
   const [selectedDayEventIdOverride, setSelectedDayEventIdOverride] = useState<Id<"events"> | undefined>();
+  // Open when a save would change what the client approved and needs a decision.
+  const [approvedChangeOpen, setApprovedChangeOpen] = useState(false);
 
   const saveRequestIdRef = useRef(0);
   const hasHydratedFromServerRef = useRef(false);
@@ -87,7 +92,6 @@ export function useInvoiceDraft({
   const artistsHydratedFromInvoiceRef = useRef(false);
   const baselineSignaturePendingRef = useRef(false);
   const savedCrewSnapshotRef = useRef<CrewRow[]>([]);
-  const reapprovalDecisionRef = useRef<null | boolean>(null);
   const crewRowsByEventRef = useRef<Map<string, InvoiceCrewRow[]>>(new Map());
   const crewBucketsHydratedInvoiceRef = useRef<string | null>(null);
 
@@ -121,7 +125,6 @@ export function useInvoiceDraft({
 
   const createDraft = useMutation(api.invoices.createDraft);
   const updateDraft = useMutation(api.invoices.updateDraft);
-  const resetApprovalToPending = useMutation(api.invoices.resetApprovalToPending);
   const scaffoldPullListFromInvoice = useMutation(api.eventPullLists.scaffoldFromInvoice);
 
   const selectedPackageIds = useMemo(
@@ -491,7 +494,6 @@ export function useInvoiceDraft({
     }));
     artistsHydratedFromInvoiceRef.current = lineItems.some((row) => row.section === "artist");
     artistsBootstrappedFromEventRef.current = false;
-    reapprovalDecisionRef.current = null;
     baselineSignaturePendingRef.current = true;
     setInvoiceFieldsHydrated(true);
   }, [invoiceData, invoiceId]);
@@ -819,7 +821,14 @@ export function useInvoiceDraft({
     setSaveState((current) => ({ ...current, error }));
   }
 
-  async function persistDraft(promptForPullListSync = false) {
+  /**
+   * Save the draft. A change to an approved quote goes to the server without a
+   * decision first: if it only touches things the client didn't approve
+   * (manager, contact, notes) it just saves; otherwise the server refuses and
+   * the approved-change dialog opens, which calls back with `approvedChange`.
+   * Nothing is written until that decision is made.
+   */
+  async function persistDraft(promptForPullListSync = false, approvedChange?: ApprovedChange) {
     const payload = buildPayload();
     if (!payload) {
       setSaveState({ status: "error", error: "Select a manager and add at least one line item." });
@@ -827,27 +836,22 @@ export function useInvoiceDraft({
     }
 
     const signature = JSON.stringify(payload);
-    const approvedQuoteEdited =
-      invoiceData?.invoice?.clientApprovalStatus === "approved" && signature !== lastSavedSignature;
-
-    if (approvedQuoteEdited && reapprovalDecisionRef.current === null) {
-      reapprovalDecisionRef.current = await confirm({
-        title: "Require client approval again?",
-        description: "This quote was already approved and has changed.",
-      });
-    }
-
     const requestId = ++saveRequestIdRef.current;
     setSaving(true);
     setSaveState({ status: "saving", error: null });
 
     try {
       if (activeInvoiceId) {
-        const result = await updateDraft({ id: activeInvoiceId, ...payload });
+        const result = await updateDraft({
+          id: activeInvoiceId,
+          ...payload,
+          ...(approvedChange ? { approvedChange } : {}),
+        });
         if (result.warning) notify.warning(result.warning);
-        if (approvedQuoteEdited && reapprovalDecisionRef.current) {
-          await resetApprovalToPending({ id: activeInvoiceId });
-          notify.success("Quote updated and reset to pending approval.");
+        if (result.revision?.kind === "reapproval_requested") {
+          notify.success(`Saved as version ${result.revision.number} and sent to the client for re-approval.`);
+        } else if (result.revision?.kind === "change_kept_approval") {
+          notify.success(`Saved as version ${result.revision.number}. The client's approval stands.`);
         }
       } else {
         const result = await createDraft(payload);
@@ -860,6 +864,11 @@ export function useInvoiceDraft({
         setSaveState({ status: "saved", error: null });
       }
     } catch (error) {
+      if (!approvedChange && getConvexAppErrorData(error)?.code === "QUOTE_APPROVED_CHANGE_NEEDS_DECISION") {
+        if (requestId === saveRequestIdRef.current) setSaveState({ status: "idle", error: null });
+        setApprovedChangeOpen(true);
+        return false;
+      }
       const message = getConvexErrorMessage(error, "Could not save invoice.");
       if (requestId === saveRequestIdRef.current) {
         setSaveState({ status: "error", error: message });
@@ -901,7 +910,18 @@ export function useInvoiceDraft({
     return true;
   }
 
+  // Autosave only while the quote is an unsent draft. Once the client can see
+  // it (sent, or approved), every change is an explicit save.
+  const invoiceDoc = invoiceData?.invoice;
+  const autosaveEnabled = Boolean(
+    invoiceDoc &&
+      invoiceDoc.status === "draft" &&
+      (invoiceDoc.clientApprovalStatus ?? "pending") !== "approved" &&
+      !invoiceDoc.clientReviewReadyAt,
+  );
+
   useEffect(() => {
+    if (!autosaveEnabled) return;
     if (!activeInvoiceId || !invoiceFieldsHydrated || !editorBaselineReady || !isDraftDirty) return;
     if (saving || saveState.status === "saving") return;
     const timer = window.setTimeout(() => {
@@ -909,7 +929,7 @@ export function useInvoiceDraft({
     }, 2500);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- persistDraft is recreated each render; draftSignature covers content changes
-  }, [draftSignature, activeInvoiceId, invoiceFieldsHydrated, editorBaselineReady, isDraftDirty, saving, saveState.status]);
+  }, [draftSignature, autosaveEnabled, activeInvoiceId, invoiceFieldsHydrated, editorBaselineReady, isDraftDirty, saving, saveState.status]);
 
   return {
     invoiceId,
@@ -973,6 +993,10 @@ export function useInvoiceDraft({
     saveError: saveState.error,
     setSaveError,
     persistDraft,
+    buildPayload,
+    autosaveEnabled,
+    approvedChangeOpen,
+    setApprovedChangeOpen,
   };
 }
 
