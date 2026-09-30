@@ -9,6 +9,7 @@ import { normalizeEventStatus } from "./lib/eventStatus";
 import { RENTAL_EVENT_TYPES } from "./eventPullLists";
 import {
   applyPositionTemplates,
+  listOccurrencePositions,
   blocksToTemplates,
   buildEventPatchFromSeriesTemplate,
   computeOccurrenceStarts,
@@ -23,7 +24,7 @@ import {
   type SeriesEditScope,
 } from "./lib/eventSeriesGeneration";
 import {
-  assertUniqueTemplateKeys,
+  assertValidPositionTemplates,
   eventSeriesPositionTemplateValue,
   positionTemplateFromSlot,
 } from "./lib/eventSeriesPositions";
@@ -211,7 +212,7 @@ export const create = mutation({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     if (args.endAt <= args.startAt) throw new Error("Event end time must be after start time.");
-    assertUniqueTemplateKeys(args.positionTemplates ?? []);
+    assertValidPositionTemplates(args.positionTemplates ?? []);
     const occurrenceStarts = computeOccurrenceStarts({
       anchorStartAt: args.startAt,
       intervalWeeks: args.intervalWeeks,
@@ -549,7 +550,7 @@ export const regenerateFuturePositions = mutation({
       throw new Error("Occurrence index must be a non-negative integer.");
     }
     const templates = args.positionTemplates ?? series.positionTemplates ?? [];
-    assertUniqueTemplateKeys(templates);
+    assertValidPositionTemplates(templates);
     const now = Date.now();
     if (args.positionTemplates !== undefined) {
       await ctx.db.patch(args.id, { positionTemplates: args.positionTemplates, updatedAt: now });
@@ -587,13 +588,20 @@ export const importPositionsFromOccurrence = mutation({
     if (!event || event.seriesId !== args.id) {
       throw new Error("Event is not part of this series.");
     }
-    const slots = await ctx.db
-      .query("eventArtistNeeds")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(100);
+    const slots = await listOccurrencePositions(ctx, args.eventId);
     if (slots.length === 0) {
       throw new Error("Selected occurrence has no positions to import.");
     }
+    // A booked act's set and soundcheck live on its participation row, not the
+    // position; import the times the bill actually shows.
+    const actByNeedId = new Map(
+      (
+        await ctx.db
+          .query("eventBandParticipations")
+          .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+          .take(200)
+      ).flatMap((row) => (row.needId ? [[row.needId, row] as const] : [])),
+    );
     const now = Date.now();
     const seenKeys = new Set<string>();
     const templates = [];
@@ -604,10 +612,20 @@ export const importPositionsFromOccurrence = mutation({
           (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt) || a.createdAt - b.createdAt,
       )) {
       // A duplicated key (hand-copied row) becomes its own template.
+      const act = actByNeedId.get(slot._id);
+      const source = act
+        ? {
+            ...slot,
+            setStartsAt: act.setStartsAt ?? slot.setStartsAt,
+            setEndsAt: act.setEndsAt ?? slot.setEndsAt,
+            soundcheckStartsAt: act.soundcheckStartsAt ?? slot.soundcheckStartsAt,
+            soundcheckEndsAt: act.soundcheckEndsAt ?? slot.soundcheckEndsAt,
+          }
+        : slot;
       const template = positionTemplateFromSlot(
-        slot.templateKey && seenKeys.has(slot.templateKey)
-          ? { ...slot, templateKey: undefined }
-          : slot,
+        source.templateKey && seenKeys.has(source.templateKey)
+          ? { ...source, templateKey: undefined }
+          : source,
         event.startAt,
         (timeMs) => pacificDayIndexFromAnchor(event.startAt, timeMs),
       );

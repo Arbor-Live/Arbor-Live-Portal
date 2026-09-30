@@ -140,9 +140,12 @@ export function EventSeriesShiftEditor({
     [blockTemplates, anchorStartAt],
   );
 
+  // Keyed on content, not identity: the series query re-runs on any occurrence
+  // change and must not wipe unsaved edits.
+  const shiftTemplatesSignature = JSON.stringify(shiftTemplates ?? []);
   const initialShifts = useMemo(
-    () => shiftTemplatesToDrafts(shiftTemplates ?? []),
-    [shiftTemplates],
+    () => shiftTemplatesToDrafts(JSON.parse(shiftTemplatesSignature) as SeriesShiftTemplate[]),
+    [shiftTemplatesSignature],
   );
 
   // Reset local shift edits whenever the template identity changes (adjusting

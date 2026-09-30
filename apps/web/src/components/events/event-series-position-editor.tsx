@@ -81,9 +81,12 @@ export function EventSeriesPositionEditor({
     mode: "onChange",
   });
 
+  // Keyed on content, not identity: `eventSeries.get` re-runs whenever any
+  // occurrence changes and hands back a new array, which must not wipe drafts.
+  const templatesSignature = JSON.stringify(positionTemplates ?? []);
   const initialDrafts = useMemo(
-    () => positionTemplatesToDrafts(positionTemplates),
-    [positionTemplates],
+    () => positionTemplatesToDrafts(JSON.parse(templatesSignature) as SeriesPositionTemplate[]),
+    [templatesSignature],
   );
 
   // Reset local edits whenever the saved template changes (same pattern as the

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Id } from "../_generated/dataModel";
 import {
   assertUniqueTemplateKeys,
+  assertValidPositionTemplates,
   planPositionTemplateApplication,
   positionTemplateFromSlot,
   positionWindowFromTemplate,
@@ -182,5 +183,54 @@ describe("assertUniqueTemplateKeys", () => {
     expect(() =>
       assertUniqueTemplateKeys([template(), template({ templateKey: "other" })]),
     ).not.toThrow();
+  });
+});
+
+describe("planPositionTemplateApplication with replaced templates", () => {
+  it("adopts a booked position keyed to a replaced template instead of duplicating it", () => {
+    // "Headliner" was deleted and re-added in the editor: new key, same name.
+    const existing = [
+      slot({ _id: needId("booked"), templateKey: "old-key", label: "Headliner", locked: true }),
+    ];
+    const plan = planPositionTemplateApplication(existing, [template({ templateKey: "new-key" })]);
+
+    expect(plan.actions).toEqual([]);
+    expect(plan.removeIds).toEqual([]);
+    expect(plan.stampKeys).toEqual([{ needId: needId("booked"), templateKey: "new-key" }]);
+  });
+
+  it("updates an open position keyed to a replaced template rather than removing it", () => {
+    const existing = [slot({ _id: needId("open"), templateKey: "old-key", label: "Headliner" })];
+    const next = template({ templateKey: "new-key" });
+    const plan = planPositionTemplateApplication(existing, [next]);
+
+    expect(plan.actions).toEqual([{ kind: "update", template: next, needId: needId("open") }]);
+    expect(plan.removeIds).toEqual([]);
+  });
+
+  it("still removes an open stale position no template claims", () => {
+    const existing = [slot({ _id: needId("gone"), templateKey: "old-key", label: "Late set" })];
+    const plan = planPositionTemplateApplication(existing, [template()]);
+    expect(plan.removeIds).toEqual([needId("gone")]);
+    expect(plan.actions.map((action) => action.kind)).toEqual(["insert"]);
+  });
+});
+
+describe("assertValidPositionTemplates", () => {
+  it("accepts a normal bill", () => {
+    expect(() => assertValidPositionTemplates([template()])).not.toThrow();
+  });
+
+  it("rejects bad windows, names, days and oversized sets", () => {
+    expect(() => assertValidPositionTemplates([template({ label: "  " })])).toThrow(/name/);
+    expect(() => assertValidPositionTemplates([template({ setDurationMs: 0 })])).toThrow(
+      /more than zero/,
+    );
+    expect(() =>
+      assertValidPositionTemplates([template({ setOffsetMs: undefined, setDurationMs: 60_000 })]),
+    ).toThrow(/needs a set start/);
+    expect(() => assertValidPositionTemplates([template({ dayIndex: 0.5 })])).toThrow(/whole/);
+    const many = Array.from({ length: 51 }, (_, index) => template({ templateKey: `k${index}` }));
+    expect(() => assertValidPositionTemplates(many)).toThrow(/at most 50/);
   });
 });

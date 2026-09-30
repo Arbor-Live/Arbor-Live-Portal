@@ -300,10 +300,12 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   template** (`positionTemplates`): the shape of its bill, applied to each
   occurrence as `eventArtistNeeds` rows tagged with a `templateKey`. Applying
   adds/moves/removes open template positions and never touches a position that
-  is filled, named as an outside act, or carrying inquiries; re-applying is
-  idempotent. A hand-added position with the same name as a template position
-  is adopted (keyed) rather than duplicated, and importing from an occurrence
-  keys that occurrence's positions.
+  is filled, named as an outside act, not open, has a submitted inquiry, or
+  stands for an invoice artist line; re-applying is idempotent. A position with
+  the same name as a template position (hand-added, or keyed to a template that
+  was replaced) is adopted rather than duplicated, and importing from an
+  occurrence keys that occurrence's positions and takes a booked act's times.
+  Templates are validated server-side (max 50; a length needs a start).
 - Band participation in events is tracked in `eventBandParticipations`
   (headliner/support/other). That row is the canonical **assignment**: staff
   manage it from the event workspace **Lineup** tab (not Promo).

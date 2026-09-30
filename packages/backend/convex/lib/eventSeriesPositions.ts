@@ -92,14 +92,63 @@ export type PositionTemplatePlan = {
   /** Open template positions whose template is gone. Filled positions are kept. */
   removeIds: Id<"eventArtistNeeds">[];
   /**
-   * Locked hand-added positions adopted by a template (matched by name): only
-   * their `templateKey` is stamped so later applies recognize them.
+   * Locked positions adopted by a template (matched by name: hand-added, or
+   * keyed to a replaced template): only their `templateKey` is stamped so later
+   * applies recognize them.
    */
   stampKeys: Array<{ needId: Id<"eventArtistNeeds">; templateKey: string }>;
 };
 
 function normalizeLabel(label: string | undefined) {
   return label?.trim().toLowerCase() ?? "";
+}
+
+/**
+ * Most template positions a series can carry. An occurrence's apply reads its
+ * positions with `MAX_OCCURRENCE_POSITIONS`, so the template stays well under
+ * it (real bills are a handful of slots).
+ */
+export const MAX_POSITION_TEMPLATES = 50;
+/** Positions read per occurrence when applying or importing. */
+export const MAX_OCCURRENCE_POSITIONS = 100;
+
+function isNonNegativeInteger(value: number) {
+  return Number.isInteger(value) && value >= 0;
+}
+
+/**
+ * Server-side check of a template set: the mutations can be called directly,
+ * so the web editor's validation isn't enough.
+ */
+export function assertValidPositionTemplates(templates: readonly EventSeriesPositionTemplate[]) {
+  if (templates.length > MAX_POSITION_TEMPLATES) {
+    throw new Error(
+      `A series can have at most ${MAX_POSITION_TEMPLATES} template positions, got ${templates.length}.`,
+    );
+  }
+  assertUniqueTemplateKeys(templates);
+  for (const template of templates) {
+    const name = template.label.trim();
+    if (!name) throw new Error("Give every template position a name.");
+    if (!isNonNegativeInteger(template.dayIndex)) {
+      throw new Error(`"${name}": day must be a whole number, got ${template.dayIndex}.`);
+    }
+    for (const [offset, duration, what] of [
+      [template.setOffsetMs, template.setDurationMs, "set"],
+      [template.soundcheckOffsetMs, template.soundcheckDurationMs, "soundcheck"],
+    ] as const) {
+      if (offset !== undefined && !Number.isFinite(offset)) {
+        throw new Error(`"${name}": ${what} start must be a number, got ${offset}.`);
+      }
+      if (duration === undefined) continue;
+      if (offset === undefined) {
+        throw new Error(`"${name}": a ${what} length needs a ${what} start.`);
+      }
+      if (!Number.isFinite(duration) || duration <= 0) {
+        throw new Error(`"${name}": ${what} length must be more than zero, got ${duration}.`);
+      }
+    }
+  }
 }
 
 /** Throws when two templates share a key (each key is one position per occurrence). */
@@ -128,12 +177,17 @@ export function planPositionTemplateApplication(
   existing: readonly ExistingPositionSlot[],
   templates: readonly EventSeriesPositionTemplate[],
 ): PositionTemplatePlan {
+  const wanted = new Set(templates.map((template) => template.templateKey));
   const byKey = new Map<string, ExistingPositionSlot>();
   for (const slot of existing) {
-    if (!slot.templateKey || byKey.has(slot.templateKey)) continue;
+    if (!slot.templateKey || !wanted.has(slot.templateKey) || byKey.has(slot.templateKey)) continue;
     byKey.set(slot.templateKey, slot);
   }
-  const unkeyed = existing.filter((slot) => !slot.templateKey);
+  // Positions no current template claims by key: hand-added ones, and ones
+  // keyed to a template that was since replaced (e.g. deleted and re-added).
+  const unclaimed = existing.filter(
+    (slot) => !slot.templateKey || !wanted.has(slot.templateKey),
+  );
   const adopted = new Set<Id<"eventArtistNeeds">>();
 
   const actions: PositionTemplateAction[] = [];
@@ -143,7 +197,7 @@ export function planPositionTemplateApplication(
     if (!match) {
       const label = normalizeLabel(template.label);
       match = label
-        ? unkeyed.find((slot) => !adopted.has(slot._id) && normalizeLabel(slot.label) === label)
+        ? unclaimed.find((slot) => !adopted.has(slot._id) && normalizeLabel(slot.label) === label)
         : undefined;
       if (match) adopted.add(match._id);
     }
@@ -152,7 +206,7 @@ export function planPositionTemplateApplication(
       continue;
     }
     if (match.locked) {
-      if (!match.templateKey) {
+      if (match.templateKey !== template.templateKey) {
         stampKeys.push({ needId: match._id, templateKey: template.templateKey });
       }
       continue;
@@ -160,11 +214,13 @@ export function planPositionTemplateApplication(
     actions.push({ kind: "update", template, needId: match._id });
   }
 
-  const wanted = new Set(templates.map((template) => template.templateKey));
   const removeIds = existing
     .filter(
       (slot) =>
-        slot.templateKey !== undefined && !wanted.has(slot.templateKey) && !slot.locked,
+        slot.templateKey !== undefined &&
+        !wanted.has(slot.templateKey) &&
+        !slot.locked &&
+        !adopted.has(slot._id),
     )
     .map((slot) => slot._id);
   return { actions, removeIds, stampKeys };

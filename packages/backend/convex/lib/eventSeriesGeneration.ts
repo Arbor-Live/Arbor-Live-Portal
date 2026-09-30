@@ -11,6 +11,7 @@ import { syncEventCrewCostUsd } from "./crewCost";
 import { detachInvoiceFromAdditionalLinks } from "./eventInvoiceLinks";
 import { syncEventStatusForLinkedInvoice, type EventStatus } from "./eventStatus";
 import {
+  MAX_OCCURRENCE_POSITIONS,
   planPositionTemplateApplication,
   positionWindowFromTemplate,
   type EventSeriesPositionTemplate,
@@ -340,11 +341,64 @@ export async function replaceScheduleBlocksFromTemplates(
   await insertScheduleBlocksFromTemplates(ctx, eventId, occurrenceStartAt, templates, now);
 }
 
+/** An occurrence's positions, failing loudly past the cap rather than missing some. */
+export async function listOccurrencePositions(ctx: MutationCtx, eventId: Id<"events">) {
+  const slots = await ctx.db
+    .query("eventArtistNeeds")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(MAX_OCCURRENCE_POSITIONS + 1);
+  if (slots.length > MAX_OCCURRENCE_POSITIONS) {
+    throw new Error(
+      `An occurrence can have at most ${MAX_OCCURRENCE_POSITIONS} positions for templates to apply, got more.`,
+    );
+  }
+  return slots;
+}
+
+/**
+ * Positions a template apply must not move or remove: a platform act fills it,
+ * an outside act is named on it, it isn't open, an artist has a submitted
+ * inquiry on it (staff can set a position back to "open" while inquiries are
+ * pending), or an invoice artist line stands for it.
+ */
+async function lockedPositionIds(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  slots: readonly Doc<"eventArtistNeeds">[],
+) {
+  const participations = await ctx.db
+    .query("eventBandParticipations")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(200);
+  const locked = new Set(participations.flatMap((row) => (row.needId ? [row.needId] : [])));
+  for (const slot of slots) {
+    if (locked.has(slot._id)) continue;
+    if (slot.externalArtistName?.trim() || slot.status !== "open") {
+      locked.add(slot._id);
+      continue;
+    }
+    const [inquiries, invoiceLine] = await Promise.all([
+      ctx.db
+        .query("eventArtistInquiries")
+        .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+        .take(20),
+      ctx.db
+        .query("invoiceLineItems")
+        .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+        .first(),
+    ]);
+    if (invoiceLine || inquiries.some((inquiry) => inquiry.status === "submitted")) {
+      locked.add(slot._id);
+    }
+  }
+  return locked;
+}
+
 /**
  * Apply the series position templates to one occurrence: add missing open
  * template positions, move/refresh the open ones, and drop open template
- * positions whose template is gone. Positions that are filled by an act, named
- * as an outside act, or carrying inquiries are never touched.
+ * positions whose template is gone. Locked positions (see `lockedPositionIds`)
+ * are never touched.
  */
 export async function applyPositionTemplates(
   ctx: MutationCtx,
@@ -353,26 +407,14 @@ export async function applyPositionTemplates(
   templates: readonly EventSeriesPositionTemplate[],
   now: number,
 ): Promise<number> {
-  const [slots, participations] = await Promise.all([
-    ctx.db
-      .query("eventArtistNeeds")
-      .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-      .take(100),
-    ctx.db
-      .query("eventBandParticipations")
-      .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-      .take(100),
-  ]);
-  const filledIds = new Set(participations.flatMap((row) => (row.needId ? [row.needId] : [])));
+  const slots = await listOccurrencePositions(ctx, eventId);
+  const lockedIds = await lockedPositionIds(ctx, eventId, slots);
   const plan = planPositionTemplateApplication(
     slots.map((slot) => ({
       _id: slot._id,
       templateKey: slot.templateKey,
       label: slot.label,
-      locked:
-        filledIds.has(slot._id) ||
-        Boolean(slot.externalArtistName?.trim()) ||
-        slot.status !== "open",
+      locked: lockedIds.has(slot._id),
     })),
     templates,
   );
