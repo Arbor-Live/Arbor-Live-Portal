@@ -25,6 +25,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { ListRow } from "@/components/list-row";
 import { MetaItem, PageHeader, StatusPill } from "@/components/page-header";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { PosterPlaceholderImage } from "@/components/public/poster-placeholder-image";
@@ -168,44 +169,40 @@ function OpportunityRow({
   onOpen: () => void;
 }) {
   return (
-    <li data-testid="opportunity-row" className="flex items-center gap-3 py-3 pr-3 pl-4 text-sm">
-      <button
-        type="button"
-        className="flex min-w-0 flex-1 items-center gap-3 text-left hover:bg-muted/30"
-        onClick={onOpen}
-      >
-        <PosterTile
-          imageUrl={need.posterUrl}
-          seed={need.eventId}
-          title={need.title}
-          className="w-12"
-        />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">
-            {formatDate(need.startAt)} · {need.venueName || "Venue TBD"}
-          </p>
-          <p className="truncate font-medium">{need.title}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {need.setStartsAt != null ? `Set ${formatTime(need.setStartsAt)} · ` : ""}
-            {TYPE_LABELS[need.artistType]}
-            {need.genres ? ` · ${need.genres}` : ""}
-          </p>
-          {need.description ? (
-            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{need.description}</p>
-          ) : null}
-        </div>
-        <CaretRightIcon className="size-4 shrink-0 text-muted-foreground" />
-      </button>
-      {need.alreadyInquired ? (
-        <StatusPill tone="blue" className="h-7 shrink-0">
-          Requested
-        </StatusPill>
-      ) : (
-        <Button type="button" variant="outline" className="shrink-0" onClick={onOpen}>
-          Inquire
-        </Button>
-      )}
-    </li>
+    <ListRow
+      data-testid="opportunity-row"
+      onOpen={onOpen}
+      className="border-0 gap-3 pr-3 pl-4"
+      bodyClassName="py-3"
+      actions={
+        need.alreadyInquired ? (
+          <StatusPill tone="blue" className="h-7 shrink-0">
+            Requested
+          </StatusPill>
+        ) : (
+          <Button type="button" variant="outline" className="shrink-0" onClick={onOpen}>
+            Inquire
+          </Button>
+        )
+      }
+    >
+      <PosterTile imageUrl={need.posterUrl} seed={need.eventId} title={need.title} className="w-12" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">
+          {formatDate(need.startAt)} · {need.venueName || "Venue TBD"}
+        </p>
+        <p className="truncate font-medium">{need.title}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {need.setStartsAt != null ? `Set ${formatTime(need.setStartsAt)} · ` : ""}
+          {TYPE_LABELS[need.artistType]}
+          {need.genres ? ` · ${need.genres}` : ""}
+        </p>
+        {need.description ? (
+          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{need.description}</p>
+        ) : null}
+      </div>
+      <CaretRightIcon className="size-4 shrink-0 text-muted-foreground" />
+    </ListRow>
   );
 }
 

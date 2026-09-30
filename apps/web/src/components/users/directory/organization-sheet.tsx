@@ -9,6 +9,7 @@ import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { OnboardingIncompleteStepsList } from "@/components/bands/onboarding-incomplete-steps";
+import { ListRow } from "@/components/list-row";
 import { StatusPill } from "@/components/page-header";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
@@ -216,25 +217,25 @@ function OrganizationSheetBody({ org, onAddPerson }: { org: DirectoryOrg; onAddP
               );
               const status = userStatusOption(member.status);
               return (
-                <li key={member.id}>
-                  <Link
-                    href={`/dashboard/users?user=${member.id}`}
-                    className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium">{member.name}</span>
-                      <span className="block truncate text-xs text-muted-foreground">{member.email}</span>
+                <ListRow
+                  key={member.id}
+                  href={`/dashboard/users?user=${member.id}`}
+                  className="border-0 gap-2 pr-0 pl-0"
+                  bodyClassName="gap-2 px-3 py-2"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{member.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{member.email}</span>
+                  </span>
+                  <span className="w-24 shrink-0 text-right text-xs text-muted-foreground">
+                    {membership ? roleLabel(membership.role) : null}
+                  </span>
+                  {member.status !== "active" ? (
+                    <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">
+                      {status.label}
                     </span>
-                    <span className="w-24 shrink-0 text-right text-xs text-muted-foreground">
-                      {membership ? roleLabel(membership.role) : null}
-                    </span>
-                    {member.status !== "active" ? (
-                      <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">
-                        {status.label}
-                      </span>
-                    ) : null}
-                  </Link>
-                </li>
+                  ) : null}
+                </ListRow>
               );
             })}
           </ul>

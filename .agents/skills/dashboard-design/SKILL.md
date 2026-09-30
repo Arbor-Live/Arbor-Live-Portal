@@ -24,6 +24,7 @@ files before building; copy their structure, don't reinvent it.
 | Tabs built on it | `components/events/workspace/event-workspace-nav.tsx` |
 | Page state: draft, dirty sections, save all | `components/events/workspace/event-workspace-provider.tsx` |
 | Main + aside grid | `components/events/workspace/tabs/overview-tab.tsx` |
+| **Shared list row** (use this) | `apps/web/src/components/list-row.tsx` |
 | List rows + side panel (the model for any list) | `components/events/event-artist-bill-section.tsx`, `components/events/lineup/position-sheet.tsx` |
 | Grouped rows with a type chip and a coloured rail | `components/events/workspace/run-of-show/run-of-show-editor.tsx`, `run-of-show-styles.tsx` |
 | Create dialog with modes | `components/events/lineup/add-to-bill-dialog.tsx` |
@@ -110,9 +111,13 @@ Lineup:
 - **A summary line** above the list, `text-sm`, in plain words, joined with
   ` · `: "3 positions · 2 booked · 1 open · $1,200 in payouts (1 unpaid)".
   Give it a `data-testid`.
-- **Rows**, not cards: `li` with `border`, `flex items-center gap-2 text-sm`.
-  The row's main area is a `button` that opens the side panel
-  (`hover:bg-muted/30`, `text-left`).
+- **Rows**, not cards: use `ListRow` (`components/list-row.tsx`). It renders the
+  `li` frame and puts the hover highlight on the **whole row**, so the highlight
+  covers the card edge to edge instead of stopping at the main button. It splits
+  the row into `leading` (an order number, checkbox, avatar), the clickable main
+  area, and `actions` (the `⋯` menu or a primary button). The main area opens
+  the side panel: pass `onOpen` (renders a `button`) or `href` (renders a
+  `Link`, for rows that navigate).
   - Left: an order number or time (`tabular-nums`, muted).
   - Middle: a tiny uppercase context label (`text-2xs font-medium tracking-wide
     uppercase text-muted-foreground`), the name (`font-medium truncate`), and

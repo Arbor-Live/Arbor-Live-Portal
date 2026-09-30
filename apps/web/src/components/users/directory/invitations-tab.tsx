@@ -9,6 +9,7 @@ import { formatDate } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { useConvexForm } from "@/hooks/use-convex-form";
+import { ListRow } from "@/components/list-row";
 import { StatusPill } from "@/components/page-header";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
@@ -229,61 +230,57 @@ function InviteRowItem({
   const status = inviteStatus(invite.status);
   const pending = status === "pending";
   return (
-    <li
+    <ListRow
       data-testid={`invite-row-${invite.id}`}
-      className="flex items-center gap-2 border pr-1 pl-3 text-sm transition-colors hover:bg-muted/30"
+      onOpen={onOpen}
+      actions={
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${invite.email}`}>
+              <DotsThreeIcon className="size-4" weight="bold" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onOpen}>Open details</DropdownMenuItem>
+            {pending || status === "expired" ? (
+              <DropdownMenuItem onSelect={onResend}>Resend invite</DropdownMenuItem>
+            ) : null}
+            {pending ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onSelect={onCancel}>
+                  Cancel invitation
+                </DropdownMenuItem>
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      }
     >
-      <button
-        type="button"
-        className="flex min-w-0 flex-1 items-center gap-3 py-2 text-left"
-        onClick={onOpen}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">
+          {invite.organizationName}
+        </p>
+        <p className="truncate font-medium">{invite.email}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          <span data-testid="invite-role">{roleLabel(invite.role)}</span> · Invited by {invite.inviterName}
+          {invite.createdAt ? ` · ${formatDate(invite.createdAt)}` : ""}
+        </p>
+      </div>
+      <span className="hidden w-44 shrink-0 text-right text-xs whitespace-nowrap text-muted-foreground tabular-nums md:block">
+        {pending && invite.expiresAt ? `Expires ${formatDate(invite.expiresAt)}` : null}
+      </span>
+      <span
+        data-testid="invite-status"
+        className={cn(
+          "w-20 shrink-0 rounded-md py-0.5 text-center text-xs font-medium",
+          STATUS_CHIP[INVITE_STATUS_TONES[status]],
+        )}
       >
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">
-            {invite.organizationName}
-          </p>
-          <p className="truncate font-medium">{invite.email}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            <span data-testid="invite-role">{roleLabel(invite.role)}</span> · Invited by {invite.inviterName}
-            {invite.createdAt ? ` · ${formatDate(invite.createdAt)}` : ""}
-          </p>
-        </div>
-        <span className="hidden w-44 shrink-0 text-right text-xs whitespace-nowrap text-muted-foreground tabular-nums md:block">
-          {pending && invite.expiresAt ? `Expires ${formatDate(invite.expiresAt)}` : null}
-        </span>
-        <span
-          data-testid="invite-status"
-          className={cn(
-            "w-20 shrink-0 rounded-md py-0.5 text-center text-xs font-medium",
-            STATUS_CHIP[INVITE_STATUS_TONES[status]],
-          )}
-        >
-          {INVITE_STATUS_LABELS[status]}
-        </span>
-        <CaretRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-      </button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${invite.email}`}>
-            <DotsThreeIcon className="size-4" weight="bold" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={onOpen}>Open details</DropdownMenuItem>
-          {pending || status === "expired" ? (
-            <DropdownMenuItem onSelect={onResend}>Resend invite</DropdownMenuItem>
-          ) : null}
-          {pending ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onSelect={onCancel}>
-                Cancel invitation
-              </DropdownMenuItem>
-            </>
-          ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </li>
+        {INVITE_STATUS_LABELS[status]}
+      </span>
+      <CaretRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+    </ListRow>
   );
 }
 

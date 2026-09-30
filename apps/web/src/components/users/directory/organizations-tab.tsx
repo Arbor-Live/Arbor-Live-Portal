@@ -7,6 +7,7 @@ import { CaretRightIcon, DotsThreeIcon, MagnifyingGlassIcon } from "@phosphor-ic
 import { api } from "@/lib/convex-api";
 import { formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { ListRow } from "@/components/list-row";
 import { OrganizationCSVImporter } from "@/components/org-csv-importer";
 import { Button } from "@/components/ui/button";
 import {
@@ -220,75 +221,69 @@ function OrganizationRow({
 }) {
   const missing = org.artist?.onboardingIncompleteSteps.length ?? 0;
   return (
-    <li
+    <ListRow
       data-testid={`org-row-${org.id}`}
-      className={cn(
-        "flex items-center gap-2 border pr-1 pl-3 text-sm transition-colors hover:bg-muted/30",
-        org.archived && "text-muted-foreground",
-      )}
+      onOpen={onOpen}
+      className={org.archived ? "text-muted-foreground" : undefined}
+      actions={
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${org.displayName}`}>
+              <DotsThreeIcon className="size-4" weight="bold" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onOpen}>Open details</DropdownMenuItem>
+            {org.artist && !org.archived ? (
+              <DropdownMenuItem onSelect={onViewAsArtist}>View as artist</DropdownMenuItem>
+            ) : null}
+            {org.artist && org.archived ? (
+              <DropdownMenuItem onSelect={onRestore}>Restore</DropdownMenuItem>
+            ) : null}
+            {org.artist ? (
+              <>
+                <DropdownMenuSeparator />
+                {org.archived ? (
+                  <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                    Delete permanently
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem variant="destructive" onSelect={onArchive}>
+                    Archive
+                  </DropdownMenuItem>
+                )}
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      }
     >
-      <button
-        type="button"
-        className="flex min-w-0 flex-1 items-center gap-3 py-2 text-left"
-        onClick={onOpen}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">
+          {ORG_TYPE_LABELS[org.organizationType]}
+        </p>
+        <p className="truncate font-medium">{org.displayName}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {org.displayName !== org.name ? `${org.name} · ` : ""}/{org.slug}
+        </p>
+      </div>
+      {org.artist?.awaitingOnboarding && !org.archived ? (
+        <span className={cn(FLAG_CLASS, "hidden shrink-0 sm:inline")}>
+          Onboarding · {missing || "?"}
+        </span>
+      ) : null}
+      <span className="hidden w-32 shrink-0 text-right text-xs text-muted-foreground tabular-nums md:block">
+        {org.artist ? `${formatUsd(org.artist.performerHourlyRateUsd)} / person / hr` : null}
+      </span>
+      <span
+        className={cn(
+          "w-20 shrink-0 rounded-md py-0.5 text-center text-xs font-medium",
+          STATUS_CHIP[org.archived ? "neutral" : "emerald"],
+        )}
       >
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">
-            {ORG_TYPE_LABELS[org.organizationType]}
-          </p>
-          <p className="truncate font-medium">{org.displayName}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {org.displayName !== org.name ? `${org.name} · ` : ""}/{org.slug}
-          </p>
-        </div>
-        {org.artist?.awaitingOnboarding && !org.archived ? (
-          <span className={cn(FLAG_CLASS, "hidden shrink-0 sm:inline")}>
-            Onboarding · {missing || "?"}
-          </span>
-        ) : null}
-        <span className="hidden w-32 shrink-0 text-right text-xs text-muted-foreground tabular-nums md:block">
-          {org.artist ? `${formatUsd(org.artist.performerHourlyRateUsd)} / person / hr` : null}
-        </span>
-        <span
-          className={cn(
-            "w-20 shrink-0 rounded-md py-0.5 text-center text-xs font-medium",
-            STATUS_CHIP[org.archived ? "neutral" : "emerald"],
-          )}
-        >
-          {org.archived ? "Archived" : "Active"}
-        </span>
-        <CaretRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-      </button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${org.displayName}`}>
-            <DotsThreeIcon className="size-4" weight="bold" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={onOpen}>Open details</DropdownMenuItem>
-          {org.artist && !org.archived ? (
-            <DropdownMenuItem onSelect={onViewAsArtist}>View as artist</DropdownMenuItem>
-          ) : null}
-          {org.artist && org.archived ? (
-            <DropdownMenuItem onSelect={onRestore}>Restore</DropdownMenuItem>
-          ) : null}
-          {org.artist ? (
-            <>
-              <DropdownMenuSeparator />
-              {org.archived ? (
-                <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-                  Delete permanently
-                </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem variant="destructive" onSelect={onArchive}>
-                  Archive
-                </DropdownMenuItem>
-              )}
-            </>
-          ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </li>
+        {org.archived ? "Archived" : "Active"}
+      </span>
+      <CaretRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+    </ListRow>
   );
 }

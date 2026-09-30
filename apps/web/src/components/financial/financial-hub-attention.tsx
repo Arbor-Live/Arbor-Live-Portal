@@ -13,6 +13,7 @@ import {
   type Icon,
 } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
+import { ListRow } from "@/components/list-row";
 import { StatusPill, type Tone } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,22 +55,20 @@ function daysLabel(at: number, nowMs: number) {
 
 function AttentionRow({ item }: { item: AttentionItem }) {
   return (
-    <li>
-      <Link href={item.href} className="flex items-center gap-3 px-3 py-2 hover:bg-muted/30">
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{item.title}</p>
-          {item.subtitle ? (
-            <p className="truncate text-xs text-muted-foreground">{item.subtitle}</p>
-          ) : null}
-        </div>
-        {item.amountUsd != null ? (
-          <span className="shrink-0 text-sm tabular-nums">{formatUsd(item.amountUsd)}</span>
+    <ListRow href={item.href} className="border-0 pr-0 pl-0" bodyClassName="px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium">{item.title}</p>
+        {item.subtitle ? (
+          <p className="truncate text-xs text-muted-foreground">{item.subtitle}</p>
         ) : null}
-        <span className="w-20 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
-          {item.trailing}
-        </span>
-      </Link>
-    </li>
+      </div>
+      {item.amountUsd != null ? (
+        <span className="shrink-0 text-sm tabular-nums">{formatUsd(item.amountUsd)}</span>
+      ) : null}
+      <span className="w-20 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
+        {item.trailing}
+      </span>
+    </ListRow>
   );
 }
 
