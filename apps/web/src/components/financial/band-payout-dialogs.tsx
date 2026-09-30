@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
+import { EventBandPaymentForm } from "@/components/events/lineup/lineup-forms";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -155,6 +156,50 @@ function SendSignatureRequestBody({
         </Button>
       </DialogFooter>
     </>
+  );
+}
+
+/**
+ * Edit a payout's pricing without leaving the queue. Reuses the Lineup's
+ * payout form, which owns the validation and the upsert.
+ */
+export function EditPayoutDialog({
+  row,
+  onOpenChange,
+  onSaved,
+}: {
+  row: PayoutRow | null;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+}) {
+  return (
+    <Dialog open={row !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl" data-testid="payout-edit-dialog">
+        {row ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Edit {row.bandName}&apos;s payout</DialogTitle>
+              <DialogDescription>
+                {formatDate(row.eventStartAt)} · {row.eventTitle}
+              </DialogDescription>
+            </DialogHeader>
+            <EventBandPaymentForm
+              embedded
+              showStatus={false}
+              showPayee={false}
+              actionsClassName="justify-end"
+              eventId={row.eventId}
+              organizationId={row.organizationId}
+              payment={row}
+              organizationLocked
+              excludedOrganizationIds={[]}
+              onSaved={onSaved}
+              onCancel={() => onOpenChange(false)}
+            />
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
   );
 }
 
