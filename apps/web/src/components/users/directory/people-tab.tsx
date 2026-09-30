@@ -15,6 +15,7 @@ import {
   type FilterState,
 } from "@/components/filter-bar";
 import { USER_DISCIPLINE_OPTIONS, USER_VERTICAL_OPTIONS } from "@/lib/validations/users";
+import { fuzzyScoreHaystack } from "@/lib/fuzzy-match";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -49,9 +50,10 @@ const ONBOARDING_OPTIONS = [
   { value: "complete", label: "Finished or waived" },
 ];
 
-function matchesSearch(user: AdminUser, query: string) {
-  if (!query) return true;
-  return [
+/** Relevance of a person to the search query; 0 when they do not match. */
+function userSearchScore(user: AdminUser, query: string) {
+  if (!query) return 1;
+  return fuzzyScoreHaystack(query, [
     user.name,
     user.email,
     user.username,
@@ -59,13 +61,10 @@ function matchesSearch(user: AdminUser, query: string) {
     user.title,
     user.verticals.join(" "),
     user.disciplines.join(" "),
-  ]
-    .join(" ")
-    .toLowerCase()
-    .includes(query);
+  ]);
 }
 
-/** Everyone with an account in the filtered organization, alphabetical, with a side panel per person. */
+/** Everyone with an account in the filtered organization, alphabetical (best match first while searching), with a side panel per person. */
 export function PeopleTab() {
   const { orgOptions, filterOrgId, setOrgFilter, openAddPerson } = useUsersDirectory();
   const users = useQuery(
@@ -117,21 +116,27 @@ export function PeopleTab() {
     [users],
   );
 
-  const rows = useMemo(
-    () =>
-      (users ?? []).filter((user) => {
-        if (access !== "all" && user.status !== access) return false;
-        const onboarding = isOnboardingIncomplete(onboardingByUserId.get(user.id)) ? "incomplete" : "complete";
-        return (
-          matchesFilter(filters.onboarding, onboarding) &&
-          matchesFilter(filters.role, user.role) &&
-          matchesFilter(filters.vertical, user.verticals) &&
-          matchesFilter(filters.discipline, user.disciplines) &&
-          matchesSearch(user, query)
-        );
-      }),
-    [users, access, filters, onboardingByUserId, query],
-  );
+  const rows = useMemo(() => {
+    const scored: Array<{ user: AdminUser; score: number }> = [];
+    for (const user of users ?? []) {
+      if (access !== "all" && user.status !== access) continue;
+      const onboarding = isOnboardingIncomplete(onboardingByUserId.get(user.id)) ? "incomplete" : "complete";
+      const matches =
+        matchesFilter(filters.onboarding, onboarding) &&
+        matchesFilter(filters.role, user.role) &&
+        matchesFilter(filters.vertical, user.verticals) &&
+        matchesFilter(filters.discipline, user.disciplines);
+      if (!matches) continue;
+      const score = userSearchScore(user, query);
+      if (score <= 0) continue;
+      scored.push({ user, score });
+    }
+    // With no query the list stays alphabetical (the backend order). While
+    // searching, the best match floats to the top instead of hiding at its
+    // alphabetical position.
+    if (query) scored.sort((a, b) => b.score - a.score || a.user.name.localeCompare(b.user.name));
+    return scored.map((entry) => entry.user);
+  }, [users, access, filters, onboardingByUserId, query]);
 
   // Resolve against the unfiltered list, so changing someone's status keeps
   // their panel open even when the filter no longer shows the row.
