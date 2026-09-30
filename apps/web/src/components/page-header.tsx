@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
  *
  *   back link ·························· actions [⋯]
  *   [status pills]
- *   Title
+ *   Title ······· (actions [⋯] here when there's no back link)
  *   description
  *   meta · meta · meta
  *   {children, e.g. a day switcher}
@@ -73,44 +73,56 @@ export function PageHeader({
   children?: React.ReactNode;
   className?: string;
 }) {
-  const hasTopRow = back || actions || menu;
+  const actionBar =
+    actions || menu ? (
+      <div className="flex shrink-0 items-center gap-2">
+        {actions}
+        {menu ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              {/* Same height as the `size="sm"` actions beside it. */}
+              <Button type="button" variant="outline" size="icon-sm" aria-label={menuLabel}>
+                <DotsThreeIcon className="size-4" weight="bold" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              {menu}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
+      </div>
+    ) : null;
+
   return (
     <header className={cn("space-y-3", className)}>
-      {hasTopRow ? (
+      {/* With a back link, actions share its row; without one they sit beside
+          the title, so they never float above empty space. */}
+      {back ? (
         <div className="flex items-center justify-between gap-2">
-          {back ? (
-            <Button asChild variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
-              <Link href={back.href}>
-                <ArrowLeftIcon />
-                {back.label}
-              </Link>
-            </Button>
-          ) : (
-            <span />
-          )}
-          {actions || menu ? (
-            <div className="flex items-center gap-2">
-              {actions}
-              {menu ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="outline" size="icon-lg" aria-label={menuLabel}>
-                      <DotsThreeIcon className="size-5" weight="bold" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-60">
-                    {menu}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : null}
-            </div>
-          ) : null}
+          <Button asChild variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
+            <Link href={back.href}>
+              <ArrowLeftIcon />
+              {back.label}
+            </Link>
+          </Button>
+          {actionBar}
         </div>
       ) : null}
 
       <div className="space-y-2">
         {pills ? <div className="flex flex-wrap items-center gap-2">{pills}</div> : null}
-        {typeof title === "string" ? <PageTitle>{title}</PageTitle> : title}
+        {back || !actionBar ? (
+          typeof title === "string" ? <PageTitle>{title}</PageTitle> : title
+        ) : (
+          // Only the title shares a row with the actions, so the description
+          // and meta keep the full width on narrow screens.
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              {typeof title === "string" ? <PageTitle>{title}</PageTitle> : title}
+            </div>
+            {actionBar}
+          </div>
+        )}
         {description ? <p className="max-w-3xl text-sm text-muted-foreground">{description}</p> : null}
         {meta ? <PageMeta>{meta}</PageMeta> : null}
       </div>
