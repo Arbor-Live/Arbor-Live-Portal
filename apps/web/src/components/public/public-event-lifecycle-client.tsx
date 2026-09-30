@@ -131,6 +131,8 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
       canSubmit: Boolean(payment?.canSubmit),
       submitted: Boolean(payment?.submission),
       received: Boolean(payment?.paymentReceived),
+      awaitingFinal: Boolean(payment?.awaitingFinalInvoice),
+      final: Boolean(data.invoice.billingFinalizedAt),
     },
     eventEnded,
     eventTitle: linkedEvent?.title,
@@ -313,6 +315,8 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
               />
 
               <PublicQuoteFinancials
+                final={Boolean(data.invoice.billingFinalizedAt)}
+                paymentOpen={data.paymentProof?.opensAt != null}
                 lineItems={data.lineItems}
                 totals={{
                   equipmentSubtotalUsd: data.invoice.equipmentSubtotalUsd,

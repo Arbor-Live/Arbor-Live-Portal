@@ -183,6 +183,8 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
       canSubmit: Boolean(payment?.canSubmit),
       submitted: Boolean(payment?.submission),
       received: Boolean(payment?.paymentReceived),
+      awaitingFinal: Boolean(payment?.awaitingFinalInvoice),
+      final: Boolean(quoteData?.invoice.billingFinalizedAt),
     },
     eventEnded,
     eventTitle: linkedEvent?.title ?? request.eventName ?? undefined,
@@ -470,6 +472,8 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
                 />
 
                 <PublicQuoteFinancials
+                  final={Boolean(quoteData.invoice.billingFinalizedAt)}
+                  paymentOpen={quoteData.paymentProof?.opensAt != null}
                   lineItems={quoteData.lineItems}
                   totals={{
                     equipmentSubtotalUsd: quoteData.invoice.equipmentSubtotalUsd,

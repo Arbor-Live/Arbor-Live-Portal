@@ -28,7 +28,7 @@ export function PaymentProofReminderEmail({
   const greeting = recipientName ? `Hi ${recipientName},` : "Hi!";
   const reminderLabel =
     reminderKind === "first"
-      ? "Your quote is approved and payment proof submission is now open."
+      ? "Your invoice is ready and payment is now open. Please submit payment proof for the amount below."
       : "This is your weekly reminder to submit payment proof for your Arbor Live event.";
 
   return (
@@ -58,7 +58,7 @@ export function PaymentProofReminderEmail({
         Submit your payment reference via ASSU ePay, iJournal transfer, or GrantEd Group Transfer to
         VSO #5001. Download your invoice PDF from the portal before submitting.
       </BodyCopy>
-      <MutedCopy>You are receiving this because your event quote has been approved.</MutedCopy>
+      <MutedCopy>You are receiving this because your event invoice is open for payment.</MutedCopy>
       <EmailSignOff />
     </EmailLayout>
   );

@@ -165,7 +165,9 @@ export function InvoiceDocumentPdf({ data, logoSrc }: InvoiceDocumentPdfProps) {
                 ) : (
                   <ArborLogoPdf width={132} />
                 )}
-                <Text style={styles.invoiceNumber}>Invoice {invoice.invoiceNumber}</Text>
+                <Text style={styles.invoiceNumber}>
+                  {invoice.isFinal ? "Invoice" : "Estimate"} {invoice.invoiceNumber}
+                </Text>
               </View>
               <View style={styles.headerText}>
                 <Text>Office of Student Engagement</Text>
@@ -175,7 +177,7 @@ export function InvoiceDocumentPdf({ data, logoSrc }: InvoiceDocumentPdfProps) {
             </View>
             <View style={styles.detailsGrid}>
               <View style={styles.detailsColumn}>
-                <Text style={styles.sectionLabel}>Invoice Details</Text>
+                <Text style={styles.sectionLabel}>{invoice.isFinal ? "Invoice Details" : "Estimate Details"}</Text>
                 <DetailLine label="Invoice number" value={invoice.invoiceNumber} />
                 <DetailLine label="Issue date" value={invoice.issueDate} />
                 {invoice.dueDate ? <DetailLine label="Due date" value={invoice.dueDate} /> : null}
@@ -184,6 +186,12 @@ export function InvoiceDocumentPdf({ data, logoSrc }: InvoiceDocumentPdfProps) {
                   <DetailLine label="Manager email" value={invoice.managerEmail} />
                 ) : null}
                 <DetailLine label="Quote status" value={invoice.clientApprovalStatus ?? "pending"} />
+                {invoice.isFinal ? null : (
+                  <Text style={styles.detailLine}>
+                    Estimate: the final invoice follows the event, once hours are final.
+                    {invoice.paymentOpenEarly ? "" : " Please don't pay this estimate."}
+                  </Text>
+                )}
                 {invoice.digitalQuoteUrl ? (
                   <Text style={styles.detailLine}>
                     <Text style={styles.detailLabel}>Live quote: </Text>

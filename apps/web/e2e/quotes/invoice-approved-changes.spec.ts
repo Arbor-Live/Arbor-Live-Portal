@@ -1,57 +1,7 @@
-import { test, expect, type Browser, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { pollConvex } from "../helpers/convex";
 import { e2eEnv } from "../helpers/env";
-import { createDraftInvoiceWithArtistLine, invoiceEditorHeading, saveInvoiceEditor } from "../helpers/invoice";
-
-type EditorState = {
-  clientApprovalStatus: string | null;
-  publicApprovalToken: string | null;
-  publicPath: string | null;
-};
-
-type RevisionsState = {
-  clientApprovalStatus: string;
-  totalUsd: number;
-  approvedTotalUsd: number | null;
-  revisions: Array<{ number: number; kind: string; totalUsd: number; note: string | null; recordedLate: boolean }>;
-};
-
-/** A quote approved by the client (at $150) through its public page, open in the editor. */
-async function approvedQuote(page: Page, browser: Browser, label: string) {
-  const invoiceId = await createDraftInvoiceWithArtistLine(page, { label, quantity: "1", rate: "150" });
-  const drafted = await pollConvex<EditorState>(
-    "e2eHelpers:getInvoiceEditorState",
-    { invoiceId },
-    (row) => Boolean(row?.publicApprovalToken),
-  );
-
-  const clientContext = await browser.newContext({ baseURL: e2eEnv.baseURL });
-  try {
-    const clientPage = await clientContext.newPage();
-    await clientPage.goto(`${drafted.publicPath!}?tab=quote`);
-    await expect(clientPage.getByText(/Terms & Conditions/i).first()).toBeVisible({ timeout: 25_000 });
-    await clientPage.getByPlaceholder("Jordan Lee").fill("E2E Approver");
-    await clientPage.getByText("I will be submitting the payment").click();
-    await clientPage.getByRole("button", { name: "Approve quote" }).click();
-    await expect(clientPage.getByText(/Approved on/i).first()).toBeVisible({ timeout: 25_000 });
-  } finally {
-    await clientContext.close();
-  }
-
-  // Approval pins what the client agreed to.
-  const approved = await pollConvex<RevisionsState>(
-    "e2eHelpers:getInvoiceRevisionsState",
-    { invoiceId },
-    (row) => row?.clientApprovalStatus === "approved" && row.revisions.length === 1,
-  );
-  expect(approved.revisions[0]).toMatchObject({ number: 1, kind: "approved", totalUsd: 150, recordedLate: false });
-  expect(approved.approvedTotalUsd).toBe(150);
-
-  await page.goto(`/dashboard/financial-hub/invoices/${invoiceId}`);
-  await expect(invoiceEditorHeading(page)).toBeVisible({ timeout: 25_000 });
-  await expect(page.getByTestId("invoice-versions-card")).toContainText("Approved", { timeout: 25_000 });
-  return { invoiceId, publicPath: drafted.publicPath! };
-}
+import { clientApprovedQuote as approvedQuote, saveInvoiceEditor, type InvoiceRevisionsState as RevisionsState } from "../helpers/invoice";
 
 /** Reprice the artist line to $400 and click Save, which opens the decision dialog. */
 async function repriceAndSave(page: Page) {

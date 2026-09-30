@@ -403,12 +403,29 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   page (`/public/quote/[token]`): view, approve, request changes, set payment
   contacts, download PDF — all token-gated, no login.
 - PDFs are rendered from `@arbor/invoice-document` (`./pdf` export).
-- **Payment proof**: after approval, payers submit payment evidence
+- **Estimate → final invoice** (#406). An approved quote is an *estimate*
+  until staff settle it after the event, once hours are final:
+  - `finalizeBilling` sets `billingFinalizedAt`, snapshots a `final` version,
+    and opens payment. `reopenBilling` undoes it; it's refused once paid.
+  - Staff can open payment before that for a deposit
+    (`setPaymentOpenedEarly`, a reason is required).
+  - `getPaymentProofOpensAt` is the single gate: payment is open from the
+    earlier of `billingFinalizedAt` and `paymentOpenedEarlyAt`, never at
+    approval. So reminders, late fees and the payment queue all wait for it.
+  - The invoice list shows `estimate` (event upcoming) and `ready_to_finalize`
+    (event over; under "Needs you").
+  - The portal and the PDF say "Estimate" and ask clients not to pay until
+    then.
+  - This is not `status: "finalized"`, which means sent/published.
+  - Quotes approved before this change keep payment open (migration
+    `keepPaymentOpenForApprovedQuotes`).
+- **Payment proof**: once payment opens (above), payers submit payment evidence
   (`paymentProof*.ts`). A quote linked as an additional invoice on an event
   (not only the primary `events.invoiceId`) opens payment the same way, and
   proof is stored per invoice. Staff verify, and cron-driven reminder emails nag
   outstanding payers only once fewer than 30 days remain until the invoice due
-  date (approval-day first reminder + Monday follow-ups via `weeklyJobs`).
+  date (first reminder the day payment opens + Monday follow-ups via
+  `weeklyJobs`).
 
 ## Band payments
 

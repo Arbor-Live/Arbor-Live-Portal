@@ -34,7 +34,15 @@ export type PortalNextStepInput = {
   finalized: boolean;
   quoteReady: boolean;
   approvalStatus: "pending" | "approved" | "changes_requested";
-  payment: { canSubmit: boolean; submitted: boolean; received: boolean };
+  payment: {
+    canSubmit: boolean;
+    submitted: boolean;
+    received: boolean;
+    /** Approved estimate: payment waits for the final invoice after the event. */
+    awaitingFinal?: boolean;
+    /** Staff settled the final invoice. */
+    final?: boolean;
+  };
   eventEnded: boolean;
   eventTitle?: string;
   feedbackSubmitted: boolean;
@@ -121,12 +129,20 @@ export function derivePortalNextSteps(input: PortalNextStepInput): PortalStep[] 
       title: "Payment submitted — verifying",
       body: "We'll confirm once we've reviewed it.",
     });
+  } else if (input.payment.awaitingFinal) {
+    steps.push({
+      key: "payment-after-event",
+      tone: "info",
+      icon: ReceiptIcon,
+      title: "Please don't send payment yet",
+      body: `Your approved quote is an estimate. After ${eventTitle}, once hours are final, we'll send your final invoice and open payment here.`,
+    });
   } else if (input.payment.canSubmit) {
     steps.push({
       key: "payment",
       tone: "action",
       icon: ReceiptIcon,
-      title: "Payment pending",
+      title: input.payment.final ? "Your final invoice is ready" : "Payment is open",
       body: "Submit your payment details so we can close out your invoice.",
       ctaLabel: "Submit payment",
       targetTab: "quote",

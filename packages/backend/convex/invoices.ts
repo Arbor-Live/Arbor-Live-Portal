@@ -19,7 +19,7 @@ import {
   requirePublicEditableEvent,
 } from "./lib/publicEventContacts";
 import { isSingleSeriesBooking } from "./lib/invoiceArtistDays";
-import { getActivePaymentProofSubmissionForInvoice } from "./lib/paymentProof";
+import { getActivePaymentProofSubmissionForInvoice, getPaymentProofOpensAt } from "./lib/paymentProof";
 import { invoiceDueEndMs } from "./lib/invoicePaymentStatus";
 import {
   billingQuantityForEquipmentLine,
@@ -483,6 +483,9 @@ async function resetInvoiceApproval(ctx: MutationCtx, invoice: Doc<"invoices">, 
     payingPartyNotifiedAt: undefined,
     termsVersionAccepted: undefined,
     termsAcceptedAt: undefined,
+    // Re-approval makes it an estimate again.
+    billingFinalizedAt: undefined,
+    billingFinalizedByName: undefined,
     updatedAt: at,
   });
   if (fromStatus !== "pending") {
@@ -947,6 +950,8 @@ export const list = query({
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type InvoiceListPaymentStatus =
+  | "estimate"
+  | "ready_to_finalize"
   | "payment_pending"
   | "proof_received"
   | "overdue"
@@ -954,7 +959,9 @@ type InvoiceListPaymentStatus =
 
 /**
  * Payment status for the invoice list, computed only for approved quotes:
- * `paid` once money landed on our account, `overdue` past the due date
+ * `paid` once money landed on our account; while it's still an estimate,
+ * `estimate` before the event ends and `ready_to_finalize` after (staff owe
+ * the final invoice); then `overdue` past the due date
  * (counting days since), `proof_received` when the client submitted payment
  * proof we haven't confirmed yet, else `payment_pending`. Non-approved quotes
  * (draft / awaiting approval / changes requested) return null.
@@ -972,6 +979,10 @@ async function resolveInvoiceListPaymentStatus(
   }
   const now = Date.now();
   const activeSubmission = await getActivePaymentProofSubmissionForInvoice(ctx, invoice._id);
+  if (getPaymentProofOpensAt(invoice) == null && !activeSubmission) {
+    const eventEnded = primaryEvent ? primaryEvent.endAt < now : false;
+    return { paymentStatus: eventEnded ? "ready_to_finalize" : "estimate", daysOverdue: 0 };
+  }
   const dueEndMs = invoiceDueEndMs(invoice, primaryEvent?.timezone);
   if (dueEndMs != null && now > dueEndMs) {
     return {
@@ -1019,6 +1030,7 @@ export const listEnriched = query({
           status: invoice.status,
           clientApprovalStatus: invoice.clientApprovalStatus,
           paymentReceivedAt: invoice.paymentReceivedAt,
+          billingFinalizedAt: invoice.billingFinalizedAt,
           paymentStatus,
           daysOverdue,
           managerName: invoice.managerName,
@@ -1393,6 +1405,9 @@ export const updateDraft = mutation({
           termsIds: normalizedTermsIds ?? [],
         });
     const approvedChange = approvedContentChanged ? args.approvedChange : undefined;
+    if (approvedContentChanged && existing.billingFinalizedAt) {
+      appError("INVOICE_FINAL_REOPEN_TO_CHANGE", "This is the final invoice. Reopen it to make changes.");
+    }
     if (approvedContentChanged) {
       if (!approvedChange) {
         appError(
@@ -1748,6 +1763,97 @@ export const resetApprovalToPending = mutation({
     if (!invoice) throw new Error("Invoice not found.");
     await resetInvoiceApproval(ctx, invoice, Date.now());
     return { ok: true };
+  },
+});
+
+/**
+ * Settle an approved estimate into the final invoice (after the event, once
+ * hours are final): snapshots a `final` version and opens payment. The first
+ * payment reminder then tells the client it's ready.
+ */
+export const finalizeBilling = mutation({
+  args: { id: v.id("invoices") },
+  handler: async (ctx, args) => {
+    const viewer = await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    return await withReportableErrors("invoices.finalizeBilling", async () => {
+      const invoice = await ctx.db.get(args.id);
+      if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+      if (invoice.status === "void") appError("INVOICE_VOID", "This invoice is void.");
+      if ((invoice.clientApprovalStatus ?? "pending") !== "approved") {
+        appError("INVOICE_NOT_APPROVED", "The client has to approve the quote before it can be finalized.");
+      }
+      if (invoice.billingFinalizedAt) return { number: null };
+      const now = Date.now();
+      await ensureApprovedRevision(ctx, invoice);
+      const snapshot = await snapshotInvoice(ctx, invoice);
+      const { number } = await recordInvoiceRevision(ctx, args.id, snapshot, {
+        kind: "final",
+        at: now,
+        actorName: viewer.name,
+        actorUserId: viewer._id ?? viewer.id,
+      });
+      await ctx.db.patch(args.id, {
+        billingFinalizedAt: now,
+        billingFinalizedByName: viewer.name,
+        updatedAt: now,
+      });
+      return { number };
+    });
+  },
+});
+
+/** Undo `finalizeBilling` to correct the invoice. Refused once it's paid. */
+export const reopenBilling = mutation({
+  args: { id: v.id("invoices") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    return await withReportableErrors("invoices.reopenBilling", async () => {
+      const invoice = await ctx.db.get(args.id);
+      if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+      if (invoice.paymentReceivedAt) {
+        appError("INVOICE_PAID", "This invoice is paid, so it can't be reopened.");
+      }
+      await ctx.db.patch(args.id, {
+        billingFinalizedAt: undefined,
+        billingFinalizedByName: undefined,
+        updatedAt: Date.now(),
+      });
+      return null;
+    });
+  },
+});
+
+/** Let the client pay before the final invoice (a deposit or prepayment), or take that back. */
+export const setPaymentOpenedEarly = mutation({
+  args: { id: v.id("invoices"), open: v.boolean(), note: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const viewer = await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    return await withReportableErrors("invoices.setPaymentOpenedEarly", async () => {
+      const invoice = await ctx.db.get(args.id);
+      if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+      const now = Date.now();
+      if (args.open) {
+        const note = args.note?.trim();
+        if (!note) appError("PAYMENT_EARLY_NOTE_REQUIRED", "Say why payment opens before the final invoice.");
+        await ctx.db.patch(args.id, {
+          paymentOpenedEarlyAt: now,
+          paymentOpenedEarlyByName: viewer.name,
+          paymentOpenedEarlyNote: note,
+          updatedAt: now,
+        });
+      } else {
+        await ctx.db.patch(args.id, {
+          paymentOpenedEarlyAt: undefined,
+          paymentOpenedEarlyByName: undefined,
+          paymentOpenedEarlyNote: undefined,
+          updatedAt: now,
+        });
+      }
+      return null;
+    });
   },
 });
 

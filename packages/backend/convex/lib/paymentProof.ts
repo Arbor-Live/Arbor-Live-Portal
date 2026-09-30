@@ -12,7 +12,10 @@ export const PAYMENT_PROOF_REMINDER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type PaymentProofMethod = "assu_epay" | "ijournal" | "granted_transfer";
 
-type PaymentProofInvoice = Pick<Doc<"invoices">, "approvedAt" | "clientApprovalStatus">;
+type PaymentProofInvoice = Pick<
+  Doc<"invoices">,
+  "approvedAt" | "clientApprovalStatus" | "billingFinalizedAt" | "paymentOpenedEarlyAt"
+>;
 
 export const paymentProofMethodValue = {
   assu_epay: "assu_epay" as const,
@@ -62,16 +65,27 @@ export function zonedLocalTimeToUtcMs(
   return lo;
 }
 
+/**
+ * Payment opens with the final invoice, after the event, not at approval: an
+ * approved quote is an estimate until hours are final. Staff can open it early
+ * for a deposit (`paymentOpenedEarlyAt`). Null while it's still an estimate.
+ */
 export function getPaymentProofOpensAt(invoice: PaymentProofInvoice): number | null {
   if ((invoice.clientApprovalStatus ?? "pending") !== "approved") return null;
-  return invoice.approvedAt ?? null;
+  const opens = [invoice.billingFinalizedAt, invoice.paymentOpenedEarlyAt].filter(
+    (value): value is number => value != null,
+  );
+  return opens.length ? Math.min(...opens) : null;
 }
 
 export function isPaymentProofOpen(nowMs: number, invoice: PaymentProofInvoice) {
-  if ((invoice.clientApprovalStatus ?? "pending") !== "approved") return false;
-  const opensAt = invoice.approvedAt;
-  if (opensAt == null) return true;
-  return nowMs >= opensAt;
+  const opensAt = getPaymentProofOpensAt(invoice);
+  return opensAt != null && nowMs >= opensAt;
+}
+
+/** Approved, but still an estimate: payment waits for the final invoice. */
+export function isAwaitingFinalInvoice(invoice: PaymentProofInvoice) {
+  return (invoice.clientApprovalStatus ?? "pending") === "approved" && getPaymentProofOpensAt(invoice) == null;
 }
 
 const PAYMENT_PROOF_HELP =
@@ -226,12 +240,16 @@ export async function loadPaymentProofState(
     paymentReceived,
   });
   const dueAt = getPaymentDueAt(invoice, linkedEvent);
-  const lateFee = flags.eligible ? computeLateFeeSummary(dueAt, now) : null;
+  // No due date clock while it's still an estimate: nothing can be paid yet.
+  const lateFee =
+    flags.eligible && flags.opensAt != null ? computeLateFeeSummary(dueAt, now) : null;
 
   return {
     eligible: flags.eligible,
     canSubmit: flags.canSubmit,
     opensAt: flags.opensAt,
+    /** Approved estimate: payment opens with the final invoice after the event. */
+    awaitingFinalInvoice: isAwaitingFinalInvoice(invoice) && !paymentReceived,
     paymentReceived,
     lateFee: lateFee
       ? {
