@@ -1,12 +1,13 @@
 import { test, expect } from "@playwright/test";
 import { runConvex } from "../helpers/convex";
 import { acceptAppDialog, dismissAppDialog, signInWithCredentials } from "../helpers/auth";
-import { pickSelectOption } from "../helpers/select";
 import {
-  accessFilterSelect,
-  chooseRowStatus,
-  openUserRow,
-  userRowStatusSelect,
+  chooseAccessStatus,
+  closeSheet,
+  openPersonSheet,
+  openUserSheet,
+  setAccessFilter,
+  userRowStatus,
   waitForUserAdminState,
   type UserAdminState,
 } from "../helpers/users";
@@ -29,6 +30,10 @@ const guardAdminName = "E2E Guard Admin";
  * for a banned user — and `userAdminProfiles.status`, which is what the table
  * filters on. Asserting only the filter would pass on a user who could still
  * sign in.
+ *
+ * Status is changed from the pill in the person panel's header; the People
+ * list shows Active people by default, so the access filter is how an alumni
+ * row comes back into view.
  */
 test.describe("user access status", () => {
   test.setTimeout(240_000);
@@ -47,25 +52,29 @@ test.describe("user access status", () => {
     const before = await waitForUserAdminState(targetEmail, (state) => state?.status === "active");
     expect(before.banned).toBe(false);
 
-    const row = await openUserRow(page, before.userId);
-    await expect(userRowStatusSelect(row)).toHaveText("Active");
+    const { row, sheet } = await openUserSheet(page, before.userId);
+    await expect(userRowStatus(row)).toHaveText("Active");
 
-    await chooseRowStatus(page, row, "Alumni");
+    await chooseAccessStatus(page, sheet, "Alumni");
     await acceptAppDialog(page, "Mark alumni");
     await expect(page.getByText(`Marked ${targetName} as alumni.`)).toBeVisible({ timeout: 30_000 });
 
     const alumni = await waitForUserAdminState(targetEmail, (state) => state?.status === "alumni");
     // The ban is the half that actually ends the session.
     expect(alumni.banned).toBe(true);
+    // The panel stays open on the person even though the Active list drops them.
+    await expect(sheet.getByRole("button", { name: "Access: Alumni" })).toBeVisible({ timeout: 30_000 });
+    await closeSheet(page, sheet);
 
     // The Active filter drops them, and Alumni picks them up.
-    await pickSelectOption(page, accessFilterSelect(page), "Active");
     await expect(page.getByTestId(`user-row-${before.userId}`)).toHaveCount(0, { timeout: 30_000 });
-    await pickSelectOption(page, accessFilterSelect(page), "Alumni");
+    await setAccessFilter(page, "Alumni");
     const alumniRow = page.getByTestId(`user-row-${before.userId}`);
     await expect(alumniRow).toBeVisible({ timeout: 30_000 });
+    await expect(userRowStatus(alumniRow)).toHaveText("Alumni");
 
-    await chooseRowStatus(page, alumniRow, "Active");
+    const alumniSheet = await openPersonSheet(page, alumniRow);
+    await chooseAccessStatus(page, alumniSheet, "Active");
     await acceptAppDialog(page, "Activate");
     await expect(page.getByText(`Activated ${targetName}.`)).toBeVisible({ timeout: 30_000 });
 
@@ -75,24 +84,25 @@ test.describe("user access status", () => {
 
   test("marking a user inactive keeps their account but drops digest targeting", async ({ page }) => {
     const before = await waitForUserAdminState(targetEmail, (state) => state?.status === "active");
-    const row = await openUserRow(page, before.userId);
+    const { sheet } = await openUserSheet(page, before.userId);
 
-    await chooseRowStatus(page, row, "Inactive");
+    await chooseAccessStatus(page, sheet, "Inactive");
     await acceptAppDialog(page, "Mark inactive");
 
     const inactive = await waitForUserAdminState(targetEmail, (state) => state?.status === "inactive");
     // Inactive is not a ban: they can still sign in and reactivate.
     expect(inactive.banned).toBe(false);
 
-    await pickSelectOption(page, accessFilterSelect(page), "Inactive");
+    await closeSheet(page, sheet);
+    await setAccessFilter(page, "Inactive");
     await expect(page.getByTestId(`user-row-${before.userId}`)).toBeVisible({ timeout: 30_000 });
   });
 
   test("dismissing the change confirm changes nothing", async ({ page }) => {
     const before = await waitForUserAdminState(targetEmail, (state) => state?.status === "active");
-    const row = await openUserRow(page, before.userId);
+    const { row, sheet } = await openUserSheet(page, before.userId);
 
-    await chooseRowStatus(page, row, "Alumni");
+    await chooseAccessStatus(page, sheet, "Alumni");
     await dismissAppDialog(page);
 
     const after = runConvex("e2eHelpers:getUserAdminStateByEmail", {
@@ -100,7 +110,8 @@ test.describe("user access status", () => {
     }) as UserAdminState | null;
     expect(after?.status).toBe("active");
     expect(after?.banned).toBe(false);
-    await expect(userRowStatusSelect(row)).toHaveText("Active");
+    await expect(sheet.getByRole("button", { name: "Access: Active" })).toBeVisible();
+    await expect(userRowStatus(row)).toHaveText("Active");
   });
 
   test("an admin cannot close their own access", async ({ browser }) => {
@@ -118,9 +129,9 @@ test.describe("user access status", () => {
     const page = await context.newPage();
     try {
       await signInWithCredentials(page, guardAdminEmail, guardAdminPassword);
-      const row = await openUserRow(page, seeded.userId);
+      const { sheet } = await openUserSheet(page, seeded.userId);
 
-      await chooseRowStatus(page, row, "Alumni");
+      await chooseAccessStatus(page, sheet, "Alumni");
       await acceptAppDialog(page, "Mark alumni");
 
       // The mutation throws and the page surfaces the message instead of
@@ -130,7 +141,7 @@ test.describe("user access status", () => {
         timeout: 30_000,
       });
       // The invariant that matters: they are still signed in and still active.
-      await expect(row).toBeVisible();
+      await expect(sheet.getByRole("button", { name: "Access: Active" })).toBeVisible();
       const after = runConvex("e2eHelpers:getUserAdminStateByEmail", {
         email: guardAdminEmail,
       }) as UserAdminState | null;

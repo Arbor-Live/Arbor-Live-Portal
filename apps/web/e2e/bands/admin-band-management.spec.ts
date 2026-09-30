@@ -129,16 +129,17 @@ test.describe("band self-service riders", () => {
 });
 
 test.describe("Users organizations no longer hosts band details", () => {
-  test("band org rows link out instead of expanding profile details", async ({ page }) => {
-    await ensureBand();
+  test("band org panels link out to Artists instead of editing the full profile", async ({ page }) => {
+    const band = await ensureBand();
 
     await page.goto("/dashboard/users/organizations");
-    await expect(page.getByText("Artist Organizations").first()).toBeVisible({
-      timeout: 30_000,
-    });
-    await expect(page.getByText(/Profile\/riders under/i)).toBeVisible();
-    await expect(page.getByRole("link", { name: "Edit profile" }).first()).toBeVisible();
-    await expect(page.getByRole("option", { name: "Show details" })).toHaveCount(0);
+    await expect(page.getByTestId("organizations-summary")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Artist profiles and riders are edited under/i)).toBeVisible();
+
+    await page.getByTestId(`org-row-${band.organizationId}`).getByRole("button").first().click();
+    const sheet = page.getByTestId("organization-sheet");
+    await expect(sheet).toBeVisible({ timeout: 20_000 });
+    await expect(sheet.getByRole("link", { name: "Edit profile" })).toBeVisible();
     await expect(page.getByText("Advanced fields")).toHaveCount(0);
   });
 });

@@ -247,7 +247,9 @@ function PayoutSheetBody({
           </Button>
           {row.status === "pending_onboarding" ? (
             <Button asChild size="sm" variant="outline">
-              <Link href="/dashboard/users/organizations">Manage onboarding</Link>
+              <Link href={`/dashboard/users/organizations?org=${encodeURIComponent(row.organizationId)}`}>
+                Manage onboarding
+              </Link>
             </Button>
           ) : null}
         </div>

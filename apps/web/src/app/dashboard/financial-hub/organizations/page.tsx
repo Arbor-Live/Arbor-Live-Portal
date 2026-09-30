@@ -7,8 +7,8 @@ export default function FinancialHubOrganizationsPage() {
     <div className="space-y-4">
       <PageHeader
         back={{ href: "/dashboard/financial-hub", label: "Ops Center" }}
-        title="Host Organizations"
-        description="Manage host orgs and their client contacts for invoices and booking requests."
+        title="Billing hosts"
+        description="The clients we invoice and host events for, with their contacts, aliases, and merges. Portal organizations (Arbor Live, artists) are under Users."
       />
       <ArborOnlyGuard>
         <FinancialHubOrganizationsClient />

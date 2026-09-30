@@ -122,22 +122,46 @@ export const bandOrgProfileSchema = z
 
 export type BandOrgProfileFormValues = z.infer<typeof bandOrgProfileSchema>;
 
-export const inviteUserSchema = z
+export const ADD_PERSON_MODE_OPTIONS = ["invite", "create"] as const;
+
+/**
+ * The Add person dialog: send an invite, or create the account directly with a
+ * temporary password. Name and password only apply to "create"; the crew
+ * compensation fields only apply to a crew (not advisor) Arbor Live member.
+ */
+export const addPersonSchema = z
   .object({
+    mode: z.enum(ADD_PERSON_MODE_OPTIONS),
+    organizationId: z.string().min(1, "Select an organization"),
     email: z.string().email("Enter a valid email"),
+    name: z.string(),
+    title: z.string(),
+    password: z.string(),
     role: z.string(),
     inviteKind: userInviteKindSchema,
     verticals: z.array(userVerticalOptionSchema),
     disciplines: z.array(userDisciplineOptionSchema),
-    rateMode: crewRateModeSchema.optional(),
-    customHourlyRateUsd: z.string().optional(),
-    payrollMethod: payrollMethodSchema.optional(),
+    rateMode: crewRateModeSchema,
+    customHourlyRateUsd: z.string(),
+    payrollMethod: payrollMethodSchema,
   })
   .superRefine((values, ctx) => {
+    if (values.mode === "create") {
+      if (!values.name.trim()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Name is required", path: ["name"] });
+      }
+      if (!values.password) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Temporary password is required",
+          path: ["password"],
+        });
+      }
+    }
     if (values.inviteKind === "advisor") return;
     if (values.rateMode === "custom") {
-      const parsed = Number(values.customHourlyRateUsd ?? "");
-      if (!Number.isFinite(parsed) || parsed < 0) {
+      const parsed = Number(values.customHourlyRateUsd);
+      if (!values.customHourlyRateUsd.trim() || !Number.isFinite(parsed) || parsed < 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Enter a valid custom hourly rate",
@@ -147,51 +171,7 @@ export const inviteUserSchema = z
     }
   });
 
-export type InviteUserFormValues = z.infer<typeof inviteUserSchema>;
-
-export const createUserAdminSchema = z
-  .object({
-    name: z.string().min(1, "Name is required"),
-    title: z.string(),
-    email: z.string().email("Enter a valid email"),
-    password: z.string().min(1, "Temporary password is required"),
-    role: z.string(),
-    inviteKind: userInviteKindSchema,
-    verticals: z.array(userVerticalOptionSchema),
-    disciplines: z.array(userDisciplineOptionSchema),
-    rateMode: crewRateModeSchema.optional(),
-    hourlyRateUsd: z.string().optional(),
-    payrollMethod: payrollMethodSchema.optional(),
-  })
-  .superRefine((values, ctx) => {
-    if (values.inviteKind === "advisor") return;
-    if (!values.rateMode) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Select a rate mode",
-        path: ["rateMode"],
-      });
-    }
-    if (!values.payrollMethod) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Select a payment method",
-        path: ["payrollMethod"],
-      });
-    }
-    if (values.rateMode === "custom") {
-      const parsed = Number(values.hourlyRateUsd ?? "");
-      if (!Number.isFinite(parsed) || parsed < 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Enter a valid custom hourly rate",
-          path: ["hourlyRateUsd"],
-        });
-      }
-    }
-  });
-
-export type CreateUserAdminFormValues = z.infer<typeof createUserAdminSchema>;
+export type AddPersonFormValues = z.infer<typeof addPersonSchema>;
 
 export const editInviteSchema = z.object({
   role: z.string(),

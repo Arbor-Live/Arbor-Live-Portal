@@ -104,7 +104,7 @@ const financialHubSubItems: NavSubItem[] = [
   { title: "Artist payouts", url: "/dashboard/financial-hub/artist-payouts" },
   { title: "Crew Timecards", url: "/dashboard/timecards" },
   { title: "My Timecards", url: "/dashboard/timecards/mine" },
-  { title: "Host Organizations", url: "/dashboard/financial-hub/organizations" },
+  { title: "Billing hosts", url: "/dashboard/financial-hub/organizations" },
   { title: "Create Invoice", url: "/dashboard/financial-hub/invoices/new" },
   { title: "Settings", url: "/dashboard/financial-hub/settings" },
 ]
@@ -122,8 +122,9 @@ const eventsSubItems: NavSubItem[] = [
 ]
 
 const usersSubItems: NavSubItem[] = [
-  { title: "Overview", url: "/dashboard/users" },
-  { title: "Access & Invites", url: "/dashboard/users/access" },
+  { title: "People", url: "/dashboard/users" },
+  { title: "Invitations", url: "/dashboard/users/invitations" },
+  { title: "Organizations", url: "/dashboard/users/organizations" },
   { title: "Crew applications", url: "/dashboard/users/crew-applications", adminOnly: true },
   { title: "Crew Rates", url: "/dashboard/users/crew-rates" },
 ]

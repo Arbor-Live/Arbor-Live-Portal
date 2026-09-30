@@ -2,13 +2,8 @@ import { test, expect, type Locator } from "@playwright/test";
 import { acceptAppDialog } from "../helpers/auth";
 import { runConvex } from "../helpers/convex";
 import { e2eEnv } from "../helpers/env";
-import { chooseRowAction, pickSelectOption } from "../helpers/select";
-import {
-  openUserRow,
-  userRowActionMenu,
-  waitForUserAdminState,
-  type UserAdminState,
-} from "../helpers/users";
+import { pickSearchableOption, pickSelectOption } from "../helpers/select";
+import { openUserSheet, waitForUserAdminState, type UserAdminState } from "../helpers/users";
 
 const targetEmail = "e2e-membership-target@arborlive.test";
 const targetPassword = "E2eTestPassword1!";
@@ -19,14 +14,18 @@ const hasBandMembership = (state: UserAdminState | null) =>
     (membership) => membership.organizationName === e2eEnv.bandOrgName,
   );
 
-/** Click the Remove button on the membership line for one org. */
+/** Click the remove (×) button on the membership line for one org. */
 async function removeMembership(panel: Locator, organizationName: string) {
-  const line = panel.locator("div.flex.items-center").filter({ hasText: organizationName });
-  await line.getByRole("button", { name: "Remove", exact: true }).click();
+  await panel.getByRole("button", { name: `Remove ${organizationName} membership`, exact: true }).click();
+}
+
+/** The membership line for one org in the panel's Memberships section. */
+function membershipLine(panel: Locator, organizationName: string) {
+  return panel.getByTestId("person-membership").filter({ hasText: organizationName });
 }
 
 /**
- * Org memberships from the Users row's expanded details.
+ * Org memberships from the person panel's Memberships section.
  *
  * A user's memberships are what `getSessionShell` turns into their org switcher
  * and their active org, so `addUserOrganizationMembershipAdmin` is how anyone
@@ -51,10 +50,8 @@ test.describe.serial("user organization memberships", () => {
     // default org, so the band membership below is genuinely a second one.
     expect(seeded.defaultOrganizationId).toBeTruthy();
 
-    const row = await openUserRow(page, seeded.userId);
-    await chooseRowAction(page, userRowActionMenu(row), "Show details");
-
-    const panel = page.getByTestId(`user-memberships-${seeded.userId}`);
+    const { sheet } = await openUserSheet(page, seeded.userId);
+    const panel = sheet.getByTestId("person-memberships");
     await expect(panel).toBeVisible({ timeout: 30_000 });
 
     // A previous run that failed between add and remove would leave the band
@@ -66,15 +63,15 @@ test.describe.serial("user organization memberships", () => {
     }
     const baseline = await waitForUserAdminState(targetEmail, (state) => !hasBandMembership(state));
 
-    const orgSelect = panel.locator("[data-slot='select-trigger']").nth(0);
-    const roleSelect = panel.locator("[data-slot='select-trigger']").nth(1);
+    const orgSelect = panel.getByTestId("searchable-select-trigger");
+    const roleSelect = panel.getByRole("combobox", { name: "Membership role" });
 
     // Picking the org rewrites the role options — an external org offers
     // Org Member / Org Admin where Arbor Live offers Member / Admin — and the
     // role select is disabled until an org is chosen, so the order matters.
-    await pickSelectOption(page, orgSelect, e2eEnv.bandOrgName);
+    await pickSearchableOption(page, orgSelect, e2eEnv.bandOrgName, e2eEnv.bandOrgName);
     await pickSelectOption(page, roleSelect, "Org Admin");
-    await panel.getByRole("button", { name: "Add Membership" }).click();
+    await panel.getByRole("button", { name: "Add membership" }).click();
 
     await expect(page.getByText(`Added membership for ${targetName}.`)).toBeVisible({
       timeout: 30_000,
@@ -88,7 +85,9 @@ test.describe.serial("user organization memberships", () => {
     // Additive: the Arbor membership is untouched, the user is not moved.
     expect(added.memberships.length).toBe(baseline.memberships.length + 1);
 
-    await expect(panel).toContainText(`${e2eEnv.bandOrgName} (org_admin)`, { timeout: 30_000 });
+    await expect(membershipLine(panel, e2eEnv.bandOrgName)).toContainText("Org Admin", {
+      timeout: 30_000,
+    });
 
     await removeMembership(panel, e2eEnv.bandOrgName);
     await expect(page.getByText(`Removed membership for ${targetName}.`)).toBeVisible({
@@ -109,9 +108,8 @@ test.describe.serial("user organization memberships", () => {
     );
     expect(defaultOrg?.organizationName).toBe("Arbor Live");
 
-    const row = await openUserRow(page, before.userId);
-    await chooseRowAction(page, userRowActionMenu(row), "Show details");
-    const panel = page.getByTestId(`user-memberships-${before.userId}`);
+    const { sheet } = await openUserSheet(page, before.userId);
+    const panel = sheet.getByTestId("person-memberships");
     await expect(panel).toBeVisible({ timeout: 30_000 });
 
     await removeMembership(panel, "Arbor Live");

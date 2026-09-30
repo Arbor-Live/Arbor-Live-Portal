@@ -5,9 +5,11 @@ import { e2eEnv } from "../helpers/env";
 import { formField, selectByLabel } from "../helpers/form";
 import { pickSelectOption } from "../helpers/select";
 import {
-  openUserRow,
-  userRowRoleSelect,
-  userRowSave,
+  openAddPersonDialog,
+  openUserSheet,
+  orgFilter,
+  personSheetSave,
+  toggleFilter,
   waitForUserAdminState,
 } from "../helpers/users";
 
@@ -20,13 +22,13 @@ const targetName = "E2E Promote Target";
  *
  * Batch 7 proved a non-admin is refused on the admin routes, but nothing proved
  * the *grant* works — a guard that refused everyone would have passed it just as
- * happily. This drives the whole loop through the UI: create a member, watch
- * them get refused, promote them from the Users table, watch the same session
- * walk in, then demote and watch the door shut again.
+ * happily. This drives the whole loop through the UI: create a member from Add
+ * person, watch them get refused, promote them from their People panel, watch
+ * the same session walk in, then demote and watch the door shut again.
  *
  * Admin-ness is one field: `requireAdmin` compares the better-auth `user.role`,
  * and `AdminOnlyGuard` reads the same value through `getSessionShell`. The
- * Users row writes it alongside `userOrganizationMemberships.role`, so both are
+ * person panel writes it alongside `userOrganizationMemberships.role`, so both are
  * asserted — they are separate values that can drift.
  */
 test.describe("create user and grant admin", () => {
@@ -42,27 +44,20 @@ test.describe("create user and grant admin", () => {
     // user is new, so a fresh email every run would leave a pile of accounts
     // behind. Re-running instead resets the existing user's role to `member`,
     // which is exactly the precondition the spec needs.
-    await page.goto("/dashboard/users/access");
-    await expect(page.getByText("User Access & Invitations")).toBeVisible({ timeout: 30_000 });
+    await page.goto("/dashboard/users");
+    // Add person defaults to the filtered organization, Arbor Live, once the
+    // org list resolves.
+    await expect(orgFilter(page)).toHaveText("Arbor Live", { timeout: 30_000 });
 
-    const usersCard = page
-      .locator("[data-slot='card']")
-      .filter({ has: page.getByText("Users", { exact: true }) });
-    await expect(usersCard.locator("[data-slot='select-trigger']").first()).toHaveText(
-      "Arbor Live",
-      { timeout: 30_000 },
-    );
-    await usersCard.getByRole("button", { name: "Create User" }).click();
-
-    const modal = page.getByTestId("create-user-modal");
-    await expect(modal).toBeVisible({ timeout: 20_000 });
+    const modal = await openAddPersonDialog(page);
+    await toggleFilter(page, "Add person mode", "Create account").click();
     await formField(modal, "Name").fill(targetName);
     await formField(modal, "Title (optional)").fill("E2E Fixture");
     await formField(modal, "Email").fill(targetEmail);
     await formField(modal, "Temporary password").fill(targetPassword);
     // Leave Role on Member — being refused first is the point.
     await pickSelectOption(page, selectByLabel(modal, "Payment method"), "Stanford payroll");
-    await modal.getByRole("button", { name: "Create User" }).click();
+    await modal.getByRole("button", { name: "Create user" }).click();
 
     await expect(page.getByText("User created.")).toBeVisible({ timeout: 30_000 });
 
@@ -93,16 +88,16 @@ test.describe("create user and grant admin", () => {
         timeout: 30_000,
       });
 
-      // Promote from the Users table.
-      const row = await openUserRow(page, created.userId);
-      await pickSelectOption(page, userRowRoleSelect(row), "Admin");
-      await userRowSave(row).click();
+      // Promote from their People panel.
+      const { sheet } = await openUserSheet(page, created.userId);
+      await pickSelectOption(page, selectByLabel(sheet, "Role"), "Admin");
+      await personSheetSave(sheet).click();
 
       const promoted = await waitForUserAdminState(
         targetEmail,
         (state) => state?.authRole === "admin",
       );
-      // The row saves the auth role and the org membership role together.
+      // The panel saves the auth role and the org membership role together.
       expect(
         promoted.memberships.some(
           (membership) => membership.organizationName === "Arbor Live" && membership.role === "admin",
@@ -115,14 +110,12 @@ test.describe("create user and grant admin", () => {
       await expect(targetPage.getByText("Admin access required")).toHaveCount(0, {
         timeout: 30_000,
       });
-      await expect(targetPage.getByRole("link", { name: "Open Access Management" })).toBeVisible({
-        timeout: 30_000,
-      });
+      await expect(targetPage.getByTestId("people-summary")).toBeVisible({ timeout: 30_000 });
 
       // Demote, which also leaves the fixture in the state the next run expects.
-      const demoteRow = await openUserRow(page, created.userId);
-      await pickSelectOption(page, userRowRoleSelect(demoteRow), "Member");
-      await userRowSave(demoteRow).click();
+      const { sheet: demoteSheet } = await openUserSheet(page, created.userId);
+      await pickSelectOption(page, selectByLabel(demoteSheet, "Role"), "Member");
+      await personSheetSave(demoteSheet).click();
       await waitForUserAdminState(targetEmail, (state) => state?.authRole === "member");
 
       await targetPage.reload();
@@ -149,10 +142,11 @@ test.describe("create user and grant admin", () => {
 /**
  * The Users sub-routes Batch 7 missed.
  *
- * Its route list came from the sidebar's `adminOnly` flags, and these three are
+ * Its route list came from the sidebar's `adminOnly` flags, and these were
  * reached from cards on `/dashboard/users` instead of from the nav — so they had
  * no `AdminOnlyGuard` at all and refused by throwing `requireAdmin` into the
- * generic error boundary. This batch adds the guard; this pins it.
+ * generic error boundary. The Users tabs now share one guarded layout, and
+ * `/access` redirects into it; this pins every entry point.
  *
  * Reuses the standing crew session rather than signing in: the crew user is a
  * real `arbor_internal` member and not an admin, which is exactly the case these
@@ -171,6 +165,7 @@ test.describe("Users sub-route guards", () => {
 
   for (const path of [
     "/dashboard/users/access",
+    "/dashboard/users/invitations",
     "/dashboard/users/organizations",
     "/dashboard/users/crew-rates",
   ]) {

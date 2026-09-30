@@ -54,21 +54,3 @@ export async function pickSearchableOption(
   await expect(trigger).toHaveText(optionName, { timeout: 25_000 });
   await expect(menu).toHaveCount(0, { timeout: 25_000 });
 }
-
-/**
- * The Users table's per-row "Select..." action menu.
- *
- * It is a Radix `Select` used as a menu: `value` is pinned to `""` so the
- * trigger keeps showing its placeholder and every pick re-fires `onValueChange`.
- * That means the trigger text never changes, so the usual confirmation would
- * always fail — wait for the listbox to unmount instead.
- */
-export async function chooseRowAction(page: Page, trigger: Locator, actionName: string) {
-  await trigger.click();
-  const option = page.getByRole("option", { name: actionName, exact: true });
-  await expect(option).toBeVisible({ timeout: 20_000 });
-  await option.click();
-  await expect(page.getByRole("option", { name: actionName, exact: true })).toHaveCount(0, {
-    timeout: 20_000,
-  });
-}

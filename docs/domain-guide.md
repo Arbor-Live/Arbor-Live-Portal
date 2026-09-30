@@ -13,7 +13,14 @@ canonical description of the domain itself.
   `invoiceGroups` + `invoiceContacts`, not Better Auth orgs. Contacts are
   per-org billing memberships; shared person identity lives in `invoicePeople`
   (keyed by email). Alternate names are stored in `invoiceGroupAliases`;
-  admins can merge duplicate hosts in Financial Hub → Organizations.
+  admins can merge duplicate hosts in Ops Center → **Billing hosts**
+  (`/dashboard/financial-hub/organizations`).
+- The **Users** page (`/dashboard/users`) has three route-based tabs:
+  **People** (`?user=<id>` opens a person's panel), **Invitations**
+  (`/invitations`, `?invite=<id>`), and **Organizations** (`/organizations`,
+  `?org=<id>`) for Arbor Live and the artist orgs. **Add person** in the header
+  either sends an invite or creates the account with a temporary password.
+  `/dashboard/users/access` redirects to People.
 - Staff-only functionality is guarded by `requireArborInternalContext`; band
   portal surfaces (linked events, media albums, payout status) use
   `requireBandContext` plus `lib/eventBandAccess.ts`.
@@ -79,7 +86,7 @@ canonical description of the domain itself.
     pickers), kept in the timecard overview, and mentionable in comments.
   - `alumni` — no dashboard access (Better Auth `banned`). Hidden from every
     picker, directory, and email; only visible in the Users admin list.
-  Change status with the per-row **Status** select in Users → Access, which
+  Change status with the **Access** pill in the person's panel (Users → People), which
   confirms and writes `users.setUserStatusAdmin`; it never touches org
   memberships. Admins can close (alumni) but cannot close their own access.
 - **Participation flags** on `userAdminProfiles` (missing ⇒ crew defaults):
@@ -368,11 +375,11 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   the payment lands in **Pending onboarding**; once onboarded it moves to
   needs-payee or needs-signature request based on payee completeness.
   Completing/waiving artist onboarding refreshes stuck payments immediately.
-  **Users → Organizations → Artist Organizations** shows an **Onboarding** chip
-  on incomplete orgs (missing steps + send reminder / recheck payouts). Admins
+  **Users → Organizations** shows an **Onboarding** flag on incomplete artist
+  orgs; the org's panel lists missing steps with send reminder / recheck payouts. Admins
   can **View as artist** to temporarily activate that org (no membership) and
   see the artist portal; switch back via the sidebar. The payout side panel for
-  pending-onboarding lists the missing steps and links there.
+  pending-onboarding lists the missing steps and links to that org's panel.
 - When assigning artists, empty events with invoice artist lines get an
   accept/confirm prompt (plus **Import from invoice** anytime). Payout
   money defaults prefer the invoice artist line (rate, hours, members), then
