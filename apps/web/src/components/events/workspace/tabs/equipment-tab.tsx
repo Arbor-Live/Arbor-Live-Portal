@@ -8,7 +8,11 @@ import { EventPullList, mapPullListRow } from "@/components/events/event-pull-li
 import { useEventWorkspace } from "@/components/events/workspace/event-workspace-provider";
 
 export function EquipmentTab() {
-  const { eventId, eventData, draft, baseline, seriesMeta } = useEventWorkspace();
+  const { eventId, eventData, draft, baseline, seriesMeta: groupMeta } = useEventWorkspace();
+  // Series costs, crew notes and the series pull list are recurring-only; a
+  // multi-day booking's days bill and staff as ordinary linked days.
+  const seriesMeta = groupMeta?.kind === "multi_day" ? null : groupMeta;
+
   const initialItems = useMemo(
     () => (eventData?.pullListItems ?? []).map((row) => mapPullListRow(row)),
     [eventData?.pullListItems],

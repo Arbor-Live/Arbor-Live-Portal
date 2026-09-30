@@ -23,7 +23,7 @@ export function ScheduleCrewTab() {
     eventId,
     draft,
     readOnly,
-    seriesMeta,
+    seriesMeta: groupMeta,
     blocks,
     setBlocks,
     shifts,
@@ -33,6 +33,9 @@ export function ScheduleCrewTab() {
     removeUnlinkedShifts,
     userSelectOptions,
   } = useEventWorkspace();
+  // Series costs, crew notes and the series pull list are recurring-only; a
+  // multi-day booking's days bill and staff as ordinary linked days.
+  const seriesMeta = groupMeta?.kind === "multi_day" ? null : groupMeta;
   const runOfShow = useRunOfShowData(eventId);
   const hasCrew = eventTypeHasCrewAssignment(draft.eventType);
 

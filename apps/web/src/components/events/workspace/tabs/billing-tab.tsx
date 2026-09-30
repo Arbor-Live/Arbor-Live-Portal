@@ -103,10 +103,13 @@ export function BillingTab() {
     readOnly,
     canEdit,
     isAdmin,
-    seriesMeta,
+    seriesMeta: groupMeta,
     linkedInvoice,
     effectivePrimaryHostGroupId,
   } = useEventWorkspace();
+  // Series costs, crew notes and the series pull list are recurring-only; a
+  // multi-day booking's days bill and staff as ordinary linked days.
+  const seriesMeta = groupMeta?.kind === "multi_day" ? null : groupMeta;
   const invoices = useQuery(api.invoices.list, {});
   const hostGroupOptions = useHostGroupOptions();
   const computedCrewCost = useQuery(api.eventCrew.getComputedCrewCost, { eventId });

@@ -295,17 +295,38 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   the host for transparency, but Insights *earned revenue* and net profit exclude
   them from Arbor margin (equipment / crew / fees). Matching `bandsCostUsd` /
   `externalRentalsCostUsd` are not double-counted; overruns still reduce profit.
-- **Event series** (`eventSeries.ts`) generate recurring occurrences and have
-  their own budgeting and pull lists. A series also carries a **position
-  template** (`positionTemplates`): the shape of its bill, applied to each
-  occurrence as `eventArtistNeeds` rows tagged with a `templateKey`. Applying
-  adds/moves/removes open template positions and never touches a position that
-  is filled, named as an outside act, not open, has a submitted inquiry, or
-  stands for an invoice artist line; re-applying is idempotent. A position with
-  the same name as a template position (hand-added, or keyed to a template that
-  was replaced) is adopted rather than duplicated, and importing from an
-  occurrence keys that occurrence's positions and takes a booked act's times.
-  Templates are validated server-side (max 50; a length needs a start).
+- **Event groups** (`eventSeries` table, `eventSeries.ts`): dated events that
+  share setup and billing. `kind` is `recurring` (a series generated from a
+  rule; absent `kind` means recurring) or `multi_day` (a booking whose days share
+  one primary invoice). Days point at their group with `events.seriesId` +
+  `occurrenceIndex` (calendar order); `seriesDetached` marks a day overridden
+  from the templates. A multi-day group mirrors its invoice's days
+  (`lib/eventGroups.ts` `syncMultiDayGroupForInvoice`, called wherever a day
+  joins or leaves an invoice): two or more primary days form it, templates
+  derive from Day 1, and one remaining day releases the others.
+  Recurring series keep their own budgeting and pull lists and are the only
+  groups the invoice treats as a "series invoice" (billable counts, equipment
+  quantity per occurrence). A single event spanning days (`spansMultipleDays`)
+  is not a group.
+- **One apply engine** (`lib/eventGroupDays.ts`, `lib/eventGroupTemplates.ts`):
+  templates are relative to each day's start — Run of Show sections
+  (`blockTemplates`), crew slots per section (`shiftTemplates`) and **positions**
+  (`positionTemplates`, applied as `eventArtistNeeds` rows tagged with a
+  `templateKey`). Every apply uses one scope: all days · this day and later ·
+  this day only; detached and cancelled days are skipped. Applying never
+  touches acts' soundcheck/set blocks, assigned crew, or a position that is
+  filled, named as an outside act, not open, has a submitted inquiry, or stands
+  for an invoice artist line; it only adds, moves or removes open template
+  positions and unfilled crew slots, and re-applying is idempotent. A position
+  with the same name as a template position (hand-added, or keyed to a replaced
+  template) is adopted rather than duplicated; importing from a day keys that
+  day's positions and takes a booked act's times. Templates are validated
+  server-side (max 50; a length needs a start). "Apply this day's setup" (`eventSeries.applyDaySetup`) makes
+  one day's setup the template and applies it to the other days (the pull list
+  copies straight across); it replaces the old copy-day-setup.
+- Editing a day with a scope: on a series, "this occurrence only" detaches it;
+  on a multi-day booking, other days take only the shared details (venue, type,
+  host, people) and keep their own title, times and costs.
 - Band participation in events is tracked in `eventBandParticipations`
   (headliner/support/other). That row is the canonical **assignment**: staff
   manage it from the event workspace **Lineup** tab (not Promo).
@@ -362,6 +383,9 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   `performerHourlyRateUsd` and member count (`bandMembers.length`) from the org
   profile when an artist is selected. Linked events auto-fill artist rows from
   assigned performers / payout totals when the invoice has no artist lines yet.
+  An artist line tagged to a day (`eventId`) applies to that day; an unscoped
+  line applies to every occurrence of a recurring series and to Day 1 otherwise
+  (`lib/invoiceArtistDays.ts`, from the owning group's kind).
   On multi-day bookings each artist line is tagged to its day/event (`eventId`),
   so the client portal shows **Artist TBD** only on days still missing an artist
   and the invoice↔event import matches lines to the right day.

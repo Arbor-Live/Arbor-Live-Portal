@@ -115,6 +115,22 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
   `eventInvoiceLinks` (max 12). Event margin and pipeline booked revenue sum
   them. Extra invoices are per occurrence; a series still shares one primary.
 
+## Event groups (series + multi-day bookings)
+- `eventSeries` rows are **event groups**: `kind: "recurring"` (series; absent
+  kind = recurring) or `"multi_day"` (days sharing one primary invoice). Days
+  point at the group via `events.seriesId` + `occurrenceIndex`.
+- Any path that adds/removes a day from an invoice must call
+  `syncMultiDayGroupForInvoice` (`lib/eventGroups.ts`); membership and day order
+  follow the invoice.
+- Template applies go through `lib/eventGroupTemplates.ts` with one scope rule
+  (`lib/eventGroupDays.ts` `selectDaysInScope`: all · this and later · this one).
+  Never hand-roll a scope loop.
+- Invoice "series" logic (`findSeriesByInvoiceId`, billable counts, series pull
+  list, the event Billing tab's series costs) is **recurring-only**; multi-day
+  days bill as ordinary linked days.
+- Group page: `/dashboard/events/series/<id>` with route tabs (Days, Run of
+  Show template, Crew template, Positions template, Budget).
+
 ## Timezone (Pacific)
 
 **Everything is Pacific Time** (`America/Los_Angeles`). Never rely on the browser/OS timezone.
