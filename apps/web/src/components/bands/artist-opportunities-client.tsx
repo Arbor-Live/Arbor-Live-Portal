@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
@@ -14,7 +14,6 @@ import {
 import { api } from "@/lib/convex-api";
 import { formatDate, formatTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Sheet,
@@ -27,7 +26,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { ListRow } from "@/components/list-row";
 import { MetaItem, PageHeader, StatusPill } from "@/components/page-header";
-import { SearchableSelect } from "@/components/inventory/searchable-select";
+import {
+  FilterBar,
+  matchesFilter,
+  type FilterDefinition,
+  type FilterState,
+} from "@/components/filter-bar";
 import { PosterPlaceholderImage } from "@/components/public/poster-placeholder-image";
 import { notify } from "@/lib/notify";
 import { getConvexErrorMessage } from "@/lib/convex-error";
@@ -46,26 +50,54 @@ const TYPE_LABELS: Record<ArtistNeedType, string> = {
  * positions open to anyone. The backend already excludes the other kind — a
  * band never sees a DJ-only position — so only an explicit type narrows further.
  */
-const FILTER_OPTIONS = [
-  { value: "for_you", label: "For you" },
+const TYPE_FILTER_OPTIONS = [
   { value: "band", label: "Live band" },
   { value: "dj", label: "DJ" },
   { value: "no_preference", label: "No preference" },
 ];
 
+const REQUESTED_OPTIONS = [
+  { value: "requested", label: "Already requested" },
+  { value: "open", label: "Not requested yet" },
+];
+
 export function ArtistOpportunitiesClient() {
   // `?position=<needId>` deep-links straight to a position's side panel.
   const searchParams = useSearchParams();
-  const [typeFilter, setTypeFilter] = useState<string>("for_you");
+  const [filters, setFilters] = useState<FilterState>({});
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(() =>
     searchParams.get("position"),
   );
 
-  const needs = useQuery(api.eventArtistNeeds.listOpenNeedsForArtist, {
-    artistType: typeFilter === "for_you" ? undefined : (typeFilter as ArtistNeedType),
+  // Type and search narrow on the server; with no Type chip it's "for you".
+  const serverNeeds = useQuery(api.eventArtistNeeds.listOpenNeedsForArtist, {
+    artistType: (filters.type?.values[0] as ArtistNeedType | undefined) ?? undefined,
     query: search.trim() || undefined,
   });
+  const needs = useMemo(
+    () =>
+      serverNeeds?.filter(
+        (need) =>
+          matchesFilter(filters.venue, need.venueName) &&
+          matchesFilter(filters.requested, need.alreadyInquired ? "requested" : "open"),
+      ),
+    [filters.requested, filters.venue, serverNeeds],
+  );
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () => [
+      { id: "type", label: "Type", options: TYPE_FILTER_OPTIONS, single: true },
+      {
+        id: "venue",
+        label: "Venue",
+        options: [...new Set((serverNeeds ?? []).map((need) => need.venueName).filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b))
+          .map((venue) => ({ value: venue, label: venue })),
+      },
+      { id: "requested", label: "Requested", options: REQUESTED_OPTIONS, single: true },
+    ],
+    [serverNeeds],
+  );
   const inquiries = useQuery(api.eventArtistNeeds.listMyInquiries);
 
   const selectedRow = needs?.find((row) => row.needId === selectedId) ?? null;
@@ -78,21 +110,15 @@ export function ArtistOpportunitiesClient() {
         description="Positions on upcoming Arbor shows looking for an act like yours."
       />
 
-      <div className="grid gap-2 sm:grid-cols-[200px_1fr]">
-        <SearchableSelect
-          value={typeFilter}
-          onChange={setTypeFilter}
-          options={FILTER_OPTIONS}
-          placeholder="Filter by type"
-          emptyLabel="For you"
-        />
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by event, venue, or genre"
-          aria-label="Search opportunities"
-        />
-      </div>
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by event, venue, or genre"
+        searchLabel="Search opportunities"
+        filters={filterDefinitions}
+        value={filters}
+        onChange={setFilters}
+      />
 
       <section className="space-y-2">
         {needs === undefined ? (

@@ -9,15 +9,6 @@ export type EventPipelineStatus = (typeof EVENT_PIPELINE_STATUSES)[number];
 
 export type EventStatus = EventPipelineStatus | "cancelled";
 
-export const EVENT_STATUS_FILTER_OPTIONS: Array<{ value: "" | EventStatus; label: string }> = [
-  { value: "", label: "All statuses" },
-  { value: "tentative", label: "Tentative" },
-  { value: "logistics", label: "Logistics" },
-  { value: "scheduling", label: "Scheduling" },
-  { value: "ready", label: "Ready" },
-  { value: "cancelled", label: "Cancelled" },
-];
-
 export const EVENT_STATUS_EDITOR_OPTIONS: Array<{ value: EventStatus; label: string }> = [
   { value: "tentative", label: "Tentative" },
   { value: "logistics", label: "Logistics" },

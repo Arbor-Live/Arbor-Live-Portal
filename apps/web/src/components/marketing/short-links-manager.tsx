@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  activeFilters,
+  FilterBar,
+  matchesFilter,
+  type FilterDefinition,
+  type FilterState,
+} from "@/components/filter-bar";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { CopyIcon } from "@phosphor-icons/react";
@@ -57,6 +64,12 @@ const defaultValues: ShortLinkFormValues = {
   manualExpiresAtDate: "",
 };
 
+const LINK_STATUS_OPTIONS = [
+  { value: "active", label: "Active" },
+  { value: "expired", label: "Expired" },
+  { value: "disabled", label: "Disabled" },
+];
+
 function StatusBadge({ status }: { status: "active" | "disabled" | "expired" }) {
   if (status === "active") {
     return (
@@ -87,6 +100,7 @@ export function ShortLinksManager() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [slugTouched, setSlugTouched] = useState(false);
   const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<FilterState>({});
 
   type AdminLink = NonNullable<typeof links>[number];
 
@@ -106,16 +120,38 @@ export function ShortLinksManager() {
     }
   }, [labelValue, slugTouched, form]);
 
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () => [
+      { id: "status", label: "Status", options: LINK_STATUS_OPTIONS },
+      {
+        id: "event",
+        label: "Event",
+        options: [
+          { value: "none", label: "Not linked to an event" },
+          ...[...new Map(
+            (links ?? []).filter((link) => link.eventId).map((link) => [link.eventId as string, link.eventTitle ?? "Event"]),
+          ).entries()]
+            .map(([value, label]) => ({ value, label }))
+            .sort((a, b) => a.label.localeCompare(b.label)),
+        ],
+      },
+    ],
+    [links],
+  );
+  const narrowed = Boolean(search.trim()) || Object.keys(activeFilters(filters)).length > 0;
+
   const filteredLinks = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q || !links) return links ?? [];
-    return links.filter(
+    return (links ?? []).filter(
       (link) =>
-        link.slug.toLowerCase().includes(q) ||
-        link.label.toLowerCase().includes(q) ||
-        link.destinationUrl.toLowerCase().includes(q),
+        (!q ||
+          link.slug.toLowerCase().includes(q) ||
+          link.label.toLowerCase().includes(q) ||
+          link.destinationUrl.toLowerCase().includes(q)) &&
+        matchesFilter(filters.status, link.status) &&
+        matchesFilter(filters.event, (link.eventId as string | undefined) ?? "none"),
     );
-  }, [links, search]);
+  }, [filters, links, search]);
 
   const resetToLink = (link: AdminLink) => {
     form.reset({
@@ -212,10 +248,14 @@ export function ShortLinksManager() {
               New
             </Button>
           </div>
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search slug, label, or URL…"
+          <FilterBar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search slug, label, or URL…"
+            searchLabel="Search short links"
+            filters={filterDefinitions}
+            value={filters}
+            onChange={setFilters}
           />
         </CardHeader>
         <CardContent className="space-y-2">
@@ -223,7 +263,9 @@ export function ShortLinksManager() {
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : null}
           {filteredLinks.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No short links yet.</p>
+            <p className="text-sm text-muted-foreground">
+              {narrowed ? "No short links match this search and these filters." : "No short links yet."}
+            </p>
           ) : null}
           {filteredLinks.map((link) => (
             <button

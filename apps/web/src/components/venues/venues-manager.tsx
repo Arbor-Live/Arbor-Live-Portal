@@ -9,11 +9,25 @@ import { getConvexErrorMessage } from "@/lib/convex-error";
 import { EMPTY_LEXICAL_STATE } from "@/components/editor/lexical-theme";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import {
+  activeFilters,
+  FilterBar,
+  matchesFilter,
+  type FilterDefinition,
+  type FilterState,
+} from "@/components/filter-bar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { VenueEditor } from "./venue-editor";
 import {
   emptyVenueForm,
   formatVenueKindLabel,
+  VENUE_KINDS,
   type VenueFormValues,
   type VenueKind,
 } from "@/lib/validations/venues";
@@ -65,6 +79,24 @@ function toFormValues(venue: VenueRow): VenueFormValues {
   };
 }
 
+const CAPACITY_OPTIONS = [
+  { value: "none", label: "Not set" },
+  { value: "small", label: "Under 50" },
+  { value: "medium", label: "50 to 199" },
+  { value: "large", label: "200 or more" },
+];
+
+const POWER_OPTIONS = [
+  { value: "listed", label: "Circuits listed" },
+  { value: "none", label: "No circuits listed" },
+];
+
+function capacityBucket(capacity: number | undefined) {
+  if (!capacity) return "none";
+  if (capacity < 50) return "small";
+  return capacity < 200 ? "medium" : "large";
+}
+
 function venueMatchesQuery(venue: VenueRow, q: string) {
   if (!q) return true;
   const nicknames = (venue.nicknames ?? []).join(" ").toLowerCase();
@@ -106,40 +138,16 @@ function buildVenueTree(venues: VenueRow[], sortDir: "asc" | "desc"): VenueTreeN
   return roots;
 }
 
-/** Keep a node if it matches, or any descendant matches. */
-function filterVenueTree(nodes: VenueTreeNode[], q: string): VenueTreeNode[] {
-  if (!q) return nodes;
+/** Keep a node if it matches, or any descendant matches (so its path stays visible). */
+function filterVenueTree(nodes: VenueTreeNode[], matches: (venue: VenueRow) => boolean): VenueTreeNode[] {
   const filtered: VenueTreeNode[] = [];
   for (const node of nodes) {
-    const children = filterVenueTree(node.children, q);
-    if (venueMatchesQuery(node.venue, q) || children.length > 0) {
+    const children = filterVenueTree(node.children, matches);
+    if (matches(node.venue) || children.length > 0) {
       filtered.push({ venue: node.venue, children });
     }
   }
   return filtered;
-}
-
-function collectAncestorIdsToExpand(
-  nodes: VenueTreeNode[],
-  q: string,
-  ancestors: string[] = [],
-): Set<string> {
-  const expand = new Set<string>();
-  if (!q) return expand;
-  for (const node of nodes) {
-    const childExpand = collectAncestorIdsToExpand(node.children, q, [
-      ...ancestors,
-      node.venue._id,
-    ]);
-    for (const id of childExpand) expand.add(id);
-    if (venueMatchesQuery(node.venue, q) || childExpand.size > 0) {
-      for (const id of ancestors) expand.add(id);
-    }
-    if (childExpand.size > 0) {
-      expand.add(node.venue._id);
-    }
-  }
-  return expand;
 }
 
 function flattenVisibleIds(nodes: VenueTreeNode[], expandedIds: Set<string>): string[] {
@@ -176,6 +184,7 @@ function collectParentIds(nodes: VenueTreeNode[]): Set<string> {
 export function VenuesManager() {
   const { alert } = useAppDialog();
   const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<FilterState>({});
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<Id<"venues"> | null>(null);
@@ -190,11 +199,38 @@ export function VenuesManager() {
     return venue ? toFormValues(venue) : emptyVenueForm();
   }, [editingId, venues]);
 
+  const narrowed = Boolean(search.trim()) || Object.keys(activeFilters(filters)).length > 0;
+
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () => [
+      { id: "kind", label: "Kind", options: VENUE_KINDS.map((kind) => ({ value: kind, label: formatVenueKindLabel(kind) })) },
+      {
+        id: "type",
+        label: "Venue type",
+        options: [...new Set((venues ?? []).map((venue) => venue.venueType).filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b))
+          .map((type) => ({ value: type, label: type })),
+      },
+      { id: "capacity", label: "Capacity", options: CAPACITY_OPTIONS },
+      { id: "power", label: "Power", options: POWER_OPTIONS, single: true },
+    ],
+    [venues],
+  );
+
   const tree = useMemo(() => {
     const q = search.trim().toLowerCase();
     const roots = buildVenueTree((venues ?? []) as VenueRow[], sortDir);
-    return filterVenueTree(roots, q);
-  }, [venues, search, sortDir]);
+    if (!narrowed) return roots;
+    return filterVenueTree(
+      roots,
+      (venue) =>
+        venueMatchesQuery(venue, q) &&
+        matchesFilter(filters.kind, venue.kind) &&
+        matchesFilter(filters.type, venue.venueType) &&
+        matchesFilter(filters.capacity, capacityBucket(venue.capacity)) &&
+        matchesFilter(filters.power, venue.circuits?.length ? "listed" : "none"),
+    );
+  }, [filters, narrowed, venues, search, sortDir]);
 
   // Default: expand every parent so the tree is obvious on first load.
   const resolvedExpandedIds = useMemo(() => {
@@ -202,13 +238,11 @@ export function VenuesManager() {
     return collectParentIds(tree);
   }, [expandedIds, tree]);
 
+  // While narrowed, open every branch that survived so each match is on screen.
   const displayExpandedIds = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return resolvedExpandedIds;
-    const next = new Set(resolvedExpandedIds);
-    for (const id of collectAncestorIdsToExpand(tree, q)) next.add(id);
-    return next;
-  }, [resolvedExpandedIds, search, tree]);
+    if (!narrowed) return resolvedExpandedIds;
+    return new Set([...resolvedExpandedIds, ...collectParentIds(tree)]);
+  }, [narrowed, resolvedExpandedIds, tree]);
 
   const visibleIds = useMemo(
     () => flattenVisibleIds(tree, displayExpandedIds),
@@ -340,20 +374,29 @@ export function VenuesManager() {
       <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle>Venues</CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <Input
-              placeholder="Search name, path, nickname…"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-            <select
-              className="h-9 rounded-md border bg-background px-3 text-sm"
-              value={sortDir}
-              onChange={(event) => setSortDir(event.target.value as typeof sortDir)}
-            >
-              <option value="asc">Name Asc</option>
-              <option value="desc">Name Desc</option>
-            </select>
+          <FilterBar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search name, path, nickname…"
+            searchLabel="Search venues"
+            filters={filterDefinitions}
+            value={filters}
+            onChange={setFilters}
+          >
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" className="font-normal">
+                  Sort: {sortDir === "asc" ? "A to Z" : "Z to A"}
+                  <CaretDownIcon className="size-3" aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-40">
+                <DropdownMenuRadioGroup value={sortDir} onValueChange={(value) => setSortDir(value as typeof sortDir)}>
+                  <DropdownMenuRadioItem value="asc">A to Z</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="desc">Z to A</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
               type="button"
               variant="outline"
@@ -375,7 +418,7 @@ export function VenuesManager() {
             <Button type="button" variant="outline" onClick={() => setEditingId(null)}>
               New Venue
             </Button>
-          </div>
+          </FilterBar>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="overflow-auto rounded-md border">
