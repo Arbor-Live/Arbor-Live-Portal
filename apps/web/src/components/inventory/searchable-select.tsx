@@ -80,11 +80,22 @@ export function SearchableSelect({
 
   const listOptions = useMemo(() => {
     const base = (() => {
-      if (!serverBacked) return options;
-      if (query.trim().length < minQueryLength) {
-        return selected ? [selected] : [];
+      if (serverBacked) {
+        if (query.trim().length < minQueryLength) {
+          return selected ? [selected] : [];
+        }
+        return options;
       }
-      return options;
+      const trimmed = query.trim();
+      if (!trimmed) return options;
+      // Rank locally-filtered options so the closest match is first rather
+      // than wherever it fell in the incoming (often alphabetical) order.
+      return [...options].sort(
+        (a, b) =>
+          fuzzyScoreHaystack(trimmed, [b.label, b.description, b.keywords]) -
+            fuzzyScoreHaystack(trimmed, [a.label, a.description, a.keywords]) ||
+          a.label.localeCompare(b.label),
+      );
     })();
     // Offer "Clear" only when there is a selection to clear.
     if (!clearable || !value) return base;
