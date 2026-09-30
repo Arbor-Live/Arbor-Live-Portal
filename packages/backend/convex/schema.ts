@@ -873,6 +873,11 @@ export default defineSchema({
     otPremium: v.optional(v.boolean()),
     crewCostBufferPercent: v.optional(v.number()),
     crewCostUsd: v.optional(v.number()),
+    /**
+     * Revision stamped as SEQUENCE on crew calendar invites. Calendar clients
+     * only apply a re-sent invite (same UID) as an update when this increases.
+     */
+    crewInviteSequence: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
     otherCostUsd: v.optional(v.number()),

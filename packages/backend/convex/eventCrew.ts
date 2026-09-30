@@ -9,6 +9,7 @@ import {
 } from "./lib/crewCompensation";
 import { getUserOtForecast } from "./lib/otForecast";
 import { scheduleCrewScheduledEmails } from "./email/triggers";
+import { bumpCrewInviteSequence } from "./email/crewInviteSequence";
 import { isSectionBlockType } from "./lib/scheduleBlockTypes";
 
 function hoursBetween(start: number, end: number) {
@@ -180,6 +181,7 @@ export const upsertShifts = mutation({
     }
 
     await syncEventCrewCostUsd(ctx, args.eventId, now);
+    const inviteSequence = await bumpCrewInviteSequence(ctx, args.eventId);
     await scheduleCrewScheduledEmails(
       ctx,
       args.eventId,
@@ -192,6 +194,7 @@ export const upsertShifts = mutation({
         userId: shift.userId?.trim() || undefined,
         crewApplicationId: shift.crewApplicationId,
       })),
+      inviteSequence,
     );
     return null;
   },

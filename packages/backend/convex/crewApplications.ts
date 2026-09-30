@@ -31,6 +31,7 @@ import {
   subjectForTemplate,
 } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
+import { bumpCrewInviteSequence } from "./email/crewInviteSequence";
 import {
   markInvitationAccepted,
   scheduleUserInviteEmail,
@@ -456,6 +457,7 @@ export const assignTraineeToEvent = mutation({
     const timezone = EVENT_TIMEZONE;
     const callTimeLabel = formatDateTime(ready.callTime, "long", timezone);
     const dateRangeLabel = formatEventDateRange(ready.startAt, ready.endAt, timezone);
+    const inviteSequence = await bumpCrewInviteSequence(ctx, args.eventId);
     const icsEvents = [
       buildSingleIcsEventForUserShifts({
         eventId: args.eventId,
@@ -472,6 +474,7 @@ export const assignTraineeToEvent = mutation({
         ],
         blockLabelById: new Map(),
         timezone,
+        sequence: inviteSequence,
       }),
     ];
 

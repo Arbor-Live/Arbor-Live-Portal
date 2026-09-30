@@ -8,7 +8,7 @@ The portal sends transactional email (schedules, invites, booking quotes, band-p
 - Templates are React Email components rendered to HTML in [`email/templates.ts`](../packages/backend/convex/email/templates.ts); sends are enqueued as Convex actions (see `email/enqueue.ts`, `email/triggers.ts`).
 - `From`, reply-to, and CC defaults live in [`email/constants.ts`](../packages/backend/convex/email/constants.ts) and are overridable by env var.
 - Schedule-published and crew-scheduled emails are **debounced (~45s)** and keyed by content fingerprint so rapid schedule/crew saves (and day-lead recipients) do not flood the same inbox. Crew notices coalesce to one email per person per event with their full current assignment.
-- Fully unassigning someone after they already received a crew invite sends a **crew-unscheduled** email with an ICS `METHOD:CANCEL` attachment (same UID as the invite). Pending schedule emails are dropped; if they are re-assigned before the debounce fires, the cancel email is cancelled instead.
+- Fully unassigning someone after they already received a crew invite sends a **crew-unscheduled** email with an ICS `METHOD:CANCEL` attachment (same UID as the invite). Pending schedule emails are dropped; if they are re-assigned before the debounce fires, the cancel email is cancelled instead. Re-sent invites reuse that UID with a bumped `SEQUENCE` (the event's `crewInviteSequence`), so calendar clients update the existing event instead of adding a duplicate.
 
 ### From-address domain
 

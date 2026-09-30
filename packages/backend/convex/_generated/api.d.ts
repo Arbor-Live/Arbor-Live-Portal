@@ -44,6 +44,7 @@ import type * as email_bandOnboardingReminders from "../email/bandOnboardingRemi
 import type * as email_bandPaymentEmails from "../email/bandPaymentEmails.js";
 import type * as email_bookingRequestEmails from "../email/bookingRequestEmails.js";
 import type * as email_constants from "../email/constants.js";
+import type * as email_crewInviteSequence from "../email/crewInviteSequence.js";
 import type * as email_damageReportEmails from "../email/damageReportEmails.js";
 import type * as email_enqueue from "../email/enqueue.js";
 import type * as email_equipmentBorrowRequestEmails from "../email/equipmentBorrowRequestEmails.js";
@@ -294,6 +295,7 @@ declare const fullApi: ApiFromModules<{
   "email/bandPaymentEmails": typeof email_bandPaymentEmails;
   "email/bookingRequestEmails": typeof email_bookingRequestEmails;
   "email/constants": typeof email_constants;
+  "email/crewInviteSequence": typeof email_crewInviteSequence;
   "email/damageReportEmails": typeof email_damageReportEmails;
   "email/enqueue": typeof email_enqueue;
   "email/equipmentBorrowRequestEmails": typeof email_equipmentBorrowRequestEmails;

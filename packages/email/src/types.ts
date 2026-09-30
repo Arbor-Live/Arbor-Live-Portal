@@ -24,6 +24,8 @@ export type CrewScheduledIcsEventPayload = {
   location?: string;
   startAt: number;
   endAt: number;
+  /** Increments per event so calendar clients treat re-sends as updates. */
+  sequence?: number;
 };
 
 export type CrewScheduledEmailPayload = CrewScheduledEmailProps & {

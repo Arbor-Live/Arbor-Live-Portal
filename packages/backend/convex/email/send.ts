@@ -148,6 +148,7 @@ export const sendQueuedEmail = internalAction({
               location: event.location,
               startAt: new Date(event.startAt),
               endAt: new Date(event.endAt),
+              sequence: event.sequence,
             })),
           });
         }
@@ -214,6 +215,7 @@ export const sendQueuedEmail = internalAction({
             location: event.location,
             startAt: new Date(event.startAt),
             endAt: new Date(event.endAt),
+            sequence: event.sequence,
           })),
         });
 

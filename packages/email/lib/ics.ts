@@ -5,6 +5,11 @@ export type IcsEventInput = {
   location?: string;
   startAt: Date;
   endAt: Date;
+  /**
+   * Revision number for this UID. Clients only apply a re-sent invite as an
+   * update when SEQUENCE increases (RFC 5546); without it they add a new event.
+   */
+  sequence?: number;
 };
 
 export type IcsMethod = "REQUEST" | "CANCEL";
@@ -88,6 +93,7 @@ function buildVeventLines(event: IcsEventInput, input: ScheduleIcsInput, now: Da
     "BEGIN:VEVENT",
     foldIcsLine(`UID:${escapeIcsText(event.uid)}`),
     foldIcsLine(`DTSTAMP:${formatIcsUtcDateTime(now)}`),
+    `SEQUENCE:${event.sequence ?? 0}`,
     foldIcsLine(
       `DTSTART;TZID=${input.timezone}:${formatIcsLocalDateTime(event.startAt, input.timezone)}`,
     ),
