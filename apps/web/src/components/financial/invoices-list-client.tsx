@@ -1,34 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { createColumnHelper } from "@tanstack/react-table";
-import {
-  CopyIcon,
-  DotsThreeIcon,
-  LinkSimpleIcon,
-  ProhibitIcon,
-  ArrowCounterClockwiseIcon,
-  TrashIcon,
-} from "@phosphor-icons/react";
-import { api, type Id } from "@/lib/convex-api";
 import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
-import { InvoicePdfDownloadButton } from "@/components/financial/invoice-pdf-download-button";
-import { useSessionViewer } from "@/components/session-shell-provider";
-import { useAppDialog } from "@/components/ui/app-dialog";
-import { Button } from "@/components/ui/button";
-import { DataTable } from "@/components/ui/data-table";
-import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
-import { type DataTableFeatures } from "@/components/ui/data-table-features";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   activeFilters,
   FilterBar,
@@ -36,45 +13,30 @@ import {
   type FilterDefinition,
   type FilterState,
 } from "@/components/filter-bar";
-import { formatUsd } from "@/lib/format";
-import { notify } from "@/lib/notify";
+import { copyQuoteLink, InvoiceSheet, invoiceIdParam } from "@/components/financial/invoice-sheet";
+import { usePaymentActions } from "@/components/financial/payment-actions";
+import { EmptyState, ListSummary, RowCell, RowGroup, RowMenu, RowText } from "@/components/list-page";
+import { ListRow } from "@/components/list-row";
+import { StatusPill } from "@/components/page-header";
+import { useSessionViewer } from "@/components/session-shell-provider";
+import { useAppDialog } from "@/components/ui/app-dialog";
+import { Button } from "@/components/ui/button";
+import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useSheetParam } from "@/hooks/use-sheet-param";
+import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { formatUsd } from "@/lib/format";
+import {
+  INVOICE_GROUPS,
+  invoiceLifecycle,
+  lifecycleLabel,
+  lifecycleTone,
+  LIFECYCLE_OPTIONS,
+} from "@/lib/invoice-lifecycle";
+import { notify } from "@/lib/notify";
 
 type InvoiceRow = FunctionReturnType<typeof api.invoices.listEnriched>[number];
-
-type InvoiceLifecycle =
-  | "draft"
-  | "awaiting_approval"
-  | "changes_requested"
-  | "payment_pending"
-  | "proof_received"
-  | "overdue"
-  | "paid"
-  | "void";
-
-type InvoiceLifecycleInput = Pick<
-  InvoiceRow,
-  "status" | "clientApprovalStatus" | "paymentStatus"
->;
-
-const LIFECYCLE_OPTIONS: { value: InvoiceLifecycle; label: string }[] = [
-  { value: "draft", label: "Draft" },
-  { value: "awaiting_approval", label: "Awaiting approval" },
-  { value: "changes_requested", label: "Changes requested" },
-  { value: "payment_pending", label: "Payment pending" },
-  { value: "proof_received", label: "Payment proof received" },
-  { value: "overdue", label: "Overdue" },
-  { value: "paid", label: "Paid" },
-  { value: "void", label: "Void" },
-];
-
-function invoiceLifecycle(invoice: InvoiceLifecycleInput): InvoiceLifecycle {
-  if (invoice.status === "void") return "void";
-  if (invoice.status === "draft") return "draft";
-  if (invoice.paymentStatus) return invoice.paymentStatus;
-  if (invoice.clientApprovalStatus === "changes_requested") return "changes_requested";
-  return "awaiting_approval";
-}
 
 const ISSUED_OPTIONS = [
   { value: "last_30", label: "In the last 30 days" },
@@ -89,61 +51,38 @@ function issuedBuckets(issueDate: string, todayMs: number): string[] {
   if (Number.isNaN(issuedMs)) return [];
   const days = (todayMs - issuedMs) / 86_400_000;
   const thisYear = new Date(todayMs).getFullYear() === new Date(issuedMs).getFullYear();
-  return [
-    ...(days <= 30 ? ["last_30"] : []),
-    ...(days <= 90 ? ["last_90"] : []),
-    thisYear ? "this_year" : "older",
-  ];
+  return [...(days <= 30 ? ["last_30"] : []), ...(days <= 90 ? ["last_90"] : []), thisYear ? "this_year" : "older"];
 }
 
-function lifecycleLabel(lifecycle: InvoiceLifecycle) {
-  return LIFECYCLE_OPTIONS.find((option) => option.value === lifecycle)?.label ?? lifecycle;
-}
-
-function lifecycleBadgeClass(lifecycle: InvoiceLifecycle) {
-  switch (lifecycle) {
-    case "paid":
-      return "border-status-emerald-500/30 bg-status-emerald-500/10 text-status-emerald-700";
-    case "payment_pending":
-      return "border-status-sky-500/30 bg-status-sky-500/10 text-status-sky-700";
-    case "proof_received":
-      return "border-status-violet-500/30 bg-status-violet-500/10 text-status-violet-700";
-    case "overdue":
-      return "border-status-red-500/30 bg-status-red-500/10 text-status-red-700";
-    case "changes_requested":
-      return "border-status-amber-500/30 bg-status-amber-500/10 text-status-amber-800";
-    case "awaiting_approval":
-      return "border-status-blue-500/30 bg-status-blue-500/10 text-status-blue-700";
-    case "void":
-    case "draft":
-    default:
-      return "border-border bg-muted/50 text-muted-foreground";
+function statusText(invoice: InvoiceRow) {
+  const lifecycle = invoiceLifecycle(invoice);
+  if (lifecycle === "overdue" && invoice.daysOverdue > 0) {
+    return `Overdue · ${invoice.daysOverdue} day${invoice.daysOverdue === 1 ? "" : "s"}`;
   }
+  return lifecycleLabel(lifecycle);
 }
 
-async function copyQuoteLink(token: string) {
-  const url = `${window.location.origin}/event/${token}`;
-  try {
-    await navigator.clipboard.writeText(url);
-    notify.success("Quote link copied to clipboard.");
-  } catch {
-    notify.error("Could not copy link.");
-  }
-}
-
-const columnHelper = createColumnHelper<DataTableFeatures, InvoiceRow>();
-
+/**
+ * Every invoice, grouped by what it needs: Arbor's turn first, then the
+ * client's, then closed. Rows open a side panel; the full editor is one click
+ * further ("Open invoice").
+ */
 export function InvoicesListClient() {
   const router = useRouter();
   const { confirm } = useAppDialog();
   const viewer = useSessionViewer();
+  const isAdmin = viewer?.isAdmin ?? false;
+  const payments = usePaymentActions();
+  const [selectedId, setSelectedId] = useSheetParam("invoice");
+
   // Starts on the active view, shown as a chip so paid and void are one click away.
   const [filters, setFilters] = useState<FilterState>({
     stage: { operator: "is_not", values: ["paid", "void"] },
   });
   const [search, setSearch] = useState("");
   const [todayMs] = useState(() => Date.now());
-  const stage = activeFilters(filters).stage;
+  const applied = activeFilters(filters);
+  const stage = applied.stage;
   const listQueryArgs = useMemo(() => {
     // Narrow on the server where the stage allows it, so the recency cap
     // applies to the right rows.
@@ -151,24 +90,20 @@ export function InvoicesListClient() {
       if (stage.values[0] === "draft") return { status: "draft" as const };
       if (stage.values[0] === "void") return { status: "void" as const };
     }
-    const showsClosed = stage
-      ? LIFECYCLE_OPTIONS.some(
-          (option) => (option.value === "paid" || option.value === "void") && matchesFilter(stage, option.value),
-        )
-      : true;
+    const showsClosed = stage ? ["paid", "void"].some((value) => matchesFilter(stage, value)) : true;
     return showsClosed ? {} : { excludeClosed: true as const };
   }, [stage]);
   const rows = useQuery(api.invoices.listEnriched, listQueryArgs);
-  const deleteInvoiceAdmin = useMutation(api.adminDeletes.deleteInvoiceAdmin);
+
+  const duplicateInvoice = useMutation(api.invoices.duplicate);
   const voidInvoice = useMutation(api.invoices.voidInvoice);
   const unvoidInvoice = useMutation(api.invoices.unvoidInvoice);
-  const duplicateInvoice = useMutation(api.invoices.duplicate);
+  const deleteInvoiceAdmin = useMutation(api.adminDeletes.deleteInvoiceAdmin);
   const [deleteInvoiceId, setDeleteInvoiceId] = useState<Id<"invoices"> | null>(null);
   const deletePreview = useQuery(
     api.adminDeletes.previewInvoiceDeletion,
     deleteInvoiceId ? { id: deleteInvoiceId } : "skip",
   );
-  const isAdmin = viewer?.isAdmin ?? false;
 
   const filterDefinitions = useMemo<FilterDefinition[]>(() => {
     const distinct = (values: (string | undefined)[]) =>
@@ -183,248 +118,213 @@ export function InvoicesListClient() {
     ];
   }, [rows]);
 
-  const filteredRows = useMemo(() => {
+  const shown = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    const applied = activeFilters(filters);
     return (rows ?? []).filter((invoice) => {
       if (!matchesFilter(applied.stage, invoiceLifecycle(invoice))) return false;
       if (!matchesFilter(applied.client, invoice.clientGroupName ?? "")) return false;
       if (!matchesFilter(applied.manager, invoice.managerName)) return false;
       if (!matchesFilter(applied.issued, issuedBuckets(invoice.issueDate, todayMs))) return false;
       if (!needle) return true;
-      const haystack = [
+      return [
         invoice.invoiceNumber,
         invoice.managerName,
         invoice.clientGroupName,
         invoice.clientContactName,
         invoice.seriesTitle,
         invoice.linkedEventTitle,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(needle);
+      ].some((field) => field?.toLowerCase().includes(needle));
     });
-  }, [filters, rows, search, todayMs]);
+  }, [applied.client, applied.issued, applied.manager, applied.stage, rows, search, todayMs]);
 
-  const columns = useMemo(
+  // Newest first within each group.
+  const groups = useMemo(
     () =>
-      columnHelper.columns([
-        columnHelper.accessor("invoiceNumber", {
-          id: "invoice",
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Invoice #" />,
-          cell: ({ row }) => <div className="font-medium">{row.original.invoiceNumber}</div>,
-        }),
-        columnHelper.accessor((row) => lifecycleLabel(invoiceLifecycle(row)), {
-          id: "status",
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-          cell: ({ row }) => {
-            const lifecycle = invoiceLifecycle(row.original);
-            const label =
-              lifecycle === "overdue" && row.original.daysOverdue > 0
-                ? `Overdue · ${row.original.daysOverdue} day${
-                    row.original.daysOverdue === 1 ? "" : "s"
-                  }`
-                : lifecycleLabel(lifecycle);
-            return (
-              <span
-                className={`inline-flex max-w-full items-center whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium ${lifecycleBadgeClass(lifecycle)}`}
-              >
-                {label}
-              </span>
-            );
-          },
-        }),
-        columnHelper.accessor((row) => row.seriesTitle ?? row.linkedEventTitle ?? "", {
-          id: "series",
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Series / Event" />,
-          cell: ({ row }) => (
-            <span className="text-muted-foreground">
-              {row.original.seriesTitle
-                ? row.original.seriesTitle
-                : row.original.linkedEventTitle
-                  ? row.original.linkedEventTitle
-                  : "—"}
-            </span>
-          ),
-        }),
-        columnHelper.accessor("managerName", {
-          id: "manager",
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Manager" />,
-        }),
-        columnHelper.accessor("issueDate", {
-          id: "issueDate",
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Issue Date" />,
-          cell: ({ getValue }) => <span className="whitespace-nowrap">{getValue()}</span>,
-        }),
-        columnHelper.accessor("totalUsd", {
-          id: "total",
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Total" />,
-          cell: ({ getValue }) => (
-            <span className="whitespace-nowrap">{formatUsd(getValue())}</span>
-          ),
-          sortFn: "basic",
-        }),
-        columnHelper.accessor((row) => row.netProfitUsd ?? Number.NEGATIVE_INFINITY, {
-          id: "netProfit",
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Net profit" />,
-          cell: ({ row }) => (
-            <span className="whitespace-nowrap">
-              {row.original.netProfitUsd == null ? "—" : formatUsd(row.original.netProfitUsd)}
-            </span>
-          ),
-          sortFn: "basic",
-        }),
-        columnHelper.display({
-          id: "actions",
-          enableHiding: false,
-          enableSorting: false,
-          header: "Actions",
-          cell: ({ row }) => {
-            const invoice = row.original;
-            return (
-              <div
-                className="flex items-center gap-1"
-                onClick={(event) => event.stopPropagation()}
-                onKeyDown={(event) => event.stopPropagation()}
-              >
-                <InvoicePdfDownloadButton
-                  invoiceId={invoice._id}
-                  invoiceNumber={invoice.invoiceNumber}
-                  size="icon-sm"
-                  iconOnly
-                  label="PDF"
-                />
-                {invoice.publicApprovalToken ? (
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="outline"
-                    title="Copy quote link"
-                    aria-label="Copy quote link"
-                    onClick={() => {
-                      void copyQuoteLink(invoice.publicApprovalToken!);
-                    }}
-                  >
-                    <LinkSimpleIcon className="size-3.5" />
-                  </Button>
-                ) : null}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button type="button" size="icon-sm" variant="outline" aria-label="More actions">
-                      <DotsThreeIcon className="size-3.5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44">
-                    <DropdownMenuItem
-                      onSelect={() => {
-                        void (async () => {
-                          try {
-                            const result = await duplicateInvoice({ id: invoice._id });
-                            router.push(`/dashboard/financial-hub/invoices/${result.id}`);
-                          } catch (error) {
-                            notify.error(getConvexErrorMessage(error, "Could not duplicate the invoice."));
-                          }
-                        })();
-                      }}
-                    >
-                      <CopyIcon className="size-4" />
-                      Duplicate
-                    </DropdownMenuItem>
-                    {invoice.status === "void" ? (
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          void (async () => {
-                            try {
-                              await unvoidInvoice({ id: invoice._id });
-                              notify.success("Invoice restored.");
-                            } catch (error) {
-                              notify.error(getConvexErrorMessage(error, "Could not unvoid the invoice."));
-                            }
-                          })();
-                        }}
-                      >
-                        <ArrowCounterClockwiseIcon className="size-4" />
-                        Unvoid
-                      </DropdownMenuItem>
-                    ) : (
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onSelect={() => {
-                          void (async () => {
-                            const confirmed = await confirm({
-                              title: `Void ${invoice.invoiceNumber}?`,
-                              description:
-                                "It will hide from the active list. You can unvoid it later.",
-                              confirmLabel: "Void",
-                              destructive: true,
-                            });
-                            if (!confirmed) return;
-                            try {
-                              await voidInvoice({ id: invoice._id });
-                              notify.success("Invoice voided.");
-                            } catch (error) {
-                              notify.error(getConvexErrorMessage(error, "Could not void the invoice."));
-                            }
-                          })();
-                        }}
-                      >
-                        <ProhibitIcon className="size-4" />
-                        Void
-                      </DropdownMenuItem>
-                    )}
-                    {isAdmin ? (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onSelect={() => setDeleteInvoiceId(invoice._id)}
-                        >
-                          <TrashIcon className="size-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </>
-                    ) : null}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            );
-          },
-        }),
-      ]),
-    [confirm, duplicateInvoice, isAdmin, router, unvoidInvoice, voidInvoice],
+      INVOICE_GROUPS.map((group) => ({
+        ...group,
+        rows: shown
+          .filter((invoice) => group.stages.includes(invoiceLifecycle(invoice)))
+          .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.createdAt - a.createdAt),
+      })).filter((group) => group.rows.length > 0),
+    [shown],
   );
 
-  if (rows === undefined) return <p className="p-2 text-muted-foreground">Loading…</p>;
+  const outstanding = shown
+    .filter((invoice) => !["paid", "void", "draft"].includes(invoiceLifecycle(invoice)))
+    .reduce((sum, invoice) => sum + invoice.totalUsd, 0);
+  const needsYou = groups.find((group) => group.id === "needs_you")?.rows.length ?? 0;
+  const narrowed = Boolean(search.trim()) || Object.keys(applied).length > 0;
+
+  async function duplicate(invoice: InvoiceRow) {
+    try {
+      const result = await duplicateInvoice({ id: invoice._id });
+      router.push(`/dashboard/financial-hub/invoices/${result.id}`);
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Could not duplicate the invoice."));
+    }
+  }
+
+  async function toggleVoid(invoice: InvoiceRow) {
+    if (invoice.status === "void") {
+      try {
+        await unvoidInvoice({ id: invoice._id });
+        notify.success(`Restored ${invoice.invoiceNumber}.`);
+      } catch (error) {
+        notify.error(getConvexErrorMessage(error, "Could not restore the invoice."));
+      }
+      return;
+    }
+    const ok = await confirm({
+      title: `Void ${invoice.invoiceNumber}?`,
+      description: "It leaves the active list and the client's link stops working. You can restore it later.",
+      destructive: true,
+      confirmLabel: "Void invoice",
+    });
+    if (!ok) return;
+    try {
+      await voidInvoice({ id: invoice._id });
+      notify.success(`Voided ${invoice.invoiceNumber}.`);
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Could not void the invoice."));
+    }
+  }
 
   return (
-    <>
-      <DataTable
-        columns={columns}
-        data={filteredRows}
-        getRowId={(row) => row._id}
-        enableColumnVisibility
-        emptyMessage="No invoices match your filters."
-        // eslint-disable-next-line shadcn/require-static-classes -- DataTable rows take a className callback; both the value and the forwarded className are the table api.
-        getRowClassName={() => "cursor-pointer"}
-        getRowProps={(row) => ({
-          onClick: () => router.push(`/dashboard/financial-hub/invoices/${row.original._id}`),
-        })}
-        toolbar={
-          <div className="min-w-0 flex-1">
-            <FilterBar
-              search={search}
-              onSearchChange={setSearch}
-              searchPlaceholder="Invoice, client, series…"
-              searchLabel="Search invoices"
-              filters={filterDefinitions}
-              value={filters}
-              onChange={setFilters}
-            />
-          </div>
-        }
+    <div className="space-y-4" data-testid="invoices-list">
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Invoice, client, series…"
+        searchLabel="Search invoices"
+        filters={filterDefinitions}
+        value={filters}
+        onChange={setFilters}
       />
 
+      {rows === undefined ? (
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-72" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      ) : (
+        <>
+          <ListSummary
+            testId="invoices-summary"
+            order="Grouped by who acts next, newest first within each group."
+          >
+            {shown.length} invoice{shown.length === 1 ? "" : "s"} · {needsYou} need you · {formatUsd(outstanding)}{" "}
+            outstanding
+          </ListSummary>
+
+          {groups.length === 0 ? (
+            <EmptyState
+              action={
+                narrowed ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearch("");
+                      setFilters({});
+                    }}
+                  >
+                    Clear search and filters
+                  </Button>
+                ) : (
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="/dashboard/financial-hub/invoices/new">Create an invoice</Link>
+                  </Button>
+                )
+              }
+            >
+              {narrowed ? "No invoices match this search and these filters." : "No invoices yet."}
+            </EmptyState>
+          ) : (
+            <div className="space-y-4">
+              {groups.map((group) => (
+                <RowGroup
+                  key={group.id}
+                  testId={`invoice-group-${group.id}`}
+                  className="border"
+                  title={group.label}
+                  count={group.rows.length}
+                  tone={group.id === "needs_you" ? "amber" : "neutral"}
+                  description={group.description}
+                  aside={
+                    <span className="text-sm font-medium tabular-nums">
+                      {formatUsd(group.rows.reduce((sum, invoice) => sum + invoice.totalUsd, 0))}
+                    </span>
+                  }
+                >
+                  {group.rows.map((invoice) => {
+                    const lifecycle = invoiceLifecycle(invoice);
+                    const forWhat = invoice.seriesTitle ?? invoice.linkedEventTitle;
+                    return (
+                      <ListRow
+                        key={invoice._id}
+                        data-testid={`invoice-list-row-${invoice._id}`}
+                        onOpen={() => setSelectedId(invoice._id)}
+                        actions={
+                          <RowMenu label={`More for ${invoice.invoiceNumber}`}>
+                            <DropdownMenuItem onSelect={() => setSelectedId(invoice._id)}>Open details</DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/dashboard/financial-hub/invoices/${invoice._id}`}>Open invoice</Link>
+                            </DropdownMenuItem>
+                            {invoice.publicApprovalToken ? (
+                              <DropdownMenuItem onSelect={() => void copyQuoteLink(invoice.publicApprovalToken!)}>
+                                Copy quote link
+                              </DropdownMenuItem>
+                            ) : null}
+                            <DropdownMenuItem onSelect={() => void duplicate(invoice)}>Duplicate</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant={invoice.status === "void" ? "default" : "destructive"}
+                              onSelect={() => void toggleVoid(invoice)}
+                            >
+                              {invoice.status === "void" ? "Restore invoice" : "Void invoice"}
+                            </DropdownMenuItem>
+                            {isAdmin ? (
+                              <DropdownMenuItem variant="destructive" onSelect={() => setDeleteInvoiceId(invoice._id)}>
+                                Delete invoice
+                              </DropdownMenuItem>
+                            ) : null}
+                          </RowMenu>
+                        }
+                      >
+                        <RowText
+                          eyebrow={`${invoice.issueDate} · ${invoice.clientGroupName || invoice.clientContactName || "No client"}`}
+                          title={forWhat ? `${invoice.invoiceNumber} · ${forWhat}` : invoice.invoiceNumber}
+                          detail={`Managed by ${invoice.managerName}${invoice.clientContactName && invoice.clientGroupName ? ` · ${invoice.clientContactName}` : ""}`}
+                        />
+                        <RowCell hideBelow="md" muted>
+                          {invoice.netProfitUsd == null ? "—" : `${formatUsd(invoice.netProfitUsd)} net`}
+                        </RowCell>
+                        <RowCell>{formatUsd(invoice.totalUsd)}</RowCell>
+                        <StatusPill
+                          tone={lifecycleTone(lifecycle)}
+                          className="hidden h-6 w-44 shrink-0 justify-center sm:inline-flex"
+                        >
+                          {statusText(invoice)}
+                        </StatusPill>
+                      </ListRow>
+                    );
+                  })}
+                </RowGroup>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      <InvoiceSheet
+        invoiceId={invoiceIdParam(selectedId)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedId(null);
+        }}
+        payments={payments}
+      />
+      {payments.elements}
       <AdminCascadeDeleteDialog
         open={deleteInvoiceId !== null}
         onClose={() => setDeleteInvoiceId(null)}
@@ -436,6 +336,6 @@ export function InvoicesListClient() {
           setDeleteInvoiceId(null);
         }}
       />
-    </>
+    </div>
   );
 }

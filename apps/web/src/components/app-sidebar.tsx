@@ -100,7 +100,6 @@ const financialHubSubItems: NavSubItem[] = [
   { title: "Insights", url: "/dashboard/financial-hub/insights" },
   { title: "Booking Requests", url: "/dashboard/financial-hub/requests" },
   { title: "Invoices", url: "/dashboard/financial-hub/invoices" },
-  { title: "Payments", url: "/dashboard/financial-hub/payments" },
   { title: "Artist payouts", url: "/dashboard/financial-hub/artist-payouts" },
   { title: "Crew Timecards", url: "/dashboard/timecards" },
   { title: "My Timecards", url: "/dashboard/timecards/mine" },

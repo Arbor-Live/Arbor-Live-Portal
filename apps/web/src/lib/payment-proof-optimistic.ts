@@ -44,6 +44,20 @@ export function optimisticMarkPaymentReceived(
     }
   }
 
+  // The Payments tab's board: the row moves to Received.
+  for (const entry of localStore.getAllQueries(api.paymentProof.listBoard)) {
+    if (entry.value === undefined) continue;
+    localStore.setQuery(
+      api.paymentProof.listBoard,
+      entry.args,
+      entry.value.map((item) =>
+        item.row.invoiceId === args.invoiceId
+          ? { group: "received" as const, row: { ...item.row, paymentReceivedAt: now, isOverdue: false } }
+          : item,
+      ),
+    );
+  }
+
   const details = localStore.getQuery(api.paymentProof.getByInvoiceId, {
     invoiceId: args.invoiceId,
   });

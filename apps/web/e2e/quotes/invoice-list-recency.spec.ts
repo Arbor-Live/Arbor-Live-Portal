@@ -24,14 +24,17 @@ test.describe("invoice list recency", () => {
     await page.getByPlaceholder("Invoice, client, series…").fill(target);
 
     const invoiceNumber = `ALINV-BULK-${stamp}-${INVOICE_COUNT - 1}`;
-    const row = page.getByRole("row").filter({ hasText: target });
+    const row = page.locator("[data-testid^='invoice-list-row-']").filter({ hasText: target });
     await expect(row).toBeVisible({ timeout: 40_000 });
     // The row is built from a slim projection now — check its columns survived.
     await expect(row).toContainText(invoiceNumber);
     await expect(row).toContainText("Draft");
-    // Rows open the editor on click (no separate Open link).
+    // A row opens its side panel; "Open invoice" goes to the editor.
     await row.getByText(invoiceNumber).click();
-    await expect(page).toHaveURL(/\/dashboard\/financial-hub\/invoices\/[^/]+$/, {
+    const sheet = page.getByTestId("invoice-sheet");
+    await expect(sheet.getByText(invoiceNumber).first()).toBeVisible({ timeout: 25_000 });
+    await sheet.getByRole("link", { name: "Open invoice" }).click();
+    await expect(page).toHaveURL(/\/dashboard\/financial-hub\/invoices\/[^/?]+$/, {
       timeout: 25_000,
     });
   });

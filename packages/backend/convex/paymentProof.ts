@@ -276,52 +276,87 @@ async function buildInvoicePaymentDetails(
   };
 }
 
+/**
+ * Every invoice the payment views consider: events from the lookback window
+ * (with each invoice linked to them), then approved invoices with no event.
+ * One pass, so the board and the per-queue lists read the same rows.
+ */
+async function collectPaymentRows(ctx: QueryCtx, now: number) {
+  const windowStart = now - REMINDER_LOOKBACK_MS;
+  const candidates = await ctx.db
+    .query("events")
+    .withIndex("by_startAt", (q) => q.gte("startAt", windowStart))
+    .take(500);
+
+  const rows = [];
+  const consideredInvoiceIds = new Set<Doc<"invoices">["_id"]>();
+  for (const event of candidates) {
+    const invoiceIds: Doc<"invoices">["_id"][] = [];
+    if (event.invoiceId) invoiceIds.push(event.invoiceId);
+    for (const invoiceId of await listAdditionalInvoiceIds(ctx, event._id)) {
+      if (!invoiceIds.includes(invoiceId)) invoiceIds.push(invoiceId);
+    }
+    for (const invoiceId of invoiceIds) {
+      if (consideredInvoiceIds.has(invoiceId)) continue;
+      consideredInvoiceIds.add(invoiceId);
+      const invoice = await ctx.db.get(invoiceId);
+      if (!invoice) continue;
+      const row = await buildPaymentQueueRow(ctx, invoice, event, now);
+      if (row) rows.push(row);
+    }
+  }
+
+  const unlinked = await listApprovedInvoicesWithoutEvent(ctx, windowStart, consideredInvoiceIds);
+  for (const invoice of unlinked) {
+    const row = await buildPaymentQueueRow(ctx, invoice, null, now);
+    if (row) rows.push(row);
+  }
+  return rows;
+}
+
 export const listByQueue = query({
   args: { queue: paymentQueueValue },
   returns: v.array(paymentQueueRowValidator),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
-    const now = Date.now();
-    const windowStart = now - REMINDER_LOOKBACK_MS;
-
-    const candidates = await ctx.db
-      .query("events")
-      .withIndex("by_startAt", (q) => q.gte("startAt", windowStart))
-      .take(500);
-
-    const rows = [];
-    const consideredInvoiceIds = new Set<Doc<"invoices">["_id"]>();
-    for (const event of candidates) {
-      const invoiceIds: Doc<"invoices">["_id"][] = [];
-      if (event.invoiceId) invoiceIds.push(event.invoiceId);
-      for (const invoiceId of await listAdditionalInvoiceIds(ctx, event._id)) {
-        if (!invoiceIds.includes(invoiceId)) invoiceIds.push(invoiceId);
-      }
-      for (const invoiceId of invoiceIds) {
-        if (consideredInvoiceIds.has(invoiceId)) continue;
-        consideredInvoiceIds.add(invoiceId);
-        const invoice = await ctx.db.get(invoiceId);
-        if (!invoice) continue;
-
-        const row = await buildPaymentQueueRow(ctx, invoice, event, now);
-        if (!row || !includeInPaymentQueue(args.queue, row)) continue;
-
-        const { queue: _queue, ...publicRow } = row;
-        rows.push(publicRow);
-      }
-    }
-
-    const unlinked = await listApprovedInvoicesWithoutEvent(ctx, windowStart, consideredInvoiceIds);
-    for (const invoice of unlinked) {
-      const row = await buildPaymentQueueRow(ctx, invoice, null, now);
-      if (!row || !includeInPaymentQueue(args.queue, row)) continue;
-
-      const { queue: _queue, ...publicRow } = row;
-      rows.push(publicRow);
-    }
-
+    const rows = (await collectPaymentRows(ctx, Date.now()))
+      .filter((row) => includeInPaymentQueue(args.queue, row))
+      .map(({ queue: _queue, ...publicRow }) => publicRow);
     rows.sort((a, b) => b.dueAt - a.dueAt);
     return rows;
+  },
+});
+
+const paymentBoardGroupValue = v.union(
+  v.literal("proof"),
+  v.literal("overdue"),
+  v.literal("pending"),
+  v.literal("received"),
+);
+
+/**
+ * The Payments tab: every invoice in exactly one group, in the order Arbor
+ * acts on them. Proof to verify comes first even when the invoice is also
+ * overdue, because verifying it is what clears the overdue.
+ */
+export const listBoard = query({
+  args: {},
+  returns: v.array(v.object({ group: paymentBoardGroupValue, row: paymentQueueRowValidator })),
+  handler: async (ctx) => {
+    await requireArborInternalContext(ctx);
+    const rows = await collectPaymentRows(ctx, Date.now());
+    return rows
+      .map(({ queue: _queue, ...row }) => ({
+        group: row.paymentReceivedAt
+          ? ("received" as const)
+          : row.submission
+            ? ("proof" as const)
+            : row.isOverdue
+              ? ("overdue" as const)
+              : ("pending" as const),
+        row,
+      }))
+      .sort((a, b) => a.row.dueAt - b.row.dueAt);
   },
 });
 
