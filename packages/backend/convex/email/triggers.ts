@@ -126,6 +126,7 @@ export async function scheduleCrewScheduledEmails(
   eventId: Id<"events">,
   previousShifts: CrewShiftLike[],
   nextShifts: CrewShiftLike[],
+  inviteSequence: number,
 ) {
   const event = await ctx.db.get(eventId);
   if (!event) return;
@@ -185,6 +186,7 @@ export async function scheduleCrewScheduledEmails(
         shifts: previousUserShifts,
         blockLabelById,
         timezone,
+        sequence: inviteSequence,
       }),
     ];
     const previousFingerprint = shiftGroupFingerprint(previousUserShifts);
@@ -254,6 +256,7 @@ export async function scheduleCrewScheduledEmails(
         shifts: previousAppShifts,
         blockLabelById,
         timezone,
+        sequence: inviteSequence,
       }),
     ];
     const previousFingerprint = shiftGroupFingerprint(previousAppShifts);
@@ -308,6 +311,7 @@ export async function scheduleCrewScheduledEmails(
         shifts: nextUserShifts,
         blockLabelById,
         timezone,
+        sequence: inviteSequence,
       }),
     ];
 
@@ -364,6 +368,7 @@ export async function scheduleCrewScheduledEmails(
         shifts: nextAppShifts,
         blockLabelById,
         timezone,
+        sequence: inviteSequence,
       }),
     ];
 

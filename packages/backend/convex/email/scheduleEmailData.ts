@@ -123,6 +123,8 @@ export function buildMergedIcsEventForShiftGroup(args: {
   group: CrewShiftLike[];
   blockLabelById: Map<string, string>;
   timezone: string;
+  /** Event-wide revision; must increase whenever this invite is re-sent. */
+  sequence: number;
 }) {
   const startsAt = Math.min(...args.group.map((shift) => shift.startsAt));
   const endsAt = Math.max(...args.group.map((shift) => shift.endsAt));
@@ -148,6 +150,7 @@ export function buildMergedIcsEventForShiftGroup(args: {
     // One VEVENT per person/event so calendar clients that only read the first
     // invite still get a span covering all assigned windows (e.g. 9–10 + 11–12 → 9–12).
     uid: `crew-${args.eventId}-${args.userId}@arbor.st`,
+    sequence: args.sequence,
     title,
     description,
     location: args.venueName,
@@ -165,6 +168,7 @@ export function buildSingleIcsEventForUserShifts(args: {
   shifts: CrewShiftLike[];
   blockLabelById: Map<string, string>;
   timezone: string;
+  sequence: number;
 }) {
   return buildMergedIcsEventForShiftGroup({
     eventId: args.eventId,
@@ -175,5 +179,6 @@ export function buildSingleIcsEventForUserShifts(args: {
     group: args.shifts,
     blockLabelById: args.blockLabelById,
     timezone: args.timezone,
+    sequence: args.sequence,
   });
 }
