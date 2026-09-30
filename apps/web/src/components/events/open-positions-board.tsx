@@ -1,12 +1,17 @@
 "use client";
 
+import {
+  FilterBar,
+  matchesFilter,
+  type FilterDefinition,
+  type FilterState,
+} from "@/components/filter-bar";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { ChatCircleIcon, MagnifyingGlassIcon, UserCircleIcon } from "@phosphor-icons/react";
+import { ChatCircleIcon, UserCircleIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Toggle } from "@/components/ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
@@ -28,6 +33,11 @@ const RANGES = {
   all: { label: "All upcoming", days: Number.POSITIVE_INFINITY },
 } as const;
 type RangeKey = keyof typeof RANGES;
+
+const INQUIRY_OPTIONS = [
+  { value: "some", label: "Has inquiries" },
+  { value: "none", label: "No inquiries yet" },
+];
 
 const TYPE_LABELS = new Map(TYPE_OPTIONS.map((option) => [option.value, option.label]));
 
@@ -60,6 +70,7 @@ export function OpenPositionsBoard() {
   const viewerUserId = viewer?.userId;
   const [range, setRange] = useState<RangeKey>("30");
   const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<FilterState>({});
   const [assignedToMe, setAssignedToMe] = useState(false);
   // Value shown until the server query catches up with an assigned lead.
   const [leadOverrides, setLeadOverrides] = useState<Record<string, string>>({});
@@ -109,6 +120,21 @@ export function OpenPositionsBoard() {
     }
   }
 
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () => [
+      { id: "type", label: "Artist type", options: TYPE_OPTIONS.map((option) => ({ ...option })) },
+      {
+        id: "venue",
+        label: "Venue",
+        options: [...new Set((events ?? []).map((event) => event.venueName).filter((name): name is string => Boolean(name)))]
+          .sort((a, b) => a.localeCompare(b))
+          .map((name) => ({ value: name, label: name })),
+      },
+      { id: "inquiries", label: "Inquiries", options: INQUIRY_OPTIONS, single: true },
+    ],
+    [events],
+  );
+
   const visible = useMemo(() => {
     if (!events) return [];
     const until = now + RANGES[range].days * DAY_MS;
@@ -117,7 +143,10 @@ export function OpenPositionsBoard() {
       if (event.startAt > until) return [];
       const lead = leadOverrides[event.eventId] ?? event.operationsLeadUserId ?? "";
       if (assignedToMe && lead !== viewerUserId) return [];
+      if (!matchesFilter(filters.venue, event.venueName ?? "")) return [];
       const positions = event.openPositions.filter((position) => {
+        if (!matchesFilter(filters.type, position.artistType)) return false;
+        if (!matchesFilter(filters.inquiries, position.inquiryCount > 0 ? "some" : "none")) return false;
         if (needles.length === 0) return true;
         const haystack = [
           event.title,
@@ -134,7 +163,7 @@ export function OpenPositionsBoard() {
       const filled = event.totalPositions - event.openPositions.length;
       return positions.length ? [{ ...event, filled, openPositions: positions }] : [];
     });
-  }, [assignedToMe, events, leadOverrides, now, range, search, viewerUserId]);
+  }, [assignedToMe, events, filters, leadOverrides, now, range, search, viewerUserId]);
 
   const openCount = visible.reduce((total, event) => total + event.openPositions.length, 0);
   const withInquiries = visible.reduce(
@@ -144,7 +173,15 @@ export function OpenPositionsBoard() {
 
   return (
     <div className="space-y-4" data-testid="open-positions">
-      <div className="flex flex-wrap items-center gap-3">
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search events, venues, genres"
+        searchLabel="Search open positions"
+        filters={filterDefinitions}
+        value={filters}
+        onChange={setFilters}
+      >
         <ToggleGroup
           type="single"
           variant="outline"
@@ -159,16 +196,6 @@ export function OpenPositionsBoard() {
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-        <div className="relative min-w-48 flex-1 sm:max-w-xs">
-          <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search events, venues, genres"
-            aria-label="Search open positions"
-            className="pl-8"
-          />
-        </div>
         <Toggle
           variant="outline"
           size="sm"
@@ -178,7 +205,7 @@ export function OpenPositionsBoard() {
         >
           Assigned to me
         </Toggle>
-      </div>
+      </FilterBar>
 
       {events === undefined ? (
         <p className="text-sm text-muted-foreground">Loading open positions…</p>
