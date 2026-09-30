@@ -404,7 +404,7 @@ export function EventBandPaymentForm({
   organizationLocked?: boolean;
   excludedOrganizationIds: string[];
   invoiceLine?: InvoiceArtistSuggestion | null;
-  /** False while the event invoice query is still loading (so invoice line defaults win). */
+  /** False while the event invoice query is still loading, so the resolved defaults don't settle early. */
   invoiceDefaultsReady?: boolean;
   /** Inside a dialog or side panel: no card border or heading. */
   embedded?: boolean;

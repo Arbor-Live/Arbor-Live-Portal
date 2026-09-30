@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolvePayoutDefaults } from "./band-payout-defaults";
 
 describe("resolvePayoutDefaults", () => {
-  it("prefers invoice line fields", () => {
+  it("prefers the org profile over the invoice line", () => {
     const result = resolvePayoutDefaults({
       invoiceLine: {
         organizationId: "org1",
@@ -17,6 +17,28 @@ describe("resolvePayoutDefaults", () => {
       },
     });
     expect(result).toMatchObject({
+      source: "band_profile",
+      ratePerMemberPerHourUsd: "100",
+      performanceHours: "1.5",
+      memberCount: "5",
+    });
+  });
+
+  it("fills gaps from the invoice line", () => {
+    const result = resolvePayoutDefaults({
+      invoiceLine: {
+        organizationId: "org1",
+        rateUsd: 200,
+        performanceHours: 1.5,
+        memberCount: 3,
+      },
+      bandProfile: {
+        organizationId: "org1",
+        performerHourlyRateUsd: 0,
+        memberCount: 0,
+      },
+    });
+    expect(result).toMatchObject({
       source: "invoice",
       ratePerMemberPerHourUsd: "200",
       performanceHours: "1.5",
@@ -24,27 +46,11 @@ describe("resolvePayoutDefaults", () => {
     });
   });
 
-  it("falls back to band profile", () => {
-    const result = resolvePayoutDefaults({
-      bandProfile: {
-        organizationId: "org1",
-        performerHourlyRateUsd: 175,
-        memberCount: 6,
-      },
-    });
-    expect(result).toMatchObject({
-      source: "band_profile",
-      ratePerMemberPerHourUsd: "175",
-      memberCount: "6",
-      performanceHours: "1",
-    });
-  });
-
-  it("uses hardcoded fallbacks", () => {
+  it("leaves rate and members empty when neither source knows them", () => {
     expect(resolvePayoutDefaults({})).toMatchObject({
-      source: "fallback",
-      ratePerMemberPerHourUsd: "150",
-      memberCount: "4",
+      source: "none",
+      ratePerMemberPerHourUsd: "",
+      memberCount: "",
       performanceHours: "1",
     });
   });

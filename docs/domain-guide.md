@@ -405,9 +405,10 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   see the artist portal; switch back via the sidebar. The payout side panel for
   pending-onboarding lists the missing steps and links to that org's panel.
 - When assigning artists, empty events with invoice artist lines get an
-  accept/confirm prompt (plus **Import from invoice** anytime). Payout
-  money defaults prefer the invoice artist line (rate, hours, members), then
-  the artist profile hourly rate / member count, then hardcoded fallbacks.
+  accept/confirm prompt (plus **Import from invoice** anytime). Payout money
+  defaults prefer the artist org profile (hourly rate, member count) — it is the
+  current source of truth — then the event invoice artist line (rate, hours,
+  members) as a snapshot, and leave anything still unknown blank.
 - Assigned artists with incomplete onboarding get a weekly reminder email
   (same Monday `weeklyJobs` cron as crew / payment-proof follow-ups, ~6-day
   cooldown) until onboarding is done — staff can also resend from the payout
