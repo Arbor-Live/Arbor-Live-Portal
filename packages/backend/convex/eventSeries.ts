@@ -4,7 +4,7 @@ import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
-import { computeShiftStats as computeCrewShiftStats } from "./lib/crewShiftKinds";
+import { computeShiftStats as computeCrewShiftStats, isTraineeShift } from "./lib/crewShiftKinds";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { RENTAL_EVENT_TYPES } from "./eventPullLists";
 import {
@@ -633,7 +633,7 @@ export const applyDaySetup = mutation({
             .query("eventCrewShifts")
             .withIndex("by_eventId", (q) => q.eq("eventId", sourceDay._id))
             .take(500)
-        ).some((shift) => !shift.scheduleBlockId)
+        ).some((shift) => !shift.scheduleBlockId && !isTraineeShift(shift))
       : false;
     // A part this day has nothing for is skipped, never used to wipe the
     // other days (e.g. no Run of Show yet must not clear their crew slots).

@@ -14,6 +14,7 @@ import {
 } from "./eventSeriesGeneration";
 import { positionTemplateFromSlot, type EventSeriesPositionTemplate } from "./eventSeriesPositions";
 import { isActBlock } from "./runOfShow";
+import { isTraineeShift } from "./crewShiftKinds";
 import { listGroupDays, selectDaysInScope, type GroupApplyScope } from "./eventGroupDays";
 
 export { listGroupDays, selectDaysInScope, type GroupApplyScope };
@@ -231,7 +232,8 @@ export async function copyUnlinkedShiftsBetweenDays(
       .take(500)
   ).filter((shift) => Boolean(shift.userId?.trim()));
   for (const shift of shifts) {
-    if (shift.scheduleBlockId) continue;
+    // Section slots come from the template; trainees shadow one day only.
+    if (shift.scheduleBlockId || isTraineeShift(shift)) continue;
     const startsAt = shift.startsAt + deltaMs;
     const endsAt = shift.endsAt + deltaMs;
     const filled = staffed.findIndex(
