@@ -215,7 +215,10 @@ export function VenuesManager() {
   const editingVenue = editingId ? (venues?.find((row) => row._id === editingId) ?? null) : null;
   const editorInitial = useMemo(() => {
     if (editingVenue) return toFormValues(editingVenue as VenueRow);
-    return { ...emptyVenueForm(), parentId: newParentId };
+    // A space inside a building is a room, not another building.
+    return newParentId
+      ? { ...emptyVenueForm(), parentId: newParentId, kind: "indoor" as const, venueType: "Common Space" }
+      : emptyVenueForm();
   }, [editingVenue, newParentId]);
 
   const narrowed = Boolean(search.trim()) || Object.keys(activeFilters(filters)).length > 0;
