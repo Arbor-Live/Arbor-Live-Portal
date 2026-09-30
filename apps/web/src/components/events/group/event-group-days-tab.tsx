@@ -123,8 +123,7 @@ export function EventGroupDaysTab() {
               {multiDay ? "Days" : "Occurrences"}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              In date order. Each {noun} has its own crew, lineup and pull list; templates apply to
-              every {noun} that isn&apos;t detached or cancelled.
+              {`In date order. Each ${noun} has its own crew, lineup and pull list; templates apply to every ${noun} that isn't detached or cancelled.`}
             </p>
           </div>
         </CardHeader>
