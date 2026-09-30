@@ -2192,7 +2192,7 @@ export default defineSchema({
 
   /**
    * A warehouse printer/agent pair. The Pi reports its CUPS queue name; one row
-   * per queue. `lastSeenAt` is written by the agent's heartbeat every minute, so
+   * per queue. `lastSeenAt` is written by the agent's ~10 min jittered heartbeat, so
    * edits to config should stay rare (there is normally a single printer).
    */
   printers: defineTable({
