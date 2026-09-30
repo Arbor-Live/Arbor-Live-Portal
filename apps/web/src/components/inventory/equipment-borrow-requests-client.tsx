@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { useSessionShell } from "@/components/session-shell-provider";
@@ -11,6 +11,13 @@ import { EquipmentBorrowRequestForm } from "@/components/inventory/equipment-bor
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import { formatDateTimeRange } from "@/lib/format";
+import {
+  activeFilters,
+  FilterBar,
+  matchesFilter,
+  type FilterDefinition,
+  type FilterState,
+} from "@/components/filter-bar";
 
 type BorrowLine = {
   label: string;
@@ -21,6 +28,7 @@ type BorrowRequest = {
   _id: Id<"equipmentBorrowRequests">;
   status: string;
   requestNumber: string;
+  requesterUserId: string;
   requesterName: string;
   purpose: string;
   venueName?: string;
@@ -58,6 +66,31 @@ function statusBadgeClass(status: string) {
     default:
       return "bg-muted text-muted-foreground";
   }
+}
+
+type BorrowStatus = "submitted" | "approved" | "rejected" | "cancelled";
+
+const STATUS_OPTIONS = (["submitted", "approved", "rejected", "cancelled"] as const).map((value) => ({
+  value,
+  label: formatStatusLabel(value),
+}));
+
+const WHEN_OPTIONS = [
+  { value: "upcoming", label: "Upcoming" },
+  { value: "now", label: "Happening now" },
+  { value: "past", label: "Past" },
+];
+
+/** True when the filters are just the default review queue. */
+function isReviewQueue(filters: FilterState) {
+  const applied = activeFilters(filters);
+  const keys = Object.keys(applied);
+  return (
+    keys.length === 1 &&
+    applied.status?.operator === "is" &&
+    applied.status.values.length === 1 &&
+    applied.status.values[0] === "submitted"
+  );
 }
 
 function equipmentSummary(lines: BorrowLine[]) {
@@ -228,10 +261,49 @@ export function EquipmentBorrowRequestsClient() {
   const [formOpen, setFormOpen] = useState(false);
 
   const mine = useQuery(api.equipmentBorrowRequests.listMine);
-  const queue = useQuery(
-    api.equipmentBorrowRequests.list,
-    isAdmin ? { status: "submitted" as const } : "skip",
+  const [search, setSearch] = useState("");
+  // Starts on the review queue, shown as a chip so it's clear how to widen it.
+  const [filters, setFilters] = useState<FilterState>({
+    status: { operator: "is", values: ["submitted"] },
+  });
+  const [nowMs] = useState(() => Date.now());
+  const applied = activeFilters(filters);
+  // One `is` status reads through the status index; anything else loads the newest requests.
+  const serverStatus =
+    applied.status?.operator === "is" && applied.status.values.length === 1
+      ? (applied.status.values[0] as BorrowStatus)
+      : undefined;
+  const requests = useQuery(api.equipmentBorrowRequests.list, isAdmin ? { status: serverStatus } : "skip");
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () => [
+      { id: "status", label: "Status", options: STATUS_OPTIONS },
+      {
+        id: "requester",
+        label: "Requester",
+        options: [...new Map((requests ?? []).map((row) => [row.requesterUserId, row.requesterName])).entries()]
+          .map(([value, label]) => ({ value, label }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+      },
+      { id: "when", label: "When", options: WHEN_OPTIONS },
+    ],
+    [requests],
   );
+  const queue = useMemo(() => {
+    if (!requests) return undefined;
+    const needle = search.trim().toLowerCase();
+    return requests.filter((request) => {
+      const when = request.endAt < nowMs ? "past" : request.startAt > nowMs ? "upcoming" : "now";
+      return (
+        (!needle ||
+          [request.requestNumber, request.purpose, request.requesterName, request.venueName, request.notes]
+            .concat(request.lines.map((line) => line.label))
+            .some((field) => field?.toLowerCase().includes(needle))) &&
+        matchesFilter(applied.status, request.status) &&
+        matchesFilter(applied.requester, request.requesterUserId) &&
+        matchesFilter(applied.when, when)
+      );
+    });
+  }, [applied.requester, applied.status, applied.when, nowMs, requests, search]);
 
   return (
     <div className="space-y-6">
@@ -242,18 +314,33 @@ export function EquipmentBorrowRequestsClient() {
       </div>
 
       {isAdmin ? (
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold">Review queue</h2>
+        <section className="space-y-2" data-testid="borrow-requests-admin">
+          <h2 className="text-sm font-semibold">Requests</h2>
+          <FilterBar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search number, purpose, requester, gear…"
+            searchLabel="Search borrow requests"
+            filters={filterDefinitions}
+            value={filters}
+            onChange={setFilters}
+          />
           {queue === undefined ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : queue.length === 0 ? (
             <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-              No borrow requests waiting on review.
+              {isReviewQueue(filters) && !search.trim()
+                ? "No borrow requests waiting on review."
+                : "No borrow requests match this search and these filters."}
             </p>
           ) : (
-            queue.map((request) => (
-              <ReviewCard key={request._id} request={request} />
-            ))
+            queue.map((request) =>
+              request.status === "submitted" ? (
+                <ReviewCard key={request._id} request={request} />
+              ) : (
+                <RequestCard key={request._id} request={request} />
+              ),
+            )
           )}
         </section>
       ) : null}

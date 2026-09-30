@@ -4,6 +4,13 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { requireAuth } from "./lib/auth";
 import {
+  FILTER_SCAN_WINDOW,
+  isActiveFilter,
+  listFilter,
+  matchesListFilter,
+  type ListFilter,
+} from "./lib/listFilters";
+import {
   normalizeOptionalAssetReference,
   normalizeResourceLinksForUpload,
 } from "./lib/inventoryUpload";
@@ -149,22 +156,6 @@ function matchesInventoryTypeSearch(type: Doc<"inventoryTypes">, loweredSearch: 
 
 const MAX_TYPE_OPTIONS = 2000;
 
-/** A filter-bar chip: the row matches when any of `values` applies (`is`) or none does (`is_not`). */
-const listFilter = v.optional(
-  v.object({
-    operator: v.union(v.literal("is"), v.literal("is_not")),
-    values: v.array(v.string()),
-  }),
-);
-
-type ListFilter = { operator: "is" | "is_not"; values: string[] };
-
-function matchesListFilter(filter: ListFilter | undefined, candidates: string[]) {
-  if (!filter || filter.values.length === 0) return true;
-  const hit = candidates.some((candidate) => filter.values.includes(candidate));
-  return filter.operator === "is" ? hit : !hit;
-}
-
 function typeVisibilityKey(type: Doc<"inventoryTypes">) {
   if (!type.publicListing) return "hidden";
   return type.publicProfile ? "profile" : "listing";
@@ -207,8 +198,8 @@ function matchesInventoryTypeFilters(
  * hid were always the newest ones — the same failure #65 fixed in six other
  * admin lists.
  *
- * Filtered pages each scan up to `MAX_TYPE_OPTIONS` rows (whatever the client
- * asked for), so past that size the matches arrive over several pages.
+ * Filtered pages each scan up to `FILTER_SCAN_WINDOW` rows (whatever the
+ * client asked for), so past that size the matches arrive over several pages.
  *
  * Each filter is a filter-bar chip (`is` / `is not` any of several values).
  * `units` takes `"has"` or `"none"` and checks `inventoryItems` per type.
@@ -226,7 +217,7 @@ export const list = query({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
 
-    const active = (filter: ListFilter | undefined) => Boolean(filter?.values.length);
+    const active = isActiveFilter;
     // A single `is` category is served by `by_category`, so on its own it can
     // still paginate.
     const indexedCategory =
@@ -244,7 +235,7 @@ export const list = query({
     if (hasInMemoryFilter) {
       // Scan the table a window at a time on the client's cursor, so a catalog
       // past the window pages on with Load more instead of being cut off.
-      const scanOpts = { ...args.paginationOpts, numItems: MAX_TYPE_OPTIONS };
+      const scanOpts = { ...args.paginationOpts, numItems: FILTER_SCAN_WINDOW };
       const scanned = indexedCategory
         ? await ctx.db
             .query("inventoryTypes")
