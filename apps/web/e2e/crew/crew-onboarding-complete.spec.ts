@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { signInWithCredentials } from "../helpers/auth";
 import { e2eEnv } from "../helpers/env";
+import { pickSelectOption } from "../helpers/select";
 import { pollConvex, runConvex } from "../helpers/convex";
 
 /**
@@ -53,7 +54,11 @@ test.describe("crew onboarding wizard", () => {
     await expect(page.getByLabel("Full name")).toBeVisible({ timeout: 20_000 });
     await page.getByLabel("Full name").fill(onboardingCrewName);
     await page.getByLabel("Phone number").fill("6505550144");
-    await page.locator("#crew-student-type").selectOption("undergrad");
+    await pickSelectOption(
+      page,
+      page.getByRole("combobox", { name: "Student type" }),
+      "Undergrad",
+    );
     await next(page);
 
     // Passkey is optional — skip enrollment in CI.

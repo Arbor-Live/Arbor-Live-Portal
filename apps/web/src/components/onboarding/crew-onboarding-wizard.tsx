@@ -22,6 +22,13 @@ import {
   QuestionnaireWizardFooter,
   QuestionnaireWizardProgress,
 } from "@/components/ui/questionnaire-wizard";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { UserAvatarUploadPreview } from "@/components/account/user-avatar";
 import {
   OnboardingAckCheckbox,
@@ -847,23 +854,23 @@ function StepBody({
 
           <div className="space-y-2">
             <Label htmlFor="crew-student-type">Student type</Label>
-            <select
-              id="crew-student-type"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
-              value={form.stanfordPosition}
-              onChange={(event) =>
-                patch({ stanfordPosition: event.target.value as StanfordPositionOption | "" })
+            <Select
+              value={form.stanfordPosition || undefined}
+              onValueChange={(value) =>
+                patch({ stanfordPosition: value as StanfordPositionOption })
               }
             >
-              <option value="" disabled>
-                Select…
-              </option>
-              {STANFORD_POSITION_OPTIONS.map((position) => (
-                <option key={position} value={position}>
-                  {STANFORD_POSITION_LABELS[position]}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="crew-student-type">
+                <SelectValue placeholder="Select a student type" />
+              </SelectTrigger>
+              <SelectContent>
+                {STANFORD_POSITION_OPTIONS.map((position) => (
+                  <SelectItem key={position} value={position}>
+                    {STANFORD_POSITION_LABELS[position]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">

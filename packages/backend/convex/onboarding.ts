@@ -663,6 +663,17 @@ export const saveCrewProfileStep = mutation({
       throw new Error("Enter a valid graduation year.");
     }
 
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    // Student type is required; accept the input or an already-saved position
+    // (so re-saving the step doesn't demand re-selecting it).
+    const stanfordPosition = args.stanfordPosition ?? profile?.stanfordPosition;
+    if (!stanfordPosition) {
+      throw new Error("Select your student type.");
+    }
+
     if (user.email) {
       await ctx.runMutation(components.betterAuth.adapter.updateOne, {
         input: {
@@ -673,10 +684,6 @@ export const saveCrewProfileStep = mutation({
       });
     }
 
-    const profile = await ctx.db
-      .query("userAdminProfiles")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .unique();
     if (profile) {
       await ctx.db.patch(profile._id, {
         phone,
@@ -686,7 +693,7 @@ export const saveCrewProfileStep = mutation({
         ...(usernameProvided ? { username } : {}),
         pronouns: pronouns ?? profile.pronouns,
         gradYear: gradYear ?? profile.gradYear,
-        stanfordPosition: args.stanfordPosition ?? profile.stanfordPosition,
+        stanfordPosition,
         updatedAt: now,
       });
     } else {
@@ -702,7 +709,7 @@ export const saveCrewProfileStep = mutation({
         ...(usernameProvided ? { username } : {}),
         pronouns,
         gradYear,
-        stanfordPosition: args.stanfordPosition,
+        stanfordPosition,
         createdAt: now,
         updatedAt: now,
       });
@@ -848,6 +855,10 @@ export const completeCrewOnboarding = mutation({
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .unique();
     const payrollMethod = normalizePayrollMethod(profile?.payrollMethod);
+    // Guards in-progress profiles created before student type was required.
+    if (!profile?.stanfordPosition) {
+      throw new Error("Select your student type before signing.");
+    }
     if (!crewRequiredStepsComplete(next, payrollMethod)) {
       throw new Error("Please complete all required onboarding steps before signing.");
     }
