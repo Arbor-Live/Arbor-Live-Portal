@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { computeShiftStats } from "./lib/crewShiftKinds";
 import { normalizeEventStatus } from "./lib/eventStatus";
 
 const openRequestStatusValue = v.union(
@@ -50,7 +51,7 @@ export const listUpcomingAdminEvents = query({
             .map((shift) => shift.userId?.trim())
             .filter((userId): userId is string => Boolean(userId)),
         ).size;
-        const unfilledShifts = shifts.filter((shift) => !shift.userId?.trim()).length;
+        const { unfilledShifts } = computeShiftStats(shifts);
         return {
           _id: event._id,
           title: event.title,

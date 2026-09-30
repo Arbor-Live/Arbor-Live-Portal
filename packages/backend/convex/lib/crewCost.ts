@@ -5,6 +5,7 @@ import {
   resolveOpenSlotHourlyRateUsd,
   resolveUserCompensationHourlyRateUsd,
 } from "./crewCompensation";
+import { staffingSlots } from "./crewShiftKinds";
 
 function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
@@ -28,10 +29,13 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
     .unique();
   const bufferPercent = event?.crewCostBufferPercent ?? settings?.crewCostBufferPercent ?? 0;
 
-  const shifts = await ctx.db
-    .query("eventCrewShifts")
-    .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
-    .take(500);
+  // Trainees shadow unpaid and never bill the host.
+  const shifts = staffingSlots(
+    await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
+      .take(500),
+  );
   const userIds = Array.from(new Set(shifts.map((shift) => shift.userId).filter(Boolean) as string[]));
   const rateByUserId = new Map<string, number>(
     await Promise.all(

@@ -240,7 +240,7 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
           </p>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-3 text-sm">
-          <p>Crew confirmed: {stats.confirmed}</p>
+          <p>Fully staffed: {stats.confirmed}</p>
           <p>Cancelled: {stats.cancelled}</p>
           <p>
             First: {formatOccurrencePreview(series.anchorStartAt)}
@@ -534,7 +534,7 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
                     {occurrence.totalShifts === 0
                       ? "No shifts"
                       : occurrence.isCrewConfirmed
-                        ? "Confirmed"
+                        ? "Fully staffed"
                         : `${occurrence.assignedShifts}/${occurrence.totalShifts} filled`}
                   </td>
                   <td className="px-2 py-2">{formatUsd(occurrence.costSummary.totalUsd)}</td>

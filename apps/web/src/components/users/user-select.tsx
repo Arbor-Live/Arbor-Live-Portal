@@ -3,11 +3,14 @@
 import { XIcon } from "@phosphor-icons/react";
 import { UserAvatar } from "@/components/account/user-avatar";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
+import { cn } from "@/lib/utils";
 
 export type UserSelectOption = SearchableSelectOption & {
   role?: string;
   email?: string;
   status?: "active" | "inactive" | "alumni";
+  /** Short context flag next to the name (e.g. crew availability for a section). */
+  badge?: { label: string; className: string };
 };
 
 function OptionAvatar({ option }: { option: UserSelectOption }) {
@@ -39,6 +42,7 @@ export function UserSelect({
   placeholder = "Search users...",
   emptyLabel = "Select user",
   clearable = false,
+  contentClassName = "min-w-[min(100%,24rem)]",
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -47,6 +51,8 @@ export function UserSelect({
   emptyLabel?: string;
   /** Offer an entry that clears the selection. */
   clearable?: boolean;
+  /** Menu width override (e.g. a wider menu under a narrow trigger). */
+  contentClassName?: string;
 }) {
   return (
     <SearchableSelect
@@ -56,7 +62,7 @@ export function UserSelect({
       placeholder={placeholder}
       emptyLabel={emptyLabel}
       clearable={clearable}
-      contentClassName="min-w-[min(100%,24rem)]"
+      contentClassName={contentClassName}
       renderOption={(option) => (
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           <span className="shrink-0">
@@ -68,6 +74,16 @@ export function UserSelect({
               {(option as UserSelectOption).status === "inactive" ? (
                 <span className="shrink-0 rounded bg-status-amber-500/15 px-1.5 py-0.5 text-3xs font-medium uppercase tracking-wide text-status-amber-800 dark:text-status-amber-300">
                   Inactive
+                </span>
+              ) : null}
+              {(option as UserSelectOption).badge ? (
+                <span
+                  className={cn(
+                    "shrink-0 rounded-md border px-1.5 py-0.5 text-3xs font-medium uppercase tracking-wide",
+                    (option as UserSelectOption).badge?.className,
+                  )}
+                >
+                  {(option as UserSelectOption).badge?.label}
                 </span>
               ) : null}
             </div>

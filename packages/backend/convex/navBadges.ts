@@ -11,6 +11,7 @@ import {
 import { isArtistOrganizationType } from "./lib/organizationType";
 import { isBandPayeeComplete, payeeFieldsFromProfile } from "./lib/bandPayments";
 import { listCrewedEventsInRange } from "./lib/crewedEvents";
+import { computeShiftStats } from "./lib/crewShiftKinds";
 import {
   DEFAULT_AVAILABILITY_WEEKS,
   eventMatchesUserTeams,
@@ -139,9 +140,6 @@ function weeksToMs(weeks: number) {
   return weeks * 7 * 24 * 60 * 60 * 1000;
 }
 
-function isShiftFilled(shift: Doc<"eventCrewShifts">) {
-  return Boolean(shift.userId?.trim());
-}
 
 async function getCurrentUserProfile(ctx: QueryCtx, userId: string) {
   return await ctx.db
@@ -177,8 +175,7 @@ async function eventIsCrewUnconfirmed(ctx: QueryCtx, eventId: Doc<"events">["_id
     .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
     .take(UNCONFIRMED_CREW_SHIFT_CAP);
   // Match previous semantics: zero shifts ⇒ not confirmed.
-  if (shifts.length === 0) return true;
-  return shifts.some((shift) => !isShiftFilled(shift));
+  return !computeShiftStats(shifts).isCrewConfirmed;
 }
 
 async function countUnconfirmedCrew(ctx: QueryCtx, rangeStart: number, rangeEnd: number) {

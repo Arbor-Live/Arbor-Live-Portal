@@ -171,7 +171,7 @@ export function InsightsEventsPanel({ startMs, endMs }: InsightsEventsPanelProps
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="rounded-md border px-3 py-2">
-                  <p className="text-xs text-muted-foreground">Unconfirmed crew</p>
+                  <p className="text-xs text-muted-foreground">Need crew</p>
                   <p className="text-lg font-semibold tabular-nums">{d90.unconfirmedCrewedCount}</p>
                 </div>
                 <div className="rounded-md border px-3 py-2">

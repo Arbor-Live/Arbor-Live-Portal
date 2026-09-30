@@ -15,15 +15,17 @@ test.describe("crew availability respond", () => {
     await expect(page.getByText("My Availability").first()).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText(seeded.title).first()).toBeVisible({ timeout: 25_000 });
 
-    const card = page.locator("div.rounded-md.border").filter({ hasText: seeded.title }).first();
-    await card.getByText(/Yes — available for entire event/i).click();
-    await card.getByRole("button", { name: "Submit response" }).click();
-    await expect(page.getByText(/Saved Yes|You: Yes/i).first()).toBeVisible({ timeout: 20_000 });
+    const card = page.getByTestId("crew-availability-event").filter({ hasText: seeded.title }).first();
+    // One tap answers; the event moves to "Answered".
+    await card.getByRole("radio", { name: "I can work it all" }).click();
+    await expect(
+      page.getByTestId("crew-availability-event").filter({ hasText: seeded.title }).getByText("You: Yes"),
+    ).toBeVisible({ timeout: 20_000 });
   });
 });
 
-async function waitForScheduleAssignControls(page: Page) {
-  const allBlocks = page.getByRole("button", { name: "All blocks" });
+async function waitForAvailableCrewChip(page: Page, name: string) {
+  const allBlocks = page.getByTestId("crew-candidate").filter({ hasText: name }).first();
   // Local Convex can stall the first subscription burst; one reload usually recovers.
   try {
     await expect(allBlocks).toBeVisible({ timeout: 45_000 });
@@ -59,17 +61,22 @@ test.describe("schedule assign from yes response", () => {
       timeout: 30_000,
     });
 
-    const allBlocks = await waitForScheduleAssignControls(page);
-    await expect(page.getByText(e2eEnv.crewName, { exact: true }).first()).toBeVisible();
-
-    await allBlocks.click();
+    // The yes responder is offered on each section; one click puts them on it.
+    const chip = await waitForAvailableCrewChip(page, e2eEnv.crewName);
+    await chip.click();
+    await expect(page.getByTestId("crew-staffing-summary")).toContainText("1 of 1 filled");
     await page.getByRole("button", { name: "Save changes" }).click();
-    await expect(page.getByText(/On schedule/i).first()).toBeVisible({ timeout: 30_000 });
 
-    const state = runConvex("e2eHelpers:getEventCrewAssignmentState", {
-      eventId: seeded.eventId,
-    }) as { shiftCount: number; assignedUserIds: string[] };
-    expect(state.shiftCount).toBeGreaterThan(0);
-    expect(state.assignedUserIds).toContain(crew.userId);
+    await expect
+      .poll(
+        () =>
+          (
+            runConvex("e2eHelpers:getEventCrewAssignmentState", {
+              eventId: seeded.eventId,
+            }) as { assignedUserIds: string[] }
+          ).assignedUserIds,
+        { timeout: 30_000 },
+      )
+      .toContain(crew.userId);
   });
 });

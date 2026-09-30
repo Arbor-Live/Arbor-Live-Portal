@@ -74,9 +74,9 @@ test.describe("insights dashboard", () => {
   test("crew scheduling header shows fill-rate KPIs", async ({ page }) => {
     await page.goto("/dashboard/events/crew-scheduling");
     await expect(page.getByText("Date range").first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Fill rate").first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Unfilled shifts").first()).toBeVisible();
-    await expect(page.getByText("Unconfirmed events").first()).toBeVisible();
+    await expect(page.getByText("Slots filled").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Open slots").first()).toBeVisible();
+    await expect(page.getByText("Events needing crew").first()).toBeVisible();
   });
 
   test("admin can open the Feedback tab and read full client feedback", async ({ page }) => {

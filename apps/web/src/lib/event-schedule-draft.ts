@@ -24,6 +24,8 @@ export type EventShiftDraft = {
   expenseReportId?: Id<"eventExpenseReports">;
   role: string;
   userId?: string;
+  /** Trainee shadowing (no pay, never billed). */
+  crewApplicationId?: Id<"crewApplications">;
   personName: string;
   startsAt: string;
   endsAt: string;

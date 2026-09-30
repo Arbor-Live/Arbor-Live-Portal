@@ -3,7 +3,7 @@ import type { Doc } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { findAuthOrganizationById } from "./auth";
 import { listCrewedEventsInRange } from "./crewedEvents";
-import { eventMatchesUserTeams } from "./crewTeams";
+import { DEFAULT_AVAILABILITY_WEEKS, eventMatchesUserTeams } from "./crewTeams";
 import { normalizeEventStatus } from "./eventStatus";
 import { bandPaymentStatusLabel } from "./bandPayments";
 import { bandOnboardingIncompleteSteps } from "./bandOnboardingSteps";
@@ -25,8 +25,8 @@ import {
   type WeeklyDigestAudience,
 } from "./weeklyDigestAudience";
 
-/** Availability window for the digest (mirrors "next two weeks"). */
-const DIGEST_AVAILABILITY_WEEKS = 2;
+/** Same window as the My Availability inbox and its nav badge, so counts agree. */
+const DIGEST_AVAILABILITY_WEEKS = DEFAULT_AVAILABILITY_WEEKS;
 /** Scheduled-events window. */
 const DIGEST_SCHEDULED_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 /** Items listed per section; the title always carries the true count. */
