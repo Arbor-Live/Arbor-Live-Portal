@@ -8,7 +8,7 @@ export default function MyAvailabilityPage() {
       <PageHeader
         back={{ href: "/dashboard/events", label: "Events" }}
         title="My Availability"
-        description="Respond to upcoming crewed events for your team. Default view covers the next three weeks."
+        description="Tell the schedulers which events, and which parts of them, you can work."
       />
       <ArborOnlyGuard>
         <CrewAvailabilityInbox />

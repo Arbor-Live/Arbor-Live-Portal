@@ -223,6 +223,13 @@ const crewAvailabilityPartialWindowValue = v.object({
   notes: v.optional(v.string()),
 });
 
+/** A time the crew member is busy (a class, another gig) — the inverse of a partial window. */
+const crewAvailabilityBusyWindowValue = v.object({
+  startsAt: v.number(),
+  endsAt: v.number(),
+  notes: v.optional(v.string()),
+});
+
 const eventPullListSourceValue = v.union(
   v.literal("manual"),
   v.literal("invoice_package"),
@@ -1251,7 +1258,13 @@ export default defineSchema({
     userId: v.string(),
     responseStatus: crewAvailabilityResponseStatusValue,
     partialWindows: v.optional(v.array(crewAvailabilityPartialWindowValue)),
+    busyWindows: v.optional(v.array(crewAvailabilityBusyWindowValue)),
     notes: v.optional(v.string()),
+    /**
+     * The event's crew sections (`id:start:end`) when the response was given.
+     * A mismatch later means the schedule changed after they answered.
+     */
+    scheduleFingerprint: v.optional(v.string()),
     respondedAt: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),

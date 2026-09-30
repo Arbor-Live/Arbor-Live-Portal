@@ -2,311 +2,268 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
-import { CaretDownIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, MapPinIcon, WarningIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { EventStateBadges } from "@/components/events/event-state-badges";
 import { CrewAvailabilityResponseForm } from "@/components/events/crew-availability-response-form";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { notify } from "@/lib/notify";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   DEFAULT_AVAILABILITY_WEEKS,
   EXTENDED_AVAILABILITY_WEEKS,
   crewResponseBadgeClass,
   formatCrewResponseLabel,
-  formatEventDateTime,
+  formatTimeWindow,
 } from "@/lib/crew-availability";
+import { formatDate, formatDateTimeRange } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type InboxEvent = NonNullable<
   ReturnType<typeof useQuery<typeof api.eventCrewAvailability.listForCrewMember>>
 >[number];
 
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
+function needsAttention(event: InboxEvent) {
+  return event.needsResponse || Boolean(event.myResponse?.scheduleChanged);
 }
 
-function CrewAvailabilityEventDetails({
-  event,
-  onSaved,
-}: {
-  event: InboxEvent;
-  onSaved: (message: string) => void;
-}) {
+function EventDetails({ event }: { event: InboxEvent }) {
+  const blockNotes = event.scheduleBlocks.filter((block) => block.notes?.trim());
+  const others = event.assignedCrew.length + event.interestedCrew.length;
+  if (!event.notes && blockNotes.length === 0 && others === 0) return null;
   return (
-    <>
-      {event.scheduleBlocks.length > 0 ? (
-        <div className="space-y-1">
-          <p className="text-sm font-medium">Schedule</p>
-          <div className="space-y-1">
-            {event.scheduleBlocks.map((block) => (
-              <div key={block._id} className="rounded-md border px-2 py-1 text-xs">
-                <span className="font-medium">{block.label}</span>
-                <span className="text-muted-foreground">
-                  {" "}
-                  · {formatEventDateTime(block.startsAt)} – {formatEventDateTime(block.endsAt)}
-                </span>
-                {block.notes ? <span className="block text-muted-foreground italic">{block.notes}</span> : null}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Assigned crew</p>
-          {event.assignedCrew.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No crew assigned yet.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {event.assignedCrew.map((member) => (
-                <div key={member.userId} className="flex items-center gap-2 rounded-md border px-2 py-1 text-sm">
-                  <Avatar size="sm">
-                    <AvatarImage src={member.image} alt={member.name} />
-                    <AvatarFallback>{initials(member.name)}</AvatarFallback>
-                  </Avatar>
-                  <span>{member.name}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Interested crew</p>
-          {event.interestedCrew.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No Yes/Partial responses yet.</p>
-          ) : (
-            <div className="space-y-1">
-              {event.interestedCrew.map((member) => (
-                <div key={member.userId} className="flex flex-wrap items-center gap-2 text-sm">
-                  <Avatar size="sm">
-                    <AvatarImage src={member.image} alt={member.name} />
-                    <AvatarFallback>{initials(member.name)}</AvatarFallback>
-                  </Avatar>
-                  <span>{member.name}</span>
-                  <span
-                    className={`rounded-full border px-2 py-0.5 text-xs ${crewResponseBadgeClass(member.responseStatus)}`}
-                  >
-                    {formatCrewResponseLabel(member.responseStatus)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-          {(event.unavailableCounts.no > 0 || event.unavailableCounts.onlyIfNecessary > 0) ? (
-            <p className="text-xs text-muted-foreground">
-              {event.unavailableCounts.no > 0
-                ? `${event.unavailableCounts.no} unavailable`
-                : null}
-              {event.unavailableCounts.no > 0 && event.unavailableCounts.onlyIfNecessary > 0 ? " · " : null}
-              {event.unavailableCounts.onlyIfNecessary > 0
-                ? `${event.unavailableCounts.onlyIfNecessary} only if necessary`
-                : null}
-            </p>
-          ) : null}
-        </div>
-      </div>
-
-      <CrewAvailabilityResponseForm
-        eventId={event._id}
-        scheduleBlocks={event.scheduleBlocks}
-        existingResponse={event.myResponse}
-        onSaved={onSaved}
-      />
-    </>
+    <Collapsible>
+      <CollapsibleTrigger className="group inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:underline">
+        Details
+        <CaretDownIcon className="size-3 transition-transform group-data-[state=open]:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-2 pt-2 text-sm">
+        {event.notes ? (
+          <p className="whitespace-pre-wrap text-muted-foreground">{event.notes}</p>
+        ) : null}
+        {blockNotes.map((block) => (
+          <p key={block._id} className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">{block.label}:</span> {block.notes}
+          </p>
+        ))}
+        {event.assignedCrew.length > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            On the crew: {event.assignedCrew.map((member) => member.name).join(", ")}
+          </p>
+        ) : null}
+        {event.interestedCrew.length > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Also available:{" "}
+            {event.interestedCrew
+              .map((member) => `${member.name} (${formatCrewResponseLabel(member.responseStatus).toLowerCase()})`)
+              .join(", ")}
+          </p>
+        ) : null}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
-function CrewAvailabilityEventHeader({
-  event,
-  showResponseBadge = true,
-}: {
-  event: InboxEvent;
-  showResponseBadge?: boolean;
-}) {
+function EventSummary({ event }: { event: InboxEvent }) {
+  const myBlockIds = new Set(event.myShifts.map((shift) => shift.scheduleBlockId));
+  const mySections = event.scheduleBlocks.filter((block) => myBlockIds.has(block._id));
   return (
-    <div className="space-y-2">
+    <div className="min-w-0 flex-1 space-y-1">
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-medium">{event.title}</p>
         <EventStateBadges status={event.status} startAt={event.startAt} endAt={event.endAt} />
-        {event.needsResponse ? (
-          <span className="rounded-full border border-status-amber-500/30 bg-status-amber-500/10 px-2 py-0.5 text-xs text-status-amber-700">
-            Needs response
-          </span>
-        ) : showResponseBadge && event.myResponse ? (
-          <span
-            className={`rounded-full border px-2 py-0.5 text-xs ${crewResponseBadgeClass(event.myResponse.responseStatus)}`}
-          >
-            You: {formatCrewResponseLabel(event.myResponse.responseStatus)}
+      </div>
+      <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+        <span className="tabular-nums">{formatDateTimeRange(event.startAt, event.endAt)}</span>
+        {event.venueName ? (
+          <span className="inline-flex items-center gap-1">
+            <MapPinIcon className="size-3.5" aria-hidden />
+            {event.venueName}
           </span>
         ) : null}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {formatEventDateTime(event.startAt)} {" → "} {formatEventDateTime(event.endAt)}
+        {event.host ? <span>Host: {event.host}</span> : null}
       </p>
-      <div className="flex flex-wrap gap-2 text-xs">
-        {event.eventType ? <span className="rounded bg-muted px-2 py-0.5">{event.eventType}</span> : null}
-        {event.venueName ? <span className="rounded bg-muted px-2 py-0.5">{event.venueName}</span> : null}
-        {event.host ? <span className="rounded bg-muted px-2 py-0.5">Host: {event.host}</span> : null}
-        {event.teamsInterested?.map((team) => (
-          <span key={team} className="rounded bg-muted px-2 py-0.5">
-            {team}
-          </span>
-        ))}
-      </div>
-      {event.notes ? (
-        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{event.notes}</p>
+      {event.scheduleBlocks.length > 0 ? (
+        <p className="text-xs text-muted-foreground">
+          {event.scheduleBlocks
+            .map((block) => `${block.label || block.blockType} ${formatTimeWindow(block)}`)
+            .join(" · ")}
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">Crew schedule not set yet.</p>
+      )}
+      {mySections.length > 0 || event.myShifts.length > 0 ? (
+        <p className="text-xs font-medium text-status-emerald-700 dark:text-status-emerald-300">
+          You&apos;re on:{" "}
+          {mySections.length > 0
+            ? mySections.map((block) => block.label || block.blockType).join(", ")
+            : `${event.myShifts.length} shift${event.myShifts.length === 1 ? "" : "s"}`}
+        </p>
+      ) : null}
+      {event.myResponse?.scheduleChanged ? (
+        <p className="flex items-center gap-1.5 text-xs text-status-amber-700">
+          <WarningIcon className="size-3.5" weight="fill" aria-hidden />
+          The schedule changed after you answered. Check it still works.
+        </p>
       ) : null}
     </div>
   );
 }
 
-function CrewAvailabilityPendingCard({
-  event,
-  onSaved,
-}: {
-  event: InboxEvent;
-  onSaved: (message: string) => void;
-}) {
+function DateColumn({ startAt }: { startAt: number }) {
+  // "Thu, Oct 15, 2026" → "Thu" over "Oct 15"; the full date is in the summary.
+  const [weekday, monthDay] = formatDate(startAt).split(", ");
   return (
-    <div className="space-y-4 rounded-md border p-4">
-      <CrewAvailabilityEventHeader event={event} />
-      <CrewAvailabilityEventDetails event={event} onSaved={onSaved} />
+    <div className="w-16 shrink-0 text-xs text-muted-foreground tabular-nums">
+      <p className="font-medium text-foreground">{weekday}</p>
+      <p>{monthDay}</p>
     </div>
   );
 }
 
-function CrewAvailabilityRespondedCard({
-  event,
-  onSaved,
-}: {
-  event: InboxEvent;
-  onSaved: (message: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const responseStatus = event.myResponse?.responseStatus;
+function AvailabilityEventCard({ event, open }: { event: InboxEvent; open: boolean }) {
+  const [expanded, setExpanded] = useState(open);
+  const status = event.myResponse?.responseStatus;
+  const form = (
+    <CrewAvailabilityResponseForm
+      eventId={event._id}
+      eventStartAt={event.startAt}
+      eventEndAt={event.endAt}
+      scheduleBlocks={event.scheduleBlocks}
+      existingResponse={event.myResponse}
+    />
+  );
+
+  if (open) {
+    return (
+      <li className="space-y-3 border p-3" data-testid="crew-availability-event">
+        <div className="flex gap-3">
+          <DateColumn startAt={event.startAt} />
+          <EventSummary event={event} />
+        </div>
+        <div className="space-y-2 sm:pl-19">
+          {form}
+          <EventDetails event={event} />
+        </div>
+      </li>
+    );
+  }
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <div className="rounded-md border">
+    <li className="border" data-testid="crew-availability-event">
+      <Collapsible open={expanded} onOpenChange={setExpanded}>
         <CollapsibleTrigger asChild>
-          <button
-            type="button"
-            className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/40"
-          >
-            <div className="min-w-0 flex-1 space-y-0.5">
-              <p className="truncate text-sm font-medium">{event.title}</p>
-              <p className="text-xs text-muted-foreground">
-                {formatEventDateTime(event.startAt)} – {formatEventDateTime(event.endAt)}
-                {event.venueName ? ` · ${event.venueName}` : null}
-              </p>
-            </div>
-            {responseStatus ? (
+          <button type="button" className="flex w-full items-start gap-3 p-3 text-left hover:bg-muted/30">
+            <DateColumn startAt={event.startAt} />
+            <EventSummary event={event} />
+            {status ? (
               <span
-                className={`shrink-0 rounded-full border px-2 py-0.5 text-xs ${crewResponseBadgeClass(responseStatus)}`}
+                className={cn(
+                  "shrink-0 rounded-md border px-2 py-0.5 text-xs",
+                  crewResponseBadgeClass(status),
+                )}
               >
-                You: {formatCrewResponseLabel(responseStatus)}
+                You: {formatCrewResponseLabel(status)}
               </span>
             ) : null}
             <CaretDownIcon
-              className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+              className={cn("mt-1 size-4 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-180")}
               aria-hidden
             />
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="space-y-4 border-t px-4 py-4">
-            <CrewAvailabilityEventHeader event={event} showResponseBadge={false} />
-            <CrewAvailabilityEventDetails event={event} onSaved={onSaved} />
+          <div className="space-y-2 border-t p-3 sm:pl-22">
+            {form}
+            <EventDetails event={event} />
           </div>
         </CollapsibleContent>
-      </div>
-    </Collapsible>
+      </Collapsible>
+    </li>
   );
 }
 
 export function CrewAvailabilityInbox() {
-  const [showExtended, setShowExtended] = useState(false);
+  const [weeks, setWeeks] = useState(DEFAULT_AVAILABILITY_WEEKS);
   const [now] = useState(() => Date.now());
 
-  const events = useQuery(api.eventCrewAvailability.listForCrewMember, {
-    now,
-    weeksAhead: showExtended ? EXTENDED_AVAILABILITY_WEEKS : DEFAULT_AVAILABILITY_WEEKS,
-  });
+  const events = useQuery(api.eventCrewAvailability.listForCrewMember, { now, weeksAhead: weeks });
 
-  const { pendingEvents, respondedEvents } = useMemo(() => {
-    if (!events) {
-      return { pendingEvents: [], respondedEvents: [] };
-    }
-    const pending = events.filter((event) => event.needsResponse);
-    const responded = events.filter((event) => !event.needsResponse);
-    return { pendingEvents: pending, respondedEvents: responded };
+  const { attention, answered } = useMemo(() => {
+    const rows = events ?? [];
+    return {
+      attention: rows.filter(needsAttention),
+      answered: rows.filter((event) => !needsAttention(event)),
+    };
   }, [events]);
-
-  const pendingCount = pendingEvents.length;
+  const changed = attention.filter((event) => !event.needsResponse).length;
+  const unanswered = attention.length - changed;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="text-sm text-muted-foreground">
-          Showing team-matched events for the next {showExtended ? EXTENDED_AVAILABILITY_WEEKS : DEFAULT_AVAILABILITY_WEEKS} weeks.
+    <div className="space-y-4" data-testid="crew-availability-inbox">
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-sm" data-testid="crew-availability-summary">
+          {events === undefined
+            ? "Loading…"
+            : [
+                unanswered > 0 ? `${unanswered} need${unanswered === 1 ? "s" : ""} an answer` : null,
+                changed > 0 ? `${changed} changed since you answered` : null,
+                `${answered.length} answered`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
         </p>
-        <Button
-          type="button"
+        <ToggleGroup
+          type="single"
           variant="outline"
           size="sm"
-          onClick={() => setShowExtended((prev) => !prev)}
+          className="sm:ml-auto"
+          value={String(weeks)}
+          onValueChange={(value) => value && setWeeks(Number(value))}
+          aria-label="How far ahead"
         >
-          {showExtended ? "Show default window" : "Show more events"}
-        </Button>
-        {pendingCount > 0 ? (
-          <span className="rounded-full border border-status-amber-500/30 bg-status-amber-500/10 px-2 py-0.5 text-xs text-status-amber-700">
-            {pendingCount} need{pendingCount === 1 ? "s" : ""} your response
-          </span>
-        ) : null}
+          <ToggleGroupItem value={String(DEFAULT_AVAILABILITY_WEEKS)}>
+            Next {DEFAULT_AVAILABILITY_WEEKS} weeks
+          </ToggleGroupItem>
+          <ToggleGroupItem value={String(EXTENDED_AVAILABILITY_WEEKS)}>
+            Next {EXTENDED_AVAILABILITY_WEEKS} weeks
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
-      {!events ? <p className="text-sm text-muted-foreground">Loading availability events...</p> : null}
-
       {events && events.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No upcoming crewed events match your teams in this window.
+        <p className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+          No upcoming crewed events for your teams in this window.
         </p>
       ) : null}
 
-      {events && events.length > 0 && pendingEvents.length === 0 ? (
-        <p className="text-sm text-muted-foreground">You&apos;re caught up — no responses needed right now.</p>
+      {events && events.length > 0 && attention.length === 0 ? (
+        <p className="text-sm text-muted-foreground">You&apos;re caught up. Nothing needs an answer right now.</p>
       ) : null}
 
-      {pendingEvents.map((event) => (
-        <CrewAvailabilityPendingCard
-          key={event._id}
-          event={event}
-          onSaved={(savedMessage) => notify.success(savedMessage)}
-        />
-      ))}
+      {attention.length > 0 ? (
+        <section className="space-y-2">
+          <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            Needs your answer
+          </h2>
+          <ul className="space-y-2">
+            {attention.map((event) => (
+              <AvailabilityEventCard key={event._id} event={event} open />
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
-      {respondedEvents.length > 0 ? (
-        <div className="space-y-2 pt-2">
-          <p className="text-sm font-medium text-muted-foreground">Already responded</p>
-          {respondedEvents.map((event) => (
-            <CrewAvailabilityRespondedCard
-              key={event._id}
-              event={event}
-              onSaved={(savedMessage) => notify.success(savedMessage)}
-            />
-          ))}
-        </div>
+      {answered.length > 0 ? (
+        <section className="space-y-2">
+          <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            Answered
+          </h2>
+          <ul className="space-y-2">
+            {answered.map((event) => (
+              <AvailabilityEventCard key={event._id} event={event} open={false} />
+            ))}
+          </ul>
+        </section>
       ) : null}
     </div>
   );

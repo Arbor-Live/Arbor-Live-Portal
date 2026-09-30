@@ -1,5 +1,6 @@
 import { normalizeCrewLineLabel } from "@arbor/invoice-document/web";
 import type { Id } from "@/lib/convex-api";
+import { staffingSlots } from "@/lib/crew-shift-kinds";
 import { shiftHours, type EventShiftDraft } from "@/lib/event-schedule-draft";
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import type { SeriesBlockTemplate } from "@/lib/event-series-schedule";
@@ -44,6 +45,7 @@ export type LinkedEventForInvoiceCrew = {
     role: string;
     personName?: string;
     userId?: string;
+    crewApplicationId?: Id<"crewApplications">;
     hours: number;
   }>;
 };
@@ -141,7 +143,8 @@ export function buildCrewRowsFromShifts(
     blockLabelById.set(block.id as Id<"eventScheduleBlocks">, block.label?.trim() || block.blockType);
   }
 
-  return shifts
+  // Trainees shadow unpaid; they never become billed crew lines.
+  return staffingSlots(shifts)
     .map((shift) => {
       const hours = shiftHours(shift);
       const blockLabel =
@@ -183,7 +186,7 @@ export function buildCrewRowsFromLinkedEvent(
     linkedEvent.blocks.map((block) => [block._id, block.label || block.blockType]),
   );
 
-  return linkedEvent.shifts
+  return staffingSlots(linkedEvent.shifts)
     .map((shift) => {
       const blockLabel = shift.scheduleBlockId ? blockLabelById.get(shift.scheduleBlockId) : undefined;
       const billing = resolveShiftBilling({

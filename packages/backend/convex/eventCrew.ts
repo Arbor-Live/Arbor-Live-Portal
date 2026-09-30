@@ -11,6 +11,8 @@ import { getUserOtForecast } from "./lib/otForecast";
 import { scheduleCrewScheduledEmails } from "./email/triggers";
 import { bumpCrewInviteSequence } from "./email/crewInviteSequence";
 import { isSectionBlockType } from "./lib/scheduleBlockTypes";
+import { isTraineeShift } from "./lib/crewShiftKinds";
+import { normalizeEventStatus } from "./lib/eventStatus";
 
 function hoursBetween(start: number, end: number) {
   return Number(((end - start) / 3_600_000).toFixed(2));
@@ -85,6 +87,7 @@ export const upsertShifts = mutation({
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(500);
     const existingIds = new Set(existing.map((row) => row._id));
+    const existingById = new Map(existing.map((row) => [row._id, row]));
     for (const shift of args.shifts) {
       if (shift.id && !existingIds.has(shift.id)) {
         throw new Error("Crew shift does not belong to this event.");
@@ -109,10 +112,20 @@ export const upsertShifts = mutation({
       const hours = hoursBetween(shift.startsAt, shift.endsAt);
       const postedToExpense = shift.postedToExpense && !!shift.expenseReportId;
       const userId = shift.userId?.trim() || undefined;
+      // Editors that don't know about trainees (e.g. the invoice crew section)
+      // send the row back without its application link or call time. Keep them,
+      // or the trainee turns into a billed open slot.
+      const previous = shift.id ? existingById.get(shift.id) : undefined;
+      const crewApplicationId =
+        shift.crewApplicationId ?? (userId ? undefined : previous?.crewApplicationId);
+      const callTime = shift.callTime ?? previous?.callTime;
+      const isTrainee = isTraineeShift({ userId, crewApplicationId });
       const timesOverridden = shift.timesOverridden === true ? true : undefined;
       // Open slots: stamp an estimate from global Normal/Lead when the client
       // didn't send one (common when rates were 0 at edit time, or omitted).
-      const estimatedHourlyRateUsd = userId
+      const estimatedHourlyRateUsd = isTrainee
+        ? undefined
+        : userId
         ? shift.estimatedHourlyRateUsd !== undefined && shift.estimatedHourlyRateUsd > 0
           ? shift.estimatedHourlyRateUsd
           : undefined
@@ -130,8 +143,8 @@ export const upsertShifts = mutation({
           role: shift.role.trim(),
           personName: shift.personName?.trim() || undefined,
           userId,
-          crewApplicationId: shift.crewApplicationId,
-          callTime: shift.callTime,
+          crewApplicationId,
+          callTime,
           startsAt: shift.startsAt,
           endsAt: shift.endsAt,
           hours,
@@ -149,8 +162,8 @@ export const upsertShifts = mutation({
           role: shift.role.trim(),
           personName: shift.personName?.trim() || undefined,
           userId,
-          crewApplicationId: shift.crewApplicationId,
-          callTime: shift.callTime,
+          crewApplicationId,
+          callTime,
           startsAt: shift.startsAt,
           endsAt: shift.endsAt,
           hours,
@@ -192,7 +205,11 @@ export const upsertShifts = mutation({
         startsAt: shift.startsAt,
         endsAt: shift.endsAt,
         userId: shift.userId?.trim() || undefined,
-        crewApplicationId: shift.crewApplicationId,
+        crewApplicationId:
+          shift.crewApplicationId ??
+          (shift.userId?.trim() || !shift.id
+            ? undefined
+            : existingById.get(shift.id)?.crewApplicationId),
       })),
       inviteSequence,
     );
@@ -222,8 +239,10 @@ export const deleteUnassignedShifts = mutation({
     );
     // Unlinked includes shifts with no block and shifts whose block was deleted
     // (dangling `scheduleBlockId`) — both are invisible on the timeline.
+    // Trainees span sections on purpose ("entire event", "first 8 hours").
     const unlinked = existing.filter(
-      (row) => !row.scheduleBlockId || !blockIds.has(row.scheduleBlockId),
+      (row) =>
+        !isTraineeShift(row) && (!row.scheduleBlockId || !blockIds.has(row.scheduleBlockId)),
     );
     for (const row of unlinked) {
       await ctx.db.delete(row._id);
@@ -269,5 +288,86 @@ export const getOtForecastForUser = query({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     return await getUserOtForecast(ctx, args.userId, args.rangeStart, args.rangeEnd);
+  },
+});
+
+const CONFLICT_USER_CAP = 80;
+const CONFLICT_LOOKBACK_MS = 24 * 3_600_000;
+
+/**
+ * Other events' shifts for these people that overlap this event's schedule.
+ * The schedule UI checks each section against them to flag double-booking.
+ */
+export const listCrewConflictsForEvent = query({
+  args: {
+    eventId: v.id("events"),
+    userIds: v.array(v.string()),
+  },
+  returns: v.array(
+    v.object({
+      userId: v.string(),
+      eventId: v.id("events"),
+      eventTitle: v.string(),
+      startsAt: v.number(),
+      endsAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) return [];
+
+    const blocks = await ctx.db
+      .query("eventScheduleBlocks")
+      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
+      .take(200);
+    const spanStart = Math.min(event.startAt, ...blocks.map((block) => block.startsAt));
+    const spanEnd = Math.max(event.endAt, ...blocks.map((block) => block.endsAt));
+
+    const userIds = Array.from(new Set(args.userIds.map((id) => id.trim()).filter(Boolean))).slice(
+      0,
+      CONFLICT_USER_CAP,
+    );
+    const perUser = await Promise.all(
+      userIds.map((userId) =>
+        ctx.db
+          .query("eventCrewShifts")
+          .withIndex("by_userId_and_startsAt", (q) =>
+            q
+              .eq("userId", userId)
+              .gte("startsAt", spanStart - CONFLICT_LOOKBACK_MS)
+              .lte("startsAt", spanEnd),
+          )
+          .take(50),
+      ),
+    );
+    const overlapping = perUser
+      .flat()
+      .filter(
+        (shift) =>
+          shift.eventId !== args.eventId && shift.endsAt > spanStart && shift.startsAt < spanEnd,
+      );
+
+    const eventIds = Array.from(new Set(overlapping.map((shift) => shift.eventId)));
+    const otherEvents = new Map(
+      (await Promise.all(eventIds.map((id) => ctx.db.get(id))))
+        .filter((row): row is NonNullable<typeof row> => row !== null)
+        .map((row) => [row._id, row]),
+    );
+
+    return overlapping.flatMap((shift) => {
+      const other = otherEvents.get(shift.eventId);
+      if (!other || normalizeEventStatus(other.status) === "cancelled" || !shift.userId) return [];
+      return [
+        {
+          userId: shift.userId,
+          eventId: shift.eventId,
+          eventTitle: other.title,
+          startsAt: shift.startsAt,
+          endsAt: shift.endsAt,
+        },
+      ];
+    });
   },
 });

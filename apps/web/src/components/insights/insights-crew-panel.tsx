@@ -72,8 +72,8 @@ export function InsightsCrewPanel({ startMs, endMs }: InsightsCrewPanelProps) {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Unconfirmed</CardTitle>
-            <CardDescription>Crewed events incomplete</CardDescription>
+            <CardTitle>Need crew</CardTitle>
+            <CardDescription>Crewed events with open slots</CardDescription>
           </CardHeader>
           <CardContent>
             {fill === undefined ? (
@@ -188,7 +188,7 @@ export function InsightsCrewPanel({ startMs, endMs }: InsightsCrewPanelProps) {
         <Card>
           <CardHeader>
             <CardTitle>Attention aging</CardTitle>
-            <CardDescription>Unconfirmed crewed events vs start</CardDescription>
+            <CardDescription>Crewed events still needing crew vs start</CardDescription>
           </CardHeader>
           <CardContent>
             {attention === undefined ? (
@@ -196,7 +196,7 @@ export function InsightsCrewPanel({ startMs, endMs }: InsightsCrewPanelProps) {
             ) : (
               <div className="grid gap-3 sm:grid-cols-3">
                 <div>
-                  <p className="text-xs text-muted-foreground">Unconfirmed</p>
+                  <p className="text-xs text-muted-foreground">Need crew</p>
                   <p className="text-lg font-semibold tabular-nums">{attention.unconfirmedEvents}</p>
                 </div>
                 <div>

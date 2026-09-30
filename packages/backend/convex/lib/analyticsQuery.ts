@@ -1,5 +1,4 @@
 import { v } from "convex/values";
-import type { Doc } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { requireAdmin, requireArborInternalContext } from "./auth";
 
@@ -38,18 +37,4 @@ export async function loadEventsFromNow(ctx: QueryCtx, startMs: number, endMs: n
   return loadEventsInRange(ctx, startMs, endMs);
 }
 
-export function isShiftFilled(shift: Doc<"eventCrewShifts">) {
-  return Boolean(shift.userId?.trim());
-}
-
-export function computeShiftStats(shifts: Doc<"eventCrewShifts">[]) {
-  const totalShifts = shifts.length;
-  const filledShifts = shifts.filter(isShiftFilled).length;
-  const isCrewConfirmed = totalShifts > 0 && filledShifts === totalShifts;
-  return {
-    totalShifts,
-    filledShifts,
-    unfilledShifts: totalShifts - filledShifts,
-    isCrewConfirmed,
-  };
-}
+export { computeShiftStats, isShiftFilled } from "./crewShiftKinds";

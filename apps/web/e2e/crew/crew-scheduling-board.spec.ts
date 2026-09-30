@@ -33,7 +33,7 @@ test.describe("crew scheduling board", () => {
 
     await page.goto("/dashboard/events/crew-scheduling");
     await expect(page.getByText("Date range").first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Pending by crew")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Waiting on answers")).toBeVisible({ timeout: 30_000 });
 
     // `seedCrewedEventWithSchedule` lands exactly 16 days out, past the default
     // 2-week window. Bracket that single day so the board stays short even as
@@ -41,16 +41,16 @@ test.describe("crew scheduling board", () => {
     await page.locator('input[type="date"]').first().fill(toDateInput(15));
     await page.locator('input[type="date"]').nth(1).fill(toDateInput(17));
 
-    // Seeded events have schedule blocks but no shift slots, so they are not
-    // "unconfirmed" — clear the filter to list every crewed event in range.
-    await page.getByText("Unconfirmed only").click();
+    // Seeded events have sections but no slots yet — clear the filter to list
+    // every crewed event in range.
+    await page.getByText("Needs crew only").click();
     await expect(page.locator('input[type="checkbox"]').first()).not.toBeChecked();
 
-    const card = page.locator("div.rounded-md.border").filter({ hasText: seeded.title }).first();
+    const card = page.getByTestId("crew-board-event").filter({ hasText: seeded.title }).first();
     await expect(card).toBeVisible({ timeout: 30_000 });
     await expect(card.getByText(/Yes 1/)).toBeVisible({ timeout: 20_000 });
 
-    await card.getByRole("button", { name: "Show responses" }).click();
+    await card.getByRole("button", { name: "Show answers" }).click();
     await expect(card.getByText(e2eEnv.crewName).first()).toBeVisible({ timeout: 20_000 });
 
     await card.getByRole("link", { name: "Assign crew" }).click();

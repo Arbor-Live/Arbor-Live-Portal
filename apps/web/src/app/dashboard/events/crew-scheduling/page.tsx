@@ -8,7 +8,7 @@ export default function CrewSchedulingPage() {
       <PageHeader
         back={{ href: "/dashboard/events", label: "Events" }}
         title="Crew Scheduling"
-        description="Crewed events in your selected date range (default: next two weeks), with availability response counts from team-matched crew."
+        description="Which crewed events still need crew, section by section, and who has said they can work them."
       />
       <ArborOnlyGuard>
         <AdminOnlyGuard>

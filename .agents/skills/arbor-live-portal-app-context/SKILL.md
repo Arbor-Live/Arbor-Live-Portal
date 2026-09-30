@@ -83,6 +83,12 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
   - `eventCrewShifts` has optional `scheduleBlockId` linking each shift to a schedule block.
   - Personnel are managed per block in Schedule UI.
 - Treat legacy unassigned shifts safely (do not crash if no `scheduleBlockId`).
+- A section's headcount is its slot count. Staffing UI is the shared
+  `components/events/crew-staffing/crew-staffing-board.tsx` (Schedule tab and
+  invoice crew section); availability is per section (see `docs/domain-guide.md`).
+- Trainee shifts (`crewApplicationId`, no `userId`) are never slots: use
+  `lib/crew-shift-kinds.ts` (web) / `convex/lib/crewShiftKinds.ts` (backend) for
+  open-slot, staffing, cost, and invoice logic.
 
 ### Event Costs (No Generated Expense Reports)
 - Event costs are direct fields on `events`:

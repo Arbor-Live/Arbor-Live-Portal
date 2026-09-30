@@ -26,7 +26,12 @@ import { resolveUserStatus } from "./lib/userStatus";
 import { loadAllAdminProfiles } from "./lib/userProfiles";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { loadEventHostDisplay } from "./lib/hostOrgs";
-import { isSectionBlockType } from "./lib/scheduleBlockTypes";
+import {
+  crewSections,
+  responseScheduleChanged,
+  sectionFingerprint,
+} from "./lib/crewAvailability";
+import { computeShiftStats, isTraineeShift } from "./lib/crewShiftKinds";
 
 
 const crewAvailabilityResponseStatusValue = v.union(
@@ -38,6 +43,12 @@ const crewAvailabilityResponseStatusValue = v.union(
 
 const partialWindowValue = v.object({
   scheduleBlockId: v.optional(v.id("eventScheduleBlocks")),
+  startsAt: v.number(),
+  endsAt: v.number(),
+  notes: v.optional(v.string()),
+});
+
+const busyWindowValue = v.object({
   startsAt: v.number(),
   endsAt: v.number(),
   notes: v.optional(v.string()),
@@ -57,8 +68,10 @@ const responsePersonValue = v.object({
   image: v.optional(v.string()),
   responseStatus: crewAvailabilityResponseStatusValue,
   partialWindows: v.optional(v.array(partialWindowValue)),
+  busyWindows: v.optional(v.array(busyWindowValue)),
   notes: v.optional(v.string()),
   respondedAt: v.number(),
+  scheduleChanged: v.boolean(),
 });
 
 const scheduleBlockSummaryValue = v.object({
@@ -70,7 +83,49 @@ const scheduleBlockSummaryValue = v.object({
   notes: v.optional(v.string()),
 });
 
+const sectionStaffingValue = v.object({
+  _id: v.id("eventScheduleBlocks"),
+  blockType: v.string(),
+  label: v.string(),
+  startsAt: v.number(),
+  endsAt: v.number(),
+  /** Staffing slots on the section (trainees excluded). */
+  slots: v.number(),
+  filled: v.number(),
+});
+
 type AuthUserRecord = AuthUser;
+
+function sectionStaffing(
+  blocks: Doc<"eventScheduleBlocks">[],
+  shifts: Doc<"eventCrewShifts">[],
+) {
+  return crewSections(blocks).map((block) => {
+    const stats = computeShiftStats(
+      shifts.filter((shift) => shift.scheduleBlockId === block._id),
+    );
+    return {
+      _id: block._id,
+      blockType: block.blockType,
+      label: block.label,
+      startsAt: block.startsAt,
+      endsAt: block.endsAt,
+      slots: stats.totalShifts,
+      filled: stats.filledShifts,
+    };
+  });
+}
+
+function toSectionSummary(block: Doc<"eventScheduleBlocks">) {
+  return {
+    _id: block._id,
+    blockType: block.blockType,
+    label: block.label,
+    startsAt: block.startsAt,
+    endsAt: block.endsAt,
+    notes: block.notes,
+  };
+}
 
 function weeksToMs(weeks: number) {
   return weeks * 7 * 24 * 60 * 60 * 1000;
@@ -113,13 +168,6 @@ function eligibleCrewProfilesForEvent(
   );
 }
 
-function computeShiftStats(shifts: Doc<"eventCrewShifts">[]) {
-  const totalShifts = shifts.length;
-  const filledShifts = shifts.filter((shift) => Boolean(shift.userId?.trim())).length;
-  const isCrewConfirmed = totalShifts > 0 && filledShifts === totalShifts;
-  return { totalShifts, filledShifts, unfilledShifts: totalShifts - filledShifts, isCrewConfirmed };
-}
-
 function aggregateResponses(responses: Doc<"eventCrewAvailabilityResponses">[]) {
   const counts = {
     yes: 0,
@@ -139,6 +187,7 @@ function aggregateResponses(responses: Doc<"eventCrewAvailabilityResponses">[]) 
 
 function buildResponsePeople(
   responses: Doc<"eventCrewAvailabilityResponses">[],
+  blocks: Doc<"eventScheduleBlocks">[],
   userByKey: Map<string, AuthUserRecord>,
   imageByUserId: Map<string, string | undefined>,
   options?: { includePrivateStatuses?: boolean; excludeUserIds?: Set<string> },
@@ -157,8 +206,10 @@ function buildResponsePeople(
       ...toUserSummary(response.userId, userByKey, imageByUserId),
       responseStatus: response.responseStatus,
       partialWindows: response.partialWindows,
+      busyWindows: response.busyWindows,
       notes: response.notes,
       respondedAt: response.respondedAt,
+      scheduleChanged: responseScheduleChanged(response, blocks),
     }));
 }
 
@@ -226,6 +277,8 @@ export const listForAdminOverview = query({
         pending: v.number(),
         eligibleCrew: v.number(),
       }),
+      sections: v.array(sectionStaffingValue),
+      traineeCount: v.number(),
       responders: v.array(responsePersonValue),
       assignedCrew: v.array(userSummaryValue),
       pendingCrew: v.array(userSummaryValue),
@@ -244,19 +297,25 @@ export const listForAdminOverview = query({
 
     const bundles = await Promise.all(
       upcomingCrewed.map(async (event) => {
-        const shifts = await ctx.db
-          .query("eventCrewShifts")
-          .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-          .take(500);
-        const responses = await ctx.db
-          .query("eventCrewAvailabilityResponses")
-          .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-          .take(500);
+        const [blocks, shifts, responses] = await Promise.all([
+          ctx.db
+            .query("eventScheduleBlocks")
+            .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", event._id))
+            .take(200),
+          ctx.db
+            .query("eventCrewShifts")
+            .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+            .take(500),
+          ctx.db
+            .query("eventCrewAvailabilityResponses")
+            .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+            .take(500),
+        ]);
         const eligibleProfiles = eligibleCrewProfilesForEvent(
           event.teamsInterested,
           crewProfiles,
         );
-        return { event, shifts, responses, eligibleProfiles };
+        return { event, blocks, shifts, responses, eligibleProfiles };
       }),
     );
 
@@ -275,7 +334,7 @@ export const listForAdminOverview = query({
     const imageByUserId = await buildUserProfileImageByUserId(ctx, allUserIds, userByKey);
 
     const rows = await Promise.all(
-      bundles.map(async ({ event, shifts, responses, eligibleProfiles }) => {
+      bundles.map(async ({ event, blocks, shifts, responses, eligibleProfiles }) => {
       const shiftStats = computeShiftStats(shifts);
       const responseCounts = aggregateResponses(responses);
       const eligibleCrew = eligibleProfiles.length;
@@ -311,11 +370,12 @@ export const listForAdminOverview = query({
         ...shiftStats,
         responseCounts: {
           ...responseCounts,
-          onlyIfNecessary: responseCounts.onlyIfNecessary,
           pending,
           eligibleCrew,
         },
-        responders: buildResponsePeople(responses, userByKey, imageByUserId, {
+        sections: sectionStaffing(blocks, shifts),
+        traineeCount: shifts.filter(isTraineeShift).length,
+        responders: buildResponsePeople(responses, blocks, userByKey, imageByUserId, {
           includePrivateStatuses: true,
         }),
         assignedCrew: assignedUserIds.map((userId) =>
@@ -363,10 +423,21 @@ export const listForCrewMember = query({
         v.object({
           responseStatus: crewAvailabilityResponseStatusValue,
           partialWindows: v.optional(v.array(partialWindowValue)),
+          busyWindows: v.optional(v.array(busyWindowValue)),
           notes: v.optional(v.string()),
           respondedAt: v.number(),
+          scheduleChanged: v.boolean(),
         }),
         v.null(),
+      ),
+      /** Sections this crew member is already on. */
+      myShifts: v.array(
+        v.object({
+          scheduleBlockId: v.optional(v.id("eventScheduleBlocks")),
+          role: v.string(),
+          startsAt: v.number(),
+          endsAt: v.number(),
+        }),
       ),
       needsResponse: v.boolean(),
     }),
@@ -447,20 +518,9 @@ export const listForCrewMember = query({
         teamsInterested: event.teamsInterested,
         startAt: event.startAt,
         endAt: event.endAt,
-        scheduleBlocks: blocks
-          // Crew respond per section; soundchecks and sets are moments inside one.
-          .filter((block) => isSectionBlockType(block.blockType))
-          .sort((a, b) => a.startsAt - b.startsAt)
-          .map((block) => ({
-            _id: block._id,
-            blockType: block.blockType,
-            label: block.label,
-            startsAt: block.startsAt,
-            endsAt: block.endsAt,
-            notes: block.notes,
-          })),
+        scheduleBlocks: crewSections(blocks).map(toSectionSummary),
         assignedCrew: assignedUserIds.map((id) => toUserSummary(id, userByKey, imageByUserId)),
-        interestedCrew: buildResponsePeople(responses, userByKey, imageByUserId, {
+        interestedCrew: buildResponsePeople(responses, blocks, userByKey, imageByUserId, {
           excludeUserIds: new Set(assignedUserIds),
         }),
         unavailableCounts: {
@@ -471,10 +531,21 @@ export const listForCrewMember = query({
           ? {
               responseStatus: myResponseRow.responseStatus,
               partialWindows: myResponseRow.partialWindows,
+              busyWindows: myResponseRow.busyWindows,
               notes: myResponseRow.notes,
               respondedAt: myResponseRow.respondedAt,
+              scheduleChanged: responseScheduleChanged(myResponseRow, blocks),
             }
           : null,
+        myShifts: shifts
+          .filter((shift) => shift.userId?.trim() === userId)
+          .sort((a, b) => a.startsAt - b.startsAt)
+          .map((shift) => ({
+            scheduleBlockId: shift.scheduleBlockId,
+            role: shift.role,
+            startsAt: shift.startsAt,
+            endsAt: shift.endsAt,
+          })),
         needsResponse: !myResponseRow,
       };
     }),
@@ -482,15 +553,17 @@ export const listForCrewMember = query({
   },
 });
 
-const assignableResponderValue = v.object({
+const eventResponderValue = v.object({
   userId: v.string(),
   name: v.string(),
   email: v.string(),
   image: v.optional(v.string()),
   responseStatus: crewAvailabilityResponseStatusValue,
   partialWindows: v.optional(v.array(partialWindowValue)),
+  busyWindows: v.optional(v.array(busyWindowValue)),
   notes: v.optional(v.string()),
   respondedAt: v.number(),
+  scheduleChanged: v.boolean(),
   isAssigned: v.boolean(),
 });
 
@@ -504,6 +577,10 @@ const ASSIGNMENT_PRIORITY: Record<
   no: 99,
 };
 
+/**
+ * Every availability response for one event (including "no", so the schedule
+ * UI can warn before someone who said no is put on a shift).
+ */
 export const getSummaryForEvent = query({
   args: {
     eventId: v.id("events"),
@@ -520,10 +597,8 @@ export const getSummaryForEvent = query({
         onlyIfNecessary: v.number(),
         no: v.number(),
         responded: v.number(),
-        pending: v.number(),
-        eligibleCrew: v.number(),
       }),
-      assignableResponders: v.array(assignableResponderValue),
+      responders: v.array(eventResponderValue),
     }),
     v.null(),
   ),
@@ -542,20 +617,19 @@ export const getSummaryForEvent = query({
         .filter((userId): userId is string => Boolean(userId)),
     );
 
-    const assignableResponseRows = bundle.responses.filter(
-      (response) => response.responseStatus !== "no",
-    );
-    const assignableUserIds = assignableResponseRows.map((response) => response.userId);
-    const userByKey = await findAuthUsersByIds(ctx, assignableUserIds);
-    const imageByUserId = await buildUserProfileImageByUserId(ctx, assignableUserIds, userByKey);
+    const responderUserIds = bundle.responses.map((response) => response.userId);
+    const userByKey = await findAuthUsersByIds(ctx, responderUserIds);
+    const imageByUserId = await buildUserProfileImageByUserId(ctx, responderUserIds, userByKey);
 
-    const assignableResponders = assignableResponseRows
+    const responders = bundle.responses
       .map((response) => ({
         ...toUserSummary(response.userId, userByKey, imageByUserId),
         responseStatus: response.responseStatus,
         partialWindows: response.partialWindows,
+        busyWindows: response.busyWindows,
         notes: response.notes,
         respondedAt: response.respondedAt,
+        scheduleChanged: responseScheduleChanged(response, bundle.blocks),
         isAssigned: assignedUserIds.has(response.userId),
       }))
       .sort((a, b) => {
@@ -565,27 +639,67 @@ export const getSummaryForEvent = query({
         return a.respondedAt - b.respondedAt;
       });
 
-    // Eligible/pending totals come from the crew-scheduling overview. Scanning
-    // every active crew profile here routinely blew the 1s budget on CI and
-    // blocked the assignable-responder list the schedule UI actually needs.
+    return { ...shiftStats, responseCounts, responders };
+  },
+});
+
+/**
+ * Team-matched crew who haven't answered for this event. Kept apart from
+ * `getSummaryForEvent`: scanning every crew profile is the slow part, and the
+ * schedule UI shouldn't wait on it to show responders.
+ */
+export const listPendingCrewForEvent = query({
+  args: { eventId: v.id("events") },
+  returns: v.union(
+    v.object({ eligibleCrew: v.number(), pendingCrew: v.array(userSummaryValue) }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const event = await ctx.db.get(args.eventId);
+    if (!event || !isCrewedEventType(event.eventType)) return null;
+
+    const [crewProfiles, responses] = await Promise.all([
+      getActiveCrewProfiles(ctx),
+      ctx.db
+        .query("eventCrewAvailabilityResponses")
+        .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+        .take(500),
+    ]);
+    const eligible = eligibleCrewProfilesForEvent(event.teamsInterested, crewProfiles);
+    const respondedUserIds = new Set(responses.map((response) => response.userId));
+    const pendingUserIds = Array.from(
+      new Set(
+        eligible
+          .map((profile) => profile.userId?.trim())
+          .filter((userId): userId is string => Boolean(userId) && !respondedUserIds.has(userId)),
+      ),
+    );
+    const userByKey = await findAuthUsersByIds(ctx, pendingUserIds);
+    const imageByUserId = await buildUserProfileImageByUserId(ctx, pendingUserIds, userByKey);
     return {
-      ...shiftStats,
-      responseCounts: {
-        ...responseCounts,
-        onlyIfNecessary: responseCounts.onlyIfNecessary,
-        pending: 0,
-        eligibleCrew: responseCounts.responded,
-      },
-      assignableResponders,
+      eligibleCrew: eligible.length,
+      pendingCrew: pendingUserIds
+        .map((userId) => toUserSummary(userId, userByKey, imageByUserId))
+        .sort((a, b) => a.name.localeCompare(b.name)),
     };
   },
 });
+
+function assertWindowOrder(windows: Array<{ startsAt: number; endsAt: number }>, label: string) {
+  for (const window of windows) {
+    if (window.endsAt <= window.startsAt) {
+      throw new Error(`${label} must end after they start.`);
+    }
+  }
+}
 
 export const submitResponse = mutation({
   args: {
     eventId: v.id("events"),
     responseStatus: crewAvailabilityResponseStatusValue,
     partialWindows: v.optional(v.array(partialWindowValue)),
+    busyWindows: v.optional(v.array(busyWindowValue)),
     notes: v.optional(v.string()),
   },
   returns: v.id("eventCrewAvailabilityResponses"),
@@ -617,24 +731,27 @@ export const submitResponse = mutation({
       throw new Error("This event is not in your crew team scope.");
     }
 
-    if (args.responseStatus === "partial") {
+    const blocks = await ctx.db
+      .query("eventScheduleBlocks")
+      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
+      .take(200);
+    const blockIds = new Set(blocks.map((block) => block._id));
+
+    const isPartial = args.responseStatus === "partial";
+    if (isPartial) {
       const windows = args.partialWindows ?? [];
       if (windows.length === 0) {
-        throw new Error("Partial availability requires at least one time window.");
+        throw new Error("Pick at least one section you can work.");
       }
+      assertWindowOrder(windows, "Available times");
       for (const window of windows) {
-        if (window.endsAt <= window.startsAt) {
-          throw new Error("Partial availability windows must have end after start.");
-        }
-        if (window.scheduleBlockId) {
-          const block = await ctx.db.get(window.scheduleBlockId);
-          if (!block || block.eventId !== args.eventId) {
-            throw new Error("Invalid schedule block for partial availability.");
-          }
+        if (window.scheduleBlockId && !blockIds.has(window.scheduleBlockId)) {
+          throw new Error("That section is no longer on this event. Reload and try again.");
         }
       }
-    } else if (args.partialWindows?.length) {
-      throw new Error("Partial windows are only allowed for partial responses.");
+      assertWindowOrder(args.busyWindows ?? [], "Busy times");
+    } else if (args.partialWindows?.length || args.busyWindows?.length) {
+      throw new Error("Sections and busy times only apply when you can work part of the event.");
     }
 
     const now = Date.now();
@@ -645,18 +762,22 @@ export const submitResponse = mutation({
       )
       .unique();
 
+    const busyWindows = isPartial && args.busyWindows?.length ? args.busyWindows : undefined;
     const payload = {
       eventId: args.eventId,
       userId,
       responseStatus: args.responseStatus,
-      partialWindows: args.responseStatus === "partial" ? args.partialWindows : undefined,
-      notes: args.notes?.trim() || undefined,
+      ...(isPartial ? { partialWindows: args.partialWindows } : {}),
+      ...(busyWindows ? { busyWindows } : {}),
+      ...(args.notes?.trim() ? { notes: args.notes.trim() } : {}),
+      scheduleFingerprint: sectionFingerprint(blocks),
       respondedAt: now,
       updatedAt: now,
     };
 
     if (existing) {
-      await ctx.db.patch(existing._id, payload);
+      // Replace, not patch: switching away from "partial" must drop old windows.
+      await ctx.db.replace(existing._id, { ...payload, createdAt: existing.createdAt });
       return existing._id;
     }
 

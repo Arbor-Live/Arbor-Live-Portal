@@ -5,7 +5,10 @@ import { useState } from "react";
 import { useQuery } from "convex/react";
 import { UsersIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
-import { getDefaultAdminSchedulingRange } from "@/lib/crew-availability";
+import {
+  ADMIN_CREW_SCHEDULING_DEFAULT_WEEKS,
+  getDefaultAdminSchedulingRange,
+} from "@/lib/crew-availability";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,16 +37,16 @@ export function AdminCrewingAttentionWidget() {
         {rows === undefined ? (
           <Skeleton className="h-16 w-full" />
         ) : rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">All upcoming crewed events are fully confirmed.</p>
+          <p className="text-sm text-muted-foreground">Every upcoming crewed event is fully staffed.</p>
         ) : (
           <>
             <p className="text-xs text-muted-foreground">
-              {rows.length} event{rows.length === 1 ? "" : "s"} need attention in the next two weeks.
+              {rows.length} event{rows.length === 1 ? "" : "s"} need crew in the next {ADMIN_CREW_SCHEDULING_DEFAULT_WEEKS} weeks.
             </p>
             {rows.slice(0, 5).map((event) => (
               <Link
                 key={event._id}
-                href={`/dashboard/events/${event._id}`}
+                href={`/dashboard/events/${event._id}/schedule`}
                 className="block rounded-md border px-3 py-2 text-sm hover:bg-muted/50"
               >
                 <p className="font-medium">{event.title}</p>
@@ -52,9 +55,10 @@ export function AdminCrewingAttentionWidget() {
                   {event.venueName ? ` · ${event.venueName}` : ""}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {event.unfilledShifts} open shift{event.unfilledShifts === 1 ? "" : "s"} ·{" "}
-                  {event.responseCounts.pending} pending response
-                  {event.responseCounts.pending === 1 ? "" : "s"}
+                  {event.totalShifts === 0
+                    ? "No crew slots yet"
+                    : `${event.unfilledShifts} open slot${event.unfilledShifts === 1 ? "" : "s"}`}{" "}
+                  · waiting on {event.responseCounts.pending}
                 </p>
               </Link>
             ))}

@@ -1,5 +1,6 @@
 import {
   formatDateTime,
+  formatTime,
   pacificDateKey,
   pacificDateTimeInputToMs,
   pacificEndOfDayMs,
@@ -9,9 +10,11 @@ import {
 
 export type CrewAvailabilityResponseStatus = "yes" | "partial" | "only_if_necessary" | "no";
 
+/** Mirrors `lib/crewTeams.ts`: the inbox, nav badge, and weekly digest all use it. */
 export const DEFAULT_AVAILABILITY_WEEKS = 3;
 export const EXTENDED_AVAILABILITY_WEEKS = 12;
-export const ADMIN_CREW_SCHEDULING_DEFAULT_WEEKS = 2;
+/** The admin board opens on the same window crew are asked about. */
+export const ADMIN_CREW_SCHEDULING_DEFAULT_WEEKS = DEFAULT_AVAILABILITY_WEEKS;
 
 /** Calendar date (`YYYY-MM-DD`) in portal timezone. */
 export function toLocalDateInput(date: Date | number) {
@@ -77,7 +80,7 @@ export function formatCrewResponseLabel(status: CrewAvailabilityResponseStatus):
     case "partial":
       return "Partial";
     case "only_if_necessary":
-      return "Only if necessary";
+      return "Backup";
     case "no":
       return "No";
   }
@@ -155,4 +158,121 @@ export function requireLocalDateTimeInputMs(value: string, label = "date/time") 
   const ms = localDateTimeInputToMs(value);
   if (ms == null) throw new Error(`Invalid ${label}.`);
   return ms;
+}
+
+export type TimeWindow = { startsAt: number; endsAt: number };
+
+export type SectionForAvailability = TimeWindow & { id?: string };
+
+export type ResponderAvailability = {
+  responseStatus: CrewAvailabilityResponseStatus;
+  partialWindows?: Array<TimeWindow & { scheduleBlockId?: string; notes?: string }>;
+  busyWindows?: Array<TimeWindow & { notes?: string }>;
+};
+
+/**
+ * How well someone's answer covers one section, best first:
+ * available → part (some of it) → backup → pending (no answer) → unavailable.
+ */
+export type SectionAvailabilityLevel = "available" | "part" | "backup" | "pending" | "unavailable";
+
+export const SECTION_AVAILABILITY_RANK: Record<SectionAvailabilityLevel, number> = {
+  available: 0,
+  part: 1,
+  backup: 2,
+  pending: 3,
+  unavailable: 4,
+};
+
+export function formatTimeWindow(window: TimeWindow) {
+  return `${formatTime(window.startsAt)}–${formatTime(window.endsAt)}`;
+}
+
+function overlapMs(a: TimeWindow, b: TimeWindow) {
+  return Math.max(0, Math.min(a.endsAt, b.endsAt) - Math.max(a.startsAt, b.startsAt));
+}
+
+function busyDetail(windows: Array<TimeWindow & { notes?: string }>) {
+  return windows
+    .map((window) => {
+      const note = window.notes?.trim();
+      return `Busy ${formatTimeWindow(window)}${note ? ` (${note})` : ""}`;
+    })
+    .join(", ");
+}
+
+export function sectionAvailability(
+  responder: ResponderAvailability | undefined,
+  section: SectionForAvailability,
+): { level: SectionAvailabilityLevel; detail?: string } {
+  if (!responder) return { level: "pending" };
+  switch (responder.responseStatus) {
+    case "no":
+      return { level: "unavailable", detail: "Said no" };
+    case "only_if_necessary":
+      return { level: "backup", detail: "Only if needed" };
+    case "yes":
+      return { level: "available" };
+    case "partial":
+      break;
+  }
+
+  const sectionMs = section.endsAt - section.startsAt;
+  const busy = (responder.busyWindows ?? []).filter((window) => overlapMs(window, section) > 0);
+  if (busy.some((window) => overlapMs(window, section) >= sectionMs)) {
+    return { level: "unavailable", detail: busyDetail(busy) };
+  }
+
+  const windows = responder.partialWindows ?? [];
+  const picked =
+    section.id !== undefined && windows.some((window) => window.scheduleBlockId === section.id);
+  if (picked) {
+    return busy.length > 0
+      ? { level: "part", detail: busyDetail(busy) }
+      : { level: "available" };
+  }
+
+  // Custom windows (older answers, or events without sections at answer time).
+  const covered = windows
+    .filter((window) => !window.scheduleBlockId)
+    .reduce((sum, window) => sum + overlapMs(window, section), 0);
+  if (covered <= 0) return { level: "unavailable", detail: "Not this section" };
+  if (covered >= sectionMs && busy.length === 0) return { level: "available" };
+  const free = windows
+    .filter((window) => !window.scheduleBlockId && overlapMs(window, section) > 0)
+    .map((window) => `Free ${formatTimeWindow(window)}`)
+    .join(", ");
+  return { level: "part", detail: [free, busyDetail(busy)].filter(Boolean).join(" · ") };
+}
+
+/**
+ * Sections left after busy times: a section any busy window overlaps is
+ * unchecked by default (crew can re-check it if they can still do part).
+ */
+export function sectionsClearOfBusy<T extends TimeWindow & { _id: string }>(
+  sections: T[],
+  busyWindows: TimeWindow[],
+) {
+  return sections
+    .filter((section) => !busyWindows.some((window) => overlapMs(window, section) > 0))
+    .map((section) => section._id);
+}
+
+/** The parts of `span` not covered by any busy window (for events with no sections yet). */
+export function freeWindowsAround(span: TimeWindow, busyWindows: TimeWindow[]): TimeWindow[] {
+  const sorted = [...busyWindows]
+    .filter((window) => overlapMs(window, span) > 0)
+    .sort((a, b) => a.startsAt - b.startsAt);
+  const free: TimeWindow[] = [];
+  let cursor = span.startsAt;
+  for (const window of sorted) {
+    if (window.startsAt > cursor) free.push({ startsAt: cursor, endsAt: window.startsAt });
+    cursor = Math.max(cursor, window.endsAt);
+  }
+  if (cursor < span.endsAt) free.push({ startsAt: cursor, endsAt: span.endsAt });
+  return free;
+}
+
+export function windowsOverlap(a: TimeWindow, b: TimeWindow) {
+  return overlapMs(a, b) > 0;
 }

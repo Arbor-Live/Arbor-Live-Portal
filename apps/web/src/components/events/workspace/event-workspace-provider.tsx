@@ -55,6 +55,7 @@ import {
   type EventDraft,
   type ShiftDraft,
 } from "@/components/events/workspace/event-draft";
+import { isTraineeShift } from "@/lib/crew-shift-kinds";
 import { isSectionBlockType } from "@/lib/schedule-block-types";
 
 type SavedSchedule = { blocks: TimelineBlockDraft[]; shifts: ShiftDraft[] };
@@ -232,7 +233,9 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
   // stale `scheduleBlockId` left behind when its block was deleted by a backend
   // path that does not relink shifts (e.g. series block regeneration).
   /** Crew belong to sections; a shift on a moment (soundcheck, set, …) counts as unlinked. */
+  /** Staffing shifts with no section. Trainees span sections on purpose, so they never count. */
   function isShiftUnlinked(shift: ShiftDraft) {
+    if (isTraineeShift(shift)) return false;
     return !blocks.some(
       (block) => isSectionBlockType(block.blockType) && shiftBelongsToBlock(shift, block),
     );
@@ -501,8 +504,9 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
 
   async function removeUnlinkedShifts() {
     const shouldDelete = await confirm({
-      title: "Delete unassigned legacy shifts?",
-      description: "Delete all legacy shifts that are not assigned to any schedule block?",
+      title: "Delete unlinked shifts?",
+      description:
+        "Deletes crew shifts that aren't on any section of the run of show. Trainees stay.",
       destructive: true,
       confirmLabel: "Delete shifts",
     });
@@ -517,15 +521,17 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
         const saved = JSON.parse(prev) as SavedSchedule;
         return JSON.stringify({
           blocks: saved.blocks,
-          shifts: saved.shifts.filter((shift) =>
-            saved.blocks.some(
-              (block) => isSectionBlockType(block.blockType) && shiftBelongsToBlock(shift, block),
-            ),
+          shifts: saved.shifts.filter(
+            (shift) =>
+              isTraineeShift(shift) ||
+              saved.blocks.some(
+                (block) => isSectionBlockType(block.blockType) && shiftBelongsToBlock(shift, block),
+              ),
           ),
         });
       });
       notify.success(
-        `Deleted ${result.deletedCount} legacy unassigned shift${result.deletedCount === 1 ? "" : "s"}.`,
+        `Deleted ${result.deletedCount} unlinked shift${result.deletedCount === 1 ? "" : "s"}.`,
       );
     } catch (error) {
       notify.error(getConvexErrorMessage(error));

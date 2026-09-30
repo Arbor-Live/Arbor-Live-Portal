@@ -181,6 +181,30 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   maps crew specialties onto these needs; events with no needs set are visible
   to all crew. The retired umbrella need `Marketing` was migrated to
   `Promotion`, and poster work now keys off `Design`.
+- **Crew availability** (`eventCrewAvailabilityResponses`, My Availability):
+  crew answer per event with one tap — *I can work it all* (`yes`), *Some of
+  it* (`partial`), *Backup only* (`only_if_necessary`), *Can't make it* (`no`).
+  *Some of it* ticks the Run of Show **sections** they can work (stored as
+  `partialWindows` with `scheduleBlockId`) and optional **busy times**
+  (`busyWindows`, "class 7–9pm"); a busy time unticks the sections it
+  overlaps. With no sections yet, the free time around busy times is saved.
+  Each answer stores a `scheduleFingerprint` of the sections; when the sections
+  change the answer shows as "schedule changed" to crew and admins
+  (`lib/crewAvailability.ts`). The inbox, nav badge, weekly digest, and admin
+  board all use the same window (`DEFAULT_AVAILABILITY_WEEKS`, 3 weeks).
+- **Crew staffing** (`CrewStaffingBoard`, used on the event Schedule tab and the
+  invoice crew section): a section's **headcount is its slot count** (open slots
+  bill on quotes), set with the − / + stepper. Each section offers the people
+  who can work it (available → part → backup), flags anyone booked on an
+  overlapping event (`eventCrew.listCrewConflictsForEvent`), and the person
+  picker shows each person's availability for that section. *Fill open slots*
+  only fills existing open slots with people available for that section and
+  free elsewhere; it never adds slots or touches trainees. An event is **fully
+  staffed** when every slot has someone (`lib/crewShiftKinds.ts`).
+- **Trainees** (shifts with `crewApplicationId` and no `userId`) shadow: they
+  never fill a slot, never count toward staffing, crew cost, or invoice crew
+  lines, and are never removed by "Delete unlinked shifts". Editors that don't
+  send `crewApplicationId` back keep it (`eventCrew.upsertShifts`).
 - **Timezone:** the whole portal uses Pacific Time (`America/Los_Angeles` /
   `PORTAL_TIMEZONE` in `@arbor/format`). Display, input hydration/save, day
   keys, and FullCalendar grids must go through that package (or
