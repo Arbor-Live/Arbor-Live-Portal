@@ -200,6 +200,13 @@ describe("shiftsToTemplates for copying a day", () => {
     expect(template).not.toHaveProperty("timesOverridden");
     expect(template).not.toHaveProperty("userId");
   });
+
+  it("never captures a trainee (an applicant shadowing one day)", () => {
+    const trainee = { ...staffed, userId: undefined, crewApplicationId: "application-1" };
+    expect(
+      shiftsToTemplates([trainee], blocks, blockTemplates, start, { copyingDay: true }),
+    ).toEqual([]);
+  });
 });
 
 describe("shared day fields on an 'all days' edit", () => {

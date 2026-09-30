@@ -8,6 +8,7 @@ import {
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { syncEventCrewCostUsd } from "./crewCost";
+import { isTraineeShift } from "./crewShiftKinds";
 import { detachInvoiceFromAdditionalLinks } from "./eventInvoiceLinks";
 import {
   normalizeEventStatus,
@@ -97,6 +98,7 @@ export function shiftsToTemplates(
     role: string;
     scheduleBlockId?: Id<"eventScheduleBlocks">;
     userId?: string;
+    crewApplicationId?: unknown;
     startsAt: number;
     endsAt: number;
     hours?: number;
@@ -122,6 +124,8 @@ export function shiftsToTemplates(
   }
 
   return shifts
+    // Trainees shadow one day; they're never part of the crew shape.
+    .filter((shift) => !isTraineeShift(shift))
     .filter((shift) => options.copyingDay || !shift.userId?.trim())
     .slice()
     .sort((a, b) => a.startsAt - b.startsAt)
@@ -224,7 +228,9 @@ export async function replaceEmptyShiftsFromTemplates(
     .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
     .take(500);
   for (const shift of existingShifts) {
-    if (!shift.userId?.trim()) {
+    // Open staffing slots are the template's; a trainee (an applicant
+    // shadowing this day) isn't a slot and stays.
+    if (!shift.userId?.trim() && !isTraineeShift(shift)) {
       await ctx.db.delete(shift._id);
     }
   }
