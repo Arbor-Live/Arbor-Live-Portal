@@ -187,6 +187,8 @@ export async function buildInvoiceDocumentData(
       clientEmail: invoice.clientEmail,
       clientPhone: invoice.clientPhone,
       clientApprovalStatus: invoice.clientApprovalStatus,
+      isFinal: Boolean(invoice.billingFinalizedAt),
+      paymentOpenEarly: Boolean(invoice.paymentOpenedEarlyAt),
       digitalQuoteUrl,
       ...totals,
       notes: invoice.notes,

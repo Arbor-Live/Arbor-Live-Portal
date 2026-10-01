@@ -47,6 +47,7 @@ export type EmailTemplate =
   | "payment_proof_submitted"
   | "paying_party_added"
   | "quote_changes_requested"
+  | "quote_updated"
   | "band_assigned"
   | "band_event_onboarding_invite"
   | "band_onboarding_reminder"
@@ -195,6 +196,8 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `You've been added as the paying party: ${context}`;
     case "quote_changes_requested":
       return `Quote changes requested: ${context}`;
+    case "quote_updated":
+      return `Your quote was updated: ${context}`;
     case "band_assigned":
       return `You're on the bill: ${context}`;
     case "band_event_onboarding_invite":

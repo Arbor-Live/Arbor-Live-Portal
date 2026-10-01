@@ -14,6 +14,7 @@ import {
   shouldNotifyPayingParty,
 } from "../email/payingPartyEmails";
 import { scheduleQuoteChangesRequestedEmail } from "../email/quoteChangesRequestedEmails";
+import { listInvoiceRevisions, recordInvoiceRevision, snapshotInvoice } from "./invoiceRevisions";
 import { scheduleQuoteApprovedEmail } from "../email/quoteApprovedEmails";
 import { loadEventHostDisplay } from "./hostOrgs";
 import { findAuthUsersByIds } from "./auth";
@@ -234,7 +235,21 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
       termsAcceptedAt: invoice.termsAcceptedAt,
       termsIds: resolveInvoiceTermsIds(invoice),
       additionalTermsMarkdown: invoice.additionalTermsMarkdown,
+      approvedTotalUsd: invoice.approvedTotalUsd,
+      /** Set once staff settle the estimate into the final invoice (after the event). */
+      billingFinalizedAt: invoice.billingFinalizedAt,
     },
+    /** Every version since the first approval, newest first. Amounts only; no staff ids. */
+    revisions: (await listInvoiceRevisions(ctx, invoice._id)).map((revision) => ({
+      number: revision.number,
+      kind: revision.kind,
+      totalUsd: revision.totalUsd,
+      lines: revision.lines,
+      note: revision.note,
+      actorName: revision.kind === "approved" ? revision.actorName : undefined,
+      recordedLate: revision.recordedLate,
+      createdAt: revision.createdAt,
+    })),
     lineItems: displayLineItems,
     termsAndConditionsMarkdown: combinedTermsMarkdown,
     termsVersion: globalTermsVersion,
@@ -317,6 +332,17 @@ export async function approveInvoiceQuote(
     updatedAt: now,
   });
   await recordInvoiceStatusTransition(ctx, invoice._id, fromStatus, "approved", { at: now });
+  // Pin exactly what they approved, so later changes are shown against it.
+  const approvedSnapshot = await snapshotInvoice(ctx, invoice);
+  const { revisionId } = await recordInvoiceRevision(ctx, invoice._id, approvedSnapshot, {
+    kind: "approved",
+    at: now,
+    actorName: signedName,
+  });
+  await ctx.db.patch(invoice._id, {
+    approvedRevisionId: revisionId,
+    approvedTotalUsd: approvedSnapshot.totalUsd,
+  });
   await syncLinkedEventStatusFromInvoice(ctx, invoice._id, "approved");
   const updatedInvoice = await ctx.db.get(invoice._id);
   if (updatedInvoice) {

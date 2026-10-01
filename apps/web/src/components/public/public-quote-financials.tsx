@@ -37,7 +37,13 @@ function QuoteSection({
 export function PublicQuoteFinancials({
   lineItems,
   totals,
+  final = false,
+  paymentOpen = false,
 }: {
+  /** Settled after the event. Until then every total here is an estimate. */
+  final?: boolean;
+  /** Payment opened before the final invoice (a deposit): don't tell them to wait. */
+  paymentOpen?: boolean;
   lineItems: Array<{ _id: string; section: string; label: string; quantity: number; quantityDetail?: string; rateUsd: number; amountUsd: number; notes?: string }>;
   totals: {
     equipmentSubtotalUsd: number;
@@ -66,7 +72,13 @@ export function PublicQuoteFinancials({
       <QuoteSection title="Fees" rows={grouped.fees} />
       <Card>
         <CardHeader>
-          <CardTitle>Totals</CardTitle>
+          <CardTitle>{final ? "Final invoice" : "Estimate"}</CardTitle>
+          {final ? null : (
+            <p className="text-sm text-muted-foreground" data-testid="public-quote-estimate-note">
+              This is an estimate. Your final invoice comes after the event, once crew hours and anything added on
+              the day are settled.{paymentOpen ? "" : " Please don't send payment until then."}
+            </p>
+          )}
         </CardHeader>
         <CardContent className="grid gap-2 text-sm md:grid-cols-2">
           <p>Equipment: {formatUsd(totals.equipmentSubtotalUsd)}</p>

@@ -761,6 +761,23 @@ export const unsetLegacyPendingInviteEmailFlags = migrations.define({
 });
 
 /**
+ * Payment now opens with the final invoice after the event (#406), not at
+ * approval. Quotes already approved keep payment open, so no client who was
+ * told to pay loses the option mid-flight.
+ */
+export const keepPaymentOpenForApprovedQuotes = migrations.define({
+  table: "invoices",
+  migrateOne: async (_ctx, invoice) => {
+    if ((invoice.clientApprovalStatus ?? "pending") !== "approved") return;
+    if (invoice.billingFinalizedAt || invoice.paymentOpenedEarlyAt) return;
+    return {
+      paymentOpenedEarlyAt: invoice.approvedAt ?? invoice.updatedAt,
+      paymentOpenedEarlyNote: "Approved before final invoices; payment stayed open.",
+    };
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -797,6 +814,7 @@ const MIGRATION_SERIES = [
   internal.migrations.backfillUserEmailOptOuts,
   internal.migrations.unsetLegacyUserEmailFlags,
   internal.migrations.unsetLegacyPendingInviteEmailFlags,
+  internal.migrations.keepPaymentOpenForApprovedQuotes,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

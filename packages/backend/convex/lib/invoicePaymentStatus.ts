@@ -49,7 +49,10 @@ export function invoiceDueEndMs(
 }
 
 export function getPaymentDueAt(
-  invoice: Pick<Doc<"invoices">, "dueDate" | "approvedAt" | "clientApprovalStatus">,
+  invoice: Pick<
+    Doc<"invoices">,
+    "dueDate" | "approvedAt" | "clientApprovalStatus" | "billingFinalizedAt" | "paymentOpenedEarlyAt"
+  >,
   event: Pick<Doc<"events">, "timezone"> | null,
 ) {
   const timezone = event?.timezone || EVENT_TIMEZONE;
@@ -97,6 +100,10 @@ export function classifyPaymentQueue(args: {
   if ((args.invoice.clientApprovalStatus ?? "pending") !== "approved") return null;
 
   if (args.invoice.paymentReceivedAt) return "payment_received";
+  // Still an estimate: nothing to collect until the final invoice.
+  if (getPaymentProofOpensAt(args.invoice) == null && !isSubmissionActive(args.activeSubmission)) {
+    return null;
+  }
 
   const dueAt = getPaymentDueAt(args.invoice, args.event);
   const late = computeLateFeeSummary(dueAt, nowMs);

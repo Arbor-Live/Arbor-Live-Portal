@@ -1016,6 +1016,8 @@ export const seedApprovedQuoteWithLinkedEvent = mutation({
       subtotalUsd: 100,
       totalUsd: 100,
       clientApprovalStatus: "approved",
+      // Seeds are settled invoices: payment is open (#406).
+      billingFinalizedAt: Date.now(),
       approvedAt: now - 60_000,
       clientApprovalSignedName: "E2E Signer",
       clientIsPaymentSubmitter: true,
@@ -1274,6 +1276,8 @@ export const seedBookingClientApproved = mutation({
       subtotalUsd: 100,
       totalUsd: 100,
       clientApprovalStatus: "approved",
+      // Seeds are settled invoices: payment is open (#406).
+      billingFinalizedAt: Date.now(),
       approvedAt: now,
       clientApprovalSignedName: "E2E Approver",
       clientIsPaymentSubmitter: true,
@@ -1417,6 +1421,8 @@ export const seedPastLinkedEventForFeedback = mutation({
         subtotalUsd: 100,
         totalUsd: 100,
         clientApprovalStatus: "approved",
+        // Seeds are settled invoices: payment is open (#406).
+        billingFinalizedAt: Date.now(),
         approvedAt: now - 60_000,
         clientApprovalSignedName: "E2E Signer",
         clientIsPaymentSubmitter: true,
@@ -1461,6 +1467,8 @@ export const seedPastLinkedEventForFeedback = mutation({
       subtotalUsd: 100,
       totalUsd: 100,
       clientApprovalStatus: "approved",
+      // Seeds are settled invoices: payment is open (#406).
+      billingFinalizedAt: Date.now(),
       approvedAt: now - 60_000,
       clientApprovalSignedName: "E2E Signer",
       clientIsPaymentSubmitter: true,
@@ -1597,6 +1605,8 @@ export const seedPastMultiDayEventsForFeedback = mutation({
         subtotalUsd: 100,
         totalUsd: 100,
         clientApprovalStatus: "approved",
+        // Seeds are settled invoices: payment is open (#406).
+        billingFinalizedAt: Date.now(),
         approvedAt: now - 60_000,
         clientApprovalSignedName: "E2E Signer",
         clientIsPaymentSubmitter: true,
@@ -1640,6 +1650,8 @@ export const seedPastMultiDayEventsForFeedback = mutation({
       subtotalUsd: 100,
       totalUsd: 100,
       clientApprovalStatus: "approved",
+      // Seeds are settled invoices: payment is open (#406).
+      billingFinalizedAt: Date.now(),
       approvedAt: now - 60_000,
       clientApprovalSignedName: "E2E Signer",
       clientIsPaymentSubmitter: true,
@@ -1708,6 +1720,8 @@ export const seedEventFeedbackForInsights = mutation({
       subtotalUsd: 100,
       totalUsd: 100,
       clientApprovalStatus: "approved",
+      // Seeds are settled invoices: payment is open (#406).
+      billingFinalizedAt: Date.now(),
       approvedAt: now - 60_000,
       clientApprovalSignedName: "E2E Signer",
       clientIsPaymentSubmitter: true,
@@ -4705,6 +4719,49 @@ const e2eInvoiceLineValidator = v.object({
  * assert against this, not the DOM, so a divergence between the two shows up as
  * a failure instead of a passing test that only ever read one of them.
  */
+/** An invoice's approval and its versions, oldest first. */
+export const getInvoiceRevisionsState = query({
+  args: { invoiceId: v.id("invoices") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      clientApprovalStatus: v.string(),
+      totalUsd: v.number(),
+      approvedTotalUsd: v.union(v.number(), v.null()),
+      revisions: v.array(
+        v.object({
+          number: v.number(),
+          kind: v.string(),
+          totalUsd: v.number(),
+          note: v.union(v.string(), v.null()),
+          recordedLate: v.boolean(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) return null;
+    const revisions = await ctx.db
+      .query("invoiceRevisions")
+      .withIndex("by_invoiceId_and_number", (q) => q.eq("invoiceId", args.invoiceId))
+      .take(50);
+    return {
+      clientApprovalStatus: invoice.clientApprovalStatus ?? "pending",
+      totalUsd: invoice.totalUsd,
+      approvedTotalUsd: invoice.approvedTotalUsd ?? null,
+      revisions: revisions.map((revision) => ({
+        number: revision.number,
+        kind: revision.kind,
+        totalUsd: revision.totalUsd,
+        note: revision.note ?? null,
+        recordedLate: Boolean(revision.recordedLate),
+      })),
+    };
+  },
+});
+
 export const getInvoiceTotalsState = query({
   args: { invoiceId: v.id("invoices") },
   returns: v.union(
@@ -5028,6 +5085,8 @@ export const seedInvoiceWithProofSubmission = mutation({
       subtotalUsd: 400,
       totalUsd: 400,
       clientApprovalStatus: "approved",
+      // Seeds are settled invoices: payment is open (#406).
+      billingFinalizedAt: Date.now(),
       approvedAt: now - 60_000,
       clientApprovalSignedName: "E2E Signer",
       clientIsPaymentSubmitter: true,

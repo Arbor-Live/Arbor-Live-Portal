@@ -18,7 +18,9 @@ export function InvoiceDocumentWeb({ data, logoSrc = "/logo.svg" }: InvoiceDocum
         <header style={headerStyle}>
           <div style={headerLeftStyle}>
             <img src={logoSrc} alt="Arbor Live logo" style={logoStyle} />
-            <p style={invoiceNumberStyle}>Invoice {invoice.invoiceNumber}</p>
+            <p style={invoiceNumberStyle}>
+              {invoice.isFinal ? "Invoice" : "Estimate"} {invoice.invoiceNumber}
+            </p>
           </div>
           <div style={headerTextStyle}>
             <p style={brandTitleStyle}>Arbor Live</p>
@@ -37,7 +39,7 @@ export function InvoiceDocumentWeb({ data, logoSrc = "/logo.svg" }: InvoiceDocum
         </header>
         <div style={detailsGridStyle}>
           <div>
-            <p style={sectionLabelStyle}>Invoice Details</p>
+            <p style={sectionLabelStyle}>{invoice.isFinal ? "Invoice Details" : "Estimate Details"}</p>
             <DetailLine label="Invoice number" value={invoice.invoiceNumber} />
             <DetailLine label="Issue date" value={invoice.issueDate} />
             {invoice.dueDate ? <DetailLine label="Due date" value={invoice.dueDate} /> : null}

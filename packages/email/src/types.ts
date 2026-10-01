@@ -139,10 +139,26 @@ export type BookingQuoteReadyEmailProps = {
   eventName?: string;
   invoiceNumber: string;
   quoteTotalUsd: number;
+  /** Payment is already open (final invoice, or opened early): drop the "don't pay yet" notice. */
+  paymentOpen?: boolean;
   trackingUrl: string;
   managerName: string;
   managerEmail?: string;
   managerMessage: string;
+};
+
+export type QuoteUpdatedEmailProps = {
+  recipientName?: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  invoiceNumber: string;
+  previousTotalUsd: number;
+  newTotalUsd: number;
+  changeNote?: string;
+  portalUrl: string;
+  managerName: string;
+  managerEmail?: string;
 };
 
 export type PaymentProofReminderEmailProps = {

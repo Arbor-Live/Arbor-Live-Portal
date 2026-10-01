@@ -16,7 +16,6 @@ const adminRoutes = [
   { path: "/dashboard/financial-hub/insights", label: "insights" },
   { path: "/dashboard/events/crew-scheduling", label: "crew scheduling" },
   { path: "/dashboard/events/venues", label: "venues" },
-  { path: "/dashboard/events/open-mic", label: "open mic" },
   { path: "/dashboard/inventory/types", label: "inventory types" },
   { path: "/dashboard/inventory/import", label: "inventory import" },
 ] as const;
@@ -73,6 +72,15 @@ test.describe("admin route guards", () => {
     await expect(page.getByText("Admin access required").first()).toBeVisible({
       timeout: 30_000,
     });
+    await expect(page.getByText("Something went wrong")).toHaveCount(0);
+  });
+
+  test("non-admin crew can reach the open mic runner", async ({ page }) => {
+    await page.goto("/dashboard/events/open-mic");
+    await expect(page.getByRole("heading", { name: "Open Mic", level: 1 })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByText("Admin access required")).toHaveCount(0);
     await expect(page.getByText("Something went wrong")).toHaveCount(0);
   });
 });

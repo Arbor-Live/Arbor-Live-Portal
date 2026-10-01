@@ -19,6 +19,7 @@ type PaymentProofState = {
   eligible: boolean;
   canSubmit: boolean;
   opensAt: number | null;
+  awaitingFinalInvoice?: boolean;
   paymentReceived: boolean;
   lateFee: {
     dueAt: number;
@@ -142,6 +143,23 @@ export function PublicPaymentProofSection({
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
           Arbor Live has marked your payment as received. Thank you!
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (paymentProof.awaitingFinalInvoice && !paymentProof.submission) {
+    return (
+      <Card data-testid="public-payment-awaiting-final">
+        <CardHeader>
+          <CardTitle>Payment opens after your event</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p>
+            Your approved quote is an estimate. Crew hours and anything added on the day are settled after the
+            event, then we&apos;ll email you the final invoice and open payment here.
+          </p>
+          <p className="font-medium text-foreground">Please don&apos;t send payment until then.</p>
         </CardContent>
       </Card>
     );

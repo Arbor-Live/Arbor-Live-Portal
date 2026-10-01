@@ -372,16 +372,60 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   and the invoice↔event import matches lines to the right day.
   Artist and external-rental amounts are pass-through (excluded from Insights
   earned revenue and from net-profit margin).
+- **Changing an approved quote** (#405). The client's approval pins a version
+  (`invoiceRevisions`, kind `approved`; `invoices.approvedRevisionId` /
+  `approvedTotalUsd`). Snapshots use the portal's pricing (`snapshotInvoice`),
+  so the amounts are what the client saw.
+  - `updateDraft` refuses a save that changes lines, pricing modes, discount or
+    terms on an approved quote unless it carries `approvedChange`:
+    - `request_reapproval`: saves a `reapproval_requested` version, resets
+      approval to pending, and emails the client `quote_updated` (old → new
+      total).
+    - `keep_approval`: needs a note; saves a `change_kept_approval` version.
+    - `match_approval`: keeps the new lines and sets one amount discount
+      (new subtotal − approved total) so the total stays what the client
+      approved; saves a `matched_approval` version. Only offered when the total
+      went up (e.g. crew repriced at the lead rate).
+  - Manager, contact, due date and notes save freely.
+  - `recalculateTotals`, `recalculateSeriesEquipmentLines` and
+    `resyncEquipmentFromPullList` refuse to change an approved quote, and point
+    to the editor.
+  - The editor autosaves only unsent drafts. Once a quote is sent or approved,
+    saves are explicit, and a save that needs a decision opens the
+    approved-change dialog (`previewApprovedChange` shows the diff). Cancel
+    saves nothing.
+  - Quotes approved before versions existed get an approved version snapshotted
+    at their first later change (`recordedLate`).
+  - Versions show in the editor (Versions card) and in the client portal (Quote
+    history, plus a "we updated your quote" banner while re-approval is
+    pending).
 - Every invoice carries a `publicApprovalToken` for the client-facing quote
   page (`/public/quote/[token]`): view, approve, request changes, set payment
   contacts, download PDF — all token-gated, no login.
 - PDFs are rendered from `@arbor/invoice-document` (`./pdf` export).
-- **Payment proof**: after approval, payers submit payment evidence
+- **Estimate → final invoice** (#406). An approved quote is an *estimate*
+  until staff settle it after the event, once hours are final:
+  - `finalizeBilling` sets `billingFinalizedAt`, snapshots a `final` version,
+    and opens payment. `reopenBilling` undoes it; it's refused once paid.
+  - Staff can open payment before that for a deposit
+    (`setPaymentOpenedEarly`, a reason is required).
+  - `getPaymentProofOpensAt` is the single gate: payment is open from the
+    earlier of `billingFinalizedAt` and `paymentOpenedEarlyAt`, never at
+    approval. So reminders, late fees and the payment queue all wait for it.
+  - The invoice list shows `estimate` (event upcoming) and `ready_to_finalize`
+    (event over; under "Needs you").
+  - The portal and the PDF say "Estimate" and ask clients not to pay until
+    then.
+  - This is not `status: "finalized"`, which means sent/published.
+  - Quotes approved before this change keep payment open (migration
+    `keepPaymentOpenForApprovedQuotes`).
+- **Payment proof**: once payment opens (above), payers submit payment evidence
   (`paymentProof*.ts`). A quote linked as an additional invoice on an event
   (not only the primary `events.invoiceId`) opens payment the same way, and
   proof is stored per invoice. Staff verify, and cron-driven reminder emails nag
   outstanding payers only once fewer than 30 days remain until the invoice due
-  date (approval-day first reminder + Monday follow-ups via `weeklyJobs`).
+  date (first reminder the day payment opens + Monday follow-ups via
+  `weeklyJobs`).
 
 ## Band payments
 

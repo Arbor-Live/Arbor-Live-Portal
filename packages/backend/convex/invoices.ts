@@ -19,7 +19,7 @@ import {
   requirePublicEditableEvent,
 } from "./lib/publicEventContacts";
 import { isSingleSeriesBooking } from "./lib/invoiceArtistDays";
-import { getActivePaymentProofSubmissionForInvoice } from "./lib/paymentProof";
+import { getActivePaymentProofSubmissionForInvoice, getPaymentProofOpensAt } from "./lib/paymentProof";
 import { invoiceDueEndMs } from "./lib/invoicePaymentStatus";
 import {
   billingQuantityForEquipmentLine,
@@ -41,6 +41,14 @@ import { listFulfillmentPackageBom } from "./lib/packageBom";
 import { allocateInvoiceNumber } from "./lib/publicReferenceIds";
 import { syncLinkedEventsPrimaryHostFromInvoice } from "./lib/hostOrgs";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
+import {
+  ensureApprovedRevision,
+  listInvoiceRevisions,
+  recordInvoiceRevision,
+  snapshotFromRows,
+  snapshotInvoice,
+} from "./lib/invoiceRevisions";
+import { scheduleQuoteUpdatedEmail } from "./email/quoteUpdatedEmails";
 import { scheduleBookingQuoteReadyEmail } from "./email/bookingRequestEmails";
 import {
   markPayingPartyNotified,
@@ -201,7 +209,7 @@ function typeRentalRate(
 
 /** Sum of (excluded BOM type qty × current type rental rate) for a package's ala-carte discount suggestion. */
 async function suggestPackageExclusionDiscount(
-  ctx: MutationCtx,
+  ctx: QueryCtx | MutationCtx,
   packageId: Id<"inventoryPackages">,
   excludedTypeIds: Id<"inventoryTypes">[],
   equipmentPricingMode: "subsidized" | "nonSubsidized",
@@ -220,7 +228,7 @@ async function suggestPackageExclusionDiscount(
 }
 
 async function computeLineAmount(
-  ctx: MutationCtx,
+  ctx: QueryCtx | MutationCtx,
   line: LineInput,
   equipmentPricingMode: "subsidized" | "nonSubsidized",
   crewRateMode: "normal" | "lead" | "custom" | "ot",
@@ -293,7 +301,7 @@ async function computeLineAmount(
 }
 
 async function computeTotals(
-  ctx: MutationCtx,
+  ctx: QueryCtx | MutationCtx,
   lineItems: LineInput[],
   equipmentPricingMode: "subsidized" | "nonSubsidized",
   crewRateMode: "normal" | "lead" | "custom" | "ot",
@@ -376,6 +384,118 @@ async function computeTotals(
     totalUsd,
     discountWarning,
   };
+}
+
+/**
+ * What the client agreed to on a quote: its lines and amounts, pricing and
+ * discount, and terms. Manager, contact, due date and notes aren't part of it,
+ * so they save freely on an approved quote.
+ */
+function approvalContentSignature(
+  rows: Array<
+    Pick<
+      Doc<"invoiceLineItems">,
+      | "section"
+      | "label"
+      | "provider"
+      | "notes"
+      | "quantity"
+      | "rateUsd"
+      | "amountUsd"
+      | "equipmentQuantityBasis"
+      | "memberCount"
+      | "performanceHours"
+    >
+  >,
+  invoice: Pick<
+    Doc<"invoices">,
+    "equipmentPricingMode" | "crewRateMode" | "discountType" | "discountValue" | "additionalTermsMarkdown"
+  > & { termsIds: string[] },
+) {
+  // Order-independent: moving a line isn't a change the client needs to approve.
+  const lines = rows
+    .map((row) =>
+      [
+        row.section,
+        row.label.trim(),
+        row.provider?.trim() ?? "",
+        row.notes?.trim() ?? "",
+        row.quantity,
+        Number(row.rateUsd.toFixed(2)),
+        Number(row.amountUsd.toFixed(2)),
+        row.equipmentQuantityBasis ?? "",
+        row.memberCount ?? "",
+        row.performanceHours ?? "",
+      ].join("|"),
+    )
+    .sort();
+  return JSON.stringify({
+    lines,
+    equipmentPricingMode: invoice.equipmentPricingMode,
+    crewRateMode: invoice.crewRateMode,
+    discountType: invoice.discountType,
+    discountValue: Number(Math.max(0, invoice.discountValue).toFixed(2)),
+    termsIds: [...invoice.termsIds].sort(),
+    additionalTermsMarkdown: invoice.additionalTermsMarkdown?.trim() ?? "",
+  });
+}
+
+const approvedChangeValue = v.object({
+  decision: v.union(
+    v.literal("request_reapproval"),
+    v.literal("keep_approval"),
+    /** Keep the new lines, and add a discount so the total stays what the client approved. */
+    v.literal("match_approval"),
+  ),
+  /** Why it changed. Required to keep an approval; shown to the client either way. */
+  note: v.optional(v.string()),
+});
+
+/** Refuse a change to an approved quote made outside the editor's decision flow. */
+function assertApprovedQuoteUnchanged(
+  invoice: Doc<"invoices">,
+  before: Parameters<typeof approvalContentSignature>[0],
+  after: Parameters<typeof approvalContentSignature>[0],
+) {
+  if ((invoice.clientApprovalStatus ?? "pending") !== "approved") return;
+  const terms = { ...invoice, termsIds: resolveInvoiceTermsIds(invoice) };
+  if (approvalContentSignature(before, terms) === approvalContentSignature(after, terms)) return;
+  appError(
+    "QUOTE_APPROVED_EDIT_IN_EDITOR",
+    "This quote is approved, and this would change it. Make the change in the quote editor, where you can send it to the client for re-approval.",
+  );
+}
+
+/** Back to awaiting approval: clears the client's decision, keeps the record of what they approved. */
+async function resetInvoiceApproval(ctx: MutationCtx, invoice: Doc<"invoices">, at: number) {
+  const fromStatus = invoice.clientApprovalStatus ?? "pending";
+  await ctx.db.patch(invoice._id, {
+    clientApprovalStatus: "pending",
+    approvedAt: undefined,
+    changesRequestedAt: undefined,
+    clientApprovalNote: undefined,
+    clientApprovalSignedName: undefined,
+    paymentFinanceContactEmail: undefined,
+    clientIsPaymentSubmitter: undefined,
+    paymentSubmitterName: undefined,
+    paymentSubmitterEmail: undefined,
+    payingPartyNotifiedEmail: undefined,
+    payingPartyNotifiedAt: undefined,
+    termsVersionAccepted: undefined,
+    termsAcceptedAt: undefined,
+    // Re-approval makes it an estimate again.
+    billingFinalizedAt: undefined,
+    billingFinalizedByName: undefined,
+    updatedAt: at,
+  });
+  if (fromStatus !== "pending") {
+    await recordInvoiceStatusTransition(ctx, invoice._id, fromStatus, "pending", { at });
+  }
+  await syncLinkedEventStatusFromInvoice(ctx, invoice._id, "pending");
+  const updated = await ctx.db.get(invoice._id);
+  if (updated?.sourceEventRequestId) {
+    await syncBookingRequestStatusFromInvoice(ctx, updated, { at });
+  }
 }
 
 function lineDocToInput(line: Doc<"invoiceLineItems">): LineInput {
@@ -830,6 +950,8 @@ export const list = query({
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type InvoiceListPaymentStatus =
+  | "estimate"
+  | "ready_to_finalize"
   | "payment_pending"
   | "proof_received"
   | "overdue"
@@ -837,7 +959,9 @@ type InvoiceListPaymentStatus =
 
 /**
  * Payment status for the invoice list, computed only for approved quotes:
- * `paid` once money landed on our account, `overdue` past the due date
+ * `paid` once money landed on our account; while it's still an estimate,
+ * `estimate` before the event ends and `ready_to_finalize` after (staff owe
+ * the final invoice); then `overdue` past the due date
  * (counting days since), `proof_received` when the client submitted payment
  * proof we haven't confirmed yet, else `payment_pending`. Non-approved quotes
  * (draft / awaiting approval / changes requested) return null.
@@ -855,6 +979,10 @@ async function resolveInvoiceListPaymentStatus(
   }
   const now = Date.now();
   const activeSubmission = await getActivePaymentProofSubmissionForInvoice(ctx, invoice._id);
+  if (getPaymentProofOpensAt(invoice) == null && !activeSubmission) {
+    const eventEnded = primaryEvent ? primaryEvent.endAt < now : false;
+    return { paymentStatus: eventEnded ? "ready_to_finalize" : "estimate", daysOverdue: 0 };
+  }
   const dueEndMs = invoiceDueEndMs(invoice, primaryEvent?.timezone);
   if (dueEndMs != null && now > dueEndMs) {
     return {
@@ -902,6 +1030,7 @@ export const listEnriched = query({
           status: invoice.status,
           clientApprovalStatus: invoice.clientApprovalStatus,
           paymentReceivedAt: invoice.paymentReceivedAt,
+          billingFinalizedAt: invoice.billingFinalizedAt,
           paymentStatus,
           daysOverdue,
           managerName: invoice.managerName,
@@ -954,6 +1083,68 @@ export const get = query({
       }),
     );
     return { invoice, lineItems, series, additionallyLinkedEvents };
+  },
+});
+
+/** The quote's versions, newest first: approvals and every change after one. */
+export const listRevisions = query({
+  args: { id: v.id("invoices") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    return await listInvoiceRevisions(ctx, args.id);
+  },
+});
+
+/**
+ * Price an unsaved draft exactly as a save would, next to what the client
+ * approved, so the editor can show the change before anyone commits to it.
+ * `approved` is null when the quote isn't approved. For quotes approved
+ * before revisions existed, it's the quote as currently saved.
+ */
+export const previewApprovedChange = query({
+  args: {
+    id: v.id("invoices"),
+    equipmentPricingMode: equipmentPricingModeValue,
+    crewRateMode: crewRateModeValue,
+    discountType: discountTypeValue,
+    discountValue: v.number(),
+    lineItems: v.array(lineItemInput),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice || (invoice.clientApprovalStatus ?? "pending") !== "approved") {
+      return { approved: null, proposed: null };
+    }
+    const approvedRevision = invoice.approvedRevisionId ? await ctx.db.get(invoice.approvedRevisionId) : null;
+    const approvedSnapshot = approvedRevision ?? (await snapshotInvoice(ctx, invoice));
+    const totals = await computeTotals(
+      ctx,
+      args.lineItems as LineInput[],
+      args.equipmentPricingMode,
+      args.crewRateMode,
+      args.discountType,
+      args.discountValue,
+      args.id,
+    );
+    const billableOccurrenceCount = await resolveBillableOccurrenceCount(ctx, args.id);
+    const proposed = snapshotFromRows(totals.normalized, billableOccurrenceCount, {
+      discountType: args.discountType,
+      discountValue: args.discountValue,
+    });
+    return {
+      approved: {
+        number: approvedRevision?.number ?? null,
+        totalUsd: approvedSnapshot.totalUsd,
+        lines: approvedSnapshot.lines,
+        approvedAt: invoice.approvedAt ?? approvedRevision?.createdAt ?? null,
+        approvedBy: invoice.clientApprovalSignedName ?? approvedRevision?.actorName ?? null,
+        recordedLate: approvedRevision ? Boolean(approvedRevision.recordedLate) : true,
+      },
+      proposed,
+    };
   },
 });
 
@@ -1161,9 +1352,16 @@ export const updateDraft = mutation({
     termsIds: v.optional(v.array(v.id("invoiceTerms"))),
     additionalTermsMarkdown: v.optional(v.string()),
     lineItems: v.array(lineItemInput),
+    /**
+     * Required when the save changes what an approved client agreed to (see
+     * `approvalContentSignature`): send it back for approval, or keep the
+     * approval with a reason. Without it, such a save is refused, so a quote
+     * can never change under an approval by accident.
+     */
+    approvedChange: v.optional(approvedChangeValue),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    const viewer = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     return await withReportableErrors("invoices.updateDraft", async () => {
     const existing = await ctx.db.get(args.id);
@@ -1175,7 +1373,7 @@ export const updateDraft = mutation({
     // invoice that already has a live link must not silently extend it.
     const mintedNewToken = Boolean(publicApprovalToken) && !existing.publicApprovalToken;
     const normalizedTermsIds = normalizeTermsIds(args.termsIds);
-    const totals = await computeTotals(
+    let totals = await computeTotals(
       ctx,
       args.lineItems as LineInput[],
       args.equipmentPricingMode,
@@ -1184,7 +1382,69 @@ export const updateDraft = mutation({
       args.discountValue,
       args.id,
     );
+    let discountType = args.discountType;
+    let discountValue = args.discountValue;
     const now = Date.now();
+
+    const beforeRows = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", args.id))
+      .take(500);
+    const approvedContentChanged =
+      (existing.clientApprovalStatus ?? "pending") === "approved" &&
+      approvalContentSignature(beforeRows, {
+        ...existing,
+        termsIds: resolveInvoiceTermsIds(existing),
+      }) !==
+        approvalContentSignature(totals.normalized, {
+          equipmentPricingMode: args.equipmentPricingMode,
+          crewRateMode: args.crewRateMode,
+          discountType: args.discountType,
+          discountValue: args.discountValue,
+          additionalTermsMarkdown: args.additionalTermsMarkdown,
+          termsIds: normalizedTermsIds ?? [],
+        });
+    const approvedChange = approvedContentChanged ? args.approvedChange : undefined;
+    if (approvedContentChanged && existing.billingFinalizedAt) {
+      appError("INVOICE_FINAL_REOPEN_TO_CHANGE", "This is the final invoice. Reopen it to make changes.");
+    }
+    if (approvedContentChanged) {
+      if (!approvedChange) {
+        appError(
+          "QUOTE_APPROVED_CHANGE_NEEDS_DECISION",
+          "This quote is approved. Choose whether to send the changes to the client for re-approval or keep the approval.",
+        );
+      }
+      if (approvedChange.decision === "keep_approval" && !approvedChange.note?.trim()) {
+        appError("QUOTE_KEEP_APPROVAL_NOTE_REQUIRED", "Say why the client's approval still stands.");
+      }
+      // Pin what the client approved before this change replaces it.
+      await ensureApprovedRevision(ctx, existing);
+      if (approvedChange.decision === "match_approval") {
+        const pinned = await ctx.db.get(args.id);
+        const approvedTotalUsd = pinned?.approvedTotalUsd ?? existing.totalUsd;
+        if (totals.totalUsd <= approvedTotalUsd) {
+          appError(
+            "QUOTE_MATCH_APPROVAL_NOT_HIGHER",
+            "The total didn't go up, so there's nothing to discount back to the approved amount.",
+          );
+        }
+        // One amount discount covering everything above the approved total
+        // (it replaces any earlier discount, which it already includes).
+        discountType = "amount";
+        discountValue = Number(Math.max(0, totals.subtotalUsd - approvedTotalUsd).toFixed(2));
+        totals = await computeTotals(
+          ctx,
+          args.lineItems as LineInput[],
+          args.equipmentPricingMode,
+          args.crewRateMode,
+          discountType,
+          discountValue,
+          args.id,
+        );
+      }
+    }
+
     await ctx.db.patch(args.id, {
       issueDate: args.issueDate,
       dueDate: trimOptional(args.dueDate),
@@ -1205,8 +1465,8 @@ export const updateDraft = mutation({
       clientPostalCode: trimOptional(args.clientPostalCode),
       equipmentPricingMode: args.equipmentPricingMode,
       crewRateMode: args.crewRateMode,
-      discountType: args.discountType,
-      discountValue: Math.max(0, args.discountValue),
+      discountType,
+      discountValue: Math.max(0, discountValue),
       discountAmountUsd: totals.discountAmountUsd,
       discountWarning: totals.discountWarning,
       equipmentSubtotalUsd: totals.equipmentSubtotalUsd,
@@ -1231,7 +1491,49 @@ export const updateDraft = mutation({
     if (args.groupId !== existing.groupId) {
       await syncLinkedEventsPrimaryHostFromInvoice(ctx, args.id);
     }
-    return { id: args.id, warning: totals.discountWarning };
+
+    let revision: { number: number; kind: Doc<"invoiceRevisions">["kind"] } | null = null;
+    if (approvedChange) {
+      const saved = await ctx.db.get(args.id);
+      if (!saved) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+      const snapshot = await snapshotInvoice(ctx, saved);
+      const kind =
+        approvedChange.decision === "request_reapproval"
+          ? "reapproval_requested"
+          : approvedChange.decision === "match_approval"
+            ? "matched_approval"
+            : "change_kept_approval";
+      const matchedNote =
+        kind === "matched_approval"
+          ? `Discounted $${discountValue.toFixed(2)} to keep the approved total.`
+          : undefined;
+      const { number } = await recordInvoiceRevision(ctx, args.id, snapshot, {
+        kind,
+        at: now,
+        note: [approvedChange.note?.trim(), matchedNote].filter(Boolean).join(" ") || undefined,
+        actorName: viewer.name,
+        actorUserId: viewer._id ?? viewer.id,
+      });
+      revision = { number, kind };
+      if (kind === "reapproval_requested") {
+        await resetInvoiceApproval(ctx, saved, now);
+        await scheduleQuoteUpdatedEmail(ctx, {
+          invoice: saved,
+          previousTotalUsd: saved.approvedTotalUsd ?? existing.totalUsd,
+          newTotalUsd: snapshot.totalUsd,
+          changeNote: approvedChange.note?.trim() || undefined,
+          revisionNumber: number,
+        });
+      }
+    }
+    return {
+      id: args.id,
+      warning: totals.discountWarning,
+      revision,
+      /** Set when the server rewrote the discount (match_approval); the editor adopts it. */
+      appliedDiscount:
+        revision?.kind === "matched_approval" ? { discountType: "amount" as const, discountValue } : null,
+    };
     });
   },
 });
@@ -1459,24 +1761,116 @@ export const resetApprovalToPending = mutation({
     await requireArborInternalContext(ctx);
     const invoice = await ctx.db.get(args.id);
     if (!invoice) throw new Error("Invoice not found.");
-    await ctx.db.patch(args.id, {
-      clientApprovalStatus: "pending",
-      approvedAt: undefined,
-      changesRequestedAt: undefined,
-      clientApprovalNote: undefined,
-      clientApprovalSignedName: undefined,
-      paymentFinanceContactEmail: undefined,
-      clientIsPaymentSubmitter: undefined,
-      paymentSubmitterName: undefined,
-      paymentSubmitterEmail: undefined,
-      payingPartyNotifiedEmail: undefined,
-      payingPartyNotifiedAt: undefined,
-      termsVersionAccepted: undefined,
-      termsAcceptedAt: undefined,
-      updatedAt: Date.now(),
-    });
-    await syncLinkedEventStatusFromInvoice(ctx, args.id, "pending");
+    await resetInvoiceApproval(ctx, invoice, Date.now());
     return { ok: true };
+  },
+});
+
+/**
+ * Settle an approved estimate into the final invoice (after the event, once
+ * hours are final): snapshots a `final` version and opens payment. The first
+ * payment reminder then tells the client it's ready.
+ */
+export const finalizeBilling = mutation({
+  args: { id: v.id("invoices") },
+  handler: async (ctx, args) => {
+    const viewer = await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    return await withReportableErrors("invoices.finalizeBilling", async () => {
+      const invoice = await ctx.db.get(args.id);
+      if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+      if (invoice.status === "void") appError("INVOICE_VOID", "This invoice is void.");
+      if ((invoice.clientApprovalStatus ?? "pending") !== "approved") {
+        appError("INVOICE_NOT_APPROVED", "The client has to approve the quote before it can be finalized.");
+      }
+      if (invoice.billingFinalizedAt) return { number: null };
+      const now = Date.now();
+      await ensureApprovedRevision(ctx, invoice);
+      const snapshot = await snapshotInvoice(ctx, invoice);
+      const { number } = await recordInvoiceRevision(ctx, args.id, snapshot, {
+        kind: "final",
+        at: now,
+        actorName: viewer.name,
+        actorUserId: viewer._id ?? viewer.id,
+      });
+      await ctx.db.patch(args.id, {
+        billingFinalizedAt: now,
+        billingFinalizedByName: viewer.name,
+        updatedAt: now,
+      });
+      return { number };
+    });
+  },
+});
+
+/**
+ * Undo `finalizeBilling` to correct the invoice. Refused once it's paid, or
+ * while the client's payment proof for the final amount is pending: changing
+ * the amount under a submitted proof would leave the two disagreeing.
+ */
+export const reopenBilling = mutation({
+  args: { id: v.id("invoices") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    return await withReportableErrors("invoices.reopenBilling", async () => {
+      const invoice = await ctx.db.get(args.id);
+      if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+      if (invoice.paymentReceivedAt) {
+        appError("INVOICE_PAID", "This invoice is paid, so it can't be reopened.");
+      }
+      if (await getActivePaymentProofSubmissionForInvoice(ctx, invoice._id)) {
+        appError(
+          "INVOICE_PROOF_SUBMITTED",
+          "The client already submitted payment proof for this invoice. Verify or invalidate it before reopening.",
+        );
+      }
+      await ctx.db.patch(args.id, {
+        billingFinalizedAt: undefined,
+        billingFinalizedByName: undefined,
+        updatedAt: Date.now(),
+      });
+      return null;
+    });
+  },
+});
+
+/** Let the client pay before the final invoice (a deposit or prepayment), or take that back. */
+export const setPaymentOpenedEarly = mutation({
+  args: { id: v.id("invoices"), open: v.boolean(), note: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const viewer = await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    return await withReportableErrors("invoices.setPaymentOpenedEarly", async () => {
+      const invoice = await ctx.db.get(args.id);
+      if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+      const now = Date.now();
+      if (args.open) {
+        const note = args.note?.trim();
+        if (!note) appError("PAYMENT_EARLY_NOTE_REQUIRED", "Say why payment opens before the final invoice.");
+        await ctx.db.patch(args.id, {
+          paymentOpenedEarlyAt: now,
+          paymentOpenedEarlyByName: viewer.name,
+          paymentOpenedEarlyNote: note,
+          updatedAt: now,
+        });
+      } else {
+        // Same reasoning as reopenBilling: don't close payment under a pending proof.
+        if (await getActivePaymentProofSubmissionForInvoice(ctx, invoice._id)) {
+          appError(
+            "INVOICE_PROOF_SUBMITTED",
+            "The client already submitted payment proof. Verify or invalidate it before closing payment.",
+          );
+        }
+        await ctx.db.patch(args.id, {
+          paymentOpenedEarlyAt: undefined,
+          paymentOpenedEarlyByName: undefined,
+          paymentOpenedEarlyNote: undefined,
+          updatedAt: now,
+        });
+      }
+      return null;
+    });
   },
 });
 
@@ -1497,6 +1891,7 @@ export const recalculateTotals = mutation({
       invoice.discountValue,
       args.id,
     );
+    assertApprovedQuoteUnchanged(invoice, lineItems, totals.normalized);
     await ctx.db.patch(args.id, {
       discountAmountUsd: totals.discountAmountUsd,
       discountWarning: totals.discountWarning,
@@ -1600,6 +1995,7 @@ export const recalculateSeriesEquipmentLines = mutation({
       invoice.discountValue,
       args.id,
     );
+    assertApprovedQuoteUnchanged(invoice, lineItems, totals.normalized);
     await ctx.db.patch(args.id, {
       discountAmountUsd: totals.discountAmountUsd,
       discountWarning: totals.discountWarning,
@@ -1724,6 +2120,7 @@ export const resyncEquipmentFromPullList = mutation({
       invoice.discountValue,
       args.id,
     );
+    assertApprovedQuoteUnchanged(invoice, lineItems, totals.normalized);
     await ctx.db.patch(args.id, {
       discountAmountUsd: totals.discountAmountUsd,
       discountWarning: totals.discountWarning,
@@ -1976,6 +2373,8 @@ export const markReadyForClientReview = mutation({
             _id: updatedInvoice._id,
             invoiceNumber: updatedInvoice.invoiceNumber,
             totalUsd: updatedInvoice.totalUsd,
+            billingFinalizedAt: updatedInvoice.billingFinalizedAt,
+            paymentOpenedEarlyAt: updatedInvoice.paymentOpenedEarlyAt,
             managerName: updatedInvoice.managerName,
             managerEmail: updatedInvoice.managerEmail,
             clientReviewReadyAt: now,
