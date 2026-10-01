@@ -35,6 +35,10 @@ export type InvoiceDocumentInvoice = {
   clientEmail?: string;
   clientPhone?: string;
   clientApprovalStatus?: string;
+  /** Settled after the event. Until then the document is an estimate. */
+  isFinal?: boolean;
+  /** Payment opened before the final invoice (a deposit). */
+  paymentOpenEarly?: boolean;
   digitalQuoteUrl?: string;
   equipmentSubtotalUsd: number;
   externalRentalsSubtotalUsd: number;

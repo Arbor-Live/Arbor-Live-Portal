@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolvePaymentProofFlags } from "./paymentProof";
 
 describe("resolvePaymentProofFlags", () => {
-  it("opens payment once the quote is approved", () => {
+  it("keeps an approved estimate closed until the final invoice", () => {
     const flags = resolvePaymentProofFlags({
       invoice: { clientApprovalStatus: "approved", approvedAt: 1_000 },
       nowMs: 2_000,
@@ -10,8 +10,35 @@ describe("resolvePaymentProofFlags", () => {
       paymentReceived: false,
     });
     expect(flags.eligible).toBe(true);
+    expect(flags.canSubmit).toBe(false);
+    expect(flags.opensAt).toBeNull();
+  });
+
+  it("opens payment with the final invoice", () => {
+    const flags = resolvePaymentProofFlags({
+      invoice: { clientApprovalStatus: "approved", approvedAt: 1_000, billingFinalizedAt: 1_500 },
+      nowMs: 2_000,
+      hasActiveSubmission: false,
+      paymentReceived: false,
+    });
     expect(flags.canSubmit).toBe(true);
-    expect(flags.opensAt).toBe(1_000);
+    expect(flags.opensAt).toBe(1_500);
+  });
+
+  it("opens payment early when staff allow it, whichever comes first", () => {
+    const flags = resolvePaymentProofFlags({
+      invoice: {
+        clientApprovalStatus: "approved",
+        approvedAt: 1_000,
+        paymentOpenedEarlyAt: 1_200,
+        billingFinalizedAt: 1_800,
+      },
+      nowMs: 2_000,
+      hasActiveSubmission: false,
+      paymentReceived: false,
+    });
+    expect(flags.canSubmit).toBe(true);
+    expect(flags.opensAt).toBe(1_200);
   });
 
   it("stays closed before approval", () => {
@@ -26,7 +53,7 @@ describe("resolvePaymentProofFlags", () => {
   });
 
   it("does not accept another submission after proof or payment", () => {
-    const approved = { clientApprovalStatus: "approved" as const, approvedAt: 1_000 };
+    const approved = { clientApprovalStatus: "approved" as const, approvedAt: 1_000, billingFinalizedAt: 1_000 };
     expect(
       resolvePaymentProofFlags({
         invoice: approved,

@@ -9,6 +9,8 @@ export type InvoiceLifecycle =
   | "draft"
   | "awaiting_approval"
   | "changes_requested"
+  | "estimate"
+  | "ready_to_finalize"
   | "payment_pending"
   | "proof_received"
   | "overdue"
@@ -19,6 +21,8 @@ export const LIFECYCLE_OPTIONS: { value: InvoiceLifecycle; label: string }[] = [
   { value: "draft", label: "Draft" },
   { value: "awaiting_approval", label: "Awaiting approval" },
   { value: "changes_requested", label: "Changes requested" },
+  { value: "estimate", label: "Approved estimate" },
+  { value: "ready_to_finalize", label: "Ready to finalize" },
   { value: "payment_pending", label: "Payment pending" },
   { value: "proof_received", label: "Payment proof received" },
   { value: "overdue", label: "Overdue" },
@@ -30,6 +34,8 @@ const LIFECYCLE_TONES: Record<InvoiceLifecycle, Tone> = {
   draft: "neutral",
   awaiting_approval: "blue",
   changes_requested: "amber",
+  estimate: "emerald",
+  ready_to_finalize: "amber",
   payment_pending: "blue",
   proof_received: "amber",
   overdue: "rose",
@@ -69,14 +75,16 @@ export const INVOICE_GROUPS: {
   {
     id: "needs_you",
     label: "Needs you",
-    description: "Drafts to finish, changes to make, proof to verify, and overdue payments to chase.",
-    stages: ["draft", "changes_requested", "proof_received", "overdue"],
+    description:
+      "Drafts to finish, changes to make, final invoices to send after events, proof to verify, and overdue payments to chase.",
+    stages: ["draft", "changes_requested", "ready_to_finalize", "proof_received", "overdue"],
   },
   {
     id: "waiting",
     label: "Waiting on the client",
-    description: "Sent for approval, or approved and waiting on payment.",
-    stages: ["awaiting_approval", "payment_pending"],
+    description:
+      "Sent for approval, approved and waiting for the event (payment opens with the final invoice), or waiting on payment.",
+    stages: ["awaiting_approval", "estimate", "payment_pending"],
   },
   {
     id: "closed",

@@ -1016,6 +1016,8 @@ export const seedApprovedQuoteWithLinkedEvent = mutation({
       subtotalUsd: 100,
       totalUsd: 100,
       clientApprovalStatus: "approved",
+      // Seeds are settled invoices: payment is open (#406).
+      billingFinalizedAt: Date.now(),
       approvedAt: now - 60_000,
       clientApprovalSignedName: "E2E Signer",
       clientIsPaymentSubmitter: true,
@@ -1274,6 +1276,8 @@ export const seedBookingClientApproved = mutation({
       subtotalUsd: 100,
       totalUsd: 100,
       clientApprovalStatus: "approved",
+      // Seeds are settled invoices: payment is open (#406).
+      billingFinalizedAt: Date.now(),
       approvedAt: now,
       clientApprovalSignedName: "E2E Approver",
       clientIsPaymentSubmitter: true,
@@ -1417,6 +1421,8 @@ export const seedPastLinkedEventForFeedback = mutation({
         subtotalUsd: 100,
         totalUsd: 100,
         clientApprovalStatus: "approved",
+        // Seeds are settled invoices: payment is open (#406).
+        billingFinalizedAt: Date.now(),
         approvedAt: now - 60_000,
         clientApprovalSignedName: "E2E Signer",
         clientIsPaymentSubmitter: true,
@@ -1461,6 +1467,8 @@ export const seedPastLinkedEventForFeedback = mutation({
       subtotalUsd: 100,
       totalUsd: 100,
       clientApprovalStatus: "approved",
+      // Seeds are settled invoices: payment is open (#406).
+      billingFinalizedAt: Date.now(),
       approvedAt: now - 60_000,
       clientApprovalSignedName: "E2E Signer",
       clientIsPaymentSubmitter: true,
@@ -1597,6 +1605,8 @@ export const seedPastMultiDayEventsForFeedback = mutation({
         subtotalUsd: 100,
         totalUsd: 100,
         clientApprovalStatus: "approved",
+        // Seeds are settled invoices: payment is open (#406).
+        billingFinalizedAt: Date.now(),
         approvedAt: now - 60_000,
         clientApprovalSignedName: "E2E Signer",
         clientIsPaymentSubmitter: true,
@@ -1640,6 +1650,8 @@ export const seedPastMultiDayEventsForFeedback = mutation({
       subtotalUsd: 100,
       totalUsd: 100,
       clientApprovalStatus: "approved",
+      // Seeds are settled invoices: payment is open (#406).
+      billingFinalizedAt: Date.now(),
       approvedAt: now - 60_000,
       clientApprovalSignedName: "E2E Signer",
       clientIsPaymentSubmitter: true,
@@ -1708,6 +1720,8 @@ export const seedEventFeedbackForInsights = mutation({
       subtotalUsd: 100,
       totalUsd: 100,
       clientApprovalStatus: "approved",
+      // Seeds are settled invoices: payment is open (#406).
+      billingFinalizedAt: Date.now(),
       approvedAt: now - 60_000,
       clientApprovalSignedName: "E2E Signer",
       clientIsPaymentSubmitter: true,
@@ -5071,6 +5085,8 @@ export const seedInvoiceWithProofSubmission = mutation({
       subtotalUsd: 400,
       totalUsd: 400,
       clientApprovalStatus: "approved",
+      // Seeds are settled invoices: payment is open (#406).
+      billingFinalizedAt: Date.now(),
       approvedAt: now - 60_000,
       clientApprovalSignedName: "E2E Signer",
       clientIsPaymentSubmitter: true,

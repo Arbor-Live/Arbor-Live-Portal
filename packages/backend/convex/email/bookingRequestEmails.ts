@@ -140,6 +140,8 @@ export async function scheduleBookingQuoteReadyEmail(
       | "managerEmail"
       | "clientReviewReadyAt"
       | "clientReadyMessage"
+      | "billingFinalizedAt"
+      | "paymentOpenedEarlyAt"
     >;
   },
 ) {
@@ -176,6 +178,7 @@ export async function scheduleBookingQuoteReadyEmail(
       eventName,
       invoiceNumber: invoice.invoiceNumber,
       quoteTotalUsd: invoice.totalUsd,
+      paymentOpen: Boolean(invoice.billingFinalizedAt || invoice.paymentOpenedEarlyAt),
       trackingUrl: requestTrackingUrl(publicToken),
       managerName: invoice.managerName,
       managerEmail,

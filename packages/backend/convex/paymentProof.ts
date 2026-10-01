@@ -459,6 +459,7 @@ export const submitByInvoiceId = mutation({
     const result = await submitPaymentProof(ctx, invoice, linkedEvent, {
       paymentMethod: args.paymentMethod,
       paymentReference: args.paymentReference,
+      allowBeforePaymentOpens: true,
     });
 
     if (args.sendNotificationEmails !== false) {

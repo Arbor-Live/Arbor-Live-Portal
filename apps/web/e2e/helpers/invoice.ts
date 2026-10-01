@@ -1,13 +1,29 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Browser, type Page } from "@playwright/test";
+import { pollConvex } from "./convex";
+import { e2eEnv } from "./env";
 
 /**
  * Shared drivers for the invoice editor.
  *
- * The editor autosaves on a 2.5s debounce *and* exposes an explicit Save in the
- * sticky bar. Specs drive the explicit path so the assertion point is
- * deterministic, but the debounce can still fire on its own — so assert against
- * persisted state via `pollConvex` rather than counting saves.
+ * The editor autosaves unsent drafts on a 2.5s debounce *and* exposes an
+ * explicit Save in the sticky bar (sent and approved quotes only save
+ * explicitly). Specs drive the explicit path so the assertion point is
+ * deterministic, but the debounce can still fire on its own — so assert
+ * against persisted state via `pollConvex` rather than counting saves.
  */
+
+export type InvoiceRevisionsState = {
+  clientApprovalStatus: string;
+  totalUsd: number;
+  approvedTotalUsd: number | null;
+  revisions: Array<{ number: number; kind: string; totalUsd: number; note: string | null; recordedLate: boolean }>;
+};
+
+type ApprovalEditorState = {
+  clientApprovalStatus: string | null;
+  publicApprovalToken: string | null;
+  publicPath: string | null;
+};
 
 /**
  * The saved editor's title: the invoice number (`ALINV-…`). `/invoices/new`
@@ -121,4 +137,41 @@ export async function readTotal(page: Page, testId: string): Promise<number> {
   const match = text.match(/-?\$?([\d,]+(?:\.\d+)?)/);
   if (!match) throw new Error(`Could not parse a number out of ${testId}: "${text}"`);
   return Number(match[1]!.replace(/,/g, ""));
+}
+
+/** A quote approved by the client (at $150) through its public page, open in the editor. */
+export async function clientApprovedQuote(page: Page, browser: Browser, label: string) {
+  const invoiceId = await createDraftInvoiceWithArtistLine(page, { label, quantity: "1", rate: "150" });
+  const drafted = await pollConvex<ApprovalEditorState>(
+    "e2eHelpers:getInvoiceEditorState",
+    { invoiceId },
+    (row) => Boolean(row?.publicApprovalToken),
+  );
+
+  const clientContext = await browser.newContext({ baseURL: e2eEnv.baseURL });
+  try {
+    const clientPage = await clientContext.newPage();
+    await clientPage.goto(`${drafted.publicPath!}?tab=quote`);
+    await expect(clientPage.getByText(/Terms & Conditions/i).first()).toBeVisible({ timeout: 25_000 });
+    await clientPage.getByPlaceholder("Jordan Lee").fill("E2E Approver");
+    await clientPage.getByText("I will be submitting the payment").click();
+    await clientPage.getByRole("button", { name: "Approve quote" }).click();
+    await expect(clientPage.getByText(/Approved on/i).first()).toBeVisible({ timeout: 25_000 });
+  } finally {
+    await clientContext.close();
+  }
+
+  // Approval pins what the client agreed to.
+  const approved = await pollConvex<InvoiceRevisionsState>(
+    "e2eHelpers:getInvoiceRevisionsState",
+    { invoiceId },
+    (row) => row?.clientApprovalStatus === "approved" && row.revisions.length === 1,
+  );
+  expect(approved.revisions[0]).toMatchObject({ number: 1, kind: "approved", totalUsd: 150, recordedLate: false });
+  expect(approved.approvedTotalUsd).toBe(150);
+
+  await page.goto(`/dashboard/financial-hub/invoices/${invoiceId}`);
+  await expect(invoiceEditorHeading(page)).toBeVisible({ timeout: 25_000 });
+  await expect(page.getByTestId("invoice-versions-card")).toContainText("Approved", { timeout: 25_000 });
+  return { invoiceId, publicPath: drafted.publicPath! };
 }

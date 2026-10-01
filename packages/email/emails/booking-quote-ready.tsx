@@ -18,6 +18,7 @@ export function BookingQuoteReadyEmail({
   eventName,
   invoiceNumber,
   quoteTotalUsd,
+  paymentOpen,
   trackingUrl,
   managerName,
   managerEmail,
@@ -52,6 +53,12 @@ export function BookingQuoteReadyEmail({
         />
       </DataCard>
       <CtaButton href={trackingUrl} label="Review and approve quote" />
+      {paymentOpen ? null : (
+        <BodyCopy>
+          This quote is an estimate. Your final invoice comes after the event, once crew hours and anything added
+          on the day are settled, so please don&apos;t send payment until we send it.
+        </BodyCopy>
+      )}
       <ContactNote managerName={managerName} managerEmail={managerEmail} />
       <MutedCopy>A PDF copy of the quote is attached to this email.</MutedCopy>
       <EmailSignOff />

@@ -236,6 +236,8 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
       termsIds: resolveInvoiceTermsIds(invoice),
       additionalTermsMarkdown: invoice.additionalTermsMarkdown,
       approvedTotalUsd: invoice.approvedTotalUsd,
+      /** Set once staff settle the estimate into the final invoice (after the event). */
+      billingFinalizedAt: invoice.billingFinalizedAt,
     },
     /** Every version since the first approval, newest first. Amounts only; no staff ids. */
     revisions: (await listInvoiceRevisions(ctx, invoice._id)).map((revision) => ({

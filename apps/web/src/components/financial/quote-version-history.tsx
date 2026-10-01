@@ -7,7 +7,12 @@ import { formatDate, formatUsd } from "@/lib/format";
 import { diffQuoteLines, formatUsdDelta, type QuoteLine } from "@/lib/quote-diff";
 import { QuoteChangeList } from "./quote-change-list";
 
-export type QuoteRevisionKind = "approved" | "reapproval_requested" | "change_kept_approval" | "matched_approval";
+export type QuoteRevisionKind =
+  | "approved"
+  | "reapproval_requested"
+  | "change_kept_approval"
+  | "matched_approval"
+  | "final";
 
 export type QuoteRevision = {
   number: number;
@@ -25,6 +30,7 @@ const KIND_LABELS: Record<QuoteRevisionKind, string> = {
   reapproval_requested: "Sent for re-approval",
   change_kept_approval: "Changed, approval kept",
   matched_approval: "Changed, discounted to approved total",
+  final: "Final invoice",
 };
 
 const KIND_TONES: Record<QuoteRevisionKind, Tone> = {
@@ -32,6 +38,7 @@ const KIND_TONES: Record<QuoteRevisionKind, Tone> = {
   reapproval_requested: "amber",
   change_kept_approval: "blue",
   matched_approval: "blue",
+  final: "emerald",
 };
 
 /**

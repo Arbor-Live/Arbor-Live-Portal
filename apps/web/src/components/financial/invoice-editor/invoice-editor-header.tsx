@@ -40,6 +40,7 @@ import {
   invoiceStatusTone,
   type InvoiceStatus,
 } from "./invoice-status";
+import { InvoiceBillingState } from "./invoice-billing-state";
 import type { InvoiceDraft } from "./use-invoice-draft";
 
 type SourceRequest = {
@@ -592,6 +593,7 @@ function InvoiceWorkflowStrip({
           </Button>
         </div>
       ) : null}
+      {approval === "approved" && invoice.status !== "void" ? <InvoiceBillingState draft={draft} /> : null}
     </div>
   );
 }

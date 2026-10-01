@@ -15,6 +15,8 @@ const invoiceDocumentValidator = v.object({
     clientPhone: v.optional(v.string()),
     clientApprovalStatus: v.optional(v.string()),
     digitalQuoteUrl: v.optional(v.string()),
+    isFinal: v.optional(v.boolean()),
+    paymentOpenEarly: v.optional(v.boolean()),
     equipmentSubtotalUsd: v.number(),
     externalRentalsSubtotalUsd: v.number(),
     artistsSubtotalUsd: v.number(),

@@ -60,6 +60,8 @@ const invoiceRevisionKindValue = v.union(
   v.literal("change_kept_approval"),
   /** Staff changed an approved quote and discounted it back to the approved total. */
   v.literal("matched_approval"),
+  /** Staff settled it after the event: the final invoice the client pays. */
+  v.literal("final"),
 );
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
@@ -715,6 +717,18 @@ export default defineSchema({
     approvedRevisionId: v.optional(v.id("invoiceRevisions")),
     /** That revision's total, denormalized for lists. */
     approvedTotalUsd: v.optional(v.number()),
+
+    /**
+     * An approved quote is an estimate until staff settle it after the event
+     * (hours final): then it's the final invoice, and payment opens. Distinct
+     * from `status: "finalized"`, which means sent/published.
+     */
+    billingFinalizedAt: v.optional(v.number()),
+    billingFinalizedByName: v.optional(v.string()),
+    /** Payment opened before the final invoice (a deposit or prepayment), with why. */
+    paymentOpenedEarlyAt: v.optional(v.number()),
+    paymentOpenedEarlyByName: v.optional(v.string()),
+    paymentOpenedEarlyNote: v.optional(v.string()),
 
     createdAt: v.number(),
     updatedAt: v.number(),
