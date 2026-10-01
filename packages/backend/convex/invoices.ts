@@ -2373,6 +2373,8 @@ export const markReadyForClientReview = mutation({
             _id: updatedInvoice._id,
             invoiceNumber: updatedInvoice.invoiceNumber,
             totalUsd: updatedInvoice.totalUsd,
+            billingFinalizedAt: updatedInvoice.billingFinalizedAt,
+            paymentOpenedEarlyAt: updatedInvoice.paymentOpenedEarlyAt,
             managerName: updatedInvoice.managerName,
             managerEmail: updatedInvoice.managerEmail,
             clientReviewReadyAt: now,

@@ -32,6 +32,23 @@ test.describe("approved estimate → final invoice", () => {
       await expect(client.getByText("Submit Payment Proof")).toHaveCount(0);
     });
 
+    // The portal hides the form, and the server refuses too: a portal token
+    // can't submit proof on an estimate.
+    const token = (
+      await pollConvex<{ publicApprovalToken: string | null }>(
+        "e2eHelpers:getInvoiceEditorState",
+        { invoiceId },
+        (row) => Boolean(row?.publicApprovalToken),
+      )
+    ).publicApprovalToken!;
+    expect(() =>
+      runConvex("paymentProof:submitByQuoteToken", {
+        token,
+        paymentMethod: "assu_epay",
+        paymentReference: "E2E-EARLY-1",
+      }),
+    ).toThrow(/Payment isn't open yet/);
+
     const billing = page.getByTestId("invoice-billing-state");
     await expect(billing).toContainText("Approved estimate", { timeout: 25_000 });
     await billing.getByTestId("invoice-finalize-billing").click();

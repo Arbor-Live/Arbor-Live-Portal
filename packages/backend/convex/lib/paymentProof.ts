@@ -277,10 +277,20 @@ export async function submitPaymentProof(
   args: {
     paymentMethod: PaymentProofMethod;
     paymentReference: string;
+    /**
+     * Staff recording proof by hand (the client paid another way) may do so on
+     * an estimate. Clients, through their portal token, may not.
+     */
+    allowBeforePaymentOpens?: boolean;
   },
 ) {
   if ((invoice.clientApprovalStatus ?? "pending") !== "approved") {
     throw new Error("Payment proof can be submitted after the quote is approved.");
+  }
+  if (!args.allowBeforePaymentOpens && !isPaymentProofOpen(Date.now(), invoice)) {
+    throw new Error(
+      "Payment isn't open yet. Your approved quote is an estimate; we'll send the final invoice after the event.",
+    );
   }
 
   if (invoice.paymentReceivedAt) {
