@@ -9,6 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ListSummary, RowCell, RowList } from "@/components/list-page";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -138,8 +146,11 @@ export function BandPaymentHistorySection() {
 
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Search</label>
+            <Label htmlFor="band-payment-search" className="text-xs text-muted-foreground">
+              Search
+            </Label>
             <Input
+              id="band-payment-search"
               className="w-56"
               placeholder="Event, payment ID…"
               value={search}
@@ -150,21 +161,27 @@ export function BandPaymentHistorySection() {
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Status</label>
-            <select
-              className="h-9 rounded-md border bg-background px-3 text-sm"
+            <Label htmlFor="band-payment-status-filter" className="text-xs text-muted-foreground">
+              Status
+            </Label>
+            <Select
               value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value as StatusFilter);
+              onValueChange={(value) => {
+                setStatusFilter(value as StatusFilter);
                 setPage(0);
               }}
             >
-              <option value="all">All</option>
-              <option value="action_needed">Needs my signature</option>
-              <option value="awaiting_confirmation">Awaiting signature</option>
-              <option value="confirmed">Ready to pay</option>
-              <option value="paid">Paid</option>
-            </select>
+              <SelectTrigger id="band-payment-status-filter" className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="action_needed">Needs my signature</SelectItem>
+                <SelectItem value="awaiting_confirmation">Awaiting signature</SelectItem>
+                <SelectItem value="confirmed">Ready to pay</SelectItem>
+                <SelectItem value="paid">Paid</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -172,94 +189,85 @@ export function BandPaymentHistorySection() {
           <p className="text-sm text-muted-foreground">Loading payments…</p>
         ) : (
           <>
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full min-w-table-md text-sm">
-                <thead className="bg-muted/40">
-                  <tr className="border-b text-left">
-                    <th className="px-3 py-2 font-medium">Event</th>
-                    <th className="px-3 py-2 font-medium">Date</th>
-                    <th className="px-3 py-2 font-medium">Payment ID</th>
-                    <th className="px-3 py-2 font-medium">Amount</th>
-                    <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pageRows.map((payment) => (
-                    <tr key={payment._id} className="border-b last:border-b-0">
-                      <td className="px-3 py-3 align-top">
-                        <div className="space-y-0.5">
-                          <p className="font-medium">{payment.eventTitle}</p>
-                          {payment.venueName ? (
-                            <p className="text-xs text-muted-foreground">{payment.venueName}</p>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 align-top text-muted-foreground">
-                        {formatDate(payment.eventStartAt)}
-                      </td>
-                      <td className="px-3 py-3 align-top font-mono text-xs">
-                        {payment.confirmationToken}
-                      </td>
-                      <td className="px-3 py-3 align-top">{formatUsd(payment.totalUsd)}</td>
-                      <td className="px-3 py-3 align-top">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                            statusBadgeClass(payment.status),
-                          )}
-                        >
-                          {payment.statusLabel}
-                        </span>
-                        {payment.status === "awaiting_confirmation" && !payment.canSign ? (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Waiting on
-                            {payment.designatedPayeeName
-                              ? ` ${payment.designatedPayeeName}`
-                              : " designated payee"}
-                          </p>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-3 align-top">
-                        <div className="flex flex-wrap gap-2">
-                          {payment.canSign ? (
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => {
-                                setSigningId(payment._id);
-                                setTypedName("");
-                                setAgreed(false);
-                                setError(null);
-                              }}
-                            >
-                              E-sign
-                            </Button>
-                          ) : null}
-                          {payment.canDownloadAgreementPdf ? (
-                            <BandPaymentAgreementPdfButton
-                              paymentId={payment._id}
-                              label="PDF"
-                              size="sm"
-                            />
-                          ) : null}
-                          {!payment.canSign && !payment.canDownloadAgreementPdf ? (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {pageRows.length === 0 ? (
-                <p className="p-4 text-sm text-muted-foreground">
-                  {payments.length === 0
-                    ? "No payments yet."
-                    : "No payments match your filters."}
-                </p>
-              ) : null}
-            </div>
+            <ListSummary testId="band-payments-summary">
+              {filtered.length} payment{filtered.length === 1 ? "" : "s"}
+              {actionNeededCount > 0
+                ? ` · ${actionNeededCount} need${actionNeededCount === 1 ? "s" : ""} your signature`
+                : ""}
+            </ListSummary>
+
+            <RowList joined testId="band-payments-list">
+              {pageRows.map((payment) => (
+                <li
+                  key={payment._id}
+                  className="flex flex-wrap items-start gap-x-3 gap-y-2 px-3 py-3 text-sm"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">{payment.eventTitle}</p>
+                    {payment.venueName ? (
+                      <p className="text-xs text-muted-foreground">{payment.venueName}</p>
+                    ) : null}
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatDate(payment.eventStartAt)}
+                      {" · "}
+                      <span className="font-mono">{payment.confirmationToken}</span>
+                    </p>
+                  </div>
+                  <RowCell className="w-24">{formatUsd(payment.totalUsd)}</RowCell>
+                  <div className="w-44 shrink-0">
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+                        statusBadgeClass(payment.status),
+                      )}
+                    >
+                      {payment.statusLabel}
+                    </span>
+                    {payment.status === "awaiting_confirmation" && !payment.canSign ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Waiting on
+                        {payment.designatedPayeeName
+                          ? ` ${payment.designatedPayeeName}`
+                          : " designated payee"}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    {payment.canSign ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          setSigningId(payment._id);
+                          setTypedName("");
+                          setAgreed(false);
+                          setError(null);
+                        }}
+                      >
+                        E-sign
+                      </Button>
+                    ) : null}
+                    {payment.canDownloadAgreementPdf ? (
+                      <BandPaymentAgreementPdfButton
+                        paymentId={payment._id}
+                        label="PDF"
+                        size="sm"
+                      />
+                    ) : null}
+                    {!payment.canSign && !payment.canDownloadAgreementPdf ? (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </RowList>
+            {pageRows.length === 0 ? (
+              <div className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                {payments.length === 0
+                  ? "No payments yet."
+                  : "No payments match your filters."}
+              </div>
+            ) : null}
 
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
               <p className="text-muted-foreground">

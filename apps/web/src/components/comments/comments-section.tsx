@@ -21,6 +21,7 @@ import { notify } from "@/lib/notify";
 import { PORTAL_TIMEZONE } from "@/lib/format";
 import { buildUserSelectDescription } from "@/lib/user-select-description";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
 
 /** Threads are keyed by subject, so a new surface only adds a literal here. */
 export type CommentSubjectType = "event" | "damage_batch" | "event_request";
@@ -418,10 +419,10 @@ function CommentsPanel({
         }}
       >
         <PopoverAnchor asChild>
-          <textarea
+          <Textarea
             ref={textareaRef}
             data-testid="comment-input"
-            className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
+            className="min-h-24"
             placeholder="Write a comment… type @ to mention a teammate"
             value={body}
             aria-activedescendant={

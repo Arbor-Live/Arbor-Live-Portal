@@ -33,6 +33,7 @@ function matchesQuery(option: SearchableSelectOption, query: string) {
 }
 
 export function SearchableSelect({
+  id,
   value,
   onChange,
   options,
@@ -50,6 +51,8 @@ export function SearchableSelect({
   clearable = false,
   clearLabel = "Clear",
 }: {
+  /** Wires the trigger to a `<Label htmlFor>`. */
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   options: SearchableSelectOption[];
@@ -152,6 +155,7 @@ export function SearchableSelect({
       filter={serverBacked ? null : matchesQuery}
     >
       <ComboboxTrigger
+        id={id}
         aria-label={emptyLabel ?? placeholder}
         data-testid="searchable-select-trigger"
         className={cn(

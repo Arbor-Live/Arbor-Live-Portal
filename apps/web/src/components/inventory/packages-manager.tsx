@@ -11,6 +11,13 @@ import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   inventoryPackageSchema,
@@ -715,31 +722,36 @@ export function PackagesManager() {
                       </label>
                       {packageValues.publicListing ? (
                         <div className="space-y-2">
-                          <Label>Public browse section</Label>
-                          <select
-                            className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                            value={packageValues.publicBucket}
-                            onChange={(event) =>
+                          <Label htmlFor="package-public-bucket">Public browse section</Label>
+                          <Select
+                            value={packageValues.publicBucket || "none"}
+                            onValueChange={(value) =>
                               packageForm.setValue(
                                 "publicBucket",
-                                event.target.value as InventoryPackageFormValues["publicBucket"],
+                                (value === "none"
+                                  ? ""
+                                  : value) as InventoryPackageFormValues["publicBucket"],
                                 { shouldDirty: true },
                               )
                             }
                           >
-                            <option value="">Select section…</option>
-                            {(Object.keys(publicBucketLabels) as PublicPackageBucket[]).map((key) => (
-                              <option key={key} value={key}>
-                                {publicBucketLabels[key]}
-                              </option>
-                            ))}
-                          </select>
+                            <SelectTrigger id="package-public-bucket" className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Select section…</SelectItem>
+                              {(Object.keys(publicBucketLabels) as PublicPackageBucket[]).map((key) => (
+                                <SelectItem key={key} value={key}>
+                                  {publicBucketLabels[key]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           {/*
-                            The section picker is a plain select rather than a
-                            FormField, so nothing else renders its error. The
-                            schema refuses `publicListing` without a bucket, and
-                            without this the operator just sees Create do
-                            nothing.
+                            The section picker is not a FormField, so nothing
+                            else renders its error. The schema refuses
+                            `publicListing` without a bucket, and without this
+                            the operator just sees Create do nothing.
                           */}
                           {packageErrors.publicBucket ? (
                             <p className="text-sm text-destructive">

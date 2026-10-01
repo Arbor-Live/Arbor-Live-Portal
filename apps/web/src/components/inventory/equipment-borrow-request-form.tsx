@@ -15,6 +15,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
+import { Textarea } from "@/components/ui/textarea";
 import {
   InventoryPackageSearchSelect,
   InventoryTypeSearchSelect,
@@ -181,8 +182,9 @@ export function EquipmentBorrowRequestForm({
           </div>
 
           <div className="space-y-2">
-            <Label>Pickup and return</Label>
+            <Label htmlFor="borrow-window">Pickup and return</Label>
             <DateTimeRangePicker
+              id="borrow-window"
               startValue={windowStart}
               endValue={windowEnd}
               onChange={({ start, end }) => {
@@ -194,8 +196,9 @@ export function EquipmentBorrowRequestForm({
           </div>
 
           <div className="space-y-2">
-            <Label>Venue</Label>
+            <Label htmlFor="borrow-venue">Venue</Label>
             <VenuePicker
+              id="borrow-venue"
               value={venueId}
               onChange={setVenueId}
               allowCreate
@@ -206,9 +209,9 @@ export function EquipmentBorrowRequestForm({
 
           <div className="space-y-2">
             <Label htmlFor="borrow-notes">Notes</Label>
-            <textarea
+            <Textarea
               id="borrow-notes"
-              className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              className="min-h-20"
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               placeholder="Anything else we should know?"
@@ -216,7 +219,7 @@ export function EquipmentBorrowRequestForm({
           </div>
 
           <div className="space-y-2">
-            <Label>Equipment</Label>
+            <p className="text-sm font-medium">Equipment</p>
             <div className="space-y-2">
               {lines.map((line) => (
                 <div key={line.key} className="space-y-2 rounded-md border p-3">

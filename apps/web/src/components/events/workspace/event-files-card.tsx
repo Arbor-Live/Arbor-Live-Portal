@@ -18,6 +18,7 @@ import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { EventArtifactUploadField } from "@/components/files/file-upload-field";
 import { StoredAssetImage, StoredAssetLink } from "@/components/files/stored-asset-image";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -111,8 +112,8 @@ function AddFileForm({ eventId, onDone }: { eventId: Id<"events">; onDone: () =>
         })}
       </div>
       <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <textarea
-        className="min-h-20 w-full border bg-background px-3 py-2 text-sm"
+      <Textarea
+        className="min-h-20"
         placeholder="Details (optional)"
         value={markdown}
         onChange={(e) => setMarkdown(e.target.value)}

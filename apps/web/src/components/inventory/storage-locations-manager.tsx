@@ -7,7 +7,17 @@ import { useAppDialog } from "@/components/ui/app-dialog";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { ListRow } from "@/components/list-row";
+import { EmptyState, ListSummary, RowList, RowText } from "@/components/list-page";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StorageLocationEditor } from "./storage-location-editor";
 
 const defaultForm = { name: "", parentId: "" };
@@ -47,20 +57,40 @@ export function StorageLocationsManager() {
       <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle>Storage Locations</CardTitle>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               placeholder="Search location/path"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              className="w-56"
             />
-            <select
-              className="h-9 rounded-md border bg-background px-3 text-sm"
+            <Select
               value={sortDir}
-              onChange={(event) => setSortDir(event.target.value as typeof sortDir)}
+              onValueChange={(value) => setSortDir(value as typeof sortDir)}
             >
-              <option value="asc">Path Asc</option>
-              <option value="desc">Path Desc</option>
-            </select>
+              <SelectTrigger aria-label="Sort by path" className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="asc">Path Asc</SelectItem>
+                <SelectItem value="desc">Path Desc</SelectItem>
+              </SelectContent>
+            </Select>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Checkbox
+                checked={
+                  filteredLocations.length > 0 &&
+                  selectedIds.length === filteredLocations.length
+                }
+                onCheckedChange={(checked) =>
+                  setSelectedIds(
+                    checked ? filteredLocations.map((location) => location._id) : [],
+                  )
+                }
+                aria-label="Select all locations"
+              />
+              Select all
+            </label>
             <Button
               type="button"
               variant="destructive"
@@ -72,69 +102,74 @@ export function StorageLocationsManager() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="overflow-auto rounded-md border">
-            <table className="min-w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="p-2 text-left">
-                    <input
-                      type="checkbox"
-                      checked={filteredLocations.length > 0 && selectedIds.length === filteredLocations.length}
-                      onChange={(event) =>
-                        setSelectedIds(
-                          event.target.checked ? filteredLocations.map((location) => location._id) : [],
+          <ListSummary testId="storage-locations-summary">
+            {filteredLocations.length} location{filteredLocations.length === 1 ? "" : "s"}
+            {search.trim() ? ` matching “${search.trim()}”` : ""}
+          </ListSummary>
+          {filteredLocations.length === 0 ? (
+            <EmptyState>
+              {search.trim()
+                ? "No locations match this search."
+                : "No storage locations yet."}
+            </EmptyState>
+          ) : (
+            <RowList joined testId="storage-locations-list">
+              {filteredLocations.map((location) => (
+                <ListRow
+                  key={location._id}
+                  data-testid={`location-row-${location._id}`}
+                  leading={
+                    <Checkbox
+                      checked={selectedIds.includes(location._id)}
+                      onCheckedChange={(checked) =>
+                        setSelectedIds((prev) =>
+                          checked
+                            ? [...prev, location._id]
+                            : prev.filter((id) => id !== location._id),
                         )
                       }
+                      aria-label={`Select ${location.name}`}
                     />
-                  </th>
-                  <th className="p-2 text-left">Name</th>
-                  <th className="p-2 text-left">Path</th>
-                  <th className="p-2 text-left">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLocations.map((location) => (
-                  <tr key={location._id} data-testid={`location-row-${location._id}`} className="border-t">
-                    <td className="p-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(location._id)}
-                        onChange={(event) =>
-                          setSelectedIds((prev) =>
-                            event.target.checked
-                              ? [...prev, location._id]
-                              : prev.filter((id) => id !== location._id),
-                          )
-                        }
-                      />
-                    </td>
-                    <td className="p-2">{location.name}</td>
-                    <td className="p-2">{location.path}</td>
-                    <td className="p-2">
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setEditingId(location._id);
-                            setEditorInitial({
-                              name: location.name,
-                              parentId: location.parentId ?? "",
-                            });
-                          }}
-                        >
-                          Edit
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={() => void removeLocation({ id: location._id })}>
-                          Delete
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  }
+                  onOpen={() =>
+                    setSelectedIds((prev) =>
+                      prev.includes(location._id)
+                        ? prev.filter((id) => id !== location._id)
+                        : [...prev, location._id],
+                    )
+                  }
+                  actions={
+                    <div className="flex items-center gap-1 pr-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingId(location._id);
+                          setEditorInitial({
+                            name: location.name,
+                            parentId: location.parentId ?? "",
+                          });
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => void removeLocation({ id: location._id })}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  }
+                >
+                  <RowText title={location.name} detail={location.path} />
+                </ListRow>
+              ))}
+            </RowList>
+          )}
         </CardContent>
       </Card>
 

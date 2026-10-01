@@ -18,6 +18,7 @@ import {
 import { api } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { RowCell } from "@/components/list-page";
 import { Input } from "@/components/ui/input";
 import type { SearchableSelectOption } from "@/components/inventory/searchable-select";
 import { EventLinkedInvoicesField } from "@/components/events/event-linked-invoices-field";
@@ -436,42 +437,40 @@ export function BillingTab() {
                     </span>
                     <span className="text-sm font-semibold tabular-nums">{formatUsd(block.subtotalUsd)}</span>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="overflow-x-auto border-t">
-                    <table className="min-w-full text-xs">
-                      <thead>
-                        <tr className="border-b bg-muted/30 text-left">
-                          <th className="px-3 py-2 font-medium">Crew</th>
-                          <th className="px-3 py-2 font-medium">Role</th>
-                          <th className="px-3 py-2 font-medium">Shift</th>
-                          <th className="px-3 py-2 font-medium">Hours (Reg / OT)</th>
-                          <th className="px-3 py-2 font-medium">Rate (Base / OT)</th>
-                          <th className="px-3 py-2 text-right font-medium">Subtotal</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {block.rows.map((row) => (
-                          <tr key={row.shiftId} className="border-b last:border-b-0">
-                            <td className="px-3 py-2">
-                              <p>{row.name}</p>
-                              {row.missingRate ? (
-                                <p className="text-2xs text-status-amber-700">Missing base rate</p>
-                              ) : null}
-                            </td>
-                            <td className="px-3 py-2">{row.role || "—"}</td>
-                            <td className="px-3 py-2">
-                              {formatDateTime(row.startsAt)} – {formatDateTime(row.endsAt)}
-                            </td>
-                            <td className="px-3 py-2">
-                              {formatHours(row.regularHours)} / {formatHours(row.overtimeHours)}
-                            </td>
-                            <td className="px-3 py-2">
-                              {formatUsd(row.baseRateUsd)} / {formatUsd(row.overtimeRateUsd)}
-                            </td>
-                            <td className="px-3 py-2 text-right">{formatUsd(row.subtotalUsd)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <CollapsibleContent className="border-t">
+                    <div className="hidden items-center gap-3 bg-muted/20 px-3 py-2 text-xs font-medium text-muted-foreground md:flex">
+                      <span className="min-w-0 flex-1">Crew</span>
+                      <span className="w-40 shrink-0">Shift</span>
+                      <span className="w-24 shrink-0 text-right">Hours (Reg / OT)</span>
+                      <span className="w-32 shrink-0 text-right">Rate (Base / OT)</span>
+                      <span className="w-20 shrink-0 text-right">Subtotal</span>
+                    </div>
+                    <ul className="divide-y">
+                      {block.rows.map((row) => (
+                        <li
+                          key={row.shiftId}
+                          className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-xs md:flex-nowrap"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium">{row.name}</p>
+                            <p className="text-muted-foreground">{row.role || "—"}</p>
+                            {row.missingRate ? (
+                              <p className="text-2xs text-status-amber-700">Missing base rate</p>
+                            ) : null}
+                          </div>
+                          <span className="w-full text-muted-foreground md:w-40 md:shrink-0">
+                            {formatDateTime(row.startsAt)} – {formatDateTime(row.endsAt)}
+                          </span>
+                          <RowCell className="w-24">
+                            {formatHours(row.regularHours)} / {formatHours(row.overtimeHours)}
+                          </RowCell>
+                          <RowCell className="w-32">
+                            {formatUsd(row.baseRateUsd)} / {formatUsd(row.overtimeRateUsd)}
+                          </RowCell>
+                          <RowCell className="w-20">{formatUsd(row.subtotalUsd)}</RowCell>
+                        </li>
+                      ))}
+                    </ul>
                   </CollapsibleContent>
                 </Collapsible>
               ))

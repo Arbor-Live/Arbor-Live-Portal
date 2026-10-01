@@ -1,7 +1,7 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { runConvex } from "../helpers/convex";
 import { formField } from "../helpers/form";
-import { pickSearchableOption } from "../helpers/select";
+import { pickSearchableOption, pickSelectOption } from "../helpers/select";
 import {
   deleteInventoryFixtures,
   confirmAppDialog,
@@ -60,7 +60,7 @@ test.describe.serial("inventory items and storage locations", () => {
     expect(parent.parentPath).toBeNull();
 
     await formField(form, "Name").fill(childLocation);
-    await form.locator("select").selectOption(parent.locationId);
+    await pickSelectOption(page, form.locator("#storage-location-parent"), parentLocation);
     await form.getByRole("button", { name: "Create", exact: true }).click();
 
     const child = await waitForStorageLocation(childLocation, (state) => Boolean(state?.parentPath));

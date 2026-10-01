@@ -17,6 +17,14 @@ import { Form } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   invoiceContactSchema,
@@ -218,38 +226,46 @@ export function FinancialHubOrganizationsClient() {
             >
               <TextFormField name="name" label="" placeholder="New host name" />
               <div className="space-y-1">
-                <select
-                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                <Select
                   value={newGroupForm.watch("type")}
-                  onChange={(e) =>
-                    newGroupForm.setValue("type", e.target.value as GroupType, { shouldDirty: true })
+                  onValueChange={(value) =>
+                    newGroupForm.setValue("type", value as GroupType, { shouldDirty: true })
                   }
                 >
-                  {INVOICE_GROUP_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="new-host-type" aria-label="Host type" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INVOICE_GROUP_TYPE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1">
-                <select
-                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                <Select
                   value={newGroupForm.watch("equipmentPricingMode")}
-                  onChange={(e) =>
+                  onValueChange={(value) =>
                     newGroupForm.setValue(
                       "equipmentPricingMode",
-                      e.target.value as EquipmentPricingMode,
+                      value as EquipmentPricingMode,
                       { shouldDirty: true },
                     )
                   }
                 >
-                  {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="new-host-pricing" aria-label="Equipment pricing mode" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <Button type="submit" disabled={newGroupForm.saveStatus === "saving"}>
                 Add host
@@ -517,36 +533,46 @@ function EditGroupForm({
         <div className="grid gap-3 md:grid-cols-4">
           <TextFormField name="name" label="Name" />
           <div className="space-y-2">
-            <label className="text-sm font-medium">Type</label>
-            <select
-              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+            <Label htmlFor="edit-host-type">Type</Label>
+            <Select
               value={form.watch("type")}
-              onChange={(e) => form.setValue("type", e.target.value as GroupType, { shouldDirty: true })}
+              onValueChange={(value) =>
+                form.setValue("type", value as GroupType, { shouldDirty: true })
+              }
             >
-              {INVOICE_GROUP_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="edit-host-type" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {INVOICE_GROUP_TYPE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Equipment pricing</label>
-            <select
-              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+            <Label htmlFor="edit-host-pricing">Equipment pricing</Label>
+            <Select
               value={form.watch("equipmentPricingMode")}
-              onChange={(e) =>
-                form.setValue("equipmentPricingMode", e.target.value as EquipmentPricingMode, {
+              onValueChange={(value) =>
+                form.setValue("equipmentPricingMode", value as EquipmentPricingMode, {
                   shouldDirty: true,
                 })
               }
             >
-              {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="edit-host-pricing" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="text-xs text-muted-foreground">
               Applied when this host is selected on a new invoice.
             </p>

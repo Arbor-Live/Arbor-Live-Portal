@@ -3,13 +3,14 @@
 import type { Ref } from "react";
 import { CameraIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   looksLikeAssetTag,
   looksLikeSerialNumber,
   normalizeAssetScanInput,
 } from "@/lib/asset-scan";
-import { cn } from "@/lib/utils";
 import { SearchableSelect } from "./searchable-select";
 import { ScanInput } from "./scan-input";
 import { useBarcodeCamera, type ScanOutcome } from "./use-barcode-camera";
@@ -62,9 +63,6 @@ type InventoryItemDetailsProps = {
   disabled?: boolean;
 };
 
-const textareaClassName =
-  "min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-(--focus-ring-width) focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive";
-
 /**
  * The per-item editor shared by the create-asset wizard and the item editor —
  * "what shows in the edit section". Controlled: the parent owns `values` and
@@ -97,6 +95,8 @@ export function InventoryItemDetails({
 
   const assetLooksLikeSerial = looksLikeSerialNumber(values.assetId);
   const serialLooksLikeAssetTag = looksLikeAssetTag(values.serialNumber);
+  // Distinct prefixes keep ids unique when two editors render at once.
+  const idPrefix = testIdPrefix ?? "inventory-item";
 
   function handleAssetIdScan(raw: string) {
     if (onScanAssetId) {
@@ -125,8 +125,9 @@ export function InventoryItemDetails({
     <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label>Asset ID</Label>
+          <Label htmlFor={`${idPrefix}-asset-id`}>Asset ID</Label>
           <ScanInput
+            id={`${idPrefix}-asset-id`}
             value={values.assetId}
             onChange={(assetId) => onChange({ assetId })}
             onScan={handleAssetIdScan}
@@ -148,8 +149,9 @@ export function InventoryItemDetails({
           ) : null}
         </div>
         <div className="space-y-1.5">
-          <Label>Serial Number</Label>
+          <Label htmlFor={`${idPrefix}-serial-number`}>Serial Number</Label>
           <ScanInput
+            id={`${idPrefix}-serial-number`}
             value={values.serialNumber}
             onChange={(serialNumber) => onChange({ serialNumber })}
             onScan={handleSerialScan}
@@ -169,15 +171,16 @@ export function InventoryItemDetails({
 
       {fixedTypeLabel ? (
         <div className="space-y-1.5">
-          <Label>Type</Label>
+          <p className="text-sm font-medium">Type</p>
           <div className="h-9 flex items-center rounded-none border border-input bg-muted/40 px-3 text-sm">
             {fixedTypeLabel}
           </div>
         </div>
       ) : (
         <div className="space-y-2" data-testid={testIdPrefix ? `${testIdPrefix}-type-field` : undefined}>
-          <Label>Type</Label>
+          <Label htmlFor={`${idPrefix}-type`}>Type</Label>
           <SearchableSelect
+            id={`${idPrefix}-type`}
             value={values.typeId}
             onChange={(typeId) => onChange({ typeId })}
             options={types ?? []}
@@ -188,8 +191,9 @@ export function InventoryItemDetails({
       )}
 
       <div className="space-y-2" data-testid={testIdPrefix ? `${testIdPrefix}-location-field` : undefined}>
-        <Label>Storage Location</Label>
+        <Label htmlFor={`${idPrefix}-storage-location`}>Storage Location</Label>
         <SearchableSelect
+          id={`${idPrefix}-storage-location`}
           value={values.storageLocationId ?? ""}
           onChange={(storageLocationId) => onChange({ storageLocationId })}
           options={[{ value: "", label: "Unassigned" }, ...locations]}
@@ -199,13 +203,14 @@ export function InventoryItemDetails({
       </div>
 
       <div className="space-y-2">
-        <Label>Contained In Asset</Label>
+        <Label htmlFor={`${idPrefix}-contained-in`}>Contained In Asset</Label>
         <div className="flex gap-1.5">
           <div
             className="min-w-0 flex-1"
             data-testid={testIdPrefix ? `${testIdPrefix}-container-field` : undefined}
           >
             <SearchableSelect
+              id={`${idPrefix}-contained-in`}
               value={values.containedInAssetId ?? ""}
               onChange={(containedInAssetId) => onChange({ containedInAssetId })}
               options={[{ value: "", label: "Not contained" }, ...containerOptions]}
@@ -243,27 +248,26 @@ export function InventoryItemDetails({
       ) : null}
 
       <div className="space-y-1.5">
-        <Label>Status</Label>
-        <input
+        <Label htmlFor={`${idPrefix}-status`}>Status</Label>
+        <Input
+          id={`${idPrefix}-status`}
           type="text"
           value={values.status}
           onChange={(event) => onChange({ status: event.target.value })}
           placeholder="e.g. functional, needs repair"
           disabled={disabled}
-          className={cn(textareaClassName, "min-h-0")}
-          aria-label="Status"
         />
       </div>
 
       <div className="space-y-1.5">
-        <Label>Notes</Label>
-        <textarea
+        <Label htmlFor={`${idPrefix}-notes`}>Notes</Label>
+        <Textarea
+          id={`${idPrefix}-notes`}
           value={values.notes}
           onChange={(event) => onChange({ notes: event.target.value })}
           placeholder="Optional details"
           disabled={disabled}
-          className={cn(textareaClassName, "min-h-20")}
-          aria-label="Notes"
+          className="min-h-20"
         />
       </div>
 
