@@ -1,32 +1,57 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   clampToStage,
   computePlotLayout,
   glyphNode,
   gridLineOffsets,
+  itemGlyph,
   itemRect,
   itemTransform,
   labelRect,
-  PLOT_COLORS,
+  plotDrawOrder,
   pxToFt,
-  RIDER_CATEGORY_PALETTE,
   riderSymbol,
   round,
 } from "@arbor/rider-document";
-import type { PlotLayout, RiderContent, RiderStageItem } from "@arbor/rider-document";
-import { ArrowsClockwiseIcon, XIcon } from "@phosphor-icons/react";
-import { cn } from "@/lib/utils";
+import type { ItemRect, PlotLayout, RiderContent, RiderStageItem } from "@arbor/rider-document";
+import { ArrowArcLeftIcon, ArrowArcRightIcon, CopyIcon, TrashIcon } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button";
 import { DOM_GLYPH_COMPONENTS } from "@/components/riders/rider-symbol-glyph";
+import { channelBadge, RIDER_FAMILY } from "@/components/riders/rider-plot-theme";
+import { cn } from "@/lib/utils";
 
-/** Payload used when dragging a palette chip onto the stage. */
+/** Payload used when dragging a gear tile onto the stage. */
 export const RIDER_SYMBOL_MIME = "application/x-arbor-rider-symbol";
 
-const PLOT_PADDING = 22;
+/** Room around the stage for the feet ruler. */
+const PLOT_PADDING = 24;
+/** The audience apron under the downstage edge. */
+const APRON = 30;
 const NUDGE_FT = 0.25;
 const COARSE_NUDGE_FT = 1;
 const ROTATE_SNAP_DEG = 15;
+/** Dragged symbols land on a 6 in grid, so rows of gear line up; Alt places freely. */
+const DRAG_SNAP_FT = 0.5;
+const TOOLBAR_HEIGHT = 32;
+const TOOLBAR_WIDTH = 128;
+
+function snapFt(value: number): number {
+  return Math.round(value / DRAG_SNAP_FT) * DRAG_SNAP_FT;
+}
+
+function wrapDegrees(rotation: number): number {
+  return ((rotation % 360) + 360) % 360;
+}
+
+/** Feet marks along the stage edges: every 4 ft, or 8 ft when that gets crowded. */
+function rulerMarks(lengthFt: number, pxPerFt: number): number[] {
+  const step = pxPerFt * 4 >= 28 ? 4 : 8;
+  const marks: number[] = [];
+  for (let ft = 0; ft <= lengthFt; ft += step) marks.push(ft);
+  return marks;
+}
 
 type StagePlotCanvasProps = {
   content: RiderContent;
@@ -35,11 +60,18 @@ type StagePlotCanvasProps = {
   onMoveItem?: (itemId: string, xFt: number, yFt: number) => void;
   onRotateItem?: (itemId: string, rotation: number) => void;
   onDeleteItem?: (itemId: string) => void;
+  onDuplicateItem?: (itemId: string) => void;
   onDropSymbol?: (symbolKey: string, xFt: number, yFt: number) => void;
   readOnly?: boolean;
   className?: string;
   /** Fixed width for previews; otherwise the canvas fills its container. */
   fixedWidth?: number;
+  /** Multiplies the fitted width; above 1 the plot scrolls and drags to pan. */
+  zoom?: number;
+  /** Channel and mix numbers on the gear that produces them. */
+  showPatch?: boolean;
+  /** Shown over an empty stage (e.g. starter layouts). */
+  emptyState?: ReactNode;
 };
 
 export function StagePlotCanvas({
@@ -49,10 +81,14 @@ export function StagePlotCanvas({
   onMoveItem,
   onRotateItem,
   onDeleteItem,
+  onDuplicateItem,
   onDropSymbol,
   readOnly = false,
   className,
   fixedWidth,
+  zoom = 1,
+  showPatch = true,
+  emptyState,
 }: StagePlotCanvasProps) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -73,14 +109,30 @@ export function StagePlotCanvas({
     return () => observer.disconnect();
   }, [fixedWidth]);
 
-  const width = fixedWidth ?? Math.max(measuredWidth, 280);
+  const zoomed = zoom > 1;
+  const width = fixedWidth ?? Math.max(measuredWidth, 280) * zoom;
   const innerWidth = Math.max(width - PLOT_PADDING * 2, 1);
-  const height =
+  const plotHeight =
     PLOT_PADDING * 2 +
     (innerWidth * Math.max(content.stage.depthFt, 1)) / Math.max(content.stage.widthFt, 1);
-  const layout = computePlotLayout(content.stage, { width, height, padding: PLOT_PADDING });
+  const height = plotHeight + APRON;
+  const layout = computePlotLayout(content.stage, { width, height: plotHeight, padding: PLOT_PADDING });
   const grid = gridLineOffsets(layout);
   const stage = layout.stage;
+  const stageBottom = stage.top + stage.height;
+
+  /** Channel and mix badges, keyed by the item that produces them. */
+  const patch = useMemo(() => {
+    const channels = new Map<string, Array<{ channel: number; stereo?: boolean }>>();
+    for (const input of content.inputs) {
+      if (!input.stageItemId) continue;
+      const list = channels.get(input.stageItemId) ?? [];
+      list.push(input);
+      channels.set(input.stageItemId, list);
+    }
+    const mixes = new Map(content.monitorMixes.map((mix) => [mix.id, mix.mixNumber]));
+    return { channels, mixes };
+  }, [content.inputs, content.monitorMixes]);
 
   function pointerToFt(clientX: number, clientY: number) {
     const box = svgRef.current?.getBoundingClientRect();
@@ -89,52 +141,59 @@ export function StagePlotCanvas({
     return pxToFt(layout, (clientX - box.left) * ratio, (clientY - box.top) * ratio);
   }
 
-  const dragRef = useRef<
-    | { mode: "move"; itemId: string; offsetXFt: number; offsetYFt: number }
-    | { mode: "rotate"; itemId: string }
-    | null
-  >(null);
+  const dragRef = useRef<{ itemId: string; offsetXFt: number; offsetYFt: number } | null>(null);
+  /** Dragging empty stage while zoomed scrolls the plot; a tap without moving deselects. */
+  const panRef = useRef<{
+    x: number;
+    y: number;
+    scrollLeft: number;
+    scrollTop: number;
+    moved: boolean;
+  } | null>(null);
+  const onSelectRef = useRef(onSelect);
   const pointerToFtRef = useRef(pointerToFt);
   const contentRef = useRef(content);
   const onMoveItemRef = useRef(onMoveItem);
-  const onRotateItemRef = useRef(onRotateItem);
 
   useEffect(() => {
     pointerToFtRef.current = pointerToFt;
     contentRef.current = content;
     onMoveItemRef.current = onMoveItem;
-    onRotateItemRef.current = onRotateItem;
+    onSelectRef.current = onSelect;
   });
 
   useEffect(() => {
     if (readOnly) return;
 
     function handleMove(event: PointerEvent) {
+      const pan = panRef.current;
+      const wrapper = wrapperRef.current;
+      if (pan && wrapper) {
+        const dx = event.clientX - pan.x;
+        const dy = event.clientY - pan.y;
+        if (!pan.moved && Math.hypot(dx, dy) < 4) return;
+        pan.moved = true;
+        event.preventDefault();
+        wrapper.scrollLeft = pan.scrollLeft - dx;
+        wrapper.scrollTop = pan.scrollTop - dy;
+        return;
+      }
       const drag = dragRef.current;
       if (!drag) return;
       event.preventDefault();
       const pointer = pointerToFtRef.current(event.clientX, event.clientY);
-      const current = contentRef.current;
-
-      if (drag.mode === "move") {
-        const next = clampToStage(
-          { xFt: pointer.xFt + drag.offsetXFt, yFt: pointer.yFt + drag.offsetYFt },
-          current.stage,
-        );
-        onMoveItemRef.current?.(drag.itemId, round(next.xFt), round(next.yFt));
-        return;
-      }
-
-      const item = current.items.find((candidate) => candidate.id === drag.itemId);
-      if (!item) return;
-      const degrees =
-        (Math.atan2(pointer.yFt - item.yFt, pointer.xFt - item.xFt) * 180) / Math.PI + 90;
-      const snapped =
-        Math.round(degrees / ROTATE_SNAP_DEG) * ROTATE_SNAP_DEG;
-      onRotateItemRef.current?.(drag.itemId, ((snapped % 360) + 360) % 360);
+      const xFt = pointer.xFt + drag.offsetXFt;
+      const yFt = pointer.yFt + drag.offsetYFt;
+      const next = clampToStage(
+        event.altKey ? { xFt, yFt } : { xFt: snapFt(xFt), yFt: snapFt(yFt) },
+        contentRef.current.stage,
+      );
+      onMoveItemRef.current?.(drag.itemId, round(next.xFt), round(next.yFt));
     }
 
     function handleUp() {
+      if (panRef.current && !panRef.current.moved) onSelectRef.current?.(null);
+      panRef.current = null;
       dragRef.current = null;
     }
 
@@ -149,36 +208,27 @@ export function StagePlotCanvas({
   }, [readOnly]);
 
   /**
-   * `preventDefault` on pointerdown (needed so dragging a symbol does not also
-   * select page text) suppresses the focus the canvas would otherwise get, and
-   * without focus `handleKeyDown` never fires — so nudge/rotate/delete keys do
-   * nothing after clicking a symbol. Focus it explicitly instead.
+   * `preventDefault` on pointerdown (so dragging doesn't select page text) also
+   * suppresses focus, and without focus the keyboard shortcuts never fire.
    */
   function focusCanvas() {
     canvasRef.current?.focus({ preventScroll: true });
   }
 
   function beginMove(event: React.PointerEvent, item: RiderStageItem) {
-    if (readOnly) return;
+    if (readOnly) {
+      onSelect?.(item.id);
+      return;
+    }
     event.preventDefault();
     focusCanvas();
     onSelect?.(item.id);
     const pointer = pointerToFt(event.clientX, event.clientY);
     dragRef.current = {
-      mode: "move",
       itemId: item.id,
       offsetXFt: item.xFt - pointer.xFt,
       offsetYFt: item.yFt - pointer.yFt,
     };
-  }
-
-  function beginRotate(event: React.PointerEvent, item: RiderStageItem) {
-    if (readOnly) return;
-    event.preventDefault();
-    event.stopPropagation();
-    focusCanvas();
-    onSelect?.(item.id);
-    dragRef.current = { mode: "rotate", itemId: item.id };
   }
 
   function handleKeyDown(event: React.KeyboardEvent) {
@@ -212,7 +262,15 @@ export function StagePlotCanvas({
       case "r":
       case "R":
         event.preventDefault();
-        return onRotateItem?.(item.id, (item.rotation + ROTATE_SNAP_DEG) % 360);
+        return onRotateItem?.(
+          item.id,
+          wrapDegrees(item.rotation + (event.shiftKey ? -ROTATE_SNAP_DEG : ROTATE_SNAP_DEG)),
+        );
+      case "d":
+      case "D":
+        if (!onDuplicateItem) return;
+        event.preventDefault();
+        return onDuplicateItem(item.id);
       case "Escape":
         return onSelect?.(null);
       default:
@@ -233,10 +291,34 @@ export function StagePlotCanvas({
 
   const selectedItem = content.items.find((item) => item.id === selectedId) ?? null;
 
+  // Zoomed in, keep the selected symbol on screen (e.g. picked from the list).
+  const selectedRect = selectedItem ? itemRect(layout, selectedItem) : null;
+  const selectedCx = selectedRect?.cx;
+  const selectedCy = selectedRect?.cy;
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!zoomed || !wrapper || selectedCx === undefined || selectedCy === undefined) return;
+    if (dragRef.current) return;
+    const margin = 48;
+    const visible =
+      selectedCx > wrapper.scrollLeft + margin &&
+      selectedCx < wrapper.scrollLeft + wrapper.clientWidth - margin &&
+      selectedCy > wrapper.scrollTop + margin &&
+      selectedCy < wrapper.scrollTop + wrapper.clientHeight - margin;
+    if (visible) return;
+    wrapper.scrollTo({
+      left: selectedCx - wrapper.clientWidth / 2,
+      top: selectedCy - wrapper.clientHeight / 2,
+      behavior: "smooth",
+    });
+    // Only when the selection changes or the zoom does, not on every nudge.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, zoom]);
+
   return (
     <div
       ref={wrapperRef}
-      className={cn("relative w-full", className)}
+      className={cn("relative w-full", zoomed && "max-h-[70vh] overflow-auto overscroll-contain", className)}
       onDragOver={(event) => {
         if (readOnly || !event.dataTransfer.types.includes(RIDER_SYMBOL_MIME)) return;
         event.preventDefault();
@@ -255,10 +337,7 @@ export function StagePlotCanvas({
         aria-label={readOnly ? undefined : "Stage plot"}
         tabIndex={readOnly ? undefined : 0}
         onKeyDown={handleKeyDown}
-        className={cn(
-          "relative outline-none",
-          !readOnly && "focus-visible:ring-2 focus-visible:ring-ring",
-        )}
+        className={cn("relative outline-none", !readOnly && "focus-visible:ring-2 focus-visible:ring-ring")}
         style={{ width, height }}
       >
         <svg
@@ -266,94 +345,80 @@ export function StagePlotCanvas({
           width={width}
           height={height}
           viewBox={`0 0 ${width} ${height}`}
-          className={cn("touch-none", isDraggingOver && "opacity-90")}
-          onPointerDown={() => onSelect?.(null)}
+          className="touch-none"
+          onPointerDown={(event) => {
+            const wrapper = wrapperRef.current;
+            if (!zoomed || !wrapper || readOnly) {
+              onSelect?.(null);
+              return;
+            }
+            panRef.current = {
+              x: event.clientX,
+              y: event.clientY,
+              scrollLeft: wrapper.scrollLeft,
+              scrollTop: wrapper.scrollTop,
+              moved: false,
+            };
+          }}
         >
+          {/* The audience apron, so the downstage edge reads as the front of the stage. */}
+          <rect
+            x={stage.left}
+            y={stageBottom}
+            width={stage.width}
+            height={APRON - 4}
+            className="fill-muted/60"
+          />
           <rect
             x={stage.left}
             y={stage.top}
             width={stage.width}
             height={stage.height}
-            fill={PLOT_COLORS.stageFill}
-            stroke={isDraggingOver ? "#2563eb" : PLOT_COLORS.stageBorder}
-            strokeWidth={isDraggingOver ? 2.5 : 1.2}
+            className={cn("fill-card", isDraggingOver ? "stroke-primary" : "stroke-border")}
+            strokeWidth={isDraggingOver ? 2 : 1}
           />
-          {grid.vertical.map((x) => (
-            <line
-              key={`v-${x}`}
-              x1={x}
-              y1={stage.top}
-              x2={x}
-              y2={stage.top + stage.height}
-              stroke={PLOT_COLORS.grid}
-              strokeWidth={1}
-            />
-          ))}
-          {grid.horizontal.map((y) => (
-            <line
-              key={`h-${y}`}
-              x1={stage.left}
-              y1={y}
-              x2={stage.left + stage.width}
-              y2={y}
-              stroke={PLOT_COLORS.grid}
-              strokeWidth={1}
-            />
-          ))}
+          {/* A dot at every grid crossing: enough to line gear up, quiet enough to ignore. */}
+          {grid.vertical.flatMap((x) =>
+            grid.horizontal.map((y) => (
+              <circle key={`dot-${x}-${y}`} cx={x} cy={y} r={1.2} className="fill-foreground/20" />
+            )),
+          )}
+          <line
+            x1={stage.left + stage.width / 2}
+            y1={stage.top}
+            x2={stage.left + stage.width / 2}
+            y2={stageBottom}
+            className="stroke-foreground/10"
+            strokeWidth={1}
+            strokeDasharray="4 6"
+          />
           <line
             x1={stage.left}
-            y1={stage.top + stage.height}
+            y1={stageBottom}
             x2={stage.left + stage.width}
-            y2={stage.top + stage.height}
-            stroke={PLOT_COLORS.audienceBar}
-            strokeWidth={4}
+            y2={stageBottom}
+            className="stroke-foreground/80"
+            strokeWidth={3}
           />
 
-          {content.items.map((item) => {
-            const symbol = riderSymbol(item.symbol);
+          {plotDrawOrder(content.items).map((item) => {
             const rect = itemRect(layout, item);
-            const rotation = itemTransform(rect, item.rotation);
-            const isSelected = item.id === selectedId;
             return (
               <g
                 key={item.id}
-                className={cn(!readOnly && "cursor-grab")}
+                className={cn(readOnly ? "cursor-pointer" : "cursor-grab active:cursor-grabbing")}
                 onPointerDown={(event) => {
                   event.stopPropagation();
                   beginMove(event, item);
                 }}
               >
-                {isSelected ? (
-                  <g transform={rotation}>
-                    <rect
-                      x={rect.x - 4}
-                      y={rect.y - 4}
-                      width={rect.width + 8}
-                      height={rect.height + 8}
-                      fill="none"
-                      stroke="currentColor"
-                      className="text-primary"
-                      strokeWidth={1.5}
-                      strokeDasharray="5 4"
-                    />
-                  </g>
-                ) : null}
-                {glyphNode({
-                  shapes: symbol.shapes,
-                  palette: RIDER_CATEGORY_PALETTE[symbol.category],
-                  components: DOM_GLYPH_COMPONENTS,
-                  rect,
-                  glyphViewBox: symbol.glyphViewBox,
-                  preserveAspect: symbol.preserveAspect,
-                  rotationTransform: rotation,
-                  keyPrefix: item.id,
-                })}
-                {/* Invisible hit area so thin glyphs stay easy to grab. */}
+                <StageSymbol item={item} rect={rect} selected={item.id === selectedId} />
+                {/* Invisible hit area, at least thumb-sized, so small symbols stay easy to grab. */}
                 <rect
-                  x={rect.x}
-                  y={rect.y}
-                  width={rect.width}
-                  height={rect.height}
+                  x={rect.cx - Math.max(rect.width, 24) / 2}
+                  y={rect.cy - Math.max(rect.height, 24) / 2}
+                  width={Math.max(rect.width, 24)}
+                  height={Math.max(rect.height, 24)}
                   fill="transparent"
                 />
               </g>
@@ -362,58 +427,147 @@ export function StagePlotCanvas({
         </svg>
 
         {content.items.map((item) => {
+          if (!item.label) return null;
           const rect = itemRect(layout, item);
           const label = labelRect(layout, rect, 14);
+          const isSelected = item.id === selectedId;
+          // A plate keeps labels readable where gear overlaps.
           return (
             <div
               key={`label-${item.id}`}
-              className="pointer-events-none absolute truncate text-center text-3xs leading-tight font-medium text-status-slate-900"
-              style={{ left: label.left, top: label.top, width: label.width }}
+              className="pointer-events-none absolute flex justify-center"
+              style={{ left: label.left, top: label.top, width: label.width, zIndex: isSelected ? 2 : 1 }}
             >
-              {item.label}
+              <span
+                className={cn(
+                  "max-w-full truncate bg-card/85 px-0.5 text-center text-3xs leading-tight",
+                  isSelected ? "font-semibold text-foreground" : "font-medium text-foreground/80",
+                )}
+              >
+                {item.label}
+              </span>
             </div>
           );
         })}
 
+        {/* Risers and tables show their size, since that's what crew builds to. */}
+        {content.items.map((item) => {
+          const symbol = riderSymbol(item.symbol);
+          if (!symbol.resizable) return null;
+          const rect = itemRect(layout, item);
+          if (rect.width < 48 || rect.height < 28) return null;
+          const widthFt = item.widthFt ?? symbol.widthFt;
+          const depthFt = item.depthFt ?? symbol.depthFt;
+          return (
+            <span
+              key={`size-${item.id}`}
+              aria-hidden
+              className="pointer-events-none absolute text-right text-4xs tabular-nums text-muted-foreground"
+              style={{ left: rect.x, top: rect.y + 4, width: rect.width - 6 }}
+            >
+              {widthFt} × {depthFt} ft
+            </span>
+          );
+        })}
+
+        {showPatch
+          ? content.items.map((item) => {
+              const channels = channelBadge(patch.channels.get(item.id) ?? []);
+              const mix = item.monitorMixId ? patch.mixes.get(item.monitorMixId) : undefined;
+              if (!channels && mix === undefined) return null;
+              const rect = itemRect(layout, item);
+              return (
+                <div
+                  key={`patch-${item.id}`}
+                  className="pointer-events-none absolute flex -translate-x-1/2 gap-0.5"
+                  style={{ left: rect.x + rect.width, top: rect.y - 6, zIndex: 3 }}
+                >
+                  {channels ? (
+                    <span
+                      className="bg-rider-input px-1 text-3xs leading-4 font-semibold text-background tabular-nums"
+                      title={`Channel ${channels}`}
+                    >
+                      {channels}
+                    </span>
+                  ) : null}
+                  {mix !== undefined ? (
+                    <span
+                      className="bg-rider-monitor px-1 text-3xs leading-4 font-semibold text-background tabular-nums"
+                      title={`Monitor mix ${mix}`}
+                    >
+                      M{mix}
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })
+          : null}
+
+        {rulerMarks(content.stage.widthFt, layout.scale).map((ft) => (
+          <span
+            key={`ruler-x-${ft}`}
+            aria-hidden
+            className="pointer-events-none absolute w-8 -translate-x-1/2 text-center text-4xs tabular-nums text-muted-foreground"
+            style={{ left: stage.left + ft * layout.scale, top: stage.top - 15 }}
+          >
+            {ft}′
+          </span>
+        ))}
+        {/* The top ruler already marks 0 at the corner. */}
+        {rulerMarks(content.stage.depthFt, layout.scale)
+          .slice(1)
+          .map((ft) => (
+            <span
+              key={`ruler-y-${ft}`}
+              aria-hidden
+              className="pointer-events-none absolute w-5 -translate-y-1/2 pr-1 text-right text-4xs tabular-nums text-muted-foreground"
+              style={{ left: stage.left - 20, top: stage.top + ft * layout.scale }}
+            >
+              {ft}′
+            </span>
+          ))}
+
         <span
-          className="pointer-events-none absolute text-4xs tracking-widest text-status-slate-500"
+          className="pointer-events-none absolute text-4xs tracking-widest text-muted-foreground"
           style={{ left: stage.left + 6, top: stage.top + 5 }}
         >
           STAGE RIGHT
         </span>
         <span
-          className="pointer-events-none absolute text-right text-4xs tracking-widest text-status-slate-500"
+          className="pointer-events-none absolute text-right text-4xs tracking-widest text-muted-foreground"
           style={{ left: stage.left, top: stage.top + 5, width: stage.width - 6 }}
         >
           STAGE LEFT
         </span>
         <span
-          className="pointer-events-none absolute text-center text-4xs tracking-widest text-status-slate-500"
+          className="pointer-events-none absolute text-center text-4xs tracking-widest text-muted-foreground"
           style={{ left: stage.left, top: stage.top + 5, width: stage.width }}
         >
-          UPSTAGE · {content.stage.widthFt} × {content.stage.depthFt} FT
+          UPSTAGE
         </span>
         <span
-          className="pointer-events-none absolute text-center text-3xs font-semibold tracking-eyebrow text-status-slate-900"
-          style={{ left: stage.left, top: stage.top + stage.height + 5, width: stage.width }}
+          className="pointer-events-none absolute text-center text-3xs font-semibold tracking-eyebrow text-muted-foreground"
+          style={{ left: stage.left, top: stageBottom + 8, width: stage.width }}
         >
           AUDIENCE
         </span>
 
         {!readOnly && selectedItem ? (
-          <SelectionControls
+          <SelectionToolbar
             item={selectedItem}
             layout={layout}
-            onRotateStart={(event) => beginRotate(event, selectedItem)}
+            onRotate={(delta) => onRotateItem?.(selectedItem.id, wrapDegrees(selectedItem.rotation + delta))}
+            onDuplicate={onDuplicateItem ? () => onDuplicateItem(selectedItem.id) : undefined}
             onDelete={() => onDeleteItem?.(selectedItem.id)}
           />
         ) : null}
 
-        {!readOnly && content.items.length === 0 ? (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <p className="max-w-xs text-center text-sm text-status-slate-500">
-              Drag symbols from the palette onto the stage, or pick a starter layout.
-            </p>
+        {content.items.length === 0 && emptyState ? (
+          <div
+            className="absolute flex items-center justify-center p-4"
+            style={{ left: stage.left, top: stage.top, width: stage.width, height: stage.height }}
+          >
+            {emptyState}
           </div>
         ) : null}
       </div>
@@ -421,41 +575,131 @@ export function StagePlotCanvas({
   );
 }
 
-function SelectionControls({
+/**
+ * A symbol drawn from the shared artwork (the PDF draws the same shapes) in
+ * its family colour, with a soft halo when selected.
+ */
+function StageSymbol({
+  item,
+  rect,
+  selected,
+}: {
+  item: RiderStageItem;
+  rect: ItemRect;
+  selected: boolean;
+}) {
+  const symbol = riderSymbol(item.symbol);
+  const glyph = itemGlyph(item);
+  const family = RIDER_FAMILY[symbol.category];
+  const rotation = itemTransform(rect, item.rotation);
+  return (
+    <>
+      {selected ? (
+        <g transform={rotation}>
+          <rect
+            x={rect.x - 4}
+            y={rect.y - 4}
+            width={rect.width + 8}
+            height={rect.height + 8}
+            className={cn("fill-transparent", family.stroke)}
+            strokeWidth={1.5}
+            strokeDasharray="4 3"
+          />
+        </g>
+      ) : null}
+      {glyphNode({
+        shapes: glyph.shapes,
+        palette: family.paint,
+        components: DOM_GLYPH_COMPONENTS,
+        rect,
+        glyphViewBox: glyph.glyphViewBox,
+        preserveAspect: glyph.preserveAspect,
+        rotationTransform: rotation,
+        keyPrefix: item.id,
+      })}
+    </>
+  );
+}
+
+/**
+ * Actions for the selected symbol, floating above it (or below, near the top
+ * edge). Big enough to hit with a thumb, unlike corner handles.
+ */
+function SelectionToolbar({
   item,
   layout,
-  onRotateStart,
+  onRotate,
+  onDuplicate,
   onDelete,
 }: {
   item: RiderStageItem;
   layout: PlotLayout;
-  onRotateStart: (event: React.PointerEvent) => void;
+  onRotate: (deltaDegrees: number) => void;
+  onDuplicate?: () => void;
   onDelete: () => void;
 }) {
   const rect = itemRect(layout, item);
+  // The symbol's furthest extent from its centre, so a rotated symbol is
+  // never covered by its own toolbar.
+  const reach = Math.hypot(rect.width, rect.height) / 2 + 8;
+  const above = rect.cy - reach - TOOLBAR_HEIGHT;
+  const top = above >= 0 ? above : Math.min(rect.cy + reach, layout.height - TOOLBAR_HEIGHT);
+  const left = Math.min(Math.max(rect.cx - TOOLBAR_WIDTH / 2, 0), layout.width - TOOLBAR_WIDTH);
+  const name = item.label || "symbol";
 
   return (
-    <>
-      <button
+    <div
+      role="toolbar"
+      aria-label={`Actions for ${name}`}
+      data-testid="stage-selection-toolbar"
+      className="absolute z-10 flex items-center border bg-popover text-popover-foreground shadow-md"
+      style={{ left, top, width: TOOLBAR_WIDTH, height: TOOLBAR_HEIGHT }}
+      // Keep presses on the toolbar from reaching the stage, which deselects.
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <Button
         type="button"
-        aria-label={`Rotate ${item.label}`}
-        title="Drag to rotate"
-        onPointerDown={onRotateStart}
-        className="absolute flex size-6 cursor-grab items-center justify-center rounded-full border border-primary bg-background text-primary shadow-sm"
-        style={{ left: rect.cx - 12, top: rect.y - 30 }}
+        size="icon-sm"
+        variant="ghost"
+        aria-label={`Rotate ${name} left`}
+        title="Rotate left (Shift+R)"
+        onClick={() => onRotate(-ROTATE_SNAP_DEG)}
       >
-        <ArrowsClockwiseIcon className="size-3.5" />
-      </button>
-      <button
+        <ArrowArcLeftIcon />
+      </Button>
+      <Button
         type="button"
-        aria-label={`Remove ${item.label}`}
-        title="Remove from plot"
+        size="icon-sm"
+        variant="ghost"
+        aria-label={`Rotate ${name} right`}
+        title="Rotate right (R)"
+        onClick={() => onRotate(ROTATE_SNAP_DEG)}
+      >
+        <ArrowArcRightIcon />
+      </Button>
+      {onDuplicate ? (
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          aria-label={`Duplicate ${name}`}
+          title="Duplicate (D)"
+          onClick={onDuplicate}
+        >
+          <CopyIcon />
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="ghost"
+        className="text-destructive"
+        aria-label={`Remove ${name}`}
+        title="Remove (Delete)"
         onClick={onDelete}
-        className="absolute flex size-6 items-center justify-center rounded-full border border-destructive bg-white text-destructive shadow-sm"
-        style={{ left: rect.x + rect.width + 4, top: rect.y - 12 }}
       >
-        <XIcon className="size-3.5" />
-      </button>
-    </>
+        <TrashIcon />
+      </Button>
+    </div>
   );
 }

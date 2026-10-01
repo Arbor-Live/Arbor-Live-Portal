@@ -110,51 +110,17 @@ export function nextMixNumber(mixes: RiderMonitorMix[]): number {
 }
 
 /**
- * Rewrites channel numbers so every slot 1..N is used (no gaps) and every
- * stereo pair starts on an odd number (the Wing's physical inputs are paired
- * 1+2, 3+4, …). When a stereo would start on an even slot, the next mono input
- * is pulled into that even slot instead of leaving it empty; if no mono follows
- * (stereo at the tail), the mono before the pair is bumped after it.
+ * Numbers channels in list order with no gaps; a stereo pair takes two numbers
+ * (5–6). Pairing onto odd physical sockets is the show-file allocator's job,
+ * so the rider reads in plain order.
  */
 export function renumberInputs(inputs: RiderInputChannel[]): RiderInputChannel[] {
-  const channels = new Array<number>(inputs.length).fill(0);
   let next = 1;
-  for (let i = 0; i < inputs.length; i++) {
-    if (channels[i] !== 0) continue;
-    const input = inputs[i];
-    if (!input.stereo) {
-      channels[i] = next;
-      next += 1;
-      continue;
-    }
-    if (next % 2 === 1) {
-      channels[i] = next;
-      next += 2;
-      continue;
-    }
-    // next is even: pull the next mono forward into this slot.
-    const filler = inputs.findIndex(
-      (candidate, j) => j > i && !candidate.stereo && channels[j] === 0,
-    );
-    if (filler !== -1) {
-      channels[filler] = next;
-      next += 1;
-      channels[i] = next;
-      next += 2;
-      continue;
-    }
-    // No mono ahead — the pair takes this odd slot and the preceding mono
-    // (which held next - 1) is bumped after it.
-    channels[i] = next - 1;
-    for (let j = i - 1; j >= 0; j--) {
-      if (channels[j] === next - 1) {
-        channels[j] = next + 1;
-        break;
-      }
-    }
-    next += 2;
-  }
-  return inputs.map((input, i) => ({ ...input, channel: channels[i] }));
+  return inputs.map((input) => {
+    const channel = next;
+    next += channelSpan(input);
+    return { ...input, channel };
+  });
 }
 
 export function renumberMixes(mixes: RiderMonitorMix[]): RiderMonitorMix[] {

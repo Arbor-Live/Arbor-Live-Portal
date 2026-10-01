@@ -231,17 +231,24 @@ export function DetailSheet({
   onOpenChange,
   testId,
   className,
+  onOpenAutoFocus,
   children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   testId?: string;
   className?: string;
+  /** Override where focus lands on open (e.g. not into a field that opens a list on focus). */
+  onOpenAutoFocus?: (event: Event) => void;
   children: React.ReactNode;
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className={cn("w-full overflow-y-auto sm:max-w-lg", className)} data-testid={testId}>
+      <SheetContent
+        className={cn("w-full overflow-y-auto sm:max-w-lg", className)}
+        data-testid={testId}
+        onOpenAutoFocus={onOpenAutoFocus}
+      >
         {children}
       </SheetContent>
     </Sheet>

@@ -269,6 +269,11 @@ export type PageTab = {
   badge?: React.ReactNode;
   /** Shows the unsaved-changes dot. */
   dirty?: boolean;
+  /**
+   * Switch tabs in place instead of navigating, for tabs that are a search
+   * param on one page (the href still works for new-tab and deep links).
+   */
+  onSelect?: () => void;
 };
 
 /**
@@ -289,6 +294,15 @@ export function PageTabs({ tabs, label }: { tabs: PageTab[]; label: string }) {
               key={tab.href}
               href={tab.href}
               aria-current={tab.active ? "page" : undefined}
+              onClick={
+                tab.onSelect
+                  ? (event) => {
+                      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                      event.preventDefault();
+                      tab.onSelect?.();
+                    }
+                  : undefined
+              }
               className={cn(
                 "relative inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
                 tab.active

@@ -11,6 +11,7 @@ import {
   searchRiderSources,
   type RiderSourceDefinition,
 } from "@arbor/rider-document";
+import { usePickerPortalContainer } from "@/components/ui/portaled-picker";
 import { cn } from "@/lib/utils";
 
 /** Also the flip threshold — below this much room, the list opens upward. */
@@ -24,6 +25,8 @@ export type RiderSourceSelection = {
 };
 
 type Props = {
+  /** For a `Label htmlFor` outside the picker. */
+  id?: string;
   /** Canonical role, if this channel has one. */
   sourceKey?: string;
   /** The band's own wording for this channel. */
@@ -50,6 +53,7 @@ type Props = {
  * rows are marked here and counted in the rider warnings instead.
  */
 export function RiderSourcePicker({
+  id,
   sourceKey,
   value,
   disabled,
@@ -69,11 +73,16 @@ export function RiderSourcePicker({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const listId = useId();
+  // Inside a Sheet the list must portal into its focus trap, or typing and
+  // clicking options would be swallowed by the modal.
+  const portalContainer = usePickerPortalContainer();
   const [box, setBox] = useState<{
     left: number;
     top: number;
     width: number;
     placement: "below" | "above";
+    /** Height of whatever the list is positioned in (the viewport or a sheet). */
+    containerHeight: number;
   } | null>(null);
 
   const selected = sourceKey ? riderSource(sourceKey) : undefined;
@@ -105,23 +114,39 @@ export function RiderSourcePicker({
     function measure() {
       const anchor = rootRef.current?.getBoundingClientRect();
       if (!anchor) return;
-      const below = window.innerHeight - anchor.bottom;
+      // Inside a sheet the list renders into the sheet's picker layer, which a
+      // transformed (sliding) sheet makes the containing block for `fixed`, so
+      // position relative to that layer rather than the viewport.
+      const origin =
+        portalContainer instanceof HTMLElement
+          ? portalContainer.getBoundingClientRect()
+          : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+      const below = origin.top + origin.height - anchor.bottom;
+      const width = Math.min(Math.max(anchor.width, 240), origin.width - 16);
+      const left = Math.min(anchor.left - origin.left, origin.width - width - 8);
+      const placement = below < MAX_LIST_HEIGHT + 8 ? "above" : "below";
       setBox({
-        left: anchor.left,
-        top: below < MAX_LIST_HEIGHT + 8 ? anchor.top : anchor.bottom + 4,
-        width: Math.max(anchor.width, 240),
-        placement: below < MAX_LIST_HEIGHT + 8 ? "above" : "below",
+        left: Math.max(left, 8),
+        top: placement === "above" ? anchor.top - origin.top : anchor.bottom - origin.top + 4,
+        width,
+        placement,
+        containerHeight: origin.height,
       });
     }
     measure();
-    // `true` so an ancestor scrolling (the table, the page) repositions us too.
+    // `true` so an ancestor scrolling (the table, the page) repositions us
+    // too, and re-measure once a sheet finishes sliding in.
     window.addEventListener("scroll", measure, true);
     window.addEventListener("resize", measure);
+    document.addEventListener("animationend", measure, true);
+    document.addEventListener("transitionend", measure, true);
     return () => {
       window.removeEventListener("scroll", measure, true);
       window.removeEventListener("resize", measure);
+      document.removeEventListener("animationend", measure, true);
+      document.removeEventListener("transitionend", measure, true);
     };
-  }, [open]);
+  }, [open, portalContainer]);
 
   useEffect(() => {
     if (!open) return;
@@ -184,6 +209,7 @@ export function RiderSourcePicker({
       <div className="relative">
         <input
           // Deliberate: the row was just created by clicking "Add channel".
+          id={id}
           autoFocus={autoFocus}
           role="combobox"
           aria-expanded={open}
@@ -231,7 +257,7 @@ export function RiderSourcePicker({
         </span>
       </div>
 
-      {open && !disabled && box
+      {open && !disabled && box && portalContainer !== null
         ? createPortal(
         <div
           ref={listRef}
@@ -244,7 +270,7 @@ export function RiderSourcePicker({
             maxHeight: MAX_LIST_HEIGHT,
             ...(box.placement === "below"
               ? { top: box.top }
-              : { bottom: window.innerHeight - box.top + 4 }),
+              : { bottom: box.containerHeight - box.top + 4 }),
           }}
           className="z-50 overflow-y-auto rounded-md border bg-popover p-1 shadow-md"
         >
@@ -274,7 +300,7 @@ export function RiderSourcePicker({
             />
           )}
         </div>,
-            document.body,
+            portalContainer ?? document.body,
           )
         : null}
     </div>

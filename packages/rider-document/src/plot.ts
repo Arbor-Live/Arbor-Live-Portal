@@ -87,8 +87,11 @@ export type ItemRect = {
 export function itemRect(layout: PlotLayout, item: RiderStageItem): ItemRect {
   const symbol = riderSymbol(item.symbol);
   const scale = item.scale > 0 ? item.scale : 1;
-  const width = symbol.widthFt * scale * layout.scale;
-  const height = symbol.depthFt * scale * layout.scale;
+  // Resizable symbols carry their own feet; everything else scales its default.
+  const widthFt = symbol.resizable && item.widthFt ? item.widthFt : symbol.widthFt * scale;
+  const depthFt = symbol.resizable && item.depthFt ? item.depthFt : symbol.depthFt * scale;
+  const width = widthFt * layout.scale;
+  const height = depthFt * layout.scale;
   const centre = ftToPx(layout, item.xFt, item.yFt);
   return {
     x: centre.x - width / 2,
@@ -98,6 +101,17 @@ export function itemRect(layout: PlotLayout, item: RiderStageItem): ItemRect {
     cx: centre.x,
     cy: centre.y,
   };
+}
+
+/** Symbols that sit under everything else, so gear standing on them stays visible. */
+const UNDERLAY_SYMBOLS = new Set(["riser", "table"]);
+
+/** Paint order for a plot: risers and tables first, then everything else in list order. */
+export function plotDrawOrder<T extends { symbol: string }>(items: T[]): T[] {
+  return [
+    ...items.filter((item) => UNDERLAY_SYMBOLS.has(item.symbol)),
+    ...items.filter((item) => !UNDERLAY_SYMBOLS.has(item.symbol)),
+  ];
 }
 
 /** SVG transform that spins an item about its own centre. */

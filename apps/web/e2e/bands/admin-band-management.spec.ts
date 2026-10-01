@@ -85,9 +85,8 @@ test.describe("admin band rider management", () => {
     await page.waitForURL(/\/dashboard\/artists\/riders\/[^/]+$/, {
       timeout: 45_000,
     });
-    await expect(page.getByText("Edit technical rider").first()).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(page.getByTestId("rider-editor")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("textbox", { name: "Rider name" })).toHaveValue(riderName);
     await expect(page.getByText("Something went wrong")).toHaveCount(0);
 
     await page.goto("/dashboard/artists/riders");
@@ -122,9 +121,8 @@ test.describe("band self-service riders", () => {
     await page.waitForURL(/\/dashboard\/artists\/riders\/[^/]+$/, {
       timeout: 45_000,
     });
-    await expect(page.getByText("Edit technical rider").first()).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(page.getByTestId("rider-editor")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("textbox", { name: "Rider name" })).toHaveValue(riderName);
   });
 });
 

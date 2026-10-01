@@ -43,6 +43,9 @@ export type RiderStageItem = {
   notes?: string;
   /** Set on monitor symbols to bind the item to a mix in `monitorMixes`. */
   monitorMixId?: string;
+  /** Own footprint in feet for resizable symbols (risers, tables); replaces `scale`. */
+  widthFt?: number;
+  depthFt?: number;
 };
 
 export type RiderInputChannel = {

@@ -326,6 +326,11 @@ labels (`TAB_ICONS` in `event-workspace-nav.tsx`, `MOMENT_ICONS` in
 | Signature / e-sign | `SignatureIcon` (awaiting signature, artist payouts) |
 | Version history (quote versions) | `ClockCounterClockwiseIcon` |
 | Select rows for a batch action | `Checkbox` (`components/ui/checkbox.tsx`), with a select-all in the group header |
+| Stage plot · rider inputs · monitor mixes | `GridFourIcon` · `PlugsConnectedIcon` · `HeadphonesIcon` (rider tabs, `lib/rider-editor-tabs.ts`) |
+| Undo · redo | `ArrowCounterClockwiseIcon` · `ArrowClockwiseIcon` |
+| Zoom out · zoom in | `MagnifyingGlassMinusIcon` · `MagnifyingGlassPlusIcon` |
+| Rotate left · right | `ArrowArcLeftIcon` · `ArrowArcRightIcon` |
+| Stage plot symbols | Drawn from `packages/rider-document/src/glyphs.ts` (Phosphor paths in to-scale outlines), never hand-picked per page; render with `RiderSymbolGlyph` |
 
 If a concept isn't in the table, search the codebase for how it's already
 drawn (`rg "<.*Icon" -g "*.tsx"`) before choosing, and add new mappings to this

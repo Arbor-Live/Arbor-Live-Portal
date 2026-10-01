@@ -21,11 +21,12 @@ import {
   itemRect,
   itemTransform,
   labelRect,
+  plotDrawOrder,
   PLOT_COLORS,
   type PlotLayout,
 } from "./plot";
 import { inputFamilyLabel } from "./content";
-import { RIDER_CATEGORY_PALETTE, riderSymbol } from "./symbols";
+import { itemGlyph, RIDER_CATEGORY_PALETTE, riderSymbol } from "./symbols";
 import type { EventBriefPatch, EventBriefPatchPort, EventBriefPlot } from "./brief-types";
 import {
   INPUT_TYPE_LABELS,
@@ -178,16 +179,17 @@ export function RiderPdfFooter() {
 
 function PlotGlyph({ item, layout }: { item: RiderStageItem; layout: PlotLayout }) {
   const symbol = riderSymbol(item.symbol);
+  const glyph = itemGlyph(item);
   const rect = itemRect(layout, item);
   return (
     <>
       {glyphNode({
-        shapes: symbol.shapes,
+        shapes: glyph.shapes,
         palette: RIDER_CATEGORY_PALETTE[symbol.category],
         components: PDF_GLYPH_COMPONENTS,
         rect,
-        glyphViewBox: symbol.glyphViewBox,
-        preserveAspect: symbol.preserveAspect,
+        glyphViewBox: glyph.glyphViewBox,
+        preserveAspect: glyph.preserveAspect,
         rotationTransform: itemTransform(rect, item.rotation),
         keyPrefix: item.id,
       })}
@@ -254,7 +256,7 @@ export function StagePlot({
             stroke={PLOT_COLORS.audienceBar}
             strokeWidth={3}
           />
-          {items.map((item) => (
+          {plotDrawOrder(items).map((item) => (
             <PlotGlyph key={item.id} item={item} layout={layout} />
           ))}
         </Svg>

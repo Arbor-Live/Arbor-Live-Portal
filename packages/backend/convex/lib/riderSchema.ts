@@ -52,6 +52,9 @@ export const riderStageItemValue = v.object({
   scale: v.number(),
   notes: v.optional(v.string()),
   monitorMixId: v.optional(v.string()),
+  /** Own footprint for resizable symbols (risers, tables). */
+  widthFt: v.optional(v.number()),
+  depthFt: v.optional(v.number()),
 });
 
 export const riderInputChannelValue = v.object({

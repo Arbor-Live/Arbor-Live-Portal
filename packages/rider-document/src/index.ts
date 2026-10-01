@@ -44,6 +44,7 @@ export {
   itemRect,
   itemTransform,
   labelRect,
+  plotDrawOrder,
   pxToFt,
 } from "./plot";
 export type { ItemRect, PlotBox, PlotLayout } from "./plot";
@@ -52,6 +53,7 @@ export {
   RIDER_CATEGORY_ORDER,
   RIDER_CATEGORY_PALETTE,
   RIDER_SYMBOLS,
+  itemGlyph,
   riderSymbol,
   riderSymbolsByCategory,
   symbolKeyForRole,

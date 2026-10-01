@@ -1,77 +1,46 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
-import {
-  ArrowLeftIcon,
-  CaretDownIcon,
-  CaretUpIcon,
-  DotsSixVerticalIcon,
-  PlusIcon,
-  TrashIcon,
-} from "@phosphor-icons/react";
+import { CaretDownIcon, WarningIcon } from "@phosphor-icons/react";
 import {
   backfillSourceKeys,
-  blankBacklineItem,
-  blankInput,
-  blankMix,
-  captureFor,
   channelSpan,
-  defaultCapture,
-  inputFamilyLabel,
-  insertByFamily,
-  INPUT_TYPE_LABELS,
-  MONITOR_TYPE_LABELS,
-  MONITOR_TYPE_OPTIONS,
-  moveInArray,
-  placeSymbol,
-  PROVIDED_BY_EDITOR_LABELS,
-  removeItem,
   renumberInputs,
-  renumberMixes,
   riderWarnings,
-  STAGE_PRESETS,
-  STAND_LABELS,
-  riderSource,
   snapStageFt,
-  sourceOrdinals,
-  stageSizeOptions,
-  updateItem,
-  type RiderBacklineItem,
   type RiderContent,
-  type RiderInputChannel,
-  type RiderInputType,
-  type RiderMonitorMix,
-  type RiderMonitorType,
-  type RiderProvidedBy,
-  type RiderStandType,
 } from "@arbor/rider-document";
 import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
+import {
+  RIDER_EDITOR_TAB_ICONS,
+  RIDER_EDITOR_TAB_LABELS,
+  RIDER_EDITOR_TABS,
+  riderEditorTabFromParam,
+  riderEditorTabHref,
+  type RiderEditorTabId,
+} from "@/lib/rider-editor-tabs";
 import type { SaveStatus } from "@/hooks/use-convex-form";
 import { FormSaveBar } from "@/components/forms";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  EditablePageTitle,
+  PageHeader,
+  PageTabs,
+  StatusPill,
+} from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { NumberInput } from "@/components/ui/number-input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
 import { RiderPdfDownloadButton } from "@/components/riders/rider-pdf-download-button";
-import {
-  RiderSourcePicker,
-  type RiderSourceSelection,
-} from "@/components/riders/rider-source-picker";
-import { RiderSymbolPalette } from "@/components/riders/rider-symbol-palette";
-import { StagePlotCanvas } from "@/components/riders/stage-plot-canvas";
-import { cn } from "@/lib/utils";
+import { RiderStagePanel } from "@/components/riders/rider-stage-panel";
+import { RiderInputsPanel } from "@/components/riders/rider-inputs-panel";
+import { RiderMonitorsPanel } from "@/components/riders/rider-monitors-panel";
+import { RiderBacklinePanel } from "@/components/riders/rider-backline-panel";
+import { RiderDetailsPanel } from "@/components/riders/rider-details-panel";
 
 type Draft = {
   name: string;
@@ -95,9 +64,10 @@ function contentFromRider(rider: {
   contactPhone?: string;
 }): RiderContent {
   // Riders written before the source vocabulary carry no `sourceKey`, so resolve
-  // what we can on the way in. Both the draft and its baseline are built from
-  // this, so a rider does not open dirty; the keys persist on the next save.
-  return backfillSourceKeys({
+  // what we can on the way in, and number channels in list order (older riders
+  // were numbered onto odd pairs). Both the draft and its baseline are built
+  // from this, so a rider doesn't open dirty; both persist on the next save.
+  const content = backfillSourceKeys({
     stage: rider.stage,
     items: rider.items,
     inputs: rider.inputs,
@@ -112,33 +82,68 @@ function contentFromRider(rider: {
     contactEmail: rider.contactEmail,
     contactPhone: rider.contactPhone,
   });
+  return { ...content, inputs: renumberInputs(content.inputs) };
 }
+
+const EMPTY_HISTORY = { past: [], future: [] };
+const HISTORY_LIMIT = 100;
+const HISTORY_COALESCE_MS = 1500;
 
 function draftKey(draft: Draft): string {
   return JSON.stringify(draft);
 }
 
-const INPUT_TYPES = Object.keys(INPUT_TYPE_LABELS) as RiderInputType[];
-const STAND_TYPES = Object.keys(STAND_LABELS) as RiderStandType[];
-const PROVIDED_BY = Object.keys(PROVIDED_BY_EDITOR_LABELS) as RiderProvidedBy[];
-const MONITOR_TYPES = MONITOR_TYPE_OPTIONS;
-
-const fieldClass =
-  "h-8 w-full min-w-0 rounded-none border border-input bg-transparent px-2 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 disabled:opacity-50";
+/** The slice of the rider each tab edits, so a tab can show its own unsaved dot. */
+const TAB_SLICES: Record<RiderEditorTabId, (content: RiderContent) => unknown> = {
+  stage: (content) => [content.stage, content.items],
+  inputs: (content) => content.inputs,
+  monitors: (content) => content.monitorMixes,
+  backline: (content) => content.backline,
+  details: (content) => [
+    content.performerCount,
+    content.setLengthMinutes,
+    content.contactName,
+    content.contactEmail,
+    content.contactPhone,
+    content.powerNotes,
+    content.generalNotes,
+    content.hospitalityNotes,
+  ],
+};
 
 export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
   const rider = useQuery(api.bandRiders.get, { riderId });
   const updateRider = useMutation(api.bandRiders.update);
   const setDefault = useMutation(api.bandRiders.setDefault);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeTab = riderEditorTabFromParam(searchParams.get("tab"));
 
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [baseline, setBaseline] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [baseline, setBaseline] = useState<Draft | null>(null);
   const [hydratedId, setHydratedId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   const savedFadeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The draft as of the last change, so several changes in one event compose. */
+  const draftRef = useRef<Draft | null>(null);
+  const [history, setHistory] = useState<{ past: RiderContent[]; future: RiderContent[] }>(
+    EMPTY_HISTORY,
+  );
+  /** What the last change was, so a drag or a typed word is one undo step, not fifty. */
+  const lastChangeRef = useRef<{ key: string | null; at: number }>({ key: null, at: 0 });
+
+  function commitDraft(next: Draft) {
+    draftRef.current = next;
+    setDraft(next);
+  }
+
+  function resetDraft(next: Draft) {
+    commitDraft(next);
+    setBaseline(next);
+    setHistory(EMPTY_HISTORY);
+    lastChangeRef.current = { key: null, at: 0 };
+  }
 
   useEffect(() => {
     if (!rider) return;
@@ -148,35 +153,110 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
       status: rider.status,
       content: contentFromRider(rider),
     };
+    draftRef.current = next;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydrate per rider id
     setDraft(next);
-    setBaseline(draftKey(next));
+    setBaseline(next);
+    setHistory(EMPTY_HISTORY);
     setHydratedId(rider._id);
-    setSelectedId(null);
   }, [rider, hydratedId, draft]);
 
-  const isDirty = draft !== null && baseline !== null && draftKey(draft) !== baseline;
+  const isDirty = draft !== null && baseline !== null && draftKey(draft) !== draftKey(baseline);
   const readOnly = rider?.canEdit === false;
-  const warnings = useMemo(
-    () => (draft ? riderWarnings(draft.content) : []),
-    [draft],
-  );
+  const warnings = useMemo(() => (draft ? riderWarnings(draft.content) : []), [draft]);
 
-  function patchContent(updater: (content: RiderContent) => RiderContent) {
-    setDraft((current) =>
-      current ? { ...current, content: updater(current.content) } : current,
-    );
+  const dirtyTabs = useMemo(() => {
+    const dirty = new Set<RiderEditorTabId>();
+    if (!draft || !baseline) return dirty;
+    for (const tab of RIDER_EDITOR_TABS) {
+      const slice = TAB_SLICES[tab];
+      if (JSON.stringify(slice(draft.content)) !== JSON.stringify(slice(baseline.content))) {
+        dirty.add(tab);
+      }
+    }
+    return dirty;
+  }, [draft, baseline]);
+
+  /**
+   * Every edit goes through here. Changes sharing a `historyKey` within a
+   * moment of each other (a drag, typing in one field) collapse into one undo
+   * step; changes without a key are always their own step.
+   */
+  function patchContent(
+    updater: (content: RiderContent) => RiderContent,
+    historyKey?: string,
+  ) {
+    const current = draftRef.current;
+    if (!current) return;
+    const content = updater(current.content);
+    if (content === current.content) return;
+    const now = Date.now();
+    const last = lastChangeRef.current;
+    const continues =
+      historyKey !== undefined && historyKey === last.key && now - last.at < HISTORY_COALESCE_MS;
+    lastChangeRef.current = { key: historyKey ?? null, at: now };
+    setHistory((previous) => ({
+      past: continues ? previous.past : [...previous.past, current.content].slice(-HISTORY_LIMIT),
+      future: [],
+    }));
+    commitDraft({ ...current, content });
   }
 
-  function placeAt(symbolKey: string, xFt: number, yFt: number) {
-    let itemId: string | null = null;
-    setDraft((current) => {
-      if (!current) return current;
-      const result = placeSymbol(current.content, { symbolKey, xFt, yFt });
-      itemId = result.itemId;
-      return { ...current, content: result.content };
-    });
-    if (itemId) setSelectedId(itemId);
+  function undo() {
+    const current = draftRef.current;
+    const previous = history.past.at(-1);
+    if (!current || !previous) return;
+    setHistory({ past: history.past.slice(0, -1), future: [current.content, ...history.future] });
+    lastChangeRef.current = { key: null, at: 0 };
+    commitDraft({ ...current, content: previous });
+  }
+
+  function redo() {
+    const current = draftRef.current;
+    const next = history.future[0];
+    if (!current || !next) return;
+    setHistory({ past: [...history.past, current.content], future: history.future.slice(1) });
+    lastChangeRef.current = { key: null, at: 0 };
+    commitDraft({ ...current, content: next });
+  }
+
+  // ⌘Z / ⇧⌘Z (Ctrl on other platforms), except while typing, where the field's
+  // own undo should win.
+  const undoRef = useRef(undo);
+  const redoRef = useRef(redo);
+  useEffect(() => {
+    undoRef.current = undo;
+    redoRef.current = redo;
+  });
+  useEffect(() => {
+    if (readOnly) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      const key = event.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      event.preventDefault();
+      if (key === "y" || event.shiftKey) redoRef.current();
+      else undoRef.current();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [readOnly]);
+
+  function selectTab(tab: RiderEditorTabId) {
+    // Next keeps `useSearchParams` in sync with history calls, so this switches
+    // tabs without a server round trip or remounting the draft.
+    window.history.pushState(null, "", riderEditorTabHref(pathname, tab));
+  }
+
+  /** From the stage: open one channel's panel in the Inputs tab. */
+  function openChannel(inputId: string) {
+    window.history.pushState(
+      null,
+      "",
+      `${riderEditorTabHref(pathname, "inputs")}&channel=${encodeURIComponent(inputId)}`,
+    );
   }
 
   async function persist(overrides?: Partial<Draft>) {
@@ -186,14 +266,9 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
       ...overrides,
       content: {
         ...draft.content,
-        ...(overrides?.content ?? {}),
         stage: {
-          widthFt: snapStageFt(
-            overrides?.content?.stage?.widthFt ?? draft.content.stage.widthFt,
-          ),
-          depthFt: snapStageFt(
-            overrides?.content?.stage?.depthFt ?? draft.content.stage.depthFt,
-          ),
+          widthFt: snapStageFt(draft.content.stage.widthFt),
+          depthFt: snapStageFt(draft.content.stage.depthFt),
         },
       },
     };
@@ -206,8 +281,8 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
         status: next.status,
         content: next.content,
       });
-      setDraft(next);
-      setBaseline(draftKey(next));
+      commitDraft(next);
+      setBaseline(next);
       setSaveStatus("saved");
       if (savedFadeRef.current) clearTimeout(savedFadeRef.current);
       savedFadeRef.current = setTimeout(() => {
@@ -226,371 +301,144 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
       status: rider.status,
       content: contentFromRider(rider),
     };
-    setDraft(next);
-    setBaseline(draftKey(next));
-    setSelectedId(null);
+    resetDraft(next);
     setSaveStatus("idle");
     setSaveError(null);
   }
 
+  async function makeDefault() {
+    try {
+      await setDefault({ riderId });
+      notify.success("Show files will use this rider by default.");
+    } catch (err) {
+      notify.error(getConvexErrorMessage(err));
+    }
+  }
+
   if (rider === undefined || draft === null) {
     return (
-      <Card>
-        <CardContent className="py-8 text-sm text-muted-foreground">Loading rider…</CardContent>
-      </Card>
+      <div className="space-y-4" data-testid="rider-editor-loading">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
     );
   }
 
-  const selectedItem =
-    draft.content.items.find((item) => item.id === selectedId) ?? null;
+  const { content } = draft;
+  const channelCount = content.inputs.reduce((count, input) => count + channelSpan(input), 0);
+  const published = draft.status === "published";
+
+  const tabBadges: Partial<Record<RiderEditorTabId, React.ReactNode>> = {
+    stage:
+      content.items.length === 0 ? (
+        <TabWarning title="The stage plot is empty" />
+      ) : null,
+    inputs:
+      content.inputs.length === 0 ||
+      content.inputs.some((input) => !input.source.trim() || !input.sourceKey) ? (
+        <>
+          <TabWarning title="Some channels need a source" />
+          <TabCount count={channelCount} />
+        </>
+      ) : (
+        <TabCount count={channelCount} />
+      ),
+    monitors:
+      content.monitorMixes.length === 0 ? (
+        <TabWarning title="No monitor mixes yet" />
+      ) : (
+        <TabCount count={content.monitorMixes.length} />
+      ),
+    backline: content.backline.length > 0 ? <TabCount count={content.backline.length} /> : null,
+  };
+
+  const panelProps = { content, readOnly, onChange: patchContent };
+  const historyControls = {
+    canUndo: history.past.length > 0,
+    canRedo: history.future.length > 0,
+    undo,
+    redo,
+  };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="ghost" size="sm" asChild>
-          <Link href="/dashboard/artists/riders">
-            <ArrowLeftIcon className="size-4" />
-            All riders
-          </Link>
-        </Button>
-        {rider.isDefault ? (
-          <span className="rounded-md bg-status-amber-500/15 px-2 py-0.5 text-2xs font-medium text-status-amber-800">
-            Default for show files
-          </span>
-        ) : null}
-        {readOnly ? (
-          <span className="rounded-md bg-muted px-2 py-0.5 text-2xs font-medium text-muted-foreground">
-            View only
-          </span>
-        ) : null}
-      </div>
-
-      <div className="flex flex-col gap-3 rounded-md border bg-card p-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <Label htmlFor="rider-editor-name">Rider name</Label>
-          <Input
-            id="rider-editor-name"
-            value={draft.name}
-            disabled={readOnly}
-            maxLength={80}
-            onChange={(event) =>
-              setDraft((current) =>
-                current ? { ...current, name: event.target.value } : current,
-              )
-            }
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <RiderPdfDownloadButton riderId={riderId} />
-          {!readOnly && !rider.isDefault ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setActionError(null);
-                void setDefault({ riderId }).catch((err) =>
-                  setActionError(getConvexErrorMessage(err)),
-                );
-              }}
-            >
-              Set as default
-            </Button>
-          ) : null}
-          {!readOnly ? (
-            <Button
-              type="button"
-              size="sm"
-              variant={draft.status === "published" ? "outline" : "default"}
-              onClick={() => {
-                const nextStatus =
-                  draft.status === "published" ? "draft" : "published";
-                void persist({ status: nextStatus });
-              }}
-            >
-              {draft.status === "published" ? "Unpublish" : "Publish"}
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      {actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}
-
-      {warnings.length > 0 ? (
-        <Alert>
-          <AlertTitle>Before you publish</AlertTitle>
-          <AlertDescription>
-            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-sm">
-              {warnings.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)_240px]">
-        <Card className="xl:max-h-180 xl:overflow-y-auto">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Symbol palette</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Drag onto the stage, or tap to place in the center.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <RiderSymbolPalette
-              disabled={readOnly}
-              onPlaceAtCenter={(symbolKey) =>
-                placeAt(
-                  symbolKey,
-                  draft.content.stage.widthFt / 2,
-                  draft.content.stage.depthFt / 2,
-                )
-              }
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-2">
-            <CardTitle className="text-sm">Stage plot</CardTitle>
-            <div className="flex flex-wrap items-center gap-2">
-              <Label className="sr-only" htmlFor="stage-preset">
-                Stage size
-              </Label>
-              <Select
-                value={
-                  STAGE_PRESETS.some(
-                    (entry) =>
-                      entry.stage.widthFt === draft.content.stage.widthFt &&
-                      entry.stage.depthFt === draft.content.stage.depthFt,
-                  )
-                    ? `${draft.content.stage.widthFt}x${draft.content.stage.depthFt}`
-                    : "custom"
-                }
-                disabled={readOnly}
-                onValueChange={(value) => {
-                  if (value === "custom") return;
-                  const preset = STAGE_PRESETS.find(
-                    (entry) =>
-                      `${entry.stage.widthFt}x${entry.stage.depthFt}` === value,
-                  );
-                  if (!preset) return;
-                  patchContent((content) => ({
-                    ...content,
-                    stage: { ...preset.stage },
-                  }));
-                }}
+    <div className="space-y-4" data-testid="rider-editor">
+      <PageHeader
+        back={{ href: "/dashboard/artists/riders", label: "Riders" }}
+        actions={
+          <>
+            <RiderPdfDownloadButton riderId={riderId} label="PDF" />
+            {!readOnly ? (
+              <Button
+                type="button"
+                size="sm"
+                variant={published ? "outline" : "default"}
+                onClick={() => void persist({ status: published ? "draft" : "published" })}
               >
-                <SelectTrigger id="stage-preset" className="h-8 w-50">
-                  <SelectValue placeholder="Stage size" />
-                </SelectTrigger>
-                <SelectContent>
-                  {STAGE_PRESETS.map((preset) => (
-                    <SelectItem
-                      key={preset.label}
-                      value={`${preset.stage.widthFt}x${preset.stage.depthFt}`}
-                    >
-                      {preset.label}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="custom">Custom (4 ft steps)</SelectItem>
-                </SelectContent>
-              </Select>
-              <div className="flex items-center gap-1">
-                <Select
-                  value={String(snapStageFt(draft.content.stage.widthFt))}
-                  disabled={readOnly}
-                  onValueChange={(value) => {
-                    const widthFt = snapStageFt(Number(value));
-                    patchContent((content) => ({
-                      ...content,
-                      stage: { ...content.stage, widthFt },
-                    }));
-                  }}
-                >
-                  <SelectTrigger
-                    aria-label="Stage width in feet"
-                    className="h-8 w-18"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stageSizeOptions().map((ft) => (
-                      <SelectItem key={`w-${ft}`} value={String(ft)}>
-                        {ft}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <span className="text-xs text-muted-foreground">×</span>
-                <Select
-                  value={String(snapStageFt(draft.content.stage.depthFt))}
-                  disabled={readOnly}
-                  onValueChange={(value) => {
-                    const depthFt = snapStageFt(Number(value));
-                    patchContent((content) => ({
-                      ...content,
-                      stage: { ...content.stage, depthFt },
-                    }));
-                  }}
-                >
-                  <SelectTrigger
-                    aria-label="Stage depth in feet"
-                    className="h-8 w-18"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stageSizeOptions().map((ft) => (
-                      <SelectItem key={`d-${ft}`} value={String(ft)}>
-                        {ft}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <span className="text-xs text-muted-foreground">ft</span>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="overflow-x-auto bg-status-slate-50 p-3 dark:bg-status-slate-950/40">
-            <StagePlotCanvas
-              content={draft.content}
-              selectedId={selectedId}
-              readOnly={readOnly}
-              onSelect={setSelectedId}
-              onMoveItem={(itemId, xFt, yFt) =>
-                patchContent((content) => updateItem(content, itemId, { xFt, yFt }))
-              }
-              onRotateItem={(itemId, rotation) =>
-                patchContent((content) =>
-                  updateItem(content, itemId, { rotation }),
-                )
-              }
-              onDeleteItem={(itemId) => {
-                patchContent((content) => removeItem(content, itemId));
-                setSelectedId((current) => (current === itemId ? null : current));
-              }}
-              onDropSymbol={placeAt}
-            />
-          </CardContent>
-        </Card>
-
-        <Card className="xl:max-h-180 xl:overflow-y-auto">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Selection</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {!selectedItem ? (
-              <p className="text-sm text-muted-foreground">
-                Select a symbol on the stage to rename it, add notes, or remove it.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="item-label">Label</Label>
-                  <Input
-                    id="item-label"
-                    value={selectedItem.label}
-                    disabled={readOnly}
-                    onChange={(event) =>
-                      patchContent((content) =>
-                        updateItem(content, selectedItem.id, {
-                          label: event.target.value,
-                        }),
-                      )
-                    }
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="item-notes">Notes</Label>
-                  <textarea
-                    id="item-notes"
-                    rows={3}
-                    disabled={readOnly}
-                    className={cn(fieldClass, "h-auto min-h-18 py-2")}
-                    value={selectedItem.notes ?? ""}
-                    onChange={(event) =>
-                      patchContent((content) =>
-                        updateItem(content, selectedItem.id, {
-                          notes: event.target.value || undefined,
-                        }),
-                      )
-                    }
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="item-rotation">Rotation</Label>
-                    <NumberInput
-                      id="item-rotation"
-                      step={15}
-                      disabled={readOnly}
-                      value={selectedItem.rotation}
-                      normalize={(rotation) => ((rotation % 360) + 360) % 360}
-                      onValueChange={(rotation) =>
-                        patchContent((content) => updateItem(content, selectedItem.id, { rotation }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="item-scale">Scale</Label>
-                    <NumberInput
-                      id="item-scale"
-                      step={0.1}
-                      min={0.5}
-                      max={2}
-                      fallback={1}
-                      disabled={readOnly}
-                      value={selectedItem.scale}
-                      onValueChange={(scale) =>
-                        patchContent((content) => updateItem(content, selectedItem.id, { scale }))
-                      }
-                    />
-                  </div>
-                </div>
-                {!readOnly ? (
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => {
-                      patchContent((content) => removeItem(content, selectedItem.id));
-                      setSelectedId(null);
-                    }}
-                  >
-                    <TrashIcon className="size-3.5" />
-                    Remove from plot
-                  </Button>
-                ) : null}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <InputsSection
-        inputs={draft.content.inputs}
-        readOnly={readOnly}
-        onChange={(inputs) => patchContent((content) => ({ ...content, inputs }))}
-      />
-      <MixesSection
-        mixes={draft.content.monitorMixes}
-        readOnly={readOnly}
-        onChange={(monitorMixes) =>
-          patchContent((content) => ({ ...content, monitorMixes }))
+                {published ? "Unpublish" : "Publish"}
+              </Button>
+            ) : null}
+          </>
         }
+        menu={
+          !readOnly && !rider.isDefault ? (
+            <DropdownMenuItem onSelect={() => void makeDefault()}>
+              Use as default for show files
+            </DropdownMenuItem>
+          ) : undefined
+        }
+        pills={
+          <>
+            <StatusPill tone={published ? "emerald" : "neutral"}>
+              {published ? "Published" : "Draft"}
+            </StatusPill>
+            {rider.isDefault ? <StatusPill tone="blue">Default for show files</StatusPill> : null}
+            {readOnly ? (
+              <StatusPill tone="neutral" dot={false}>
+                View only
+              </StatusPill>
+            ) : null}
+          </>
+        }
+        title={
+          readOnly ? (
+            draft.name
+          ) : (
+            <EditablePageTitle
+              id="rider-editor-name"
+              label="Rider name"
+              placeholder="Technical rider"
+              maxLength={80}
+              value={draft.name}
+              onChange={(name) => {
+                if (draftRef.current) commitDraft({ ...draftRef.current, name });
+              }}
+            />
+          )
+        }
+        description="Place gear on the stage and the input list and monitor mixes fill in as you go. The PDF uses the last saved version."
+      >
+        {warnings.length > 0 ? <RiderChecklist warnings={warnings} /> : null}
+      </PageHeader>
+
+      <PageTabs
+        label="Rider sections"
+        tabs={RIDER_EDITOR_TABS.map((tab) => ({
+          href: riderEditorTabHref(pathname, tab),
+          label: RIDER_EDITOR_TAB_LABELS[tab],
+          icon: RIDER_EDITOR_TAB_ICONS[tab],
+          active: tab === activeTab,
+          badge: tabBadges[tab],
+          dirty: dirtyTabs.has(tab),
+          onSelect: () => selectTab(tab),
+        }))}
       />
-      <BacklineSection
-        backline={draft.content.backline}
-        readOnly={readOnly}
-        onChange={(backline) => patchContent((content) => ({ ...content, backline }))}
-      />
-      <DetailsSection
-        content={draft.content}
-        readOnly={readOnly}
-        onChange={(patch) => patchContent((content) => ({ ...content, ...patch }))}
-      />
+
+      {activeTab === "stage" ? <RiderStagePanel {...panelProps} history={historyControls} onOpenChannel={openChannel} /> : null}
+      {activeTab === "inputs" ? <RiderInputsPanel {...panelProps} /> : null}
+      {activeTab === "monitors" ? <RiderMonitorsPanel {...panelProps} /> : null}
+      {activeTab === "backline" ? <RiderBacklinePanel {...panelProps} /> : null}
+      {activeTab === "details" ? <RiderDetailsPanel {...panelProps} /> : null}
 
       {!readOnly ? (
         <FormSaveBar
@@ -603,11 +451,11 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
           onDiscard={discard}
           onRetry={() => void persist()}
           summary={
-            <span className="text-xs text-muted-foreground">
-              {draft.content.inputs.reduce((count, input) => count + channelSpan(input), 0)}{" "}
-              channels · {draft.content.monitorMixes.length} mixes ·{" "}
-              {draft.content.items.length} symbols
-            </span>
+            dirtyTabs.size > 0 ? (
+              <span className="text-xs text-muted-foreground">
+                Unsaved: {[...dirtyTabs].map((tab) => RIDER_EDITOR_TAB_LABELS[tab]).join(" · ")}
+              </span>
+            ) : null
           }
         />
       ) : null}
@@ -615,811 +463,44 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
   );
 }
 
-/**
- * Picking a role rewrites the row's capture defaults too, so the band gets the
- * right Type, stand, phantom and width without touching four more cells. Keeping
- * the typed text is deliberate: the label is theirs, the key is ours.
- */
-function applySourceSelection(
-  selection: RiderSourceSelection,
-): Partial<RiderInputChannel> {
-  const { source, text } = selection;
-  if (!source) return { source: text, sourceKey: undefined };
-  const capture = defaultCapture(source);
-  return {
-    source: text,
-    sourceKey: source.key,
-    inputType: capture.inputType,
-    stand: capture.stand,
-    phantom: capture.phantom,
-    stereo: source.stereo ?? false,
-  };
+function TabCount({ count }: { count: number }) {
+  return <span className="bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">{count}</span>;
 }
 
-/**
- * A mapped role knows how it can be picked up — a guitar is amp-or-DI, a kick is
- * always a mic — so the Type list narrows to those. Unmapped rows keep the full
- * list, since we have nothing to narrow it with.
- */
-function captureOptionsFor(input: RiderInputChannel): RiderInputType[] {
-  const source = input.sourceKey ? riderSource(input.sourceKey) : undefined;
-  if (!source) return INPUT_TYPES;
-  const options = source.captures.map((capture) => capture.inputType);
-  // Keep whatever is stored selectable, so an older value never vanishes.
-  return options.includes(input.inputType) ? options : [...options, input.inputType];
-}
-
-/** Changing capture carries its stand and phantom defaults with it. */
-function applyCaptureChange(
-  input: RiderInputChannel,
-  inputType: RiderInputType,
-): Partial<RiderInputChannel> {
-  const source = input.sourceKey ? riderSource(input.sourceKey) : undefined;
-  const capture = source ? captureFor(source, inputType) : undefined;
-  if (!capture) return { inputType };
-  return { inputType, stand: capture.stand, phantom: capture.phantom };
-}
-
-function InputsSection({
-  inputs,
-  readOnly,
-  onChange,
-}: {
-  inputs: RiderInputChannel[];
-  readOnly: boolean;
-  onChange: (inputs: RiderInputChannel[]) => void;
-}) {
-  function patch(id: string, patch: Partial<RiderInputChannel>) {
-    onChange(inputs.map((input) => (input.id === id ? { ...input, ...patch } : input)));
-  }
-
-  /**
-   * Applying a role can change the strip width, so this renumbers — and a row
-   * that had no role yet slides into its family group rather than staying at the
-   * bottom where "Add channel" put it. A row that already had a role stays put:
-   * the band may have positioned it deliberately.
-   */
-  function selectSource(input: RiderInputChannel, selection: RiderSourceSelection) {
-    const updated = { ...input, ...applySourceSelection(selection) };
-    const next = input.sourceKey
-      ? inputs.map((row) => (row.id === input.id ? updated : row))
-      : insertByFamily(
-          inputs.filter((row) => row.id !== input.id),
-          updated,
-        );
-    onChange(renumberInputs(next));
-    setAutoFocusId(null);
-  }
-
-  /** Row whose picker should open on mount — the one "Add channel" just made. */
-  const [autoFocusId, setAutoFocusId] = useState<string | null>(null);
-
-  function addChannel() {
-    const row = blankInput(inputs);
-    onChange([...inputs, row]);
-    setAutoFocusId(row.id);
-  }
-
-  const ordinals = useMemo(() => sourceOrdinals(inputs), [inputs]);
-
-  /**
-   * Rows are only `draggable` once a pointer goes down on their grip handle —
-   * a permanently draggable row makes the browser start a drag instead of a
-   * text selection when you click into any of the cell inputs.
-   */
-  const [dragArmedId, setDragArmedId] = useState<string | null>(null);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<
-    { index: number; edge: "top" | "bottom" } | null
-  >(null);
-  const dragIndexRef = useRef<number>(-1);
-
-  function handleDragStart(id: string, index: number) {
-    dragIndexRef.current = index;
-    setDraggingId(id);
-  }
-
-  function handleDragEnd() {
-    dragIndexRef.current = -1;
-    setDragArmedId(null);
-    setDraggingId(null);
-    setDropTarget(null);
-  }
-
-  /** Highlights the edge the row will actually land on (see `handleDropOn`). */
-  function hoverRow(index: number) {
-    const from = dragIndexRef.current;
-    if (from === -1 || from === index) return;
-    setDropTarget({ index, edge: from < index ? "bottom" : "top" });
-  }
-
-  /**
-   * Reorders `inputs` and renumbers. `moveInArray` lands the row *at* `index`,
-   * which for a downward move is just below the hovered row — `hoverRow` draws
-   * the indicator on that same edge.
-   */
-  function handleDropOn(index: number) {
-    const from = dragIndexRef.current;
-    if (from === -1 || from >= inputs.length) {
-      handleDragEnd();
-      return;
-    }
-    onChange(renumberInputs(moveInArray(inputs, from, index)));
-    handleDragEnd();
-  }
-
-  /**
-   * Family headings are derived from each row's role, and only mark where a run
-   * changes — the array order is the patch order, so we label it rather than
-   * reshuffle rows into containers.
-   */
-  const rows = useMemo(
-    () =>
-      inputs.map((input, index) => {
-        const family = inputFamilyLabel(input);
-        const previous = index > 0 ? inputFamilyLabel(inputs[index - 1]) : null;
-        return { input, index, heading: family !== previous ? family : null };
-      }),
-    [inputs],
-  );
-
-  const columnCount = readOnly ? 9 : 10;
-
-  function toggleStereo(id: string, stereo: boolean) {
-    onChange(
-      renumberInputs(
-        inputs.map((input) => (input.id === id ? { ...input, stereo } : input)),
-      ),
-    );
-  }
-
-
+function TabWarning({ title }: { title: string }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-        <CardTitle className="text-sm">Input list</CardTitle>
-        {!readOnly ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={addChannel}
-          >
-            <PlusIcon className="size-3.5" />
-            Add channel
-          </Button>
-        ) : null}
-      </CardHeader>
-      <CardContent className="overflow-x-auto">
-        {inputs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No channels yet. Place mics, DIs, or amps on the plot — or add a row.
-          </p>
-        ) : (
-          // Every other column is a fixed width, so the free-text ones only get
-          // what is left over — 860px starved Source and Notes to ~75px each.
-          <table className="w-full min-w-table-xl border-collapse text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs text-muted-foreground">
-                <th className="w-10 py-2 pr-2 font-medium">Ch</th>
-                <th className="min-w-55 py-2 pr-2 font-medium">Source</th>
-                <th className="w-12 py-2 pr-2 font-medium">L/R</th>
-                <th className="w-28 py-2 pr-2 font-medium">Type</th>
-                <th className="w-32 py-2 pr-2 font-medium">Mic / DI</th>
-                <th className="w-32 py-2 pr-2 font-medium">Stand</th>
-                <th className="w-14 py-2 pr-2 font-medium">48V</th>
-                <th className="w-40 py-2 pr-2 font-medium">Provided by</th>
-                <th className="py-2 pr-2 font-medium">Notes</th>
-                {!readOnly ? <th className="w-20 py-2 font-medium" /> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ input, index, heading }) => (
-                <Fragment key={input.id}>
-                  {heading ? (
-                    <tr className="border-b border-border/40 bg-muted/40">
-                      <td colSpan={columnCount} className="px-2 py-1">
-                        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          {heading}
-                        </span>
-                      </td>
-                    </tr>
-                  ) : null}
-                  <tr
-                      className={cn(
-                        "border-b border-border/60 align-top",
-                        draggingId === input.id && "opacity-40",
-                        dropTarget?.index === index &&
-                          !readOnly &&
-                          (dropTarget.edge === "top"
-                            ? "shadow-[inset_0_2px_0_0_var(--ring)]"
-                            : "shadow-[inset_0_-2px_0_0_var(--ring)]"),
-                      )}
-                      draggable={!readOnly && dragArmedId === input.id}
-                      onDragStart={(event) => {
-                        handleDragStart(input.id, index);
-                        event.dataTransfer.effectAllowed = "move";
-                      }}
-                      onDragOver={(event) => {
-                        event.preventDefault();
-                        event.dataTransfer.dropEffect = "move";
-                        hoverRow(index);
-                      }}
-                      onDrop={(event) => {
-                        event.preventDefault();
-                        handleDropOn(index);
-                      }}
-                      onDragEnd={handleDragEnd}
-                    >
-                      <td className="py-1.5 pr-2 text-muted-foreground">
-                        <span className="flex h-8 items-center">
-                          {input.stereo
-                            ? `${input.channel}–${input.channel + 1}`
-                            : input.channel}
-                        </span>
-                      </td>
-                      <td className="py-1.5 pr-2">
-                        <RiderSourcePicker
-                          disabled={readOnly}
-                          sourceKey={input.sourceKey}
-                          value={input.source}
-                          ordinal={ordinals.get(input.id)}
-                          autoFocus={autoFocusId === input.id}
-                          onChange={(selection) => selectSource(input, selection)}
-                        />
-                      </td>
-                      <td className="py-1.5 pr-2">
-                        <label className="flex h-8 items-center">
-                          <input
-                            type="checkbox"
-                            className="size-4 shrink-0 accent-primary"
-                            disabled={readOnly}
-                            checked={input.stereo ?? false}
-                            aria-label={`Stereo pair for ${input.source || `channel ${input.channel}`}`}
-                            onChange={(event) => toggleStereo(input.id, event.target.checked)}
-                          />
-                        </label>
-                      </td>
-                      <td className="py-1.5 pr-2">
-                        <select
-                          className={fieldClass}
-                          disabled={readOnly}
-                          value={input.inputType}
-                          onChange={(event) =>
-                            patch(
-                              input.id,
-                              applyCaptureChange(
-                                input,
-                                event.target.value as RiderInputType,
-                              ),
-                            )
-                          }
-                        >
-                          {captureOptionsFor(input).map((type) => (
-                            <option key={type} value={type}>
-                              {INPUT_TYPE_LABELS[type]}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="py-1.5 pr-2">
-                        <input
-                          className={fieldClass}
-                          disabled={readOnly}
-                          value={input.micPreference ?? ""}
-                          onChange={(event) =>
-                            patch(input.id, {
-                              micPreference: event.target.value || undefined,
-                            })
-                          }
-                        />
-                      </td>
-                      <td className="py-1.5 pr-2">
-                        <select
-                          className={fieldClass}
-                          disabled={readOnly}
-                          value={input.stand}
-                          onChange={(event) =>
-                            patch(input.id, {
-                              stand: event.target.value as RiderStandType,
-                            })
-                          }
-                        >
-                          {STAND_TYPES.map((type) => (
-                            <option key={type} value={type}>
-                              {STAND_LABELS[type]}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="py-1.5 pr-2">
-                        <label className="flex h-8 items-center">
-                          <input
-                            type="checkbox"
-                            className="size-4 shrink-0 accent-primary"
-                            disabled={readOnly}
-                            checked={input.phantom}
-                            onChange={(event) =>
-                              patch(input.id, { phantom: event.target.checked })
-                            }
-                          />
-                        </label>
-                      </td>
-                      <td className="py-1.5 pr-2">
-                        <select
-                          className={fieldClass}
-                          disabled={readOnly}
-                          value={input.providedBy}
-                          onChange={(event) =>
-                            patch(input.id, {
-                              providedBy: event.target.value as RiderProvidedBy,
-                            })
-                          }
-                        >
-                          {PROVIDED_BY.map((value) => (
-                            <option key={value} value={value}>
-                              {PROVIDED_BY_EDITOR_LABELS[value]}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="py-1.5 pr-2">
-                        <input
-                          className={fieldClass}
-                          disabled={readOnly}
-                          value={input.notes ?? ""}
-                          onChange={(event) =>
-                            patch(input.id, { notes: event.target.value || undefined })
-                          }
-                        />
-                      </td>
-                      {!readOnly ? (
-                        <td className="py-1.5">
-                          <div className="flex items-center gap-0.5">
-                            <span
-                              className="flex h-8 cursor-grab touch-none select-none items-center text-muted-foreground/50 active:cursor-grabbing"
-                              title="Drag to reorder"
-                              aria-hidden
-                              onPointerDown={() => setDragArmedId(input.id)}
-                              onPointerUp={() => setDragArmedId(null)}
-                            >
-                              <DotsSixVerticalIcon className="size-4" />
-                            </span>
-                            <Button
-                              type="button"
-                              size="icon-xs"
-                              variant="ghost"
-                              className="text-destructive"
-                              aria-label="Remove channel"
-                              onClick={() =>
-                                onChange(
-                                  renumberInputs(inputs.filter((row) => row.id !== input.id)),
-                                )
-                              }
-                            >
-                              <TrashIcon className="size-3.5" />
-                            </Button>
-                          </div>
-                        </td>
-                      ) : null}
-                    </tr>
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </CardContent>
-    </Card>
+    <span className="inline-flex text-status-amber-700 dark:text-status-amber-200" title={title}>
+      <WarningIcon className="size-3.5" weight="fill" aria-label={title} />
+    </span>
   );
 }
 
-function MixesSection({
-  mixes,
-  readOnly,
-  onChange,
-}: {
-  mixes: RiderMonitorMix[];
-  readOnly: boolean;
-  onChange: (mixes: RiderMonitorMix[]) => void;
-}) {
-  function patch(id: string, next: Partial<RiderMonitorMix>) {
-    onChange(mixes.map((mix) => (mix.id === id ? { ...mix, ...next } : mix)));
-  }
-
+/** The publish checklist, folded to one line so it doesn't push the editor off small screens. */
+function RiderChecklist({ warnings }: { warnings: string[] }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-        <CardTitle className="text-sm">Monitor mixes</CardTitle>
-        {!readOnly ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => onChange([...mixes, blankMix(mixes)])}
-          >
-            <PlusIcon className="size-3.5" />
-            Add mix
-          </Button>
-        ) : null}
-      </CardHeader>
-      <CardContent className="overflow-x-auto">
-        {mixes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Drop wedges or in-ears on the plot to create mixes automatically.
-          </p>
-        ) : (
-          <table className="w-full min-w-table-md border-collapse text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs text-muted-foreground">
-                <th className="w-12 py-2 pr-2 font-medium">Mix</th>
-                <th className="py-2 pr-2 font-medium">For</th>
-                <th className="w-32 py-2 pr-2 font-medium">Type</th>
-                <th className="w-20 py-2 pr-2 font-medium">Sends</th>
-                <th className="py-2 pr-2 font-medium">Notes</th>
-                {!readOnly ? <th className="w-20 py-2 font-medium" /> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {mixes.map((mix, index) => (
-                <tr key={mix.id} className="border-b border-border/60 align-top">
-                  <td className="py-2 pr-2 pt-3 text-muted-foreground">{mix.mixNumber}</td>
-                  <td className="py-1.5 pr-2">
-                    <input
-                      className={fieldClass}
-                      disabled={readOnly}
-                      value={mix.label}
-                      onChange={(event) => patch(mix.id, { label: event.target.value })}
-                    />
-                  </td>
-                  <td className="py-1.5 pr-2">
-                    <select
-                      className={fieldClass}
-                      disabled={readOnly}
-                      value={mix.type}
-                      onChange={(event) =>
-                        patch(mix.id, {
-                          type: event.target.value as RiderMonitorType,
-                        })
-                      }
-                    >
-                      {MONITOR_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {MONITOR_TYPE_LABELS[type]}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="py-1.5 pr-2">
-                    <NumberInput
-                      min={0}
-                      max={8}
-                      className={fieldClass}
-                      aria-label="Sends"
-                      disabled={readOnly || mix.type === "iem"}
-                      value={mix.sends}
-                      onValueChange={(sends) => patch(mix.id, { sends })}
-                    />
-                  </td>
-                  <td className="py-1.5 pr-2">
-                    <input
-                      className={fieldClass}
-                      disabled={readOnly}
-                      value={mix.notes ?? ""}
-                      onChange={(event) =>
-                        patch(mix.id, { notes: event.target.value || undefined })
-                      }
-                    />
-                  </td>
-                  {!readOnly ? (
-                    <td className="py-1.5">
-                      <div className="flex gap-0.5">
-                        <Button
-                          type="button"
-                          size="icon-xs"
-                          variant="ghost"
-                          disabled={index === 0}
-                          aria-label="Move mix up"
-                          onClick={() =>
-                            onChange(renumberMixes(moveInArray(mixes, index, index - 1)))
-                          }
-                        >
-                          <CaretUpIcon className="size-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          size="icon-xs"
-                          variant="ghost"
-                          disabled={index === mixes.length - 1}
-                          aria-label="Move mix down"
-                          onClick={() =>
-                            onChange(renumberMixes(moveInArray(mixes, index, index + 1)))
-                          }
-                        >
-                          <CaretDownIcon className="size-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          size="icon-xs"
-                          variant="ghost"
-                          className="text-destructive"
-                          aria-label="Remove mix"
-                          onClick={() =>
-                            onChange(
-                              renumberMixes(mixes.filter((row) => row.id !== mix.id)),
-                            )
-                          }
-                        >
-                          <TrashIcon className="size-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function BacklineSection({
-  backline,
-  readOnly,
-  onChange,
-}: {
-  backline: RiderBacklineItem[];
-  readOnly: boolean;
-  onChange: (backline: RiderBacklineItem[]) => void;
-}) {
-  function patch(id: string, next: Partial<RiderBacklineItem>) {
-    onChange(backline.map((item) => (item.id === id ? { ...item, ...next } : item)));
-  }
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-        <CardTitle className="text-sm">Backline</CardTitle>
-        {!readOnly ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => onChange([...backline, blankBacklineItem()])}
-          >
-            <PlusIcon className="size-3.5" />
-            Add item
-          </Button>
-        ) : null}
-      </CardHeader>
-      <CardContent className="overflow-x-auto">
-        {backline.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            List amps, stands, and other gear you need on stage.
-          </p>
-        ) : (
-          <table className="w-full min-w-table-sm border-collapse text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs text-muted-foreground">
-                <th className="py-2 pr-2 font-medium">Item</th>
-                <th className="w-20 py-2 pr-2 font-medium">Qty</th>
-                <th className="w-40 py-2 pr-2 font-medium">Provided by</th>
-                <th className="py-2 pr-2 font-medium">Notes</th>
-                {!readOnly ? <th className="w-12 py-2 font-medium" /> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {backline.map((item) => (
-                <tr key={item.id} className="border-b border-border/60 align-top">
-                  <td className="py-1.5 pr-2">
-                    <input
-                      className={fieldClass}
-                      disabled={readOnly}
-                      value={item.label}
-                      onChange={(event) => patch(item.id, { label: event.target.value })}
-                    />
-                  </td>
-                  <td className="py-1.5 pr-2">
-                    <NumberInput
-                      min={1}
-                      max={20}
-                      className={fieldClass}
-                      aria-label="Quantity"
-                      disabled={readOnly}
-                      value={item.quantity}
-                      onValueChange={(quantity) => patch(item.id, { quantity })}
-                    />
-                  </td>
-                  <td className="py-1.5 pr-2">
-                    <select
-                      className={fieldClass}
-                      disabled={readOnly}
-                      value={item.providedBy}
-                      onChange={(event) =>
-                        patch(item.id, {
-                          providedBy: event.target.value as RiderProvidedBy,
-                        })
-                      }
-                    >
-                      {PROVIDED_BY.map((value) => (
-                        <option key={value} value={value}>
-                          {PROVIDED_BY_EDITOR_LABELS[value]}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="py-1.5 pr-2">
-                    <input
-                      className={fieldClass}
-                      disabled={readOnly}
-                      value={item.notes ?? ""}
-                      onChange={(event) =>
-                        patch(item.id, { notes: event.target.value || undefined })
-                      }
-                    />
-                  </td>
-                  {!readOnly ? (
-                    <td className="py-1.5">
-                      <Button
-                        type="button"
-                        size="icon-xs"
-                        variant="ghost"
-                        className="text-destructive"
-                        aria-label="Remove backline item"
-                        onClick={() =>
-                          onChange(backline.filter((row) => row.id !== item.id))
-                        }
-                      >
-                        <TrashIcon className="size-3.5" />
-                      </Button>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function DetailsSection({
-  content,
-  readOnly,
-  onChange,
-}: {
-  content: RiderContent;
-  readOnly: boolean;
-  onChange: (patch: Partial<RiderContent>) => void;
-}) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Show details & notes</CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="performer-count">Performers</Label>
-          <Input
-            id="performer-count"
-            type="number"
-            min={0}
-            max={40}
-            disabled={readOnly}
-            value={content.performerCount ?? ""}
-            onChange={(event) => {
-              const value = event.target.value;
-              if (!value) {
-                onChange({ performerCount: undefined });
-                return;
-              }
-              const performerCount = Number(value);
-              if (!Number.isFinite(performerCount)) return;
-              onChange({
-                performerCount: Math.max(0, Math.min(40, performerCount)),
-              });
-            }}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="set-length">Set length (minutes)</Label>
-          <Input
-            id="set-length"
-            type="number"
-            min={0}
-            max={240}
-            disabled={readOnly}
-            value={content.setLengthMinutes ?? ""}
-            onChange={(event) => {
-              const value = event.target.value;
-              if (!value) {
-                onChange({ setLengthMinutes: undefined });
-                return;
-              }
-              const setLengthMinutes = Number(value);
-              if (!Number.isFinite(setLengthMinutes)) return;
-              onChange({
-                setLengthMinutes: Math.max(0, Math.min(240, setLengthMinutes)),
-              });
-            }}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="contact-name">Day-of contact</Label>
-          <Input
-            id="contact-name"
-            disabled={readOnly}
-            value={content.contactName ?? ""}
-            onChange={(event) =>
-              onChange({ contactName: event.target.value || undefined })
-            }
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="contact-email">Contact email</Label>
-          <Input
-            id="contact-email"
-            type="email"
-            disabled={readOnly}
-            value={content.contactEmail ?? ""}
-            onChange={(event) =>
-              onChange({ contactEmail: event.target.value || undefined })
-            }
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="contact-phone">Contact phone</Label>
-          <Input
-            id="contact-phone"
-            disabled={readOnly}
-            value={content.contactPhone ?? ""}
-            onChange={(event) =>
-              onChange({ contactPhone: event.target.value || undefined })
-            }
-          />
-        </div>
-        <div className="space-y-1.5 md:col-span-2">
-          <Label htmlFor="power-notes">Power</Label>
-          <textarea
-            id="power-notes"
-            rows={2}
-            disabled={readOnly}
-            className={cn(fieldClass, "h-auto min-h-16 py-2")}
-            value={content.powerNotes ?? ""}
-            onChange={(event) =>
-              onChange({ powerNotes: event.target.value || undefined })
-            }
-          />
-        </div>
-        <div className="space-y-1.5 md:col-span-2">
-          <Label htmlFor="general-notes">Notes</Label>
-          <textarea
-            id="general-notes"
-            rows={3}
-            disabled={readOnly}
-            className={cn(fieldClass, "h-auto min-h-20 py-2")}
-            value={content.generalNotes ?? ""}
-            onChange={(event) =>
-              onChange({ generalNotes: event.target.value || undefined })
-            }
-          />
-        </div>
-        <div className="space-y-1.5 md:col-span-2">
-          <Label htmlFor="hospitality-notes">Hospitality</Label>
-          <textarea
-            id="hospitality-notes"
-            rows={2}
-            disabled={readOnly}
-            className={cn(fieldClass, "h-auto min-h-16 py-2")}
-            value={content.hospitalityNotes ?? ""}
-            onChange={(event) =>
-              onChange({ hospitalityNotes: event.target.value || undefined })
-            }
-          />
-        </div>
-      </CardContent>
-    </Card>
+    <Collapsible
+      className="border border-status-amber-500/40 bg-status-amber-500/10 text-sm"
+      data-testid="rider-checklist"
+    >
+      <CollapsibleTrigger className="group flex w-full items-center gap-2 px-3 py-2 text-left font-medium text-status-amber-700 dark:text-status-amber-200">
+        <WarningIcon className="size-4 shrink-0" weight="fill" aria-hidden />
+        <span className="flex-1">
+          {warnings.length === 1
+            ? "1 thing to check before you publish"
+            : `${warnings.length} things to check before you publish`}
+        </span>
+        <CaretDownIcon
+          className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-180"
+          aria-hidden
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <ul className="list-disc space-y-0.5 pr-3 pb-2.5 pl-9 text-foreground">
+          {warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
