@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import Image from "next/image";
 import { useResolvedAssetUrl } from "@/components/files/stored-asset-image";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ import {
   isImageAssetReference,
 } from "@/lib/r2-assets";
 import { ImmichImportButton } from "@/components/marketing/immich-library-picker";
+import { ImageCropDialog } from "@/components/files/image-crop-dialog";
+import { HERO_LANDSCAPE_ASPECT_RATIO, POSTER_ASPECT_RATIO } from "@/lib/image-processing";
 
 type R2UploadFieldProps = {
   label: string;
@@ -36,6 +38,9 @@ type R2UploadFieldProps = {
   pasteHint?: string;
   /** Frame around the image preview (defaults to a short landscape thumb). */
   previewFrameClassName?: string;
+  /** When set, images are cropped to this aspect ratio before uploading. */
+  cropAspect?: number;
+  cropTitle?: string;
 };
 
 function R2UploadField({
@@ -52,9 +57,12 @@ function R2UploadField({
   className,
   pasteHint = "Focus this area and paste (Ctrl+V), or choose a file.",
   previewFrameClassName = "relative h-28 w-full max-w-xs",
+  cropAspect,
+  cropTitle,
 }: R2UploadFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const zoneRef = useRef<HTMLDivElement>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const { uploadFile, busy, error } = useR2FileUpload(uploadArgs);
 
   const storedValue = (urlValue ?? currentUrl ?? "").trim();
@@ -73,7 +81,7 @@ function R2UploadField({
           : uploadArgs.purpose;
   const resolvedAccept = accept ?? defaultAcceptForPurpose(purpose);
 
-  const handleFile = useCallback(
+  const uploadAndStore = useCallback(
     async (file: File) => {
       const storedReference = await uploadFile(file);
       if (!storedReference) return;
@@ -81,6 +89,17 @@ function R2UploadField({
       onUrlChange?.(storedReference);
     },
     [onUploaded, onUrlChange, uploadFile],
+  );
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      if (cropAspect && file.type.startsWith("image/")) {
+        setCropFile(file);
+        return;
+      }
+      await uploadAndStore(file);
+    },
+    [cropAspect, uploadAndStore],
   );
 
   const handlePaste = useCallback(
@@ -187,6 +206,18 @@ function R2UploadField({
       ) : null}
 
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
+
+      <ImageCropDialog
+        open={Boolean(cropFile)}
+        file={cropFile}
+        aspect={cropAspect}
+        title={cropTitle}
+        onCancel={() => setCropFile(null)}
+        onConfirm={(cropped) => {
+          setCropFile(null);
+          void uploadAndStore(cropped);
+        }}
+      />
     </div>
   );
 }
@@ -232,7 +263,7 @@ type MarketingPostHeroUploadFieldProps = {
 export function MarketingPostHeroUploadField({
   postId,
   label = "Cover image",
-  helperText = "Optional hero image for cards and the detail page. JPEG, PNG, WebP, GIF, or SVG up to 5 MB.",
+  helperText = "Optional hero image for cards and the detail page. JPEG, PNG, WebP, GIF, or SVG.",
   ...rest
 }: MarketingPostHeroUploadFieldProps) {
   return (
@@ -241,6 +272,8 @@ export function MarketingPostHeroUploadField({
       uploadArgs={{ scope: "marketing", postId, imageKind: "hero" }}
       accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
       helperText={helperText}
+      cropAspect={HERO_LANDSCAPE_ASPECT_RATIO}
+      cropTitle="Crop cover image"
       {...rest}
     />
   );
@@ -289,7 +322,7 @@ type EventPosterUploadFieldProps = {
 export function EventPosterUploadField({
   eventId,
   label = "Poster image",
-  helperText = "JPEG, PNG, WebP, GIF, or SVG up to 5 MB. Shown on the public event page.",
+  helperText = "JPEG, PNG, WebP, GIF, or SVG. Shown on the public event page.",
   ...rest
 }: EventPosterUploadFieldProps) {
   return (
@@ -299,6 +332,8 @@ export function EventPosterUploadField({
       accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
       helperText={helperText}
       previewFrameClassName="relative aspect-(--aspect-poster) w-full max-w-xs rounded-xl"
+      cropAspect={POSTER_ASPECT_RATIO}
+      cropTitle="Crop poster"
       {...rest}
     />
   );
@@ -319,7 +354,7 @@ type BandHeroUploadFieldProps = {
 export function BandHeroUploadField({
   organizationId,
   label = "Hero image",
-  helperText = "Shown on your public artist page. JPEG, PNG, WebP, GIF, or SVG up to 5 MB.",
+  helperText = "Shown on your public artist page. JPEG, PNG, WebP, GIF, or SVG.",
   ...rest
 }: BandHeroUploadFieldProps) {
   return (

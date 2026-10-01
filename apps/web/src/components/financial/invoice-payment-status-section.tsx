@@ -18,6 +18,7 @@ import {
 } from "@/lib/validations/payment-proof";
 import { formatDate, formatDateTime, formatUsd } from "@/lib/format";
 import { optimisticMarkPaymentReceived } from "@/lib/payment-proof-optimistic";
+import { compressImageToLimit } from "@/lib/image-processing";
 
 type PaymentStatus = "not_applicable" | "payment_received" | "proof_submitted" | "payment_pending" | "overdue";
 
@@ -106,11 +107,12 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
     setBusy(true);
     setError(null);
     try {
+      const preparedFile = await compressImageToLimit(file);
       const uploadUrl = await generateUploadUrl({});
       const response = await fetch(uploadUrl, {
         method: "POST",
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-        body: file,
+        headers: { "Content-Type": preparedFile.type || "application/octet-stream" },
+        body: preparedFile,
       });
       if (!response.ok) throw new Error("Upload failed");
       const { storageId } = (await response.json()) as { storageId: Id<"_storage"> };

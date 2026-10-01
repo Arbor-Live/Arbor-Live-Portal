@@ -31,12 +31,14 @@ export const markJobCompleted = internalMutation({
     jobId: v.id("marketingPublishJobs"),
     designId: v.id("eventMarketingDesigns"),
     instagramPostId: v.string(),
+    instagramPostUrl: v.union(v.string(), v.null()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
     await ctx.db.patch(args.jobId, { status: "completed", updatedAt: now });
     await ctx.db.patch(args.designId, {
       instagramPostId: args.instagramPostId,
+      instagramPostUrl: args.instagramPostUrl ?? undefined,
       lastError: undefined,
       updatedAt: now,
     });

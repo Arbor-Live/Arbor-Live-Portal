@@ -17,6 +17,7 @@ import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import { optimisticMarkPaymentReceived } from "@/lib/payment-proof-optimistic";
+import { compressImageToLimit } from "@/lib/image-processing";
 
 type InvalidateTarget = { submissionId: Id<"eventPaymentProofSubmissions">; invoiceNumber: string };
 
@@ -83,11 +84,12 @@ export function usePaymentActions() {
   async function uploadReceipt(invoiceId: Id<"invoices">, file: File) {
     setBusyInvoiceId(invoiceId);
     try {
+      const preparedFile = await compressImageToLimit(file);
       const uploadUrl = await generateUploadUrl({});
       const response = await fetch(uploadUrl, {
         method: "POST",
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-        body: file,
+        headers: { "Content-Type": preparedFile.type || "application/octet-stream" },
+        body: preparedFile,
       });
       if (!response.ok) throw new Error("Upload failed");
       const { storageId } = (await response.json()) as { storageId: Id<"_storage"> };

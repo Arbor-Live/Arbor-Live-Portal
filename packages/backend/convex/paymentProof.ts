@@ -500,6 +500,9 @@ export const markPaymentReceived = mutation({
   },
 });
 
+/** Receipts are proof scans; anything larger means the wrong file was picked. */
+const MAX_RECEIPT_BYTES = 25 * 1024 * 1024;
+
 export const attachReceipt = mutation({
   args: {
     invoiceId: v.id("invoices"),
@@ -510,6 +513,12 @@ export const attachReceipt = mutation({
     await requireArborInternalContext(ctx);
     const invoice = await ctx.db.get(args.invoiceId);
     if (!invoice) throw new Error("Invoice not found.");
+
+    const metadata = await ctx.db.system.get(args.storageFileId);
+    if (!metadata) throw new Error("Uploaded receipt was not found.");
+    if (metadata.size > MAX_RECEIPT_BYTES) {
+      throw new Error("Receipts must be 25 MB or smaller.");
+    }
 
     await ctx.db.patch(args.invoiceId, {
       paymentReceiptStorageFileId: args.storageFileId,

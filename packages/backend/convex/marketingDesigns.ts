@@ -84,6 +84,7 @@ async function serializeDesign(ctx: QueryCtx, design: DesignDoc) {
     partifulCohostUrl: design.partifulCohostUrl ?? null,
     status: design.status,
     instagramPostId: design.instagramPostId ?? null,
+    instagramPostUrl: design.instagramPostUrl ?? null,
     publishedAt: design.publishedAt ?? null,
     lastError: design.lastError ?? null,
     publicEventUrl: buildPublicEventUrl(String(design.eventId), SITE_URL),
@@ -219,6 +220,7 @@ export const listUpcomingPosterWork = query({
                 publishedAt: design.publishedAt ?? null,
                 lastError: design.lastError ?? null,
                 instagramPostId: design.instagramPostId ?? null,
+                instagramPostUrl: design.instagramPostUrl ?? null,
               }
             : null,
         };
@@ -254,6 +256,7 @@ export const getForEvent = query({
         partifulCohostUrl: null as string | null,
         status: null as "draft" | "ready" | "published" | null,
         instagramPostId: null as string | null,
+        instagramPostUrl: null as string | null,
         publishedAt: null as number | null,
         lastError: null as string | null,
         publicEventUrl: buildPublicEventUrl(String(event._id), SITE_URL),
@@ -278,6 +281,7 @@ export const getForEvent = query({
       partifulCohostUrl: design.partifulCohostUrl ?? null,
       status: design.status,
       instagramPostId: design.instagramPostId ?? null,
+      instagramPostUrl: design.instagramPostUrl ?? null,
       publishedAt: design.publishedAt ?? null,
       lastError: design.lastError ?? null,
       publicEventUrl: buildPublicEventUrl(String(event._id), SITE_URL),

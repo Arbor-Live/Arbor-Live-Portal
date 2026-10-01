@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { Id } from "backend/convex/_generated/dataModel";
 import { authClient } from "@/lib/auth-client";
@@ -26,7 +26,8 @@ import {
   type ProfileFormValues,
 } from "@/lib/validations/account";
 import { formatDate } from "@/lib/format";
-import { UserAvatarUploadPreview } from "@/components/account/user-avatar";
+import { AvatarUploadField } from "@/components/account/avatar-upload-field";
+import { normalizeAvatarFile } from "@/lib/image-processing";
 import {
   BellIcon,
   FingerprintIcon,
@@ -168,7 +169,6 @@ export function AccountSettingsClient() {
   const passkeysQuery = authClient.useListPasskeys();
   const passkeys = (passkeysQuery.data ?? []) as PasskeyRow[];
 
-  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarMessage, setAvatarMessage] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -305,14 +305,12 @@ export function AccountSettingsClient() {
       if (!file.type.startsWith("image/")) {
         throw new Error("Please choose an image file.");
       }
-      if (file.size > 2 * 1024 * 1024) {
-        throw new Error("Profile image must be 2 MB or smaller.");
-      }
+      const preparedFile = await normalizeAvatarFile(file);
       const uploadUrl = await generateAvatarUploadUrl({});
       const response = await fetch(uploadUrl, {
         method: "POST",
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-        body: file,
+        headers: { "Content-Type": preparedFile.type || "application/octet-stream" },
+        body: preparedFile,
       });
       if (!response.ok) throw new Error("Upload failed.");
       const { storageId } = (await response.json()) as { storageId: Id<"_storage"> };
@@ -390,33 +388,17 @@ export function AccountSettingsClient() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <UserAvatarUploadPreview
+            <AvatarUploadField
               name={displayName}
               email={displayEmail}
               imageUrl={avatarUrl}
+              buttonLabel="Upload photo"
+              busy={avatarBusy}
+              onSelected={(file) => void onAvatarSelected(file)}
             />
             <div className="space-y-2">
-              <input
-                ref={avatarInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (file) void onAvatarSelected(file);
-                }}
-              />
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={avatarBusy}
-                  onClick={() => avatarInputRef.current?.click()}
-                >
-                  {avatarBusy ? "Uploading…" : "Upload photo"}
-                </Button>
-                {avatarUrl ? (
+              {avatarUrl ? (
+                <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
                     variant="ghost"
@@ -425,8 +407,8 @@ export function AccountSettingsClient() {
                   >
                     Remove
                   </Button>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
               <p className="text-xs text-muted-foreground">PNG or JPG, up to 2 MB.</p>
               {avatarMessage ? (
                 <Alert>
