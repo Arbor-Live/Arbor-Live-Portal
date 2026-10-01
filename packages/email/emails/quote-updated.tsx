@@ -28,7 +28,7 @@ export function QuoteUpdatedEmail({
   managerEmail,
 }: QuoteUpdatedEmailProps) {
   const greeting = recipientName ? `Hi ${recipientName},` : "Hi!";
-  const difference = newTotalUsd - previousTotalUsd;
+  const difference = Math.round((newTotalUsd - previousTotalUsd) * 100) / 100;
   const differenceLabel =
     difference === 0
       ? "No change"
