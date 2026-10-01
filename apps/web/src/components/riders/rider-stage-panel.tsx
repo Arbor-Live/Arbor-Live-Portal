@@ -187,27 +187,17 @@ export function RiderStagePanel({
     }));
   }
 
-  const familySummary = RIDER_CATEGORY_ORDER.filter((category) => counts[category] > 0);
-
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start" data-testid="rider-stage-panel">
       <Card className="min-w-0 gap-0 overflow-hidden py-0">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-4 py-3">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold">Stage</h2>
-            {familySummary.length > 0 ? (
-              <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                {familySummary.map((category) => (
-                  <span key={category} className="inline-flex items-center gap-1.5">
-                    <span className={cn("size-2 rounded-full", RIDER_FAMILY[category].dot)} aria-hidden />
-                    <span className="tabular-nums">{counts[category]}</span>
-                    {RIDER_CATEGORY_PALETTE[category].label.toLowerCase()}
-                  </span>
-                ))}
-              </p>
-            ) : (
-              <p className="mt-0.5 text-xs text-muted-foreground">Nothing on stage yet.</p>
-            )}
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {content.items.length === 0
+                ? "Nothing on stage yet."
+                : `${content.items.length} thing${content.items.length === 1 ? "" : "s"} on stage, drawn from the audience's view.`}
+            </p>
           </div>
           <StageSizeControl
             stage={content.stage}

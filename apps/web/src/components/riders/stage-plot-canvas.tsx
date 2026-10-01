@@ -652,7 +652,7 @@ function SelectionToolbar({
       role="toolbar"
       aria-label={`Actions for ${name}`}
       data-testid="stage-selection-toolbar"
-      className="absolute z-10 flex items-center border bg-popover text-popover-foreground shadow-md"
+      className="absolute z-10 flex items-center justify-center gap-1 border bg-popover text-popover-foreground shadow-md"
       style={{ left, top, width: TOOLBAR_WIDTH, height: TOOLBAR_HEIGHT }}
       // Keep presses on the toolbar from reaching the stage, which deselects.
       onPointerDown={(event) => event.stopPropagation()}
