@@ -31,7 +31,7 @@ export async function generateMetadata({ params }: WorkDetailPageProps): Promise
 
   if (!post) {
     return {
-      title: "Post not found | Arbor Live",
+      title: "Post not found",
       description: "Case study or blog post from Arbor Live.",
     };
   }

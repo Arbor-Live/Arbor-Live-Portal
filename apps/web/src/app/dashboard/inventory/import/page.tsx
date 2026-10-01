@@ -1,5 +1,10 @@
 import { AdminOnlyGuard } from "@/components/org-context-guard";
 import { CsvImporter } from "@/components/inventory/csv-importer";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Import inventory",
+};
 
 export default function InventoryImportPage() {
   return (

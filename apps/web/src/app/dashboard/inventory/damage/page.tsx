@@ -1,5 +1,10 @@
 import { Suspense } from "react";
 import { DamageQueueManager } from "@/components/inventory/damage-queue-manager";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Damage & repair",
+};
 
 export default function InventoryDamagePage() {
   // The queue reads `?report=` (the mention email's deep link) with

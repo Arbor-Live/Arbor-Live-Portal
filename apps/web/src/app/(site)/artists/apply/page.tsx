@@ -3,7 +3,7 @@ import { PublicPageHero } from "@/components/public/public-page-hero";
 import { BandApplicationForm } from "@/components/public/band-application-form";
 
 export const metadata = {
-  title: "Join as an artist | Arbor Live",
+  title: "Join as an artist",
   description: "Join the live music community at Stanford with Arbor Live.",
 };
 

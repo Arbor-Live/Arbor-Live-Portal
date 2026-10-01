@@ -1,7 +1,7 @@
 import { OpenMicWizard } from "@/components/request/open-mic-wizard";
 
 export const metadata = {
-  title: "Open Mic sign-up | Arbor Live",
+  title: "Open Mic sign-up",
   description: "Sign up to perform at the next Arbor Live open mic.",
 };
 

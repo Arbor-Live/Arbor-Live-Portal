@@ -4,7 +4,7 @@ import { PublicMarketingLayout } from "@/components/public/public-marketing-layo
 import { PublicPageHero } from "@/components/public/public-page-hero";
 
 export const metadata = {
-  title: "The Team | Arbor Live",
+  title: "The Team",
   description: "Meet the Arbor Live student production crew.",
 };
 

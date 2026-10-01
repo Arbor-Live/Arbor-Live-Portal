@@ -1,7 +1,7 @@
 import { PublicEventLifecycleClient } from "@/components/public/public-event-lifecycle-client";
 
 export const metadata = {
-  title: "Event quote | Arbor Live",
+  title: "Event quote",
   description: "Review your Arbor Live event quote, schedule, and approval details.",
 };
 

@@ -1,12 +1,10 @@
-"use client";
+import { PrintQueuePageContent } from "@/components/printing/print-queue-page-content";
+import type { Metadata } from "next";
 
-import { ArborOnlyGuard } from "@/components/org-context-guard";
-import { PrintQueueClient } from "@/components/printing/print-queue-client";
+export const metadata: Metadata = {
+  title: "Print queue",
+};
 
 export default function PrintQueuePage() {
-  return (
-    <ArborOnlyGuard>
-      <PrintQueueClient />
-    </ArborOnlyGuard>
-  );
+  return <PrintQueuePageContent />;
 }

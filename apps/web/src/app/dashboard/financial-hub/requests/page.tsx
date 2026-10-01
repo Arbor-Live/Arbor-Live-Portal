@@ -4,6 +4,11 @@ import { EventRequestsInbox } from "@/components/events/event-requests-inbox";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Booking requests",
+};
 
 export default function EventRequestsPage() {
   return (

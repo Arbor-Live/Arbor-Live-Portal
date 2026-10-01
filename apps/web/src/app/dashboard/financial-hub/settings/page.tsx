@@ -1,6 +1,11 @@
 import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
 import { PageHeader } from "@/components/page-header";
 import { FinancialHubSettings } from "@/components/financial/financial-hub-settings";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Ops Center settings",
+};
 
 export default function FinancialHubSettingsPage() {
   return (

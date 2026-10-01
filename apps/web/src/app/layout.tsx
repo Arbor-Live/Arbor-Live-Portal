@@ -27,7 +27,10 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Arbor Live",
+  title: {
+    template: "%s | Arbor Live",
+    default: "Arbor Live",
+  },
   description:
     "Arbor Live is Stanford's only student-run live event production company, bringing live events to every corner of campus.",
   icons: {

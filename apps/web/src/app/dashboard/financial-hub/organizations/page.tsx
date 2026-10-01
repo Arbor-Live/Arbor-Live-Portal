@@ -1,6 +1,11 @@
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { FinancialHubOrganizationsClient } from "@/components/financial/financial-hub-organizations-client";
 import { PageHeader } from "@/components/page-header";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Billing hosts",
+};
 
 export default function FinancialHubOrganizationsPage() {
   return (

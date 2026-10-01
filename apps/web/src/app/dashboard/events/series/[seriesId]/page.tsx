@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import {
   Card,
   CardDescription,
@@ -6,7 +7,21 @@ import {
 } from "@/components/ui/card";
 import { EventSeriesOverview } from "@/components/events/event-series-overview";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
-import type { Id } from "@/lib/convex-api";
+import { api, type Id } from "@/lib/convex-api";
+import { fetchAuthQuery } from "@/lib/auth-server";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ seriesId: string }>;
+}): Promise<Metadata> {
+  const { seriesId } = await params;
+  const data = await fetchAuthQuery(api.eventSeries.get, {
+    id: seriesId as Id<"eventSeries">,
+  });
+  const title = data?.series.title?.trim();
+  return { title: title ? `${title} · Series` : "Event series" };
+}
 
 export default async function EventSeriesPage({
   params,

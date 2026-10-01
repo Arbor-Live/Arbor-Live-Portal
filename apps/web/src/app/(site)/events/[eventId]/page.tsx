@@ -1,3 +1,5 @@
+import { cache } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
@@ -8,7 +10,7 @@ import { LandingUpcomingEvents } from "@/components/public/public-events-grid";
 import { LandingStayInTheLoop } from "@/components/public/newsletter-signup-form";
 import { EventAddToCalendar } from "@/components/public/event-add-to-calendar";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/convex-api";
+import { api, type Id } from "@/lib/convex-api";
 import { fetchPublicQuerySafe } from "@/lib/convex-server";
 import { formatDateTime } from "@/lib/format";
 import { MarketingLinkIcon } from "@/lib/marketing-link-icons";
@@ -17,13 +19,35 @@ type EventDetailPageProps = {
   params: Promise<{ eventId: string }>;
 };
 
+const getPublicEvent = cache((eventId: string) =>
+  fetchPublicQuerySafe(api.publicEvents.getByEventId, { eventId: eventId as Id<"events"> }, null),
+);
+
+export async function generateMetadata({
+  params,
+}: EventDetailPageProps): Promise<Metadata> {
+  const { eventId } = await params;
+  const event = await getPublicEvent(eventId);
+  if (!event) return { title: "Event not found" };
+  const venue = [event.venueName, event.venueAddress].filter(Boolean).join(", ");
+  const description =
+    venue.length > 0
+      ? `${formatDateTime(event.startAt, "long")} at ${venue}.`
+      : formatDateTime(event.startAt, "long");
+  return {
+    title: event.title,
+    description,
+    openGraph: {
+      title: event.title,
+      description,
+      images: event.posterImageUrl ? [{ url: event.posterImageUrl }] : undefined,
+    },
+  };
+}
+
 export default async function PublicEventDetailPage({ params }: EventDetailPageProps) {
   const { eventId } = await params;
-  const event = await fetchPublicQuerySafe(
-    api.publicEvents.getByEventId,
-    { eventId: eventId as import("@/lib/convex-api").Id<"events"> },
-    null,
-  );
+  const event = await getPublicEvent(eventId);
   if (!event) notFound();
 
   return (

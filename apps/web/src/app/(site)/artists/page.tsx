@@ -4,7 +4,7 @@ import { PublicMarketingLayout } from "@/components/public/public-marketing-layo
 import { PublicPageHero } from "@/components/public/public-page-hero";
 
 export const metadata = {
-  title: "Artists | Arbor Live",
+  title: "Artists",
   description: "Discover artists and performers working with Arbor Live.",
 };
 

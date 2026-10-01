@@ -10,5 +10,5 @@ export const getPublicWorkPostBySlug = cache(
 );
 
 export function formatPublicWorkPageTitle(postTitle: string) {
-  return `${postTitle.trim()} | Arbor Live`;
+  return postTitle.trim();
 }
