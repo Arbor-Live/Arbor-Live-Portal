@@ -52,27 +52,18 @@ export function ImageCropDialog({
   onCancel,
   onConfirm,
 }: ImageCropDialogProps) {
-  // ?devPreview=crop demos the crop UI on any page without wiring a real file.
-  const [demoFile] = useState<File | null>(() => {
-    if (process.env.NODE_ENV !== "development" || typeof window === "undefined") return null;
-    if (new URLSearchParams(window.location.search).get("devPreview") !== "crop") return null;
-    return new File([], "dev-poster.png", { type: "image/png" });
-  });
-  const activeFile = file ?? demoFile;
-  void activeFile;
-
   return (
     <Dialog
-      open={open || Boolean(demoFile)}
+      open={open && Boolean(file)}
       onOpenChange={(next) => {
         if (!next) onCancel();
       }}
     >
       <DialogContent className="sm:max-w-md">
-        {activeFile ? (
+        {file ? (
           <CropSurface
-            key={`${activeFile.name}:${activeFile.size}:${activeFile.lastModified}`}
-            file={activeFile}
+            key={`${file.name}:${file.size}:${file.lastModified}`}
+            file={file}
             aspect={aspect}
             title={title}
             description={description}
@@ -107,30 +98,7 @@ function CropSurface({
     startY: number;
     origin: Offset;
   } | null>(null);
-  const [imageUrl] = useState(() => {
-    if (file.size === 0 && /\.png$/i.test(file.name) && file.name.startsWith("dev-")) {
-      const canvas = document.createElement("canvas");
-      canvas.width = 1200;
-      canvas.height = 900;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        const gradient = ctx.createLinearGradient(0, 0, 1200, 900);
-        gradient.addColorStop(0, "#0f172a");
-        gradient.addColorStop(0.5, "#7c3aed");
-        gradient.addColorStop(1, "#ec4899");
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 1200, 900);
-        ctx.fillStyle = "rgba(255,255,255,0.9)";
-        ctx.font = "bold 96px sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText("ARBOR LIVE", 600, 430);
-        ctx.font = "600 52px sans-serif";
-        ctx.fillText("Sample poster", 600, 510);
-      }
-      return canvas.toDataURL("image/png");
-    }
-    return URL.createObjectURL(file);
-  });
+  const [imageUrl] = useState(() => URL.createObjectURL(file));
   const [natural, setNatural] = useState<Size | null>(null);
   const [frame, setFrame] = useState<Size | null>(null);
   const [zoom, setZoom] = useState(1);
