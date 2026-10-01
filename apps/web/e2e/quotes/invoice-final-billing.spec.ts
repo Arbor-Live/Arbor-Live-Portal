@@ -1,6 +1,6 @@
 import { test, expect, type Browser } from "@playwright/test";
 import { acceptAppDialog } from "../helpers/auth";
-import { pollConvex } from "../helpers/convex";
+import { pollConvex, runConvex } from "../helpers/convex";
 import { e2eEnv } from "../helpers/env";
 import { clientApprovedQuote, type InvoiceRevisionsState } from "../helpers/invoice";
 
@@ -79,5 +79,20 @@ test.describe("approved estimate → final invoice", () => {
       // Still an estimate, but no "don't pay" once payment is open.
       await expect(client.getByTestId("public-quote-estimate-note")).not.toContainText("Please don't send payment");
     });
+  });
+
+  test("a final invoice with pending payment proof can't be reopened", async ({ page }) => {
+    const seeded = runConvex("e2eHelpers:seedInvoiceWithProofSubmission", {
+      clientGroupName: `E2E Final Proof ${Date.now()}`,
+    }) as { invoiceId: string };
+
+    await page.goto(`/dashboard/financial-hub/invoices/${seeded.invoiceId}`);
+    const billing = page.getByTestId("invoice-billing-state");
+    await expect(billing).toContainText("Final invoice since", { timeout: 25_000 });
+    await expect(billing.getByTestId("invoice-billing-proof-pending")).toContainText(
+      "Payment proof is pending. Verify or invalidate it first.",
+      { timeout: 25_000 },
+    );
+    await expect(billing.getByRole("button", { name: "Reopen" })).toHaveCount(0);
   });
 });
