@@ -111,7 +111,7 @@ const financialHubSubItems: NavSubItem[] = [
 const eventsSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/events" },
   { title: "Venues", url: "/dashboard/events/venues", adminOnly: true },
-  { title: "Open Mic", url: "/dashboard/events/open-mic", adminOnly: true },
+  { title: "Open Mic", url: "/dashboard/events/open-mic" },
   { title: "Open Positions", url: "/dashboard/events/positions" },
   { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", adminOnly: true },
   { title: "My Availability", url: "/dashboard/events/my-availability" },

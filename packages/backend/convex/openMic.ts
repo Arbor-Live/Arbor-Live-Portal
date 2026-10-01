@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireAdmin } from "./lib/auth";
+import { requireArborInternalContext } from "./lib/auth";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { runnerWindowFor, runnerWindowOpenAt } from "./lib/openMicAddon";
 
@@ -211,7 +211,7 @@ export const listEvents = query({
   args: {},
   returns: v.array(adminEventSummaryValue),
   handler: async (ctx) => {
-    await requireAdmin(ctx);
+    await requireArborInternalContext(ctx);
     const events = await ctx.db
       .query("events")
       .withIndex("by_openMicEnabled_and_startAt", (q) => q.eq("openMicEnabled", true))
@@ -310,7 +310,7 @@ export const getRunnerState = query({
     }),
   ),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireArborInternalContext(ctx);
     const event = await ctx.db.get(args.eventId);
     if (!event || !event.openMicEnabled) return null;
     const now = Date.now();
@@ -361,7 +361,7 @@ export const getLeaderboard = query({
   args: {},
   returns: v.array(leaderboardEntryValue),
   handler: async (ctx) => {
-    await requireAdmin(ctx);
+    await requireArborInternalContext(ctx);
     const performed = await ctx.db
       .query("openMicSignups")
       .withIndex("by_status_and_performedAt", (q) => q.eq("status", "performed"))
@@ -405,7 +405,7 @@ export const setOpenMicStatus = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireArborInternalContext(ctx);
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
     if (!event.openMicEnabled) {
@@ -448,7 +448,7 @@ export const advanceCurrent = mutation({
   args: { eventId: v.id("events") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireArborInternalContext(ctx);
     const event = await ctx.db.get(args.eventId);
     if (!event || !event.openMicEnabled) {
       throw new Error("Open Mic isn't enabled on this event.");
@@ -487,7 +487,7 @@ export const markNotHere = mutation({
   args: { signupId: v.id("openMicSignups") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireArborInternalContext(ctx);
     const signup = await ctx.db.get(args.signupId);
     if (!signup) throw new Error("Sign-up not found.");
     if (signup.status !== "current") {
@@ -568,7 +568,7 @@ export const removeSignup = mutation({
   args: { signupId: v.id("openMicSignups") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireArborInternalContext(ctx);
     const signup = await ctx.db.get(args.signupId);
     if (!signup) return null;
     const wasCurrent = signup.status === "current";
