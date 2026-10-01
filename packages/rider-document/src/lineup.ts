@@ -299,7 +299,7 @@ export function buildRiderFromLineup(lineup: Lineup): RiderContent {
       place("playback", 2, 1.4, name);
       return;
     }
-    const x = member.role === "keys" ? (hasDrums ? W / 2 + 6.5 : W * 0.7) : hasDrums ? W / 2 - 6.5 : W * 0.3;
+    const x = member.role === "keys" ? (hasDrums ? W / 2 + 5.5 : W * 0.7) : hasDrums ? W / 2 - 5.5 : W * 0.3;
     upstageSpots[member.id] = x;
     place(role.symbol, x, upstageY - 1.4, name);
     if (role.gear) place(role.gear, x, upstageY + 0.6, name);
@@ -309,27 +309,17 @@ export function buildRiderFromLineup(lineup: Lineup): RiderContent {
     }
   });
 
-  // Monitors. In-ears: a pack and a mix per person. Wedges: everyone gets a
-  // wedge, but they share mixes by where they stand (centre, stage right,
-  // stage left) plus one for the drummer, so there are at most four mixes to
-  // dial in; more is rarely worth the setup on a stage this size.
+  // Monitors. In-ears: a pack and a mix per person. Wedges: kept light,
+  // because every wedge is a cable, a send and a mix to dial in. At most three
+  // across the front (stage right, centre, stage left; one per zone anyone
+  // stands in) and one at the drums, each on its own mix. Upstage players
+  // (keys, percussion) share their zone's front wedge.
   const people = members.filter((member) => !LINEUP_ROLES[member.role].notPerformer);
   type Zone = "centre" | "right" | "left" | "drums";
   const zoneMixes = new Map<Zone, { id: string; names: string[]; wedges: number }>();
   const zoneOf = (x: number): Zone => (x < W / 3 ? "right" : x > (W * 2) / 3 ? "left" : "centre");
-  const placeWedge = (zone: Zone, name: string, x: number, y: number, rotation?: number) => {
-    const mix = zoneMixes.get(zone) ?? { id: createRiderId("mix"), names: [], wedges: 0 };
-    zoneMixes.set(zone, mix);
-    mix.names.push(name);
-    mix.wedges += 1;
-    const result = placeSymbol(content, { symbolKey: "wedge", xFt: x, yFt: y, rotation, withoutLinkedRows: true });
-    content = {
-      ...result.content,
-      items: result.content.items.map((item) =>
-        item.id === result.itemId ? { ...item, monitorMixId: mix.id } : item,
-      ),
-    };
-  };
+  const zoneCentre: Record<Exclude<Zone, "drums">, number> = { right: W / 6, centre: W / 2, left: (W * 5) / 6 };
+  const frontXs = new Map<Zone, number[]>();
 
   people.forEach((member) => {
     const name = names.get(member.id) ?? LINEUP_ROLES[member.role].label;
@@ -340,20 +330,34 @@ export function buildRiderFromLineup(lineup: Lineup): RiderContent {
       place("iem", x, y, name);
       return;
     }
-    if (frontIndex >= 0) {
-      placeWedge(zoneOf(frontX[frontIndex]), name, frontX[frontIndex], D - 1.2);
-      return;
-    }
-    const x = upstageSpots[member.id] ?? W / 2;
-    const towardCentre = x >= W / 2 ? -1 : 1;
-    placeWedge(
-      member.role === "drums" ? "drums" : zoneOf(x),
-      name,
-      x + towardCentre * (member.role === "drums" ? 4.5 : 2.6),
-      upstageY + 2.4,
-      towardCentre * -35,
-    );
+    const x = frontIndex >= 0 ? frontX[frontIndex] : (upstageSpots[member.id] ?? W / 2);
+    const zone: Zone = member.role === "drums" ? "drums" : zoneOf(x);
+    const mix = zoneMixes.get(zone) ?? { id: createRiderId("mix"), names: [], wedges: 1 };
+    zoneMixes.set(zone, mix);
+    mix.names.push(name);
+    if (frontIndex >= 0) frontXs.set(zone, [...(frontXs.get(zone) ?? []), x]);
   });
+
+  const placeWedge = (mixId: string, x: number, y: number, rotation?: number) => {
+    const result = placeSymbol(content, { symbolKey: "wedge", xFt: x, yFt: y, rotation, withoutLinkedRows: true });
+    content = {
+      ...result.content,
+      items: result.content.items.map((item) =>
+        item.id === result.itemId ? { ...item, monitorMixId: mixId } : item,
+      ),
+    };
+  };
+  for (const [zone, mix] of zoneMixes) {
+    if (zone === "drums") {
+      const kitX = W / 2;
+      placeWedge(mix.id, kitX - 4.5, upstageY + 2.4, 35);
+      continue;
+    }
+    // In front of the people it serves, or the zone's middle when only upstage players use it.
+    const xs = frontXs.get(zone);
+    const x = xs?.length ? xs.reduce((sum, value) => sum + value, 0) / xs.length : zoneCentre[zone];
+    placeWedge(mix.id, x, D - 1.2);
+  }
 
   if (zoneMixes.size > 0) {
     const order: Zone[] = ["centre", "right", "left", "drums"];

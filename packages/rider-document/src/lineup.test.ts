@@ -10,7 +10,8 @@ describe("buildRiderFromLineup", () => {
     expect(keys.filter((key) => key === "vox.bgv")).toHaveLength(2);
     // Vocals centre, bass stage right, guitar and keys stage left, drums.
     expect(content.monitorMixes.map((mix) => mix.label)).toEqual(["Vocals", "Bass", "Electric guitar · Keys", "Drums"]);
-    expect(content.items.filter((item) => item.symbol === "wedge")).toHaveLength(5);
+    // One wedge per mix: three across the front, one at the drums.
+    expect(content.items.filter((item) => item.symbol === "wedge")).toHaveLength(4);
     expect(content.performerCount).toBe(5);
     expect(content.inputs.map((input) => input.channel)).toEqual(
       content.inputs.map((_, index, all) =>
@@ -35,13 +36,15 @@ describe("buildRiderFromLineup", () => {
     expect(content.monitorMixes[0]).toMatchObject({ label: "Sarah", type: "iem" });
   });
 
-  it("keeps wedge mixes to three zones plus drums, however big the band", () => {
+  it("keeps to three front wedges plus one for drums, however big the band", () => {
     const members = ["vocals", "vocals", "guitar", "guitar", "bass", "keys", "drums", "horns", "horns", "percussion"].map(
       (role) => newLineupMember(role as never),
     );
     const content = buildRiderFromLineup({ members, monitors: "wedges" });
     expect(content.monitorMixes.length).toBeLessThanOrEqual(4);
     const wedges = content.items.filter((item) => item.symbol === "wedge");
+    expect(wedges.length).toBeLessThanOrEqual(4);
+    expect(wedges.filter((item) => item.yFt > content.stage.depthFt / 2).length).toBeLessThanOrEqual(3);
     expect(wedges.every((item) => content.monitorMixes.some((mix) => mix.id === item.monitorMixId))).toBe(true);
     expect(content.monitorMixes.reduce((sum, mix) => sum + mix.sends, 0)).toBe(wedges.length);
   });
