@@ -3,7 +3,7 @@ import { PublicPageHero } from "@/components/public/public-page-hero";
 import { CrewApplicationForm } from "@/components/public/crew-application-form";
 
 export const metadata = {
-  title: "Join the crew | Arbor Live",
+  title: "Join the crew",
   description: "Apply to join the Arbor Live crew at Stanford.",
 };
 

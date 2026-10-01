@@ -1,7 +1,7 @@
 import { PublicPostMortemSection } from "@/components/public/public-post-mortem-section";
 
 export const metadata = {
-  title: "Event post-mortem | Arbor Live",
+  title: "Event post-mortem",
   description: "Share your post-event review for an Arbor Live production.",
 };
 

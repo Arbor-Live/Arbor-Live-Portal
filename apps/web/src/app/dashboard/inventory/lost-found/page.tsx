@@ -1,4 +1,9 @@
 import { LostFoundSettingsManager } from "@/components/inventory/lost-found-settings-manager";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Lost & found",
+};
 
 export default function InventoryLostFoundPage() {
   return (

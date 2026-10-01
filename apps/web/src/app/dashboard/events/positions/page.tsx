@@ -3,7 +3,7 @@ import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { PageHeader } from "@/components/page-header";
 
 export const metadata = {
-  title: "Open positions | Arbor Live",
+  title: "Open positions",
 };
 
 export default function OpenPositionsPage() {

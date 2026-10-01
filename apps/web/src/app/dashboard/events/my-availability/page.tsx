@@ -1,6 +1,11 @@
 import { CrewAvailabilityInbox } from "@/components/events/crew-availability-inbox";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { PageHeader } from "@/components/page-header";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "My availability",
+};
 
 export default function MyAvailabilityPage() {
   return (

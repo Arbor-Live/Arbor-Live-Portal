@@ -31,12 +31,12 @@ export async function generateMetadata({
 
   if (!data) {
     return {
-      title: "Package not available | Arbor Live",
+      title: "Package not available",
     };
   }
 
   return {
-    title: `${data.package.name} | Arbor Live`,
+    title: data.package.name,
     description: data.package.description ?? "Public equipment package from Arbor Live.",
   };
 }

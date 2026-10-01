@@ -4,7 +4,7 @@ import { PublicUpcomingEventsClient } from "@/components/public/public-upcoming-
 import { LandingStayInTheLoop } from "@/components/public/newsletter-signup-form";
 
 export const metadata = {
-  title: "Upcoming Events | Arbor Live",
+  title: "Upcoming Events",
   description: "Upcoming public events from Arbor Live.",
 };
 

@@ -1,6 +1,11 @@
 import { BookingRequestSettingsClient } from "@/components/events/booking-request-settings-client";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { PageHeader } from "@/components/page-header";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Booking request settings",
+};
 
 export default function BookingRequestSettingsPage() {
   return (

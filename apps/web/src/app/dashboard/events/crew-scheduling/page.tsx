@@ -1,6 +1,11 @@
 import { CrewSchedulingDashboard } from "@/components/events/crew-scheduling-dashboard";
 import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
 import { PageHeader } from "@/components/page-header";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Crew scheduling",
+};
 
 export default function CrewSchedulingPage() {
   return (

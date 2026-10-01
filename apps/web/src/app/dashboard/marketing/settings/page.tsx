@@ -1,5 +1,10 @@
 import { MarketingSettingsManager } from "@/components/marketing/marketing-settings-manager";
 import { NewsletterSubscribersManager } from "@/components/marketing/newsletter-subscribers-manager";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Marketing settings",
+};
 
 export default function MarketingSettingsPage() {
   return (

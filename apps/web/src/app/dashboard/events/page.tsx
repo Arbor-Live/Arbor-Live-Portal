@@ -1,6 +1,11 @@
 import { EventsMainPageClient } from "@/components/events/events-main-page-client";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { PageHeader } from "@/components/page-header";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Events",
+};
 
 export default function EventsPage() {
   return (

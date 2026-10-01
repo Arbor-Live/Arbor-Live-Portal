@@ -9,6 +9,11 @@ import {
   FinancialHubExpensesCard,
   FinancialHubRevenueCard,
 } from "@/components/insights/financial-hub-kpi-cards";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Ops Center",
+};
 
 export default function FinancialHubPage() {
   return (

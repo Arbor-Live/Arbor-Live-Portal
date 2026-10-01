@@ -1,7 +1,23 @@
+import type { Metadata } from "next";
 import { OpenMicRunner } from "@/components/events/open-mic-runner";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { PageHeader } from "@/components/page-header";
-import type { Id } from "@/lib/convex-api";
+import { api, type Id } from "@/lib/convex-api";
+import { fetchAuthQuery } from "@/lib/auth-server";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const data = await fetchAuthQuery(api.events.get, {
+    id: id as Id<"events">,
+    detail: "schedule",
+  });
+  const title = data?.event.title?.trim();
+  return { title: title ? `${title} · Open Mic` : "Open Mic" };
+}
 
 export default async function OpenMicRunnerPage({
   params,

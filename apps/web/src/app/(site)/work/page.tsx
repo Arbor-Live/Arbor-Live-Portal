@@ -6,7 +6,7 @@ import { fetchPublicQuerySafe } from "@/lib/convex-server";
 export const revalidate = 3600;
 
 export const metadata = {
-  title: "Our Work | Arbor Live",
+  title: "Our Work",
   description: "Case studies and stories from live events produced by Arbor Live.",
 };
 

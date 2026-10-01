@@ -1,7 +1,7 @@
 import { PublicRequestLifecycleClient } from "@/components/public/public-request-lifecycle-client";
 
 export const metadata = {
-  title: "Track booking request | Arbor Live",
+  title: "Track booking request",
   description: "Follow your Arbor Live booking request from submission through quote approval.",
 };
 
