@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
+import { usePublishStatusToasts } from "@/hooks/use-publish-status-toasts";
 import { formatDateTime } from "@/lib/format";
 import { formatEventVisibilityLabel, type EventVisibility } from "@/lib/event-visibility";
 import { PrintPosterButton } from "@/components/printing/print-poster-button";
@@ -42,6 +43,7 @@ export function EventMarketingSection({ eventId }: { eventId: Id<"events"> }) {
   const upsert = useMutation(api.marketingDesigns.upsertForEvent);
   const assignPosterDesigner = useMutation(api.marketingDesigns.assignPosterDesigner);
   const markReady = useMutation(api.marketingDesigns.markReady);
+  usePublishStatusToasts(design, eventId);
 
   const [imageUrl, setImageUrl] = useState("");
   const [caption, setCaption] = useState("");
@@ -130,7 +132,7 @@ export function EventMarketingSection({ eventId }: { eventId: Id<"events"> }) {
         additionalLinks: filterMarketingLinks(additionalLinks),
       });
       await markReady({ id: designId });
-      notify.success("Published to Instagram and the public site.");
+      notify.info("Publishing to Instagram…");
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
     } finally {
@@ -170,7 +172,19 @@ export function EventMarketingSection({ eventId }: { eventId: Id<"events"> }) {
                 <p>Published {formatDateTime(design.publishedAt)}</p>
               </>
             ) : null}
-            {design.instagramPostId ? (
+            {design.instagramPostUrl ? (
+              <>
+                <p>·</p>
+                <a
+                  href={design.instagramPostUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  View Instagram post
+                </a>
+              </>
+            ) : design.instagramPostId ? (
               <>
                 <p>·</p>
                 <p>Instagram {design.instagramPostId}</p>

@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { formatStoredR2Asset } from "@/lib/r2-assets";
+import { compressImageToLimit } from "@/lib/image-processing";
 
 export type R2UploadScope = "inventory" | "event" | "marketing" | "organization" | "venue";
 
@@ -75,10 +76,11 @@ export function useR2FileUpload(uploadArgs: R2UploadArgs) {
       setError(null);
       try {
         const normalizedFile = file.name.trim() ? file : normalizeClipboardFile(file);
+        const preparedFile = await compressImageToLimit(normalizedFile);
         const common = {
-          fileName: normalizedFile.name,
-          contentType: normalizedFile.type || "application/octet-stream",
-          contentLength: normalizedFile.size,
+          fileName: preparedFile.name,
+          contentType: preparedFile.type || "application/octet-stream",
+          contentLength: preparedFile.size,
           uploadId: draftUploadIdRef.current,
         };
 
@@ -123,9 +125,9 @@ export function useR2FileUpload(uploadArgs: R2UploadArgs) {
         const response = await fetch(url, {
           method: "PUT",
           headers: {
-            "Content-Type": normalizedFile.type || "application/octet-stream",
+            "Content-Type": preparedFile.type || "application/octet-stream",
           },
-          body: normalizedFile,
+          body: preparedFile,
         });
 
         if (!response.ok) {

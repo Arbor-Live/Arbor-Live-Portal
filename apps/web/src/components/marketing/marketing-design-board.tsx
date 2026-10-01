@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
+import { usePublishStatusToasts } from "@/hooks/use-publish-status-toasts";
 import { formatDateTime } from "@/lib/format";
 import {
   formatEventVisibilityLabel,
@@ -64,6 +65,7 @@ export function MarketingDesignBoard() {
   );
 
   const selectedDesign = selectedEvent?.design ?? null;
+  usePublishStatusToasts(selectedDesign, selectedEventId);
 
   function selectEvent(eventId: Id<"events">) {
     const event = events?.find((row) => row.eventId === eventId);
@@ -123,7 +125,7 @@ export function MarketingDesignBoard() {
         additionalLinks: filterMarketingLinks(additionalLinks),
       });
       await markReady({ id: designId });
-      notify.success("Published to Instagram and the public site.");
+      notify.info("Publishing to Instagram…");
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
     }
@@ -241,9 +243,23 @@ export function MarketingDesignBoard() {
               {selectedDesign?.status === "published" ? (
                 <p className="text-sm text-muted-foreground">
                   Published
-                  {selectedDesign.instagramPostId
-                    ? ` · Instagram ${selectedDesign.instagramPostId}`
-                    : ""}
+                  {selectedDesign.instagramPostUrl ? (
+                    <>
+                      {" · "}
+                      <a
+                        href={selectedDesign.instagramPostUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline"
+                      >
+                        View Instagram post
+                      </a>
+                    </>
+                  ) : selectedDesign.instagramPostId ? (
+                    <>{` · Instagram ${selectedDesign.instagramPostId}`}</>
+                  ) : (
+                    ""
+                  )}
                   {selectedDesign.lastError ? ` · Error: ${selectedDesign.lastError}` : ""}
                 </p>
               ) : selectedDesign?.status === "ready" ? (

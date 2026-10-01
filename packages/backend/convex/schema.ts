@@ -1936,6 +1936,8 @@ export default defineSchema({
     partifulCohostUrl: v.optional(v.string()),
     status: marketingDesignStatusValue,
     instagramPostId: v.optional(v.string()),
+    /** Public permalink (instagram.com/p/…) returned by PostPeer on success. */
+    instagramPostUrl: v.optional(v.string()),
     publishedAt: v.optional(v.number()),
     lastError: v.optional(v.string()),
     createdByUserId: v.string(),

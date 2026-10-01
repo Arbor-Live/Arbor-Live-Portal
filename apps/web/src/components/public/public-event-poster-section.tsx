@@ -24,6 +24,8 @@ import { notify } from "@/lib/notify";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { fileFromClipboardEvent, normalizeClipboardFile } from "@/hooks/use-r2-file-upload";
+import { ImageCropDialog } from "@/components/files/image-crop-dialog";
+import { POSTER_ASPECT_RATIO, compressImageToLimit } from "@/lib/image-processing";
 
 type Portal = "request" | "quote";
 
@@ -91,6 +93,7 @@ export function PublicEventPosterSection({
   ]);
   const [partifulCohostUrl, setPartifulCohostUrl] = useState("");
   const [detailsSourceKey, setDetailsSourceKey] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
 
   const days = poster?.days ?? [];
   const dayIndex = Math.min(
@@ -117,22 +120,23 @@ export function PublicEventPosterSection({
       setError(null);
       try {
         const normalizedFile = file.name.trim() ? file : normalizeClipboardFile(file);
+        const preparedFile = await compressImageToLimit(normalizedFile);
         const { url, key } = await generateUploadUrl({
           portal,
           token,
           eventId: activeEventId,
-          fileName: normalizedFile.name,
-          contentType: normalizedFile.type || "application/octet-stream",
-          contentLength: normalizedFile.size,
+          fileName: preparedFile.name,
+          contentType: preparedFile.type || "application/octet-stream",
+          contentLength: preparedFile.size,
           uploadId: draftUploadIdRef.current,
         });
 
         const response = await fetch(url, {
           method: "PUT",
           headers: {
-            "Content-Type": normalizedFile.type || "application/octet-stream",
+            "Content-Type": preparedFile.type || "application/octet-stream",
           },
-          body: normalizedFile,
+          body: preparedFile,
         });
         if (!response.ok) {
           throw new Error("Upload failed. Please try again.");
@@ -155,6 +159,17 @@ export function PublicEventPosterSection({
       }
     },
     [activeEventId, generateUploadUrl, portal, savePoster, token],
+  );
+
+  const handlePosterFile = useCallback(
+    (file: File) => {
+      if (file.type.startsWith("image/")) {
+        setCropFile(file);
+        return;
+      }
+      void uploadFile(file);
+    },
+    [uploadFile],
   );
 
   const saveDetails = useCallback(async () => {
@@ -284,7 +299,7 @@ export function PublicEventPosterSection({
           onChange={(event) => {
             const file = event.target.files?.[0];
             event.target.value = "";
-            if (file) void uploadFile(file);
+            if (file) handlePosterFile(file);
           }}
         />
 
@@ -316,7 +331,7 @@ export function PublicEventPosterSection({
               const file = fileFromClipboardEvent(event.nativeEvent);
               if (!file) return;
               event.preventDefault();
-              void uploadFile(file);
+              handlePosterFile(file);
             }}
             onDragEnter={(event) => {
               event.preventDefault();
@@ -340,7 +355,7 @@ export function PublicEventPosterSection({
                 notify.error("Drop an image file (JPEG, PNG, WebP, GIF, or SVG).");
                 return;
               }
-              void uploadFile(file);
+              handlePosterFile(file);
             }}
           >
             <PublicEventPoster
@@ -438,6 +453,18 @@ export function PublicEventPosterSection({
 
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
       </CardContent>
+
+      <ImageCropDialog
+        open={Boolean(cropFile)}
+        file={cropFile}
+        aspect={POSTER_ASPECT_RATIO}
+        title="Crop poster"
+        onCancel={() => setCropFile(null)}
+        onConfirm={(cropped) => {
+          setCropFile(null);
+          void uploadFile(cropped);
+        }}
+      />
     </Card>
   );
 }

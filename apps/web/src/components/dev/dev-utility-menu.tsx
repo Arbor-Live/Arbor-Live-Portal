@@ -18,6 +18,7 @@ const LINKS = [
   { href: `/setup?${DEV_PREVIEW}`, label: "First-admin setup" },
   { href: `/onboarding?${DEV_PREVIEW}`, label: "Crew onboarding" },
   { href: `/onboarding/artist?${DEV_PREVIEW}`, label: "Artist onboarding" },
+  { href: "/preview-crop", label: "Image crop dialog" },
 ] as const;
 
 /**
