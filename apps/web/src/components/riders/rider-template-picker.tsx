@@ -188,7 +188,7 @@ export function RiderTemplatePicker({ open, onOpenChange, organizationId }: Ride
               <p className="text-xs text-muted-foreground">
                 {monitors === "iem"
                   ? "A pack and a mix per person, named after them."
-                  : "A wedge for everyone, sharing three mixes by where they stand (centre, stage right, stage left), plus one for drums. Quicker to set up, and enough for most bands."}
+                  : "Up to three wedges along the front (stage right, centre, stage left) plus one at the drums, each on its own mix. Quick to set up, and enough for most bands."}
               </p>
             </section>
           </div>

@@ -217,7 +217,7 @@ function block(
   ]);
 }
 
-/** 61-key board from above: a key bed with naturals and sharps. */
+/** 61-key board from above: a key bed with naturals and sharps, keys toward the player. */
 function keyboard(): RiderGlyph {
   const w = 4 * U;
   const h = 1.2 * U;
@@ -240,7 +240,9 @@ function keyboard(): RiderGlyph {
     const x = fixed(left + i * keyWidth - keyWidth * 0.3);
     shapes.push({ kind: "rect", x, y: bedTop, w: fixed(keyWidth * 0.6), h: 8, fill: "accent" });
   }
-  return frame(4, 1.2, shapes);
+  // Drawn keys-down, then turned 180° so the keys face upstage, toward the
+  // player standing behind the board, not the audience.
+  return frame(4, 1.2, [{ kind: "group", transform: `translate(${w}, ${h}) scale(-1, -1)`, shapes }]);
 }
 
 /** A floor wedge from above: wide cabinet back upstage, angled face, driver. */
