@@ -24,7 +24,7 @@ import { resolveUserStatus } from "./lib/userStatus";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { listMyPostEventWork as listMyPostEventWorkForUser } from "./lib/myEventActions";
 import { isSectionBlockType } from "./lib/scheduleBlockTypes";
-import { listShowShifts } from "./lib/showShift";
+import { listShowShifts, userWorkedShowShift } from "./lib/showShift";
 
 const scheduleBlockSummaryValue = v.object({
   _id: v.id("eventScheduleBlocks"),
@@ -270,16 +270,10 @@ export const resolveMyEventMedia = mutation({
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
 
-    // Leads / managers can resolve media even without a crew shift.
-    const isLead =
-      event.dayOfLeadUserId === userId || event.eventManagerUserId === userId;
-    if (!isLead) {
-      const myShifts = await ctx.db
-        .query("eventCrewShifts")
-        .withIndex("by_userId_and_startsAt", (q) => q.eq("userId", userId))
-        .take(500);
-      const hasShift = myShifts.some((shift) => shift.eventId === args.eventId);
-      if (!hasShift) throw new Error("You are not assigned to this event.");
+    // Only show-shift crew owe media; assigned leads/managers without a show
+    // shift are not asked and cannot resolve.
+    if (!(await userWorkedShowShift(ctx, args.eventId, userId))) {
+      throw new Error("You did not work this event's show shift.");
     }
 
     const existing = await ctx.db

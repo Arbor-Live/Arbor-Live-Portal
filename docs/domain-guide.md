@@ -113,8 +113,8 @@ canonical description of the domain itself.
   remain editable per user in Users admin.
 - **Weekly pending-activity digest** (`email/weeklyDigest.ts`, run by the
   Monday `weeklyJobs` cron): Arbor staff get pending availability, shifts that
-  week, timecards, and post-event work for events they crewed or led (review +
-  photos, and only after the event itself has ended). Portal admins also get
+  week, timecards, and post-event work for events whose show shift they worked
+  (review + photos, and only after the event itself has ended). Portal admins also get
   open booking requests and artist payouts in progress. Unsubmitted reviews
   for other people are not listed — a review shows up only when the recipient
   still owes it. Artist-only members get the email only when one of their
@@ -123,10 +123,11 @@ canonical description of the domain itself.
   `role: "admin"`; that is not a portal admin. Per-user opt-out is the
   `weeklyDigest` Participation flag; empty sections are omitted and users with
   nothing pending get no email.
-- **Post-event work** (`postMortemFeedback.ts`, `lib/myEventActions.ts`): every
-  assigned crew member *and* the day-of lead / event manager reviews each ended
-  event — 5⭐ rating + what went well / what could improve + resolving their
-  photos/videos. It appears inline on the event **Overview** and as one combined
+- **Post-event work** (`postMortemFeedback.ts`, `lib/myEventActions.ts`): everyone
+  who worked the event's `show` shift reviews each ended event — 5⭐ rating + what
+  went well / what could improve + resolving their photos/videos. The day-of lead
+  and event manager are asked only when they were on the show shift; setup/strike
+  crew and assignees with no shift are not. It appears inline on the event **Overview** and as one combined
   **Events → My Post-event work** page (plus the crew Home widget); the email
   link points internal recipients at the event page. The emailed
   `/postmortem/[token]` form remains a fallback. One amber nav badge counts

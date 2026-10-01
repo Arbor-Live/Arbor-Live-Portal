@@ -1,7 +1,7 @@
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { findAuthUsersByIds } from "../lib/auth";
-import { listShowShifts } from "../lib/showShift";
+import { listShowShifts, userWorkedShowShift } from "../lib/showShift";
 
 export type EmailRecipient = {
   email: string;
@@ -118,6 +118,24 @@ export async function getEventLeadRecipients(
   }
 
   return [...recipients.values()];
+}
+
+/**
+ * Day-of lead / event manager recipients for the post-event email, limited to
+ * those who actually worked the event's show shift. A lead or manager who was
+ * only assigned is not asked to review the event.
+ */
+export async function getEventPostEventLeadRecipients(
+  ctx: QueryCtx | MutationCtx,
+  eventId: Id<"events">,
+) {
+  const leads = await getEventLeadRecipients(ctx, eventId);
+  const recipients: EmailRecipient[] = [];
+  for (const lead of leads) {
+    if (!lead.userId) continue;
+    if (await userWorkedShowShift(ctx, eventId, lead.userId)) recipients.push(lead);
+  }
+  return recipients;
 }
 
 /**
