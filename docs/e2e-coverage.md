@@ -302,7 +302,7 @@ that is the better risk proxy than the page count:
 
 | Surface | Backend | What exists today |
 |---------|---------|-------------------|
-| Open Mic (`/events/open-mic`, `/[id]`, public page) | `openMic.ts` 575 | nothing but the Batch 7 route guard |
+| Open Mic (`/events/open-mic`, `/[id]`, public page) | `openMic.ts` 575 | nothing but the Batch 7 route guard (crew access asserted) |
 | Crew availability beyond one Yes (`/events/my-availability`) | `eventCrewAvailability.ts` 832 | one yes → assign path |
 | Invoice PDF download / void | `invoicePdf.ts` | nothing |
 | Account page, event expenses, event artifacts, marketing settings | 217 / 73 / 107 / 56 | nothing |
