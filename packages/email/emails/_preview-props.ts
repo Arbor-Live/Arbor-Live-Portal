@@ -4,6 +4,7 @@ import type {
   EventEmailProps,
   PasswordResetEmailProps,
   PaymentProofReminderEmailProps,
+  QuoteUpdatedEmailProps,
   PaymentProofSubmittedEmailProps,
   PayingPartyAddedEmailProps,
   QuoteChangesRequestedEmailProps,
@@ -108,6 +109,20 @@ export const bookingQuoteReadyPreviewProps: BookingQuoteReadyEmailProps = {
   managerEmail: "alex.chen@stanford.edu",
   managerMessage:
     "Thank you for reaching out! Here is the quote I have prepared for you. Please feel free to let me know if you have any questions.",
+};
+
+export const quoteUpdatedPreviewProps: QuoteUpdatedEmailProps = {
+  recipientName: "Jordan Lee",
+  eventTitle: eventDefaults.eventTitle,
+  venueName: eventDefaults.venueName,
+  dateRangeLabel: eventDefaults.dateRangeLabel,
+  invoiceNumber: "ALINV-4K8Z2NP",
+  previousTotalUsd: 4250,
+  newTotalUsd: 4610,
+  changeNote: "Added two crew for load-out after the stage plot changed.",
+  portalUrl: `${ARBOR_WEBSITE_URL}/event/demo-event`,
+  managerName: "Alex Chen",
+  managerEmail: "alex.chen@stanford.edu",
 };
 
 export const paymentProofReminderPreviewProps: PaymentProofReminderEmailProps = {

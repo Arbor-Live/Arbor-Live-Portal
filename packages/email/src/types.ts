@@ -145,6 +145,20 @@ export type BookingQuoteReadyEmailProps = {
   managerMessage: string;
 };
 
+export type QuoteUpdatedEmailProps = {
+  recipientName?: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  invoiceNumber: string;
+  previousTotalUsd: number;
+  newTotalUsd: number;
+  changeNote?: string;
+  portalUrl: string;
+  managerName: string;
+  managerEmail?: string;
+};
+
 export type PaymentProofReminderEmailProps = {
   recipientName?: string;
   eventTitle: string;

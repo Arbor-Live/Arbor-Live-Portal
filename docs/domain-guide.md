@@ -372,6 +372,33 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   and the invoice↔event import matches lines to the right day.
   Artist and external-rental amounts are pass-through (excluded from Insights
   earned revenue and from net-profit margin).
+- **Changing an approved quote** (#405). The client's approval pins a version
+  (`invoiceRevisions`, kind `approved`; `invoices.approvedRevisionId` /
+  `approvedTotalUsd`). Snapshots use the portal's pricing (`snapshotInvoice`),
+  so the amounts are what the client saw.
+  - `updateDraft` refuses a save that changes lines, pricing modes, discount or
+    terms on an approved quote unless it carries `approvedChange`:
+    - `request_reapproval`: saves a `reapproval_requested` version, resets
+      approval to pending, and emails the client `quote_updated` (old → new
+      total).
+    - `keep_approval`: needs a note; saves a `change_kept_approval` version.
+    - `match_approval`: keeps the new lines and sets one amount discount
+      (new subtotal − approved total) so the total stays what the client
+      approved; saves a `matched_approval` version. Only offered when the total
+      went up (e.g. crew repriced at the lead rate).
+  - Manager, contact, due date and notes save freely.
+  - `recalculateTotals`, `recalculateSeriesEquipmentLines` and
+    `resyncEquipmentFromPullList` refuse to change an approved quote, and point
+    to the editor.
+  - The editor autosaves only unsent drafts. Once a quote is sent or approved,
+    saves are explicit, and a save that needs a decision opens the
+    approved-change dialog (`previewApprovedChange` shows the diff). Cancel
+    saves nothing.
+  - Quotes approved before versions existed get an approved version snapshotted
+    at their first later change (`recordedLate`).
+  - Versions show in the editor (Versions card) and in the client portal (Quote
+    history, plus a "we updated your quote" banner while re-approval is
+    pending).
 - Every invoice carries a `publicApprovalToken` for the client-facing quote
   page (`/public/quote/[token]`): view, approve, request changes, set payment
   contacts, download PDF — all token-gated, no login.

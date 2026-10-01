@@ -51,6 +51,17 @@ const clientApprovalStatusValue = v.union(
   v.literal("changes_requested"),
 );
 
+const invoiceRevisionKindValue = v.union(
+  /** The client approved this version. */
+  v.literal("approved"),
+  /** Staff changed an approved quote and sent it back for approval. */
+  v.literal("reapproval_requested"),
+  /** Staff changed an approved quote and kept the approval, with a reason. */
+  v.literal("change_kept_approval"),
+  /** Staff changed an approved quote and discounted it back to the approved total. */
+  v.literal("matched_approval"),
+);
+
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
 const crewRateModeValue = v.union(
   v.literal("normal"),
@@ -700,6 +711,11 @@ export default defineSchema({
 
     billableOccurrenceCountAtSave: v.optional(v.number()),
 
+    /** The revision the client last approved (see `invoiceRevisions`). */
+    approvedRevisionId: v.optional(v.id("invoiceRevisions")),
+    /** That revision's total, denormalized for lists. */
+    approvedTotalUsd: v.optional(v.number()),
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -713,6 +729,44 @@ export default defineSchema({
     .index("by_groupId", ["groupId"])
     .index("by_paymentReceivedAt", ["paymentReceivedAt"])
     .index("by_approvedAt", ["approvedAt"]),
+
+  /**
+   * What a quote looked like at each point that matters: when the client
+   * approved it, and each time staff changed it afterwards (sent back for
+   * re-approval, or kept the approval with a reason). Immutable snapshots, in
+   * the amounts the client saw, so "what did they agree to?" always has an
+   * answer.
+   */
+  invoiceRevisions: defineTable({
+    invoiceId: v.id("invoices"),
+    /** 1, 2, 3… per invoice. */
+    number: v.number(),
+    kind: invoiceRevisionKindValue,
+    totalUsd: v.number(),
+    subtotalUsd: v.number(),
+    discountAmountUsd: v.number(),
+    lines: v.array(
+      v.object({
+        section: invoiceLineSectionValue,
+        label: v.string(),
+        quantity: v.number(),
+        quantityDetail: v.optional(v.string()),
+        rateUsd: v.number(),
+        amountUsd: v.number(),
+      }),
+    ),
+    /** Why it changed (required when staff keep an approval). */
+    note: v.optional(v.string()),
+    /** Who made it: the client's signed name for approvals, else the staff member. */
+    actorName: v.optional(v.string()),
+    actorUserId: v.optional(v.string()),
+    /**
+     * Approved before revisions existed: snapshotted the first time the quote
+     * changed afterwards, so it shows the quote as it stood then.
+     */
+    recordedLate: v.optional(v.boolean()),
+    createdAt: v.number(),
+  }).index("by_invoiceId_and_number", ["invoiceId", "number"]),
 
   invoiceLineItems: defineTable({
     invoiceId: v.id("invoices"),
@@ -1530,6 +1584,7 @@ export default defineSchema({
       v.literal("payment_proof_submitted"),
       v.literal("paying_party_added"),
       v.literal("quote_changes_requested"),
+      v.literal("quote_updated"),
       v.literal("band_assigned"),
       v.literal("band_event_onboarding_invite"),
       v.literal("band_onboarding_reminder"),
