@@ -19,6 +19,7 @@ export {
   nextChannelNumber,
   nextMixNumber,
   placeSymbol,
+  removalPlan,
   removeItem,
   renumberInputs,
   renumberMixes,
@@ -129,3 +130,14 @@ export type {
   EventBriefSection,
   EventBriefShift,
 } from "./brief-types";
+export {
+  LINEUP_PRESETS,
+  LINEUP_ROLE_ORDER,
+  LINEUP_ROLES,
+  buildRiderFromLineup,
+  lineupFromPreset,
+  lineupPerformerCount,
+  memberDisplayNames,
+  newLineupMember,
+} from "./lineup";
+export type { Lineup, LineupMember, LineupMonitors, LineupRole } from "./lineup";

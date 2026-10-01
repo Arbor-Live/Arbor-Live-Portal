@@ -23,11 +23,14 @@ import {
   MIN_STAGE_FT,
   MONITOR_TYPE_LABELS,
   placeSymbol,
+  removalPlan,
   removeItem,
   renumberInputs,
   RIDER_CATEGORY_ORDER,
   RIDER_CATEGORY_PALETTE,
-  RIDER_TEMPLATES,
+  buildRiderFromLineup,
+  LINEUP_PRESETS,
+  lineupFromPreset,
   riderSymbol,
   snapStageFt,
   STAGE_PRESETS,
@@ -174,9 +177,7 @@ export function RiderStagePanel({
   }
 
   function startFrom(templateKey: string) {
-    const template = RIDER_TEMPLATES.find((entry) => entry.key === templateKey);
-    if (!template) return;
-    const built = template.build();
+    const built = buildRiderFromLineup({ members: lineupFromPreset(templateKey), monitors: "wedges" });
     onChange((current) => ({
       ...current,
       stage: built.stage,
@@ -184,6 +185,7 @@ export function RiderStagePanel({
       inputs: built.inputs,
       monitorMixes: built.monitorMixes,
       backline: current.backline.length > 0 ? current.backline : built.backline,
+      performerCount: current.performerCount ?? built.performerCount,
     }));
   }
 
@@ -326,17 +328,16 @@ function StarterLayouts({ hasChannels, onPick }: { hasChannels: boolean; onPick:
         </p>
       </div>
       <div className="flex flex-wrap justify-center gap-2">
-        {RIDER_TEMPLATES.map((template) => (
+        {LINEUP_PRESETS.map((preset) => (
           <Button
-            key={template.key}
+            key={preset.key}
             type="button"
             size="sm"
             variant="outline"
             className="bg-card"
-            title={template.description}
-            onClick={() => onPick(template.key)}
+            onClick={() => onPick(preset.key)}
           >
-            {template.name}
+            {preset.name}
           </Button>
         ))}
       </div>
@@ -753,20 +754,39 @@ function StageInspector({
               Remove
             </Button>
           </div>
-          {channels.length > 0 || mix ? (
-            <p className="text-xs text-muted-foreground">
-              Removing it also removes{" "}
-              {[
-                channels.length > 0 ? `${channels.length} channel${channels.length === 1 ? "" : "s"}` : null,
-                mix ? `mix ${mix.mixNumber}` : null,
-              ]
-                .filter(Boolean)
-                .join(" and ")}
-              . Undo brings them back.
-            </p>
-          ) : null}
+          <RemovalHint content={content} itemId={selected.id} mixNumber={mix?.mixNumber} />
         </div>
       ) : null}
     </Card>
+  );
+}
+
+/** Says what else changes when the item goes: channels removed, or handed back to a player. */
+function RemovalHint({
+  content,
+  itemId,
+  mixNumber,
+}: {
+  content: RiderContent;
+  itemId: string;
+  mixNumber?: number;
+}) {
+  const plan = removalPlan(content, itemId);
+  const removed = [
+    plan.removed.length > 0 ? `${plan.removed.length} channel${plan.removed.length === 1 ? "" : "s"}` : null,
+    mixNumber !== undefined ? `mix ${mixNumber}` : null,
+  ].filter(Boolean);
+  const handedBack = plan.handedBack.map(({ input, toItemId }) => {
+    const player = content.items.find((item) => item.id === toItemId);
+    return `Ch ${input.channel} goes back to ${player?.label || "the player"}`;
+  });
+  if (removed.length === 0 && handedBack.length === 0) return null;
+  return (
+    <p className="text-xs text-muted-foreground">
+      {[removed.length > 0 ? `Removing it also removes ${removed.join(" and ")}.` : null, ...handedBack.map((line) => `${line}.`)]
+        .filter(Boolean)
+        .join(" ")}{" "}
+      Undo brings it all back.
+    </p>
   );
 }

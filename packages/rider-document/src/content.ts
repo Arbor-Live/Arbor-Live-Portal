@@ -180,6 +180,42 @@ export type PlaceSymbolOptions = {
   withoutLinkedRows?: boolean;
 };
 
+/**
+ * One instrument, one channel. A guitarist and their amp share the guitar
+ * channel: it sits on the amp when there is one (that's what gets the mic) and
+ * on the player otherwise. Only performers and backline pair up this way; mics
+ * and DIs are always their own channel.
+ */
+function pairsBySource(symbol: RiderSymbol): boolean {
+  return symbol.category === "performer" || symbol.category === "backline";
+}
+
+function seedKeys(symbolKey: string): string[] {
+  const symbol = riderSymbol(symbolKey);
+  if (!pairsBySource(symbol)) return [];
+  return (symbol.defaultInputs ?? []).flatMap((seed) => (seed.sourceKey ? [seed.sourceKey] : []));
+}
+
+function itemCategory(content: RiderContent, itemId: string | undefined) {
+  const item = itemId ? content.items.find((candidate) => candidate.id === itemId) : undefined;
+  return item ? riderSymbol(item.symbol).category : undefined;
+}
+
+/** Channels for `sourceKey`, split by whether a performer or a piece of gear holds them. */
+function sourceChannels(content: RiderContent, sourceKey: string) {
+  const channels = content.inputs.filter((input) => input.sourceKey === sourceKey);
+  return {
+    onPerformers: channels.filter((input) => itemCategory(content, input.stageItemId) === "performer"),
+    onGear: channels.filter((input) => itemCategory(content, input.stageItemId) === "backline"),
+  };
+}
+
+function itemsPlaying(content: RiderContent, sourceKey: string, category: "performer" | "backline") {
+  return content.items.filter(
+    (item) => riderSymbol(item.symbol).category === category && seedKeys(item.symbol).includes(sourceKey),
+  );
+}
+
 export type PlaceSymbolResult = {
   content: RiderContent;
   itemId: string;
@@ -229,7 +265,8 @@ export function placeSymbol(
     monitorMixId: addedMixId,
   };
 
-  const newInputs = options.withoutLinkedRows
+  let inputs = content.inputs;
+  let newInputs = options.withoutLinkedRows
     ? []
     : inputsForSymbol(
         symbol,
@@ -239,11 +276,34 @@ export function placeSymbol(
         options.label,
       );
 
+  if (pairsBySource(symbol)) {
+    newInputs = newInputs.filter((input) => {
+      if (!input.sourceKey) return true;
+      const { onPerformers, onGear } = sourceChannels(content, input.sourceKey);
+      if (symbol.category === "backline") {
+        // A player without gear holds the channel: hand it to the gear.
+        const held = onPerformers[0];
+        if (!held) return true;
+        inputs = inputs.map((candidate) =>
+          candidate.id === held.id ? { ...candidate, stageItemId: itemId } : candidate,
+        );
+        return false;
+      }
+      // A performer is already covered when there's more miked gear than players.
+      const players = itemsPlaying(content, input.sourceKey, "performer").length;
+      return onGear.length <= players;
+    });
+    newInputs = newInputs.map((input, index) => ({
+      ...input,
+      channel: nextChannelNumber(inputs) + index,
+    }));
+  }
+
   return {
     content: {
       ...content,
       items: [...content.items, item],
-      inputs: [...content.inputs, ...newInputs],
+      inputs: [...inputs, ...newInputs],
       monitorMixes,
     },
     itemId,
@@ -252,14 +312,64 @@ export function placeSymbol(
   };
 }
 
-/** Removes an item along with the channels and mix it created. */
+export type RemovalPlan = {
+  /** Channels that go with the item. */
+  removed: RiderInputChannel[];
+  /** Channels handed back to a player when their gear leaves the stage. */
+  handedBack: Array<{ input: RiderInputChannel; toItemId: string }>;
+};
+
+/**
+ * What removing an item does to the channel list. Gear that held a player's
+ * channel hands it back to the nearest player of that instrument who has none,
+ * rather than taking it off the rider.
+ */
+export function removalPlan(content: RiderContent, itemId: string): RemovalPlan {
+  const item = content.items.find((candidate) => candidate.id === itemId);
+  const linked = content.inputs.filter((input) => input.stageItemId === itemId);
+  if (!item || riderSymbol(item.symbol).category !== "backline") {
+    return { removed: linked, handedBack: [] };
+  }
+  const remaining: RiderContent = { ...content, items: content.items.filter((candidate) => candidate.id !== itemId) };
+  const plan: RemovalPlan = { removed: [], handedBack: [] };
+  const claimed = new Set<string>();
+  for (const input of linked) {
+    const players = input.sourceKey ? itemsPlaying(remaining, input.sourceKey, "performer") : [];
+    const holders = new Set(
+      content.inputs
+        .filter((candidate) => candidate.sourceKey === input.sourceKey && candidate.id !== input.id)
+        .map((candidate) => candidate.stageItemId),
+    );
+    const uncovered = players.filter((player) => !holders.has(player.id) && !claimed.has(player.id));
+    const gearLeft = input.sourceKey
+      ? sourceChannels(remaining, input.sourceKey).onGear.filter((candidate) => candidate.stageItemId !== itemId).length
+      : 0;
+    if (uncovered.length > 0 && players.length > gearLeft) {
+      const nearest = [...uncovered].sort(
+        (a, b) => Math.hypot(a.xFt - item.xFt, a.yFt - item.yFt) - Math.hypot(b.xFt - item.xFt, b.yFt - item.yFt),
+      )[0];
+      claimed.add(nearest.id);
+      plan.handedBack.push({ input, toItemId: nearest.id });
+    } else {
+      plan.removed.push(input);
+    }
+  }
+  return plan;
+}
+
+/** Removes an item along with the channels and mix it created (or hands them back; see `removalPlan`). */
 export function removeItem(content: RiderContent, itemId: string): RiderContent {
   const item = content.items.find((candidate) => candidate.id === itemId);
+  const plan = removalPlan(content, itemId);
+  const removed = new Set(plan.removed.map((input) => input.id));
+  const handBack = new Map(plan.handedBack.map(({ input, toItemId }) => [input.id, toItemId]));
   return {
     ...content,
     items: content.items.filter((candidate) => candidate.id !== itemId),
     inputs: renumberInputs(
-      content.inputs.filter((input) => input.stageItemId !== itemId),
+      content.inputs
+        .filter((input) => !removed.has(input.id))
+        .map((input) => (handBack.has(input.id) ? { ...input, stageItemId: handBack.get(input.id) } : input)),
     ),
     monitorMixes: item?.monitorMixId
       ? content.monitorMixes.filter((mix) => mix.id !== item.monitorMixId)
@@ -386,7 +496,8 @@ export function backfillSourceKeys(content: RiderContent): RiderContent {
       const index = seenPerItem.get(input.stageItemId) ?? 0;
       seenPerItem.set(input.stageItemId, index + 1);
       const item = content.items.find((entry) => entry.id === input.stageItemId);
-      const seeds = item ? (riderSymbol(item.symbol).defaultInputs ?? []) : [];
+      const symbol = item ? riderSymbol(item.symbol) : undefined;
+      const seeds = symbol?.legacyDefaultInputs ?? symbol?.defaultInputs ?? [];
       // Position is not trustworthy — channels can be reordered or deleted after
       // the symbol created them — so only lean on it when the symbol has a
       // single seed (unambiguous) or nothing else identifies the row.
@@ -468,8 +579,8 @@ export function riderWarnings(content: RiderContent): string[] {
   if (content.inputs.length === 0) {
     warnings.push("No input channels yet, so nobody knows what to patch.");
   }
-  if (content.inputs.some((input) => !input.source.trim())) {
-    warnings.push("Some input channels have no source name.");
+  if (content.inputs.some((input) => !input.source.trim() && !input.sourceKey)) {
+    warnings.push("Some input channels have no name or instrument.");
   }
   if (content.monitorMixes.length === 0) {
     warnings.push("No monitor mixes — add a wedge or in-ear pack for each mix.");

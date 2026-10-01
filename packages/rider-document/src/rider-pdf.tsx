@@ -27,6 +27,7 @@ import {
 } from "./plot";
 import { inputFamilyLabel } from "./content";
 import { itemGlyph, RIDER_CATEGORY_PALETTE, riderSymbol } from "./symbols";
+import { riderSource } from "./sources";
 import type { EventBriefPatch, EventBriefPatchPort, EventBriefPlot } from "./brief-types";
 import {
   INPUT_TYPE_LABELS,
@@ -441,7 +442,10 @@ export function RiderPages({
 }) {
   const inputRows = data.inputs.map((input) => [
     input.stereo ? `${input.channel}–${input.channel + 1}` : String(input.channel),
-    input.stereo ? `${input.source || "—"} (L/R)` : input.source || "—",
+    // A channel left unnamed prints as its instrument.
+    input.stereo
+      ? `${input.source || (input.sourceKey ? riderSource(input.sourceKey)?.label : undefined) || "—"} (L/R)`
+      : input.source || (input.sourceKey ? riderSource(input.sourceKey)?.label : undefined) || "—",
     INPUT_TYPE_LABELS[input.inputType],
     input.micPreference ?? "—",
     STAND_LABELS[input.stand],

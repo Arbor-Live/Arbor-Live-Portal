@@ -11,6 +11,8 @@ import {
   inputFamilyLabel,
   insertByFamily,
   INPUT_TYPE_LABELS,
+  RIDER_SOURCE_FAMILY_LABELS,
+  RIDER_SOURCES,
   moveInArray,
   PROVIDED_BY_EDITOR_LABELS,
   renumberInputs,
@@ -18,6 +20,7 @@ import {
   sourceOrdinals,
   STAND_LABELS,
   type RiderInputChannel,
+  type RiderSourceDefinition,
   type RiderInputType,
   type RiderStandType,
 } from "@arbor/rider-document";
@@ -39,10 +42,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  RiderSourcePicker,
-  type RiderSourceSelection,
-} from "@/components/riders/rider-source-picker";
+import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
 import {
   Field,
   OptionSelect,
@@ -56,6 +56,26 @@ import { RiderSymbolGlyph } from "@/components/riders/rider-symbol-glyph";
 import { cn } from "@/lib/utils";
 
 const INPUT_TYPES = Object.keys(INPUT_TYPE_LABELS) as RiderInputType[];
+
+/** A pick from the source catalogue, or none ("Not listed"). */
+type RiderSourceSelection = {
+  source?: RiderSourceDefinition;
+  /** The channel's name after the pick. */
+  text: string;
+};
+
+/** Every instrument in the catalogue, searchable by its other names too. */
+const INSTRUMENT_OPTIONS: SearchableSelectOption[] = RIDER_SOURCES.map((source) => ({
+  value: source.key,
+  label: source.label,
+  description: RIDER_SOURCE_FAMILY_LABELS[source.family],
+  keywords: (source.aliases ?? []).join(" "),
+}));
+
+/** The instrument a channel is, for display (undefined when not listed). */
+function instrumentLabel(input: RiderInputChannel): string | undefined {
+  return input.sourceKey ? riderSource(input.sourceKey)?.label : undefined;
+}
 const STAND_TYPES = Object.keys(STAND_LABELS) as RiderStandType[];
 
 /**
@@ -106,7 +126,10 @@ function channelLabel(input: RiderInputChannel): string {
 }
 
 function inputDetail(input: RiderInputChannel): string {
+  const instrument = instrumentLabel(input);
+  const named = input.source.trim();
   return [
+    instrument && instrument.toLowerCase() !== named.toLowerCase() ? instrument : null,
     INPUT_TYPE_LABELS[input.inputType],
     input.micPreference,
     input.stand !== "none" ? STAND_LABELS[input.stand] : null,
@@ -124,8 +147,6 @@ export function RiderInputsPanel({ content, readOnly, onChange }: RiderPanelProp
   const searchParams = useSearchParams();
   // `?channel=` opens one channel's panel: the stage plot links here.
   const [openId, setOpenId] = useState<string | null>(() => searchParams.get("channel"));
-  /** The row "Add channel" just made: its picker opens straight away. */
-  const [newId, setNewId] = useState<string | null>(null);
 
   function setInputs(next: RiderInputChannel[], historyKey?: string) {
     onChange((current) => ({ ...current, inputs: next }), historyKey);
@@ -146,6 +167,8 @@ export function RiderInputsPanel({ content, readOnly, onChange }: RiderPanelProp
    */
   function selectSource(input: RiderInputChannel, selection: RiderSourceSelection) {
     const updated = { ...input, ...applySourceSelection(selection) };
+    // A mic note ("SM57 on cab") doesn't survive a change of capture (a DI).
+    if (updated.inputType !== input.inputType) updated.micPreference = undefined;
     const next = input.sourceKey
       ? inputs.map((row) => (row.id === input.id ? updated : row))
       : insertByFamily(
@@ -153,19 +176,16 @@ export function RiderInputsPanel({ content, readOnly, onChange }: RiderPanelProp
           updated,
         );
     setInputs(renumberInputs(next));
-    setNewId(null);
   }
 
   function closeSheet() {
     setOpenId(null);
-    setNewId(null);
     if (searchParams.get("channel")) window.history.replaceState(null, "", `${pathname}?tab=inputs`);
   }
 
   function addChannel() {
     const row = blankInput(inputs);
     setInputs([...inputs, row]);
-    setNewId(row.id);
     setOpenId(row.id);
   }
 
@@ -283,7 +303,7 @@ export function RiderInputsPanel({ content, readOnly, onChange }: RiderPanelProp
                 const family = inputFamilyLabel(input);
                 const previous = index > 0 ? inputFamilyLabel(inputs[index - 1]) : null;
                 const heading = family !== previous ? family : null;
-                const name = input.source.trim();
+                const name = input.source.trim() || instrumentLabel(input) || "";
                 const ordinal = repeatedNames.has(name.toLowerCase())
                   ? ordinals.get(input.id)
                   : undefined;
@@ -376,9 +396,9 @@ export function RiderInputsPanel({ content, readOnly, onChange }: RiderPanelProp
                         }
                         detail={inputDetail(input)}
                       />
-                      {name && !input.sourceKey ? (
+                      {!input.sourceKey ? (
                         <span className="shrink-0 rounded-md bg-status-amber-500/15 px-2 py-0.5 text-xs text-status-amber-700 dark:text-status-amber-200">
-                          Not matched
+                          No instrument
                         </span>
                       ) : null}
                       <RowCell hideBelow="md" className="w-36" align="left" muted>
@@ -399,12 +419,6 @@ export function RiderInputsPanel({ content, readOnly, onChange }: RiderPanelProp
           if (!open) closeSheet();
         }}
         testId="rider-input-sheet"
-        onOpenAutoFocus={(event) => {
-          // The source field opens its list on focus; only a new channel wants that.
-          if (openId === newId) return;
-          event.preventDefault();
-          (event.currentTarget as HTMLElement | null)?.focus();
-        }}
       >
         {openInput ? (
           <InputSheetBody
@@ -412,9 +426,7 @@ export function RiderInputsPanel({ content, readOnly, onChange }: RiderPanelProp
             input={openInput}
             index={openIndex}
             total={inputs.length}
-            ordinal={ordinals.get(openInput.id)}
             readOnly={readOnly}
-            autoFocusSource={openInput.id === newId}
             onPatch={(next) => patch(openInput.id, next)}
             onToggleStereo={(stereo) =>
               setInputs(
@@ -425,7 +437,6 @@ export function RiderInputsPanel({ content, readOnly, onChange }: RiderPanelProp
             }
             onSelectSource={(selection) => selectSource(openInput, selection)}
             onStep={(next) => {
-              setNewId(null);
               setOpenId(inputs[next]?.id ?? null);
             }}
             onRemove={() => remove(openInput.id)}
@@ -464,9 +475,7 @@ function InputSheetBody({
   input,
   index,
   total,
-  ordinal,
   readOnly,
-  autoFocusSource,
   onPatch,
   onToggleStereo,
   onSelectSource,
@@ -477,9 +486,7 @@ function InputSheetBody({
   input: RiderInputChannel;
   index: number;
   total: number;
-  ordinal?: number;
   readOnly: boolean;
-  autoFocusSource: boolean;
   onPatch: (next: Partial<RiderInputChannel>) => void;
   onToggleStereo: (stereo: boolean) => void;
   onSelectSource: (selection: RiderSourceSelection) => void;
@@ -487,30 +494,62 @@ function InputSheetBody({
   onRemove: () => void;
   onDone: () => void;
 }) {
-  const unmatched = Boolean(input.source.trim()) && !input.sourceKey;
+  const unmatched = !input.sourceKey;
+  const instrument = input.sourceKey ? riderSource(input.sourceKey) : undefined;
+
+  /**
+   * The name follows the instrument until the band types their own: picking
+   * Bass on a channel still called "Guitar" renames it, but "Sarah's Strat"
+   * stays "Sarah's Strat".
+   */
+  function pickInstrument(key: string) {
+    const next = key ? riderSource(key) : undefined;
+    const current = input.source.trim();
+    const followsInstrument = !current || (instrument && current.toLowerCase() === instrument.label.toLowerCase());
+    onSelectSource({ source: next, text: followsInstrument && next ? next.label : input.source });
+  }
 
   return (
     <>
       <DetailSheetHeader
         title={`Channel ${channelLabel(input)}`}
-        pill={unmatched ? <StatusPill tone="amber">Not matched</StatusPill> : null}
+        pill={unmatched ? <StatusPill tone="amber">No instrument</StatusPill> : null}
         description={
           unmatched
-            ? "We don't recognise this source, so crew will confirm it at load-in. Pick from the list to match it."
+            ? "Pick what this is so crew can patch it. If it isn't listed, crew will confirm it at load-in."
             : "Changes go into the draft. Save the rider to keep them."
         }
       />
 
       <SheetSection title="Source">
-        <Field id="rider-input-source" label="What's plugged in" hint="Pick from the list, or type your own.">
-          <RiderSourcePicker
-            id="rider-input-source"
+        <Field id="rider-input-instrument" label="Instrument" hint="What it is. This is what crew patch from.">
+          {readOnly ? (
+            <p id="rider-input-instrument" className="text-sm">
+              {instrument?.label ?? "Not listed"}
+            </p>
+          ) : (
+            <SearchableSelect
+              value={input.sourceKey ?? ""}
+              options={INSTRUMENT_OPTIONS}
+              placeholder="Pick an instrument"
+              emptyLabel="Nothing matches. Pick Not listed and name it below."
+              clearable
+              clearLabel="Not listed"
+              onChange={pickInstrument}
+            />
+          )}
+        </Field>
+        <Field id="rider-input-name" label="Name" hint="What you call it. It prints on the rider and the console.">
+          <Input
+            id="rider-input-name"
             disabled={readOnly}
-            sourceKey={input.sourceKey}
             value={input.source}
-            ordinal={ordinal}
-            autoFocus={autoFocusSource}
-            onChange={onSelectSource}
+            placeholder={instrument ? instrument.label : "e.g. Sarah's Strat"}
+            onChange={(event) => onPatch({ source: event.target.value })}
+            onBlur={() => {
+              // A blank name falls back to the instrument, so nothing prints empty.
+              if (!input.source.trim() && instrument) onPatch({ source: instrument.label });
+            }}
           />
         </Field>
         <SwitchRow

@@ -102,6 +102,12 @@ export type RiderSymbol = {
   shapes: RiderGlyphShape[];
   /** Channels appended to the input list when this symbol is placed. */
   defaultInputs?: RiderInputSeed[];
+  /**
+   * The seeds this symbol used before `defaultInputs` last changed. Riders old
+   * enough to need `backfillSourceKeys` were made with these, so provenance is
+   * resolved against them, never against today's list.
+   */
+  legacyDefaultInputs?: RiderInputSeed[];
   /** Monitor symbols create (or join) a monitor mix when placed. */
   monitor?: RiderMonitorType;
   hint?: string;
@@ -286,11 +292,18 @@ const BACKLINE_SYMBOLS: RiderSymbol[] = [
     ...RIDER_GLYPHS.drum_kit,
     defaultInputs: [
       { sourceKey: "drum.kick", source: "Kick", inputType: "mic", micPreference: "Beta 52 / D6", stand: "short_boom" },
-      { sourceKey: "drum.snare.top", source: "Snare", inputType: "mic", micPreference: "SM57", stand: "short_boom" },
-      { sourceKey: "drum.hat", source: "Hi-hat", inputType: "mic", micPreference: "Condenser", stand: "short_boom", phantom: true },
+      { sourceKey: "drum.snare.top", source: "Snare", inputType: "mic", micPreference: "Clip-on dynamic", stand: "clip" },
+      { sourceKey: "drum.tom.rack", source: "Tom 1", inputType: "mic", micPreference: "Clip-on dynamic", stand: "clip" },
+      { sourceKey: "drum.tom.floor", source: "Tom 2", inputType: "mic", micPreference: "Clip-on dynamic", stand: "clip" },
       { sourceKey: "drum.oh", source: "Overheads", inputType: "mic", micPreference: "Condenser", stand: "tall_boom", phantom: true, stereo: true },
     ],
-    hint: "Adds a four-channel drum sub-list (overheads as one stereo pair).",
+    legacyDefaultInputs: [
+      { sourceKey: "drum.kick", source: "Kick", inputType: "mic" },
+      { sourceKey: "drum.snare.top", source: "Snare", inputType: "mic" },
+      { sourceKey: "drum.hat", source: "Hi-hat", inputType: "mic" },
+      { sourceKey: "drum.oh", source: "Overheads", inputType: "mic", stereo: true },
+    ],
+    hint: "Adds kick, snare, two toms and a stereo pair of overheads.",
   },
   {
     key: "keyboard_rig",
