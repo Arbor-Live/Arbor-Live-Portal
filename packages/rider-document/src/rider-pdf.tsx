@@ -21,11 +21,13 @@ import {
   itemRect,
   itemTransform,
   labelRect,
+  plotDrawOrder,
   PLOT_COLORS,
   type PlotLayout,
 } from "./plot";
 import { inputFamilyLabel } from "./content";
-import { RIDER_CATEGORY_PALETTE, riderSymbol } from "./symbols";
+import { itemGlyph, RIDER_CATEGORY_PALETTE, riderSymbol } from "./symbols";
+import { riderSource } from "./sources";
 import type { EventBriefPatch, EventBriefPatchPort, EventBriefPlot } from "./brief-types";
 import {
   INPUT_TYPE_LABELS,
@@ -178,16 +180,17 @@ export function RiderPdfFooter() {
 
 function PlotGlyph({ item, layout }: { item: RiderStageItem; layout: PlotLayout }) {
   const symbol = riderSymbol(item.symbol);
+  const glyph = itemGlyph(item);
   const rect = itemRect(layout, item);
   return (
     <>
       {glyphNode({
-        shapes: symbol.shapes,
+        shapes: glyph.shapes,
         palette: RIDER_CATEGORY_PALETTE[symbol.category],
         components: PDF_GLYPH_COMPONENTS,
         rect,
-        glyphViewBox: symbol.glyphViewBox,
-        preserveAspect: symbol.preserveAspect,
+        glyphViewBox: glyph.glyphViewBox,
+        preserveAspect: glyph.preserveAspect,
         rotationTransform: itemTransform(rect, item.rotation),
         keyPrefix: item.id,
       })}
@@ -254,7 +257,7 @@ export function StagePlot({
             stroke={PLOT_COLORS.audienceBar}
             strokeWidth={3}
           />
-          {items.map((item) => (
+          {plotDrawOrder(items).map((item) => (
             <PlotGlyph key={item.id} item={item} layout={layout} />
           ))}
         </Svg>
@@ -439,7 +442,10 @@ export function RiderPages({
 }) {
   const inputRows = data.inputs.map((input) => [
     input.stereo ? `${input.channel}–${input.channel + 1}` : String(input.channel),
-    input.stereo ? `${input.source || "—"} (L/R)` : input.source || "—",
+    // A channel left unnamed prints as its instrument.
+    input.stereo
+      ? `${input.source || (input.sourceKey ? riderSource(input.sourceKey)?.label : undefined) || "—"} (L/R)`
+      : input.source || (input.sourceKey ? riderSource(input.sourceKey)?.label : undefined) || "—",
     INPUT_TYPE_LABELS[input.inputType],
     input.micPreference ?? "—",
     STAND_LABELS[input.stand],

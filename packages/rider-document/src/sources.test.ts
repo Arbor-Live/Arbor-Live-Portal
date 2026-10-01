@@ -14,6 +14,39 @@ import {
   sourceOrdinals,
 } from "./content";
 
+
+/**
+ * A drum kit as riders made before the source vocabulary stored it: the kit's
+ * old four channels (kick, snare, hi-hat, overheads), linked to the kit. Today's
+ * kit seeds differ, and backfill must resolve against what made the rider.
+ */
+function legacyKit() {
+  const placed = placeSymbol(emptyRiderContent(), {
+    symbolKey: "drum_kit",
+    xFt: 4,
+    yFt: 4,
+    withoutLinkedRows: true,
+  });
+  const channel = (index: number, source: string, stereo = false) => ({
+    id: `legacy-${index}`,
+    channel: index + 1,
+    source,
+    inputType: "mic" as const,
+    stand: "short_boom" as const,
+    phantom: false,
+    providedBy: "arbor" as const,
+    stereo,
+    stageItemId: placed.itemId,
+  });
+  return {
+    ...placed,
+    content: {
+      ...placed.content,
+      inputs: [channel(0, "Kick"), channel(1, "Snare"), channel(2, "Hi-hat"), channel(3, "Overheads", true)],
+    },
+  };
+}
+
 describe("source vocabulary", () => {
   it("has unique keys", () => {
     const keys = RIDER_SOURCES.map((source) => source.key);
@@ -107,11 +140,7 @@ describe("searchRiderSources", () => {
 
 describe("backfillSourceKeys", () => {
   it("resolves a renamed symbol channel through its provenance", () => {
-    const placed = placeSymbol(emptyRiderContent(), {
-      symbolKey: "drum_kit",
-      xFt: 4,
-      yFt: 4,
-    });
+    const placed = legacyKit();
     // Band renamed every channel and the keys were never stored.
     const legacy = {
       ...placed.content,
@@ -178,11 +207,7 @@ describe("sourceOrdinals", () => {
 
 describe("backfillSourceKeys after a reorder", () => {
   it("does not mis-map when channels have been dragged out of seed order", () => {
-    const placed = placeSymbol(emptyRiderContent(), {
-      symbolKey: "drum_kit",
-      xFt: 4,
-      yFt: 4,
-    });
+    const placed = legacyKit();
     const stripped = placed.content.inputs.map((input) => ({
       ...input,
       sourceKey: undefined,
@@ -199,11 +224,7 @@ describe("backfillSourceKeys after a reorder", () => {
   });
 
   it("still resolves a renamed channel positionally as a last resort", () => {
-    const placed = placeSymbol(emptyRiderContent(), {
-      symbolKey: "drum_kit",
-      xFt: 4,
-      yFt: 4,
-    });
+    const placed = legacyKit();
     const renamed = placed.content.inputs.map((input) => ({
       ...input,
       sourceKey: undefined,

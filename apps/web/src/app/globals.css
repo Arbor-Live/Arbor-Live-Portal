@@ -137,6 +137,12 @@
   --color-emerald: var(--color-status-emerald-700);
   --color-rose: var(--color-status-rose-600);
   --color-sky: var(--color-status-sky-700);
+  /* Stage plot families (rider editor): one hue per kind of gear. */
+  --color-rider-performer: var(--rider-performer);
+  --color-rider-backline: var(--rider-backline);
+  --color-rider-monitor: var(--rider-monitor);
+  --color-rider-input: var(--rider-input);
+  --color-rider-stage: var(--rider-stage);
   --color-zinc: var(--color-status-zinc-500);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
@@ -193,6 +199,18 @@
   --sidebar-border: oklch(0.93 0.007 106.5);
   --sidebar-ring: oklch(0.737 0.021 106.9);
 
+  --rider-performer: var(--color-status-violet-600);
+  --rider-backline: var(--color-status-amber-700);
+  --rider-monitor: var(--color-status-emerald-600);
+  --rider-input: var(--color-status-sky-600);
+  --rider-stage: var(--color-status-slate-500);
+  /* Symbol fills: a whisper of the family hue over the card. */
+  --rider-performer-fill: color-mix(in oklab, var(--rider-performer) 12%, var(--card));
+  --rider-backline-fill: color-mix(in oklab, var(--rider-backline) 12%, var(--card));
+  --rider-monitor-fill: color-mix(in oklab, var(--rider-monitor) 12%, var(--card));
+  --rider-input-fill: color-mix(in oklab, var(--rider-input) 12%, var(--card));
+  --rider-stage-fill: color-mix(in oklab, var(--rider-stage) 8%, var(--card));
+
 }
 
 .dark {
@@ -227,6 +245,17 @@
   --sidebar-accent-foreground: oklch(0.988 0.003 106.5);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.58 0.031 107.3);
+
+  --rider-performer: oklch(0.72 0.17 293);
+  --rider-backline: var(--color-status-amber-500);
+  --rider-monitor: var(--color-status-emerald-400);
+  --rider-input: var(--color-status-sky-500);
+  --rider-stage: oklch(0.7 0.03 257);
+  --rider-performer-fill: color-mix(in oklab, var(--rider-performer) 16%, var(--card));
+  --rider-backline-fill: color-mix(in oklab, var(--rider-backline) 16%, var(--card));
+  --rider-monitor-fill: color-mix(in oklab, var(--rider-monitor) 16%, var(--card));
+  --rider-input-fill: color-mix(in oklab, var(--rider-input) 16%, var(--card));
+  --rider-stage-fill: color-mix(in oklab, var(--rider-stage) 10%, var(--card));
 
 }
 
