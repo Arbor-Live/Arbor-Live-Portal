@@ -26,7 +26,7 @@ function RatingStars({ rating }: { rating: number }) {
 
 /**
  * The signed-in crew member's own post-event review, inline on the event page.
- * Any assigned crew member or lead sees it once the event has ended; the
+ * Anyone who worked the event's show shift sees it once the event has ended; the
  * emailed token form (`/postmortem/[token]`) remains the fallback.
  */
 export function EventPostMortemSection({ eventId }: { eventId: Id<"events"> }) {

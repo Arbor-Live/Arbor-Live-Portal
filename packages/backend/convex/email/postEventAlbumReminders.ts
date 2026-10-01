@@ -14,7 +14,7 @@ import {
   subjectForTemplate,
 } from "./constants";
 import { enqueueEmail } from "./enqueue";
-import { getEventCrewRecipients, getEventLeadRecipients } from "./recipients";
+import { getEventCrewRecipients, getEventPostEventLeadRecipients } from "./recipients";
 import { getCanonicalAlbumLink } from "../lib/immichAlbumLinks";
 
 /** Days after an event ends before we send the post-event emails. */
@@ -141,7 +141,9 @@ export const enqueueForEvent = internalMutation({
       }
     }
 
-    const leads = await getEventLeadRecipients(ctx, event._id);
+    // Only leads / managers who worked the show shift get the review request;
+    // a manager who was merely assigned is not asked.
+    const leads = await getEventPostEventLeadRecipients(ctx, event._id);
     const leadEmails = new Set(leads.map((lead) => lead.email));
     for (const lead of leads) {
       if (!lead.userId) continue;

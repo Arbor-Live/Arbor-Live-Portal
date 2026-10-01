@@ -5,7 +5,7 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import { SITE_URL } from "./email/constants";
 import { findAuthUsersByIds, getUserId, requireAuth } from "./lib/auth";
 import { canEditEvent } from "./lib/eventAccess";
-import { isAssignedToEvent } from "./lib/myEventActions";
+import { userWorkedShowShift } from "./lib/showShift";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 
 const POST_MORTEM_TOKEN_ALPHABET = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -154,7 +154,7 @@ export const getMyPostMortemForEvent = query({
     const userId = getUserId(user);
     const event = await ctx.db.get(args.eventId);
     if (!event) return null;
-    if (!(await isAssignedToEvent(ctx, args.eventId, userId))) return null;
+    if (!(await userWorkedShowShift(ctx, args.eventId, userId))) return null;
 
     const row = await ctx.db
       .query("postMortemFeedback")
@@ -174,7 +174,7 @@ export const getMyPostMortemForEvent = query({
   },
 });
 
-/** Submit the in-app post-event review as a signed-in crew member or lead. */
+/** Submit the in-app post-event review as signed-in crew who worked the show. */
 export const submitForEvent = mutation({
   args: {
     eventId: v.id("events"),
@@ -188,8 +188,8 @@ export const submitForEvent = mutation({
     const userId = getUserId(user);
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
-    if (!(await isAssignedToEvent(ctx, args.eventId, userId))) {
-      throw new Error("You are not assigned to this event.");
+    if (!(await userWorkedShowShift(ctx, args.eventId, userId))) {
+      throw new Error("You did not work this event's show shift.");
     }
     if (event.endAt >= Date.now()) {
       throw new Error("The post-mortem opens once the event has ended.");
