@@ -1,15 +1,9 @@
-import type { Metadata } from "next";
 import { EventEditorLayoutClient } from "@/components/events/event-editor-layout-client";
-import { eventTabMetadata } from "@/lib/event-tab-metadata";
 import type { Id } from "@/lib/convex-api";
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}): Promise<Metadata> {
-  return eventTabMetadata(params, "Event");
-}
+// Each tab page (Overview, Run of Show, Lineup, Equipment, Billing, Promo) sets
+// its own document title. This layout must not export metadata: a layout title
+// string would clear the root `| Arbor Live` title template for those descendants.
 
 export default async function EditEventLayout({
   params,
