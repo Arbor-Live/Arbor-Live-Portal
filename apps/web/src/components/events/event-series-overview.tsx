@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
+import { RowCell, RowList } from "@/components/list-page";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -512,41 +513,36 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
         <CardHeader>
           <CardTitle>Occurrences</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <table className="w-full min-w-table-lg text-sm">
-            <thead>
-              <tr className="border-b text-left">
-                <th className="px-2 py-2">#</th>
-                <th className="px-2 py-2">Date</th>
-                <th className="px-2 py-2">Status</th>
-                <th className="px-2 py-2">Crew</th>
-                <th className="px-2 py-2">Cost</th>
-                <th className="px-2 py-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {occurrences.map((occurrence) => (
-                <tr key={occurrence._id} className="border-b last:border-b-0">
-                  <td className="px-2 py-2">{(occurrence.occurrenceIndex ?? 0) + 1}</td>
-                  <td className="px-2 py-2">{formatOccurrencePreview(occurrence.startAt)}</td>
-                  <td className="px-2 py-2">{formatEventStatusLabel(normalizeEventStatus(occurrence.status))}</td>
-                  <td className="px-2 py-2">
-                    {occurrence.totalShifts === 0
-                      ? "No shifts"
-                      : occurrence.isCrewConfirmed
-                        ? "Fully staffed"
-                        : `${occurrence.assignedShifts}/${occurrence.totalShifts} filled`}
-                  </td>
-                  <td className="px-2 py-2">{formatUsd(occurrence.costSummary.totalUsd)}</td>
-                  <td className="px-2 py-2">
-                    <Button asChild type="button" variant="outline" size="sm">
-                      <Link href={`/dashboard/events/${occurrence._id}`}>Open event</Link>
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <CardContent className="space-y-3">
+          <RowList joined testId="series-occurrences-list">
+            {occurrences.map((occurrence) => (
+              <li
+                key={occurrence._id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm"
+              >
+                <span className="w-6 shrink-0 text-xs text-muted-foreground tabular-nums">
+                  {(occurrence.occurrenceIndex ?? 0) + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{formatOccurrencePreview(occurrence.startAt)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatEventStatusLabel(normalizeEventStatus(occurrence.status))}
+                  </p>
+                </div>
+                <RowCell className="w-32" muted>
+                  {occurrence.totalShifts === 0
+                    ? "No shifts"
+                    : occurrence.isCrewConfirmed
+                      ? "Fully staffed"
+                      : `${occurrence.assignedShifts}/${occurrence.totalShifts} filled`}
+                </RowCell>
+                <RowCell className="w-24">{formatUsd(occurrence.costSummary.totalUsd)}</RowCell>
+                <Button asChild type="button" variant="outline" size="sm">
+                  <Link href={`/dashboard/events/${occurrence._id}`}>Open event</Link>
+                </Button>
+              </li>
+            ))}
+          </RowList>
         </CardContent>
       </Card>
 

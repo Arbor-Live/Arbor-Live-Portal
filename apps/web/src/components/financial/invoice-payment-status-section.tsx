@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
@@ -305,8 +306,8 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
             <p className="text-muted-foreground">
               The client will be able to submit new payment proof from their portal.
             </p>
-            <textarea
-              className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-24 w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+            <Textarea
+              className="min-h-24"
               value={invalidateNote}
               onChange={(event) => setInvalidateNote(event.target.value)}
               placeholder="Reason for invalidation (required)"
@@ -338,11 +339,14 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
               Use this when payment details were received outside the public portal.
             </p>
             <div className="space-y-2">
-              <Label>Payment method</Label>
+              <Label htmlFor={`manual-payment-method-${PAYMENT_PROOF_METHOD_OPTIONS[0]?.value}`}>
+                Payment method
+              </Label>
               <div className="space-y-2">
                 {PAYMENT_PROOF_METHOD_OPTIONS.map((option) => (
                   <label key={option.value} className="flex cursor-pointer items-start gap-2">
                     <input
+                      id={`manual-payment-method-${option.value}`}
                       type="radio"
                       name="manual-payment-method"
                       checked={paymentMethod === option.value}

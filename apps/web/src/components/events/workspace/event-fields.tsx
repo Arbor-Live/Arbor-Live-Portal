@@ -18,12 +18,15 @@ import {
 /** Labelled form field. The `space-y-1` wrapper is what E2E helpers anchor on. */
 export function Field({
   label,
+  htmlFor,
   icon: FieldIcon,
   hint,
   className,
   children,
 }: {
   label: string;
+  /** Wires the label to a single control; omit for group labels. */
+  htmlFor?: string;
   icon?: Icon;
   hint?: ReactNode;
   className?: string;
@@ -31,7 +34,7 @@ export function Field({
 }) {
   return (
     <div className={cn("space-y-1", className)}>
-      <Label className="flex items-center gap-1.5">
+      <Label htmlFor={htmlFor} className="flex items-center gap-1.5">
         {FieldIcon ? <FieldIcon className="size-3.5 text-muted-foreground" /> : null}
         {label}
       </Label>

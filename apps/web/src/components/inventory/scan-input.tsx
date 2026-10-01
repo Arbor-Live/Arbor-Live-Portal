@@ -18,6 +18,8 @@ type ScanInputProps = {
   placeholder?: string;
   disabled?: boolean;
   autoFocus?: boolean;
+  /** Wires the field to a `<Label htmlFor>`. */
+  id?: string;
   ariaLabel?: string;
   className?: string;
   showCameraButton?: boolean;
@@ -39,6 +41,7 @@ export function ScanInput({
   placeholder,
   disabled,
   autoFocus,
+  id,
   ariaLabel,
   className,
   showCameraButton = true,
@@ -66,6 +69,7 @@ export function ScanInput({
       <div className="flex gap-1.5">
         <Input
           ref={inputRef}
+          id={id}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onBlur={onBlur}

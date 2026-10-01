@@ -1,5 +1,6 @@
 "use client";
 
+import { RowCell, RowList } from "@/components/list-page";
 import { formatUsd } from "@/lib/format";
 
 type TopClientsTableProps = {
@@ -17,25 +18,19 @@ export function TopClientsTable({ clients }: TopClientsTableProps) {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-muted-foreground">
-            <th className="pb-2 pr-4 font-medium">Host organization</th>
-            <th className="pb-2 pr-4 font-medium text-right">Invoices</th>
-            <th className="pb-2 font-medium text-right">Paid</th>
-          </tr>
-        </thead>
-        <tbody>
-          {clients.map((client) => (
-            <tr key={client.groupId ?? client.name} className="border-b border-border/60">
-              <td className="py-2 pr-4">{client.name}</td>
-              <td className="py-2 pr-4 text-right tabular-nums">{client.invoiceCount}</td>
-              <td className="py-2 text-right tabular-nums">{formatUsd(client.totalUsd)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <RowList joined testId="top-clients-list">
+      {clients.map((client) => (
+        <li
+          key={client.groupId ?? client.name}
+          className="flex items-center gap-3 px-3 py-2 text-sm"
+        >
+          <span className="min-w-0 flex-1 truncate">{client.name}</span>
+          <RowCell className="w-20" muted>
+            {client.invoiceCount} invoice{client.invoiceCount === 1 ? "" : "s"}
+          </RowCell>
+          <RowCell className="w-24">{formatUsd(client.totalUsd)}</RowCell>
+        </li>
+      ))}
+    </RowList>
   );
 }

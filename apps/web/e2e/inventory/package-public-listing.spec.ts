@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { runConvex } from "../helpers/convex";
 import { checkboxByLabel, formField } from "../helpers/form";
+import { pickSelectOption } from "../helpers/select";
 import {
   deleteInventoryFixtures,
   waitForInventoryPackage,
@@ -73,15 +74,15 @@ test.describe.serial("inventory package public listing", () => {
     await page.getByRole("button", { name: "Create", exact: true }).click();
 
     // The zod refinement catches this before the mutation runs, so the editor
-    // stays open with the work intact and says why. The section picker is a
-    // plain `<select>` rather than a `FormField`, so this batch had to add the
-    // error line — until then Create silently did nothing.
+    // stays open with the work intact and says why. The section picker is not a
+    // `FormField`, so this batch had to add the error line — until then Create
+    // silently did nothing.
     await expect(
       page.getByText("Choose a public browse section when listing publicly"),
     ).toBeVisible({ timeout: 20_000 });
     expect(runConvex("e2eHelpers:getInventoryPackageByName", { name: packageName })).toBeNull();
 
-    await editor.locator("select").selectOption("lighting");
+    await pickSelectOption(page, editor.locator("#package-public-bucket"), "Lighting");
     await page.getByRole("button", { name: "Create", exact: true }).click();
 
     const created = await waitForInventoryPackage(packageName, (state) => Boolean(state?.packageId));

@@ -7,7 +7,7 @@ import {
   saveInvoiceEditor,
   waitForInvoiceEditorUrl,
 } from "../helpers/invoice";
-import { fillSearchableSelectQuery } from "../helpers/select";
+import { fillSearchableSelectQuery, pickSelectOption } from "../helpers/select";
 
 type GroupState = {
   groupId: string;
@@ -87,7 +87,7 @@ test.describe("invoice host organizations and contacts", () => {
     // from the "subsidized" default.
     const createForm = page.locator("form").filter({ has: page.getByPlaceholder("New host name") });
     await createForm.getByPlaceholder("New host name").fill(hostName);
-    await createForm.locator("select").nth(1).selectOption("nonSubsidized");
+    await pickSelectOption(page, createForm.locator("#new-host-pricing"), "Non-subsidized");
     await createForm.getByRole("button", { name: "Add host" }).click();
 
     const group = await pollConvex<GroupState>(

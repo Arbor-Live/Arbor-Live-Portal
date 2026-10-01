@@ -11,6 +11,13 @@ import { useSessionViewer } from "@/components/session-shell-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
   formatVenueKindLabel,
@@ -23,6 +30,8 @@ const MIN_QUERY_CHARS = 2;
 const DEBOUNCE_MS = 200;
 
 type VenuePickerProps = {
+  /** Wires the trigger to a `<Label htmlFor>`. */
+  id?: string;
   value: string;
   onChange: (venueId: string) => void;
   allowCreate?: boolean;
@@ -64,6 +73,7 @@ function toSelectOption(venue: VenueOption): SearchableSelectOption {
 }
 
 export function VenuePicker({
+  id,
   value,
   onChange,
   allowCreate = false,
@@ -146,6 +156,7 @@ export function VenuePicker({
   return (
     <>
       <SearchableSelect
+        id={id}
         value={value}
         onChange={onChange}
         options={options}
@@ -172,12 +183,17 @@ export function VenuePicker({
           <div className="w-full max-w-md space-y-3 rounded-md border bg-background p-4 shadow-lg">
             <h3 className="text-base font-semibold">Create venue</h3>
             <div className="space-y-1">
-              <Label>Name</Label>
-              <Input value={draftName} onChange={(e) => setDraftName(e.target.value)} />
+              <Label htmlFor="venue-create-name">Name</Label>
+              <Input
+                id="venue-create-name"
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+              />
             </div>
             <div className="space-y-1">
-              <Label>Nicknames (comma-separated)</Label>
+              <Label htmlFor="venue-create-nicknames">Nicknames (comma-separated)</Label>
               <Input
+                id="venue-create-nicknames"
                 value={nicknamesText}
                 onChange={(e) => setNicknamesText(e.target.value)}
                 placeholder="Llaga, Yaga"
@@ -185,52 +201,58 @@ export function VenuePicker({
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label>Kind</Label>
-                <select
-                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                <Label htmlFor="venue-create-kind">Kind</Label>
+                <Select
                   value={kind}
-                  onChange={(e) => {
-                    const next = e.target.value as VenueKind;
-                    setKind(next);
-                    setVenueType(venueTypesForKind(next)[0]!);
+                  onValueChange={(next) => {
+                    setKind(next as VenueKind);
+                    setVenueType(venueTypesForKind(next as VenueKind)[0]!);
                   }}
                 >
-                  {VENUE_KINDS.map((k) => (
-                    <option key={k} value={k}>
-                      {formatVenueKindLabel(k)}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="venue-create-kind" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VENUE_KINDS.map((k) => (
+                      <SelectItem key={k} value={k}>
+                        {formatVenueKindLabel(k)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1">
-                <Label>Type</Label>
-                <select
-                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                  value={venueType}
-                  onChange={(e) => setVenueType(e.target.value)}
-                >
-                  {venueTypesForKind(kind).map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
+                <Label htmlFor="venue-create-type">Type</Label>
+                <Select value={venueType} onValueChange={setVenueType}>
+                  <SelectTrigger id="venue-create-type" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {venueTypesForKind(kind).map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="space-y-1">
-              <Label>Parent (optional)</Label>
-              <select
-                className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+              <Label htmlFor="venue-create-parent">Parent (optional)</Label>
+              <SearchableSelect
+                id="venue-create-parent"
                 value={parentId}
-                onChange={(e) => setParentId(e.target.value)}
-              >
-                <option value="">No parent (top-level)</option>
-                {(parentVenues ?? []).map((venue) => (
-                  <option key={venue._id} value={venue._id}>
-                    {venue.path}
-                  </option>
-                ))}
-              </select>
+                onChange={setParentId}
+                options={[
+                  { value: "", label: "No parent (top-level)" },
+                  ...(parentVenues ?? []).map((venue) => ({
+                    value: venue._id,
+                    label: venue.path,
+                  })),
+                ]}
+                placeholder="Search venues…"
+                emptyLabel="No parent (top-level)"
+              />
             </div>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
             <div className="flex justify-end gap-2">

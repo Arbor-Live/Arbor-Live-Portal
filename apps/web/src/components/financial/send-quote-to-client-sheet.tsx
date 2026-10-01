@@ -12,6 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 
 export const DEFAULT_QUOTE_READY_CLIENT_MESSAGE =
   "Thank you for reaching out! Here is the quote I have prepared for you. Please feel free to let me know if you have any questions.";
@@ -83,7 +84,7 @@ export function SendQuoteToClientSheet({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Reply-To</Label>
+            <p className="text-sm font-medium">Reply-To</p>
             <p className="text-sm text-muted-foreground">{replyToParts.join(" · ")}</p>
           </div>
 
@@ -94,9 +95,9 @@ export function SendQuoteToClientSheet({
 
           <div className="space-y-1.5">
             <Label htmlFor="quote-ready-message">Your message</Label>
-            <textarea
+            <Textarea
               id="quote-ready-message"
-              className="min-h-32 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              className="min-h-32"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder={DEFAULT_QUOTE_READY_CLIENT_MESSAGE}

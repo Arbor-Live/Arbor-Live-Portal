@@ -222,6 +222,7 @@ function defaultEndFromStart(start: string) {
 }
 
 export function DateTimeRangePicker({
+  id,
   startValue,
   endValue,
   onChange,
@@ -229,6 +230,8 @@ export function DateTimeRangePicker({
   className,
   openToDate,
 }: {
+  /** Wires the trigger to a `<Label htmlFor>`. */
+  id?: string;
   startValue: string;
   endValue: string;
   onChange: (next: { start: string; end: string }) => void;
@@ -294,6 +297,7 @@ export function DateTimeRangePicker({
       <PopoverTrigger asChild>
         <Button
           type="button"
+          id={id}
           variant="outline"
           data-empty={!startValue}
           data-testid="date-time-range-picker"
@@ -312,7 +316,7 @@ export function DateTimeRangePicker({
       </PopoverTrigger>
       <PopoverContent className="z-80 w-78 max-w-[calc(100vw-2rem)] p-0" align="start">
         <div className="space-y-2 border-b p-3">
-          <Label>Time</Label>
+          <Label htmlFor={startTimeId}>Time</Label>
           <div className="flex items-center gap-2">
             <TimeInput
               id={startTimeId}

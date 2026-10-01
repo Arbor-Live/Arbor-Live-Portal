@@ -8,6 +8,14 @@ import { Form } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   storageLocationSchema,
@@ -78,23 +86,27 @@ export function StorageLocationEditor({
             >
               <TextFormField name="name" label="Name" />
               <div className="space-y-2">
-                <label className="text-sm font-medium">Parent</label>
-                <select
-                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                  value={form.watch("parentId") ?? ""}
-                  onChange={(e) =>
-                    form.setValue("parentId", e.target.value, { shouldDirty: true })
+                <Label htmlFor="storage-location-parent">Parent</Label>
+                <Select
+                  value={form.watch("parentId") || "none"}
+                  onValueChange={(value) =>
+                    form.setValue("parentId", value === "none" ? "" : value, { shouldDirty: true })
                   }
                 >
-                  <option value="">No Parent</option>
-                  {locations
-                    .filter((location) => location._id !== editingId)
-                    .map((location) => (
-                      <option key={location._id} value={location._id}>
-                        {location.path}
-                      </option>
-                    ))}
-                </select>
+                  <SelectTrigger id="storage-location-parent" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Parent</SelectItem>
+                    {locations
+                      .filter((location) => location._id !== editingId)
+                      .map((location) => (
+                        <SelectItem key={location._id} value={location._id}>
+                          {location.path}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
               </div>
               {tier === "C" ? (
                 <Button type="submit" disabled={form.saveStatus === "saving"}>

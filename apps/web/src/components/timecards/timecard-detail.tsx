@@ -1,5 +1,6 @@
 "use client";
 
+import { RowCell, RowGroup } from "@/components/list-page";
 import { formatDate } from "@/lib/format";
 
 type TimecardDay = {
@@ -20,38 +21,37 @@ export function TimecardDetail({ days }: { days: TimecardDay[] }) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="timecard-detail">
       <p className="text-xs text-muted-foreground">
         Hours to input are a guide for Stanford — you do not need exact clock times. Log real work
         including prep time as appropriate.
       </p>
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 font-medium">Day</th>
-              <th className="px-3 py-2 font-medium">Event</th>
-              <th className="px-3 py-2 font-medium text-right">Hours to input</th>
-              <th className="px-3 py-2 font-medium text-right">Worked</th>
-            </tr>
-          </thead>
-          <tbody>
-            {days.map((day) =>
-              day.events.map((event, index) => (
-                <tr key={`${day.dateMs}-${event.eventId}`} className="border-t">
-                  <td className="px-3 py-2">
-                    {index === 0 ? formatDate(day.dateMs) : ""}
-                  </td>
-                  <td className="px-3 py-2">{event.title}</td>
-                  <td className="px-3 py-2 text-right font-medium">{event.inputHours.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-right text-muted-foreground">
-                    {event.actualHours.toFixed(2)}
-                  </td>
-                </tr>
-              )),
-            )}
-          </tbody>
-        </table>
+      <div className="space-y-4">
+        {days.map((day) => (
+          <RowGroup
+            key={day.dateMs}
+            title={formatDate(day.dateMs)}
+            count={day.events.length}
+            aside={
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {day.totalInput.toFixed(2)} h to input · {day.totalActual.toFixed(2)} h worked
+              </span>
+            }
+          >
+            {day.events.map((event) => (
+              <li
+                key={`${day.dateMs}-${event.eventId}`}
+                className="flex items-center gap-3 px-3 py-2 text-sm"
+              >
+                <span className="min-w-0 flex-1 truncate">{event.title}</span>
+                <RowCell className="w-28">{event.inputHours.toFixed(2)} h</RowCell>
+                <RowCell className="w-20" muted>
+                  {event.actualHours.toFixed(2)} h
+                </RowCell>
+              </li>
+            ))}
+          </RowGroup>
+        ))}
       </div>
     </div>
   );

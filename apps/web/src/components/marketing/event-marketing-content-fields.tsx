@@ -8,6 +8,7 @@ import {
 } from "@/components/marketing/marketing-links-editor";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { MarketingLinkIcon } from "@/lib/marketing-link-icons";
 import { cn } from "@/lib/utils";
 import { fileFromClipboardEvent } from "@/hooks/use-r2-file-upload";
@@ -83,9 +84,6 @@ export function linksIncludePartiful(links: Array<{ url: string }> | undefined) 
   return (links ?? []).some((link) => isPartifulUrl(link.url));
 }
 
-const textareaClassName =
-  "flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
-
 type PosterUploadProps =
   | { type: "event"; eventId: string }
   | { type: "marketing-post"; postId?: string }
@@ -148,13 +146,13 @@ export function EventMarketingContentFields({
         )}
         {caption.trim() ? (
           <div className="space-y-1">
-            <Label>{captionLabel}</Label>
+            <p className="text-sm font-medium">{captionLabel}</p>
             <p className="whitespace-pre-wrap text-sm">{caption}</p>
           </div>
         ) : null}
         {filterMarketingLinks(links).length > 0 ? (
           <div className="space-y-1">
-            <Label>Additional links</Label>
+            <p className="text-sm font-medium">Additional links</p>
             <ul className="space-y-1 text-sm">
               {filterMarketingLinks(links).map((link) => (
                 <li key={`${link.label}:${link.url}`} className="flex items-center gap-2">
@@ -242,13 +240,13 @@ export function EventMarketingContentFields({
 
       <div className="space-y-2">
         <Label htmlFor={`${idPrefix}-caption`}>{captionLabel}</Label>
-        <textarea
+        <Textarea
           id={`${idPrefix}-caption`}
           rows={4}
           value={caption}
           onChange={(event) => onCaptionChange(event.target.value)}
           placeholder={captionPlaceholder}
-          className={textareaClassName}
+          className="min-h-24"
           disabled={disabled}
         />
       </div>
