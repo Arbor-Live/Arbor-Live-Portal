@@ -1,16 +1,13 @@
 "use client";
 
-import { useRef } from "react";
 import { EventPosterUploadField, MarketingPostHeroUploadField } from "@/components/files/file-upload-field";
 import {
   MarketingLinksEditor,
   PartifulCohostAdminLink,
 } from "@/components/marketing/marketing-links-editor";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { MarketingLinkIcon } from "@/lib/marketing-link-icons";
 import { cn } from "@/lib/utils";
-import { fileFromClipboardEvent } from "@/hooks/use-r2-file-upload";
 
 export type MarketingAdditionalLink = {
   label: string;
@@ -88,12 +85,7 @@ const textareaClassName =
 
 type PosterUploadProps =
   | { type: "event"; eventId: string }
-  | { type: "marketing-post"; postId?: string }
-  | {
-      type: "file";
-      busy?: boolean;
-      onFile: (file: File) => void | Promise<void>;
-    };
+  | { type: "marketing-post"; postId?: string };
 
 export function EventMarketingContentFields({
   idPrefix,
@@ -131,7 +123,6 @@ export function EventMarketingContentFields({
   captionPlaceholder?: string;
   className?: string;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
   const previewSrc = (imagePreviewUrl || imageUrl).trim();
   const links = additionalLinks.length > 0 ? additionalLinks : [emptyMarketingLink()];
 
@@ -181,7 +172,7 @@ export function EventMarketingContentFields({
           onUploaded={onImageUrlChange}
           onClear={() => onImageUrlChange("")}
         />
-      ) : posterUpload.type === "marketing-post" ? (
+      ) : (
         <MarketingPostHeroUploadField
           postId={posterUpload.postId}
           label="Poster image"
@@ -189,55 +180,6 @@ export function EventMarketingContentFields({
           onUploaded={onImageUrlChange}
           onClear={() => onImageUrlChange("")}
         />
-      ) : (
-        <div
-          className={cn(
-            "space-y-2 rounded-md border border-dashed p-3",
-            (disabled || posterUpload.busy) && "opacity-60",
-          )}
-          onPaste={(event) => {
-            if (disabled || posterUpload.busy) return;
-            const file = fileFromClipboardEvent(event.nativeEvent);
-            if (!file) return;
-            event.preventDefault();
-            void posterUpload.onFile(file);
-          }}
-        >
-          <Label htmlFor={`${idPrefix}-poster-upload`}>Upload poster image</Label>
-          <input
-            ref={inputRef}
-            id={`${idPrefix}-poster-upload`}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
-            className="hidden"
-            disabled={disabled || posterUpload.busy}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (file) void posterUpload.onFile(file);
-            }}
-          />
-          {previewSrc ? (
-            <div className="mx-auto w-full max-w-xs overflow-hidden rounded-xl border bg-muted/20">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={previewSrc} alt="" className="aspect-(--aspect-poster) w-full object-cover" />
-            </div>
-          ) : null}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={disabled || posterUpload.busy}
-              onClick={() => inputRef.current?.click()}
-            >
-              {posterUpload.busy ? "Uploading…" : previewSrc ? "Replace poster" : "Choose image"}
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            JPEG, PNG, WebP, GIF, or SVG up to 5 MB. Paste an image here, or choose a file.
-          </p>
-        </div>
       )}
 
       <div className="space-y-2">

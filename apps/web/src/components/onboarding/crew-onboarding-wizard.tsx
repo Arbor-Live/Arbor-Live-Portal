@@ -29,7 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UserAvatarUploadPreview } from "@/components/account/user-avatar";
+import { AvatarUploadField } from "@/components/account/avatar-upload-field";
+import { normalizeAvatarFile } from "@/lib/image-processing";
 import {
   OnboardingAckCheckbox,
   OnboardingLinkCard,
@@ -588,19 +589,17 @@ export function CrewOnboardingWizard() {
       if (!file.type.startsWith("image/")) {
         throw new Error("Please choose an image file.");
       }
-      if (file.size > 2 * 1024 * 1024) {
-        throw new Error("Profile photo must be 2 MB or smaller.");
-      }
+      const preparedFile = await normalizeAvatarFile(file);
       const uploadUrl = await generateAvatarUploadUrl({});
       const response = await fetch(uploadUrl, {
         method: "POST",
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-        body: file,
+        headers: { "Content-Type": preparedFile.type || "application/octet-stream" },
+        body: preparedFile,
       });
       if (!response.ok) throw new Error("Upload failed.");
       const { storageId } = (await response.json()) as { storageId: Id<"_storage"> };
       await setMyAvatar({ storageId });
-      setAvatarPreviewOverride(URL.createObjectURL(file));
+      setAvatarPreviewOverride(URL.createObjectURL(preparedFile));
     } catch (uploadError) {
       setError(getConvexErrorMessage(uploadError));
     } finally {
@@ -683,6 +682,7 @@ export function CrewOnboardingWizard() {
                   onAvatarSelected={onAvatarSelected}
                   onGoToDashboard={goToDashboard}
                   onPasskeyAdded={() => setHasAddedPasskey(true)}
+                  previewOnly={previewOnly}
                 />
               </div>
             ) : (
@@ -707,6 +707,7 @@ export function CrewOnboardingWizard() {
                     onAvatarSelected={onAvatarSelected}
                     onGoToDashboard={goToDashboard}
                     onPasskeyAdded={() => setHasAddedPasskey(true)}
+                    previewOnly={previewOnly}
                   />
                   <MarkStepAnswered />
                   <QuestionnaireFieldError className="text-sm">
@@ -733,6 +734,7 @@ function StepBody({
   onAvatarSelected,
   onGoToDashboard,
   onPasskeyAdded,
+  previewOnly,
 }: {
   stepId: StepId;
   form: FormState;
@@ -744,6 +746,7 @@ function StepBody({
   onAvatarSelected: (file: File) => void;
   onGoToDashboard: () => void;
   onPasskeyAdded: () => void;
+  previewOnly: boolean;
 }) {
   const patch = (next: Partial<FormState>) => {
     setForm((prev) => ({ ...prev, ...next }));
@@ -765,36 +768,16 @@ function StepBody({
     case "profile":
       return (
         <div className="space-y-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <UserAvatarUploadPreview
-              name={form.name || "Crew member"}
-              email={avatarSeedEmail}
-              imageUrl={avatarUrl || null}
-            />
-            <div className="space-y-2">
-              <input
-                type="file"
-                accept="image/*"
-                id="crew-avatar-input"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (file) onAvatarSelected(file);
-                }}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={avatarBusy}
-                onClick={() => document.getElementById("crew-avatar-input")?.click()}
-              >
-                {avatarBusy ? "Uploading…" : "Upload photo"}
-              </Button>
-              <p className="text-xs text-muted-foreground">PNG or JPG, up to 2 MB. Optional.</p>
-            </div>
-          </div>
+          <AvatarUploadField
+            name={form.name || "Crew member"}
+            email={avatarSeedEmail}
+            imageUrl={avatarUrl || null}
+            buttonLabel="Upload photo"
+            busy={avatarBusy}
+            previewOnly={previewOnly}
+            onSelected={(file) => void onAvatarSelected(file)}
+          />
+          <p className="text-xs text-muted-foreground">PNG or JPG, up to 2 MB. Optional.</p>
 
           <div className="space-y-2">
             <Label htmlFor="crew-name">Full name</Label>

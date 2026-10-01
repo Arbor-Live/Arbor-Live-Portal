@@ -6,6 +6,15 @@ export const POSTER_ASPECT_RATIO = 4 / 5;
 /** Work-post cover images render into short landscape cards. */
 export const HERO_LANDSCAPE_ASPECT_RATIO = 16 / 9;
 
+/** Avatars render inside a circle. */
+export const AVATAR_ASPECT_RATIO = 1;
+
+/** Backend avatar limit (`account.ts` MAX_AVATAR_BYTES). */
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+
+const MAX_OUTPUT_EDGE = 2048;
+const MAX_DECODE_EDGE = 2560;
+
 export function aspectRatioLabel(aspect: number): string {
   if (Math.abs(aspect - POSTER_ASPECT_RATIO) < 0.001) return "4:5 (poster shape)";
   if (Math.abs(aspect - HERO_LANDSCAPE_ASPECT_RATIO) < 0.001) return "16:9 (landscape)";
@@ -13,8 +22,44 @@ export function aspectRatioLabel(aspect: number): string {
   return "its recommended shape";
 }
 
-const MAX_OUTPUT_EDGE = 2048;
-const MAX_DECODE_EDGE = 2560;
+/**
+ * Center-crops a raster image to a square and downscales it to `maxEdge`,
+ * returning a small JPEG. Non-raster inputs (SVG/GIF) pass through untouched.
+ * Avatars upload straight to Convex storage, so they skip the R2 compression
+ * path; this keeps them small without a full crop UI.
+ */
+export async function normalizeAvatarFile(file: File, maxEdge = 512): Promise<File> {
+  if (!isRasterImageFile(file)) return file;
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await loadImageElement(objectUrl);
+    const source = Math.min(image.naturalWidth, image.naturalHeight);
+    if (source <= 0) return file;
+    const edge = Math.min(maxEdge, source);
+    const canvas = document.createElement("canvas");
+    drawWithWhiteMatte(
+      canvas,
+      image,
+      {
+        sx: (image.naturalWidth - source) / 2,
+        sy: (image.naturalHeight - source) / 2,
+        sw: source,
+        sh: source,
+      },
+      edge,
+      edge,
+    );
+    const blob = await encodeUnderLimit(canvas, MAX_AVATAR_BYTES, "image/jpeg");
+    return new File([blob], jpegFileName(file.name), {
+      type: "image/jpeg",
+      lastModified: file.lastModified,
+    });
+  } catch {
+    return file;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 
 /**
  * GIF (animation) and SVG (vector) are intentionally left untouched; canvas

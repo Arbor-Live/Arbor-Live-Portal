@@ -98,7 +98,7 @@ function CropSurface({
     startY: number;
     origin: Offset;
   } | null>(null);
-  const [imageUrl] = useState(() => URL.createObjectURL(file));
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [natural, setNatural] = useState<Size | null>(null);
   const [frame, setFrame] = useState<Size | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -106,7 +106,15 @@ function CropSurface({
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => () => URL.revokeObjectURL(imageUrl), [imageUrl]);
+  // Create and revoke the object URL inside one effect so Strict Mode's
+  // mount→cleanup→mount cycle always leaves a live URL behind. Creating it in
+  // a useState initializer would let the cleanup revoke the URL React keeps.
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- object URLs are an external resource; the effect owns its lifecycle
+    setImageUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   useEffect(() => {
     const element = frameRef.current;
@@ -206,7 +214,7 @@ function CropSurface({
   };
 
   const handleConfirm = async () => {
-    if (!natural || !frame || natural.w <= 0 || natural.h <= 0) return;
+    if (!imageUrl || !natural || !frame || natural.w <= 0 || natural.h <= 0) return;
     setWorking(true);
     setError(null);
     try {
@@ -255,8 +263,9 @@ function CropSurface({
           className="relative mx-auto w-full max-w-full overflow-hidden rounded-lg bg-muted"
           style={{ aspectRatio: aspect }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
             src={imageUrl}
             alt=""
             draggable={false}
@@ -276,7 +285,8 @@ function CropSurface({
               height: natural ? natural.h * totalScale : undefined,
               transform: `translate(${displayOffset.x}px, ${displayOffset.y}px)`,
             }}
-          />
+            />
+          ) : null}
           <div className="pointer-events-none absolute inset-0 ring-1 ring-foreground/15 ring-inset">
             <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
               {Array.from({ length: 9 }).map((_, index) => (
