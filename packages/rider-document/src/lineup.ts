@@ -12,6 +12,7 @@
 import {
   createRiderId,
   emptyRiderContent,
+  nextMixNumber,
   placeSymbol,
   renumberInputs,
 } from "./content";
@@ -358,7 +359,7 @@ export function buildRiderFromLineup(lineup: Lineup): RiderContent {
     const order: Zone[] = ["centre", "right", "left", "drums"];
     const numbered = order
       .filter((zone) => zoneMixes.has(zone))
-      .map((zone, index) => ({ zone, mixNumber: content.monitorMixes.length + index + 1, ...zoneMixes.get(zone)! }));
+      .map((zone, index) => ({ zone, mixNumber: nextMixNumber(content.monitorMixes) + index, ...zoneMixes.get(zone)! }));
     const numberById = new Map(numbered.map((mix) => [mix.id, mix.mixNumber]));
     content = {
       ...content,

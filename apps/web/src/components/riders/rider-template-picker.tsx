@@ -224,7 +224,7 @@ export function RiderTemplatePicker({ open, onOpenChange, organizationId }: Ride
             Start with an empty stage
           </Button>
           <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="button" disabled={busy} onClick={() => void create(false)}>

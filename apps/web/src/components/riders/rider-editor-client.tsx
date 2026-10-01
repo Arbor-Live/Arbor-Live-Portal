@@ -85,7 +85,9 @@ function contentFromRider(rider: {
   return { ...content, inputs: renumberInputs(content.inputs) };
 }
 
-const EMPTY_HISTORY = { past: [], future: [] };
+type RiderHistory = { past: RiderContent[]; future: RiderContent[] };
+
+const EMPTY_HISTORY: RiderHistory = { past: [], future: [] };
 const HISTORY_LIMIT = 100;
 const HISTORY_COALESCE_MS = 1500;
 
@@ -127,9 +129,18 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
   const savedFadeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** The draft as of the last change, so several changes in one event compose. */
   const draftRef = useRef<Draft | null>(null);
-  const [history, setHistory] = useState<{ past: RiderContent[]; future: RiderContent[] }>(
-    EMPTY_HISTORY,
-  );
+  const [history, setHistoryState] = useState<RiderHistory>(EMPTY_HISTORY);
+  /**
+   * The history as of the last change, like `draftRef` for the draft, so an
+   * edit and an undo in the same event build on each other instead of the
+   * render they started from.
+   */
+  const historyRef = useRef<RiderHistory>(EMPTY_HISTORY);
+
+  function setHistory(next: RiderHistory) {
+    historyRef.current = next;
+    setHistoryState(next);
+  }
   /** What the last change was, so a drag or a typed word is one undo step, not fifty. */
   const lastChangeRef = useRef<{ key: string | null; at: number }>({ key: null, at: 0 });
 
@@ -154,10 +165,11 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
       content: contentFromRider(rider),
     };
     draftRef.current = next;
+    historyRef.current = EMPTY_HISTORY;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydrate per rider id
     setDraft(next);
     setBaseline(next);
-    setHistory(EMPTY_HISTORY);
+    setHistoryState(EMPTY_HISTORY);
     setHydratedId(rider._id);
   }, [rider, hydratedId, draft]);
 
@@ -195,27 +207,30 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
     const continues =
       historyKey !== undefined && historyKey === last.key && now - last.at < HISTORY_COALESCE_MS;
     lastChangeRef.current = { key: historyKey ?? null, at: now };
-    setHistory((previous) => ({
+    const previous = historyRef.current;
+    setHistory({
       past: continues ? previous.past : [...previous.past, current.content].slice(-HISTORY_LIMIT),
       future: [],
-    }));
+    });
     commitDraft({ ...current, content });
   }
 
   function undo() {
     const current = draftRef.current;
-    const previous = history.past.at(-1);
+    const { past, future } = historyRef.current;
+    const previous = past.at(-1);
     if (!current || !previous) return;
-    setHistory({ past: history.past.slice(0, -1), future: [current.content, ...history.future] });
+    setHistory({ past: past.slice(0, -1), future: [current.content, ...future] });
     lastChangeRef.current = { key: null, at: 0 };
     commitDraft({ ...current, content: previous });
   }
 
   function redo() {
     const current = draftRef.current;
-    const next = history.future[0];
+    const { past, future } = historyRef.current;
+    const next = future[0];
     if (!current || !next) return;
-    setHistory({ past: [...history.past, current.content], future: history.future.slice(1) });
+    setHistory({ past: [...past, current.content], future: future.slice(1) });
     lastChangeRef.current = { key: null, at: 0 };
     commitDraft({ ...current, content: next });
   }

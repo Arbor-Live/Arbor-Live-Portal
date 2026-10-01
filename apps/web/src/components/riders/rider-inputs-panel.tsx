@@ -146,7 +146,15 @@ export function RiderInputsPanel({ content, readOnly, onChange }: RiderPanelProp
   const pathname = usePathname();
   const searchParams = useSearchParams();
   // `?channel=` opens one channel's panel: the stage plot links here.
-  const [openId, setOpenId] = useState<string | null>(() => searchParams.get("channel"));
+  const channelParam = searchParams.get("channel");
+  const [openId, setOpenId] = useState<string | null>(channelParam);
+  // Follow later changes too (Back/Forward, or a link while already on this
+  // tab), adjusting during render rather than in an effect.
+  const [followedParam, setFollowedParam] = useState(channelParam);
+  if (channelParam !== followedParam) {
+    setFollowedParam(channelParam);
+    setOpenId(channelParam);
+  }
 
   function setInputs(next: RiderInputChannel[], historyKey?: string) {
     onChange((current) => ({ ...current, inputs: next }), historyKey);

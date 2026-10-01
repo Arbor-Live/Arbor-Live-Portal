@@ -160,7 +160,12 @@ export function RiderStagePanel({
       rotation: item.rotation,
       scale: item.scale,
     });
-    onChange(() => result.content);
+    // Risers and tables carry their own size; the copy keeps it.
+    const sized =
+      item.widthFt !== undefined || item.depthFt !== undefined
+        ? updateItem(result.content, result.itemId, { widthFt: item.widthFt, depthFt: item.depthFt })
+        : result.content;
+    onChange(() => sized);
     setSelectedId(result.itemId);
   }
 
