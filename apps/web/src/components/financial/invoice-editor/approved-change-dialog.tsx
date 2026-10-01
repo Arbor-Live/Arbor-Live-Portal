@@ -63,7 +63,8 @@ function ApprovedChangeBody({ draft }: { draft: InvoiceDraft }) {
   const noteMissing = keeping && !note.trim();
 
   async function submit() {
-    if (noteMissing) return;
+    // The preview can refetch after the choice is made; never send a match the server will refuse.
+    if (noteMissing || matchUnavailable) return;
     setSubmitting(true);
     const saved = await draft.persistDraft(true, { decision, note: note.trim() || undefined });
     setSubmitting(false);
@@ -76,8 +77,11 @@ function ApprovedChangeBody({ draft }: { draft: InvoiceDraft }) {
   // Matching the approval only makes sense when the total went up.
   const increase = approved && proposed ? proposed.totalUsd - approved.totalUsd : 0;
   const canMatch = increase >= 0.005;
+  const matchUnavailable = matching && !canMatch;
   const matchDiscount = approved && proposed ? proposed.subtotalUsd - approved.totalUsd : 0;
-  const choiceHelp = matching
+  const choiceHelp = matchUnavailable
+    ? "The total didn't go up, so there's nothing to discount. Choose another option."
+    : matching
     ? `The discount becomes ${formatUsd(matchDiscount)}${
         proposed && proposed.discountAmountUsd > 0 ? ` (was ${formatUsd(proposed.discountAmountUsd)})` : ""
       }, so the total stays ${formatUsd(approved?.totalUsd ?? 0)}. The approval stands, and the client sees the updated lines in their quote history.`
@@ -178,7 +182,7 @@ function ApprovedChangeBody({ draft }: { draft: InvoiceDraft }) {
         <Button type="button" variant="outline" onClick={() => draft.setApprovedChangeOpen(false)}>
           Cancel
         </Button>
-        <Button type="button" disabled={submitting || noteMissing || !payload} onClick={() => void submit()}>
+        <Button type="button" disabled={submitting || noteMissing || matchUnavailable || !payload} onClick={() => void submit()}>
           {submitting
             ? "Saving…"
             : keeping
