@@ -175,7 +175,7 @@ export function BandPaymentHistorySection() {
                       </div>
                     }
                   >
-                    <RowCell className="w-20" align="left" muted>
+                    <RowCell className="w-32 whitespace-nowrap" align="left" muted>
                       {formatDate(payment.eventStartAt)}
                     </RowCell>
                     <RowText
@@ -193,7 +193,7 @@ export function BandPaymentHistorySection() {
                     <RowCell className="w-24" hideBelow="sm">
                       {formatUsd(payment.totalUsd)}
                     </RowCell>
-                    <span className="flex w-40 shrink-0 justify-end">
+                    <span className="hidden w-40 shrink-0 justify-end sm:flex">
                       <StatusPill tone={bandPaymentStatusTone(payment.status)}>
                         {payment.statusLabel}
                       </StatusPill>
