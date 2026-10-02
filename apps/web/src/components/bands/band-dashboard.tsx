@@ -70,7 +70,8 @@ function ShowListRow({
       data-testid="band-show-row"
       onOpen={onOpen}
       actions={
-        <div className="flex shrink-0 items-center gap-1">
+        // Fixed width so the amount column lines up whether or not E-sign shows.
+        <div className="flex w-28 shrink-0 items-center justify-end gap-1">
           {payment?.canSign && !show.cancelled ? (
             <Button
               type="button"
