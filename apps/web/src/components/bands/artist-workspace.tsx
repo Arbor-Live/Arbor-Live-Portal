@@ -10,7 +10,6 @@ import {
   GridFourIcon,
   SignatureIcon,
   UserCircleIcon,
-  UsersThreeIcon,
   WarningIcon,
   type Icon,
 } from "@phosphor-icons/react";
@@ -132,7 +131,6 @@ function WorkspaceTabs({
 function BandWorkspaceChrome({ activeTab }: { activeTab: ArtistWorkspaceTabId }) {
   const router = useRouter();
   const profile = useQuery(api.users.getActiveBandProfile, {});
-  const members = useQuery(api.users.listMembersForActiveOrganization, {});
   const riders = useQuery(api.bandRiders.listForActiveBand, {});
   const payments = useQuery(api.bandPayments.listForActiveBand, {});
 
@@ -154,11 +152,6 @@ function BandWorkspaceChrome({ activeTab }: { activeTab: ArtistWorkspaceTabId })
         meta={
           profile ? (
             <>
-              {members !== undefined ? (
-                <MetaItem icon={UsersThreeIcon}>
-                  {members.length} member{members.length === 1 ? "" : "s"}
-                </MetaItem>
-              ) : null}
               {riders !== undefined ? (
                 <MetaItem
                   icon={GridFourIcon}
