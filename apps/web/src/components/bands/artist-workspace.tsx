@@ -132,9 +132,9 @@ function BandWorkspaceChrome({ activeTab }: { activeTab: ArtistWorkspaceTabId })
   const router = useRouter();
   const profile = useQuery(api.users.getActiveBandProfile, {});
   const riders = useQuery(api.bandRiders.listForActiveBand, {});
-  const payments = useQuery(api.bandPayments.listForActiveBand, {});
-
-  const toSign = (payments ?? []).filter((payment) => payment.canSign).length;
+  // Counted on the server over every payout (the same number as the sidebar
+  // chip): ones waiting on this viewer's signature or on payee setup.
+  const pendingPayments = useQuery(api.bandPayments.countPendingActionsForActiveBand, {}) ?? 0;
   const defaultRider = riders?.find((rider) => rider.isDefault) ?? null;
   const act: ActSummary | undefined = profile
     ? {
@@ -175,13 +175,13 @@ function BandWorkspaceChrome({ activeTab }: { activeTab: ArtistWorkspaceTabId })
         activeTab={activeTab}
         badges={{
           payments:
-            toSign > 0 ? (
+            pendingPayments > 0 ? (
               <span
                 className="inline-flex items-center gap-0.5 text-status-amber-700 dark:text-status-amber-300"
-                title={`${toSign} payout${toSign === 1 ? "" : "s"} to sign`}
+                title={`${pendingPayments} payout${pendingPayments === 1 ? " needs" : "s need"} you`}
               >
                 <WarningIcon className="size-3.5" weight="fill" aria-hidden />
-                <span className="text-xs tabular-nums">{toSign}</span>
+                <span className="text-xs tabular-nums">{pendingPayments}</span>
               </span>
             ) : null,
         }}
