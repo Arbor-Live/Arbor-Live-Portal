@@ -44,7 +44,12 @@ async function submitBorrowRequest(
   page: Page,
   args: { purpose: string; typeName: string; signedName: string },
 ) {
-  await page.getByRole("button", { name: "New borrow request" }).click();
+  // The header's button; an empty Mine list has a second one in its empty state.
+  await page
+    .getByTestId("borrow-requests-page")
+    .locator("header")
+    .getByRole("button", { name: "New borrow request" })
+    .click();
   const sheet = page.getByRole("dialog");
   await expect(sheet.getByText("Step 1 of 2")).toBeVisible({ timeout: 15_000 });
 
@@ -98,14 +103,19 @@ test.describe.serial("borrow request loan agreement", () => {
     test("crew must tick every term and e-sign before submitting", async ({ page }) => {
       test.setTimeout(120_000);
       await page.goto("/dashboard/inventory/borrow-requests");
-      await expect(page.getByRole("heading", { name: "Borrow Requests" })).toBeVisible({
+      await expect(page.getByRole("heading", { name: "Borrow requests" })).toBeVisible({
         timeout: 25_000,
       });
+      // Crew can't review, so they land on their own requests.
+      await expect(page.getByTestId("borrow-requests-mine")).toBeVisible({ timeout: 25_000 });
 
       await submitBorrowRequest(page, {
         purpose: crewPurpose,
         typeName,
         signedName: "Casey Crew",
+      });
+      await expect(page.getByTestId("borrow-requests-mine").getByText(crewPurpose)).toBeVisible({
+        timeout: 20_000,
       });
 
       const request = await pollConvex<BorrowRequestState>(
@@ -124,18 +134,25 @@ test.describe.serial("borrow request loan agreement", () => {
     test("admin sees the signed agreement and approves", async ({ page }) => {
       test.setTimeout(120_000);
       await page.goto("/dashboard/inventory/borrow-requests");
-      const card = page
-        .getByTestId("borrow-requests-admin")
-        .locator("div.rounded-md.border")
+      // Reviewers land on To review, filtered to pending requests.
+      const row = page
+        .getByTestId("borrow-requests-review")
+        .locator('[data-testid^="borrow-request-row-"]')
         .filter({ hasText: crewPurpose })
         .first();
-      await expect(card).toBeVisible({ timeout: 25_000 });
+      await expect(row).toBeVisible({ timeout: 25_000 });
 
-      await card.getByText(/Loan agreement e-signed by/).click();
-      await expect(card.getByText(/unsupported equipment loan/)).toBeVisible();
+      await row.getByText(crewPurpose).click();
+      const sheet = page.getByTestId("borrow-request-sheet");
+      await expect(sheet.getByText(/E-signed by/)).toBeVisible();
+      await expect(sheet.getByText(/unsupported equipment loan/)).toBeVisible();
+      // The panel is deep-linkable.
+      await expect(page).toHaveURL(/[?&]request=/);
 
-      await card.getByRole("button", { name: "Approve" }).click();
+      await sheet.getByRole("button", { name: "Approve", exact: true }).click();
       await expect(page.getByText("Borrow request approved.")).toBeVisible({ timeout: 20_000 });
+      // The panel closes once the approval succeeds.
+      await expect(sheet).toBeHidden();
 
       const request = await pollConvex<BorrowRequestState>(
         "e2eHelpers:getLatestBorrowRequestByPurpose",

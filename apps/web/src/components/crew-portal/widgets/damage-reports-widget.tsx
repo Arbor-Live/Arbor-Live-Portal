@@ -44,7 +44,7 @@ export function DamageReportsWidget() {
             {preview.map((report) => (
               <Link
                 key={report._id}
-                href="/dashboard/inventory/damage"
+                href={`/dashboard/inventory/damage?report=${report._id}`}
                 className="block rounded-md border px-3 py-2 text-sm hover:bg-muted/50"
               >
                 <p className="font-medium">

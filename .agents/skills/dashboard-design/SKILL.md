@@ -325,6 +325,11 @@ labels (`TAB_ICONS` in `event-workspace-nav.tsx`, `MOMENT_ICONS` in
 | Magic / auto-build | `MagicWandIcon` (Build run of show); quick fill `LightningIcon` |
 | Signature / e-sign | `SignatureIcon` (awaiting signature, artist payouts) |
 | Version history (quote versions) | `ClockCounterClockwiseIcon` |
+| Expand / collapse a tree row | `CaretRightIcon` / `CaretDownIcon` (`weight="bold"`, `TreeRowLeading` in `components/tree-row.tsx`) |
+| Review queue (things waiting on staff) | `ClipboardTextIcon` |
+| Comment count on a row | `ChatCircleIcon` (`size-3.5`) |
+| File to upload · CSV file | `UploadSimpleIcon` (`FileDropzone`) · `FileCsvIcon` |
+| Step-by-step progress log | `ListChecksIcon`; a running step `CircleNotchIcon` with `animate-spin` |
 | Select rows for a batch action | `Checkbox` (`components/ui/checkbox.tsx`), with a select-all in the group header |
 | Stage plot · rider inputs · monitor mixes | `GridFourIcon` · `PlugsConnectedIcon` · `HeadphonesIcon` (rider tabs, `lib/rider-editor-tabs.ts`) |
 | Undo · redo | `ArrowCounterClockwiseIcon` · `ArrowClockwiseIcon` |

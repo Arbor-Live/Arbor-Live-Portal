@@ -169,32 +169,41 @@ async function enrichReports(
 export const list = query({
   args: {
     status: v.optional(statusValue),
+    /** Several statuses at once (the queue's Status chip); wins over `status`. */
+    statuses: v.optional(v.array(statusValue)),
     eventId: v.optional(v.id("events")),
   },
   returns: v.array(reportValidator),
   handler: async (ctx, args) => {
     await requireCrew(ctx);
+    const statuses = args.statuses ?? (args.status ? [args.status] : undefined);
     let rows;
     if (args.eventId) {
       rows = await ctx.db
         .query("damageReports")
         .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
         .take(500);
-    } else if (args.status) {
-      rows = await ctx.db
-        .query("damageReports")
-        .withIndex("by_status_and_reportedAt", (q) => q.eq("status", args.status!))
-        .order("desc")
-        .take(500);
+      if (statuses) rows = rows.filter((row) => statuses.includes(row.status));
+    } else if (statuses) {
+      // Newest 500 per status, merged newest first, so no status hides another's recent rows.
+      const perStatus = await Promise.all(
+        [...new Set(statuses)].map((status) =>
+          ctx.db
+            .query("damageReports")
+            .withIndex("by_status_and_reportedAt", (q) => q.eq("status", status))
+            .order("desc")
+            .take(500),
+        ),
+      );
+      rows = perStatus
+        .flat()
+        .sort((a, b) => b.reportedAt - a.reportedAt)
+        .slice(0, 500);
     } else {
       rows = await ctx.db.query("damageReports").order("desc").take(500);
     }
 
-    const filtered = args.status
-      ? rows.filter((row) => row.status === args.status)
-      : rows;
-
-    return await enrichReports(ctx, filtered);
+    return await enrichReports(ctx, rows);
   },
 });
 

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { runConvex } from "../helpers/convex";
-import { checkboxByLabel, formField } from "../helpers/form";
+import { formField } from "../helpers/form";
 import { pickSelectOption } from "../helpers/select";
 import {
   deleteInventoryFixtures,
@@ -49,11 +49,10 @@ test.describe.serial("inventory package public listing", () => {
 
   test("listing publicly requires a browse section", async ({ page }) => {
     await page.goto("/dashboard/inventory/packages");
-    await expect(page.getByText("Packages", { exact: true }).first()).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(page.getByTestId("packages-summary")).toBeVisible({ timeout: 30_000 });
 
-    await page.getByRole("button", { name: "Create Package" }).click();
+    // The empty state has its own New package button, so take the header's.
+    await page.getByRole("button", { name: "New package", exact: true }).first().click();
     const editor = page.locator("#package-editor-form");
     await expect(editor).toBeVisible({ timeout: 20_000 });
 
@@ -67,11 +66,11 @@ test.describe.serial("inventory package public listing", () => {
     await expect(catalogRow).toBeVisible({ timeout: 20_000 });
     await catalogRow.getByRole("button", { name: /^Add (to package|another)$/ }).click();
 
-    await checkboxByLabel(editor, "List publicly").check();
+    await editor.getByRole("switch", { name: "List publicly" }).click();
     // Ticking the box reveals the section picker, deliberately left unset.
     await expect(editor.getByText("Public browse section")).toBeVisible({ timeout: 20_000 });
 
-    await page.getByRole("button", { name: "Create", exact: true }).click();
+    await page.getByRole("button", { name: "Create package", exact: true }).click();
 
     // The zod refinement catches this before the mutation runs, so the editor
     // stays open with the work intact and says why. The section picker is not a
@@ -83,7 +82,7 @@ test.describe.serial("inventory package public listing", () => {
     expect(runConvex("e2eHelpers:getInventoryPackageByName", { name: packageName })).toBeNull();
 
     await pickSelectOption(page, editor.locator("#package-public-bucket"), "Lighting");
-    await page.getByRole("button", { name: "Create", exact: true }).click();
+    await page.getByRole("button", { name: "Create package", exact: true }).click();
 
     const created = await waitForInventoryPackage(packageName, (state) => Boolean(state?.packageId));
     expect(created.publicListing).toBe(true);
@@ -101,14 +100,17 @@ test.describe.serial("inventory package public listing", () => {
     const created = await waitForInventoryPackage(packageName, (state) => Boolean(state?.packageId));
 
     await page.goto("/dashboard/inventory/packages");
-    const card = page.getByTestId(`package-card-${created.packageId}`);
-    await expect(card).toBeVisible({ timeout: 30_000 });
-    await card.getByRole("button", { name: "Edit", exact: true }).click();
+    const row = page.getByTestId(`package-row-${created.packageId}`);
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    // The row's main area is its first button (the checkbox has role="checkbox").
+    await row.getByRole("button").first().click();
 
     const editor = page.locator("#package-editor-form");
     await expect(editor).toBeVisible({ timeout: 20_000 });
-    await checkboxByLabel(editor, "Active").uncheck();
-    await page.getByRole("button", { name: "Update", exact: true }).click();
+    const active = editor.getByRole("switch", { name: "Active", exact: true });
+    await expect(active).toBeChecked();
+    await active.click();
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
 
     // `publicListing` stays true — `listPublicPackages` filters on `active`
     // separately, so archiving a package hides it without losing the publish

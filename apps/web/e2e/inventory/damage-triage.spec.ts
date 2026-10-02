@@ -15,12 +15,11 @@ test.describe("damage triage", () => {
     };
 
     // Other specs leave open reports behind, so always act inside this
-    // report's own card rather than on the first matching button.
-    const card = () =>
-      page.locator('[data-slot="card"]').filter({ hasText: seeded.assetId }).first();
+    // report's own row rather than on the first matching button.
+    const card = () => page.getByTestId("damage-report-row").filter({ hasText: seeded.assetId }).first();
     const sheet = () => page.getByTestId("damage-report-sheet");
 
-    // The sheet is modal, so it must be dismissed before the filter buttons
+    // The sheet is modal, so it must be dismissed before the filter chips
     // underneath are clickable again.
     async function closeSheet() {
       await page.keyboard.press("Escape");
@@ -29,7 +28,7 @@ test.describe("damage triage", () => {
 
     await page.goto(seeded.queuePath);
     await expect(page.getByText("Damage & repair").first()).toBeVisible({ timeout: 25_000 });
-    await page.getByRole("button", { name: "open", exact: true }).click();
+    // The queue opens on Open + In progress.
     await expect(card()).toBeVisible({ timeout: 20_000 });
 
     await card().click();
@@ -43,8 +42,7 @@ test.describe("damage triage", () => {
     );
     await closeSheet();
 
-    await page.getByRole("button", { name: "in progress", exact: true }).click();
-    await expect(card()).toBeVisible({ timeout: 20_000 });
+    await expect(card()).toContainText("In progress", { timeout: 20_000 });
 
     await card().click();
     await expect(sheet()).toBeVisible({ timeout: 20_000 });
@@ -59,7 +57,11 @@ test.describe("damage triage", () => {
     expect(resolved.assetId).toBe(seeded.assetId);
     await closeSheet();
 
-    await page.getByRole("button", { name: "resolved", exact: true }).click();
+    // Resolved reports leave the default queue; add Resolved to the Status chip.
+    await expect(card()).toBeHidden({ timeout: 20_000 });
+    await page.getByTestId("filter-chip-status").getByRole("button").first().click();
+    await page.getByTestId("filter-menu-status").getByLabel("Resolved").check();
+    await page.keyboard.press("Escape");
     await expect(card()).toBeVisible({ timeout: 20_000 });
   });
 });

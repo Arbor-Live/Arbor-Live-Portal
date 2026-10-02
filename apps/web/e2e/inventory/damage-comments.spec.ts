@@ -90,11 +90,11 @@ test.describe("damage report comments and mentions", () => {
     expect(posted!.body).toContain(`@${mentionHandle}`);
     expect(posted!.mentionedUserIds).toContain(crew.userId);
 
-    // The queue card surfaces the thread size once the sheet is dismissed.
+    // The queue row surfaces the thread size once the sheet is dismissed.
     await page.keyboard.press("Escape");
     await expect(sheet).toBeHidden({ timeout: 15_000 });
     const card = page
-      .locator('[data-slot="card"]')
+      .getByTestId("damage-report-row")
       .filter({ hasText: seeded.assetId })
       .first();
     await expect(card.getByTestId("damage-comment-count")).toContainText("1 comment", {

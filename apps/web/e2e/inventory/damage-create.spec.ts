@@ -49,7 +49,9 @@ test.describe("damage report create", () => {
     expect(report.operability).toBe("needs_repair");
     expect(report.notes).toBe(notes);
 
-    await page.getByRole("button", { name: "open", exact: true }).click();
-    await expect(page.getByText(seeded.assetId).first()).toBeVisible({ timeout: 25_000 });
+    // The queue already shows Open reports.
+    await expect(
+      page.getByTestId("damage-report-row").filter({ hasText: seeded.assetId }).first(),
+    ).toBeVisible({ timeout: 25_000 });
   });
 });

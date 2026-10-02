@@ -3,11 +3,16 @@
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "convex/react";
+import { ChatCircleIcon, PlusIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { DamageReportSheet } from "@/components/inventory/damage-report-sheet";
 import { DamageReportWizard } from "@/components/inventory/damage-report-wizard";
+import { ListRow } from "@/components/list-row";
+import { EmptyState, ListSummary, RowCell, RowList, RowMenu, RowText } from "@/components/list-page";
+import { PageHeader, StatusPill } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   activeFilters,
   FilterBar,
@@ -15,36 +20,53 @@ import {
   type FilterDefinition,
   type FilterState,
 } from "@/components/filter-bar";
-import { formatDateTime } from "@/lib/format";
+import {
+  DAMAGE_STATUS_LABELS,
+  DAMAGE_STATUS_OPTIONS,
+  damageStatusTone,
+  OPERABILITY_LABELS,
+  severityTone,
+  type DamageStatus,
+} from "@/lib/damage-status";
+import { formatDate } from "@/lib/format";
 
 const SEVERITY_OPTIONS = [1, 2, 3, 4, 5].map((level) => ({ value: String(level), label: `${level} of 5` }));
 
-const OPERABILITY_OPTIONS = [
-  { value: "functional", label: "Still works" },
-  { value: "needs_repair", label: "Needs repair" },
-];
+const OPERABILITY_OPTIONS = Object.entries(OPERABILITY_LABELS).map(([value, label]) => ({ value, label }));
+
+/** The queue opens on what still needs fixing. */
+const DEFAULT_FILTERS: FilterState = { status: { operator: "is", values: ["open", "in_progress"] } };
+
+/** Turns the Status chip into the statuses the server reads; `undefined` reads every status. */
+function statusesFor(filter: FilterState[string] | undefined): DamageStatus[] | undefined {
+  if (!filter?.values.length) return undefined;
+  const picked = filter.values as DamageStatus[];
+  if (filter.operator === "is") return picked;
+  return DAMAGE_STATUS_OPTIONS.map((option) => option.value).filter((status) => !picked.includes(status));
+}
+
+function plural(count: number, noun: string) {
+  return `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
+}
 
 export function DamageQueueManager() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [statusFilter, setStatusFilter] = useState<"open" | "in_progress" | "resolved" | "all">(
-    "open",
-  );
   const [wizardOpen, setWizardOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<FilterState>({});
-  const reports = useQuery(api.damageReports.list, {
-    status: statusFilter === "all" ? undefined : statusFilter,
-  });
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const applied = activeFilters(filters);
+  const reports = useQuery(api.damageReports.list, { statuses: statusesFor(applied.status) });
 
   const allRows = useMemo(() => reports ?? [], [reports]);
-  // The list is bounded (newest 500 per status), so the extra filters run here.
+  // Status filters on the server; the list is bounded (newest 500), so the rest run here.
   const filterDefinitions = useMemo<FilterDefinition[]>(() => {
     const distinct = (entries: Array<[string, string]>) =>
       [...new Map(entries).entries()]
         .map(([value, label]) => ({ value, label }))
         .sort((a, b) => a.label.localeCompare(b.label));
     return [
+      { id: "status", label: "Status", options: DAMAGE_STATUS_OPTIONS },
       { id: "severity", label: "Severity", options: SEVERITY_OPTIONS },
       { id: "operability", label: "Operability", options: OPERABILITY_OPTIONS, single: true },
       {
@@ -87,7 +109,11 @@ export function DamageQueueManager() {
         matchesFilter(filters.reporter, report.reportedByUserId),
     );
   }, [allRows, filters, search]);
-  const narrowed = Boolean(search.trim()) || Object.keys(activeFilters(filters)).length > 0;
+  // Anything other than the default open queue counts as narrowed.
+  const narrowed =
+    Boolean(search.trim()) ||
+    Object.keys(applied).some((id) => id !== "status") ||
+    JSON.stringify(applied.status) !== JSON.stringify(DEFAULT_FILTERS.status);
 
   // `?report=` is what the mention email links to, so the open report is derived
   // from the URL rather than mirrored into state — a deep link and an in-page
@@ -117,19 +143,25 @@ export function DamageQueueManager() {
     [commentCounts],
   );
 
+  const countByStatus = (status: DamageStatus) => rows.filter((row) => row.status === status).length;
+  const statusCounts = DAMAGE_STATUS_OPTIONS.map((option) => ({
+    label: option.label.toLowerCase(),
+    count: countByStatus(option.value),
+  })).filter((entry) => entry.count > 0);
+  const needsRepair = rows.filter((row) => row.status !== "resolved" && row.operability === "needs_repair").length;
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Damage & repair</h1>
-          <p className="text-sm text-muted-foreground">
-            Crew can report damage. Operations/admin triage the queue. Open a report to discuss it.
-          </p>
-        </div>
-        <Button type="button" onClick={() => setWizardOpen(true)}>
-          Report damage
-        </Button>
-      </div>
+    <div className="space-y-4 pb-24" data-testid="damage-page">
+      <PageHeader
+        title="Damage & repair"
+        description="Crew report damaged gear here, and Operations triage it. Open a report to change its status or discuss it."
+        actions={
+          <Button type="button" size="sm" onClick={() => setWizardOpen(true)}>
+            <PlusIcon />
+            Report damage
+          </Button>
+        }
+      />
 
       <FilterBar
         search={search}
@@ -139,97 +171,100 @@ export function DamageQueueManager() {
         filters={filterDefinitions}
         value={filters}
         onChange={setFilters}
-      >
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Status">
-          {(["open", "in_progress", "resolved", "all"] as const).map((value) => (
-            <Button
-              key={value}
-              type="button"
-              size="sm"
-              variant={statusFilter === value ? "default" : "outline"}
-              onClick={() => setStatusFilter(value)}
-            >
-              <span className="capitalize">
-                {value === "all" ? "All" : value.replace("_", " ")}
-              </span>
-            </Button>
-          ))}
-        </div>
-      </FilterBar>
-      <p className="text-sm text-muted-foreground" data-testid="damage-summary">
-        {rows.length} report{rows.length === 1 ? "" : "s"}
-        {narrowed ? ` of ${allRows.length} ${statusFilter === "all" ? "in total" : statusFilter.replace("_", " ")}` : ""}
-      </p>
+      />
 
-      <div className="grid gap-3">
-        {rows.map((report) => {
-          const commentCount = commentCountByThread.get(report.threadId) ?? 0;
-          return (
-            <Card
-              key={report._id}
-              role="button"
-              tabIndex={0}
-              data-testid="damage-report-card"
-              className="cursor-pointer transition-colors hover:border-foreground/30"
-              onClick={() => openReport(report._id)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault();
-                openReport(report._id);
-              }}
+      {reports === undefined ? (
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-72" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      ) : (
+        <>
+          <ListSummary testId="damage-summary" order="Newest first. Open a report for details, status and comments.">
+            {plural(rows.length, "report")}
+            {statusCounts.length > 1
+              ? ` · ${statusCounts.map((entry) => `${entry.count} ${entry.label}`).join(" · ")}`
+              : ""}
+            {needsRepair ? ` · ${needsRepair} need${needsRepair === 1 ? "s" : ""} repair` : ""}
+          </ListSummary>
+
+          {rows.length ? (
+            <RowList testId="damage-report-list">
+              {rows.map((report) => {
+                const commentCount = commentCountByThread.get(report.threadId) ?? 0;
+                const name = report.assetId ?? "No ID";
+                return (
+                  <ListRow
+                    key={report._id}
+                    data-testid="damage-report-row"
+                    onOpen={() => openReport(report._id)}
+                    actions={
+                      <RowMenu label={`More for ${name}`}>
+                        <DropdownMenuItem onSelect={() => openReport(report._id)}>Open details</DropdownMenuItem>
+                      </RowMenu>
+                    }
+                  >
+                    <RowText
+                      eyebrow={report.eventTitle ?? "No event"}
+                      title={report.typeName ? `${name} · ${report.typeName}` : name}
+                      detail={report.notes ?? OPERABILITY_LABELS[report.operability]}
+                    />
+                    {commentCount > 0 ? (
+                      <span
+                        className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground tabular-nums"
+                        title={plural(commentCount, "comment")}
+                        data-testid="damage-comment-count"
+                      >
+                        <ChatCircleIcon className="size-3.5" aria-hidden />
+                        {commentCount}
+                        <span className="sr-only"> comment{commentCount === 1 ? "" : "s"}</span>
+                      </span>
+                    ) : null}
+                    <RowCell className="w-20" align="left">
+                      <StatusPill tone={severityTone(report.severity)} dot={false} className="h-6">
+                        Sev {report.severity}/5
+                      </StatusPill>
+                    </RowCell>
+                    <RowCell className="w-32" align="left" hideBelow="lg" muted>
+                      {report.reportedByName}
+                    </RowCell>
+                    <RowCell className="w-24" hideBelow="md" muted>
+                      {formatDate(report.reportedAt)}
+                    </RowCell>
+                    <RowCell className="w-28" align="left">
+                      <StatusPill tone={damageStatusTone(report.status)} className="h-6">
+                        {DAMAGE_STATUS_LABELS[report.status]}
+                      </StatusPill>
+                    </RowCell>
+                  </ListRow>
+                );
+              })}
+            </RowList>
+          ) : (
+            <EmptyState
+              action={
+                narrowed ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearch("");
+                      setFilters(DEFAULT_FILTERS);
+                    }}
+                  >
+                    Back to the open queue
+                  </Button>
+                ) : null
+              }
             >
-              <CardHeader className="pb-2">
-                <CardTitle className="flex flex-wrap items-baseline gap-2 text-base">
-                  <span>
-                    {report.assetId ?? "No ID"}
-                    {report.typeName ? ` · ${report.typeName}` : ""}
-                  </span>
-                  {commentCount > 0 ? (
-                    <span
-                      className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground"
-                      data-testid="damage-comment-count"
-                    >
-                      {commentCount} comment{commentCount === 1 ? "" : "s"}
-                    </span>
-                  ) : null}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-1 text-sm text-muted-foreground">
-                <p>
-                  Severity {report.severity}/5 ·{" "}
-                  <span className="capitalize">{report.operability.replace("_", " ")}</span> ·{" "}
-                  <span className="capitalize">{report.status.replace("_", " ")}</span>
-                </p>
-                <p>
-                  Event: {report.eventTitle ?? "Unknown / not linked"}
-                </p>
-                <p>
-                  Reported by {report.reportedByName} · {formatDateTime(report.reportedAt)}
-                </p>
-                {report.notes ? <p className="line-clamp-2">{report.notes}</p> : null}
-              </CardContent>
-            </Card>
-          );
-        })}
-        {!rows.length ? (
-          <div className="space-y-2 border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-            <p>{narrowed ? "No reports match this search and these filters." : "No damage reports in this status."}</p>
-            {narrowed ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSearch("");
-                  setFilters({});
-                }}
-              >
-                Clear search and filters
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+              {narrowed
+                ? "No reports match this search and these filters."
+                : "Nothing waiting for repair. Report damage when gear comes back broken."}
+            </EmptyState>
+          )}
+        </>
+      )}
 
       <DamageReportSheet
         reportId={selectedReportId as Id<"damageReports"> | null}
