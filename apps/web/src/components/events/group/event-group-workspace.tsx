@@ -129,11 +129,6 @@ function EventGroupHeader() {
         </>
       }
       title={series.title}
-      description={
-        multiDay
-          ? "Days that share one invoice, set up once and applied to all days, later days, or one day."
-          : `${intervalLabel(series.intervalWeeks)} series, set up once and applied to every occurrence.`
-      }
       meta={
         <>
           <MetaItem icon={CalendarBlankIcon}>
@@ -143,6 +138,7 @@ function EventGroupHeader() {
                 : `${formatDate(first.startAt)} – ${formatDate(last.startAt)} · ${occurrences.length} ${nouns}`
               : `No ${nouns} yet`}
           </MetaItem>
+          {!multiDay ? <MetaItem icon={RepeatIcon}>{intervalLabel(series.intervalWeeks)}</MetaItem> : null}
           <MetaItem icon={MapPinIcon}>
             {series.venueName ?? <span className="text-muted-foreground">No venue</span>}
           </MetaItem>

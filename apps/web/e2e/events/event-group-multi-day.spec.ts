@@ -7,8 +7,10 @@ type SeededBooking = {
   invoiceId: string;
   groupId: string;
   eventIds: string[];
+  startAts: number[];
   groupPath: string;
 };
+type EventFields = { title: string; status: string; notes: string | null; teamsInterested: string[] };
 
 type Position = { label: string; templateKey: string | null };
 type GroupState = { kind: string; occurrenceCount: number; updatedAt: number };
@@ -113,5 +115,71 @@ test.describe("event groups: multi-day booking", () => {
       (state) => state?.occurrenceCount === 2,
     );
     expect(afterCancel.kind).toBe("multi_day");
+  });
+
+  test("an 'All days' edit spreads only what was edited and leaves each day's own fields", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const title = `E2E Multi-day Edit ${Date.now()}`;
+    const seeded = runConvex("e2eHelpers:seedMultiDayBooking", { title }) as SeededBooking;
+    const [day1, day2] = seeded.eventIds as [string, string];
+
+    await page.goto(`/dashboard/events/${day1}`);
+    await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 25_000 });
+    await page.getByRole("button", { name: "Lighting", exact: true }).click();
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "All days" }).click();
+    await expect(page.getByText("Event saved.").first()).toBeVisible({ timeout: 30_000 });
+
+    // Day 2 picked up the shared field...
+    const spread = await pollConvex<EventFields>(
+      "e2eHelpers:getEventFields",
+      { eventId: day2 },
+      (fields) => fields?.teamsInterested.includes("Lighting") === true,
+    );
+    // ...and nothing else: its own title, status and notes stay.
+    expect(spread.title).toBe(`${title} — Day 2`);
+    expect(spread.status).toBe("ready");
+    expect(spread.notes).toBe("Day 2 notes");
+  });
+
+  test("adding a day puts it on the booking's invoice and in its group", async ({ page }) => {
+    test.setTimeout(180_000);
+    const title = `E2E Multi-day Add ${Date.now()}`;
+    const seeded = runConvex("e2eHelpers:seedMultiDayBooking", { title }) as SeededBooking;
+    // A day of this month that the booking doesn't already use.
+    const taken = new Set(
+      seeded.startAts.map((ms) =>
+        new Date(ms).toLocaleDateString("en-US", { timeZone: "America/Los_Angeles", day: "numeric" }),
+      ),
+    );
+    const dayLabel = ["28", "27", "26"].find((candidate) => !taken.has(candidate))!;
+
+    await page.goto(seeded.groupPath);
+    await expect(page.getByTestId("event-group-days-summary")).toContainText("2 days", {
+      timeout: 25_000,
+    });
+    await page.getByRole("button", { name: /Pick a date/ }).click();
+    await page
+      .locator("[data-slot='popover-content']")
+      .last()
+      .locator("[data-slot='calendar']")
+      .locator("button:not([data-outside])")
+      .filter({ hasText: new RegExp(`^${dayLabel}$`) })
+      .click();
+    await page.getByRole("button", { name: "Add day" }).click();
+    await expect(page.getByTestId("event-group-days-summary")).toContainText("3 days", {
+      timeout: 30_000,
+    });
+
+    const state = await pollConvex<GroupState & { occurrenceTitles: string[] }>(
+      "e2eHelpers:getEventSeriesStateByEventId",
+      { eventId: seeded.eventIds[0] },
+      (group) => group?.occurrenceCount === 3,
+    );
+    expect(state.kind).toBe("multi_day");
+    // The new day is titled from the booking, not left as "Day N".
+    expect(state.occurrenceTitles.filter((name) => name.startsWith(`${title} — `))).toHaveLength(3);
   });
 });

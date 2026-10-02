@@ -308,7 +308,6 @@ export function EventSeriesPositionEditor({
       </Card>
 
       <PositionTemplateSheet
-        kind={kind}
         draft={selectedDraft}
         onOpenChange={(open) => {
           if (!open) setSelectedClientId(null);
@@ -341,13 +340,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function PositionTemplateSheet({
-  kind,
   draft,
   onOpenChange,
   onChange,
   onRemove,
 }: {
-  kind: EventGroupKind;
   draft: SeriesPositionTemplateDraft | null;
   onOpenChange: (open: boolean) => void;
   onChange: (clientId: string, patch: Partial<SeriesPositionTemplateDraft>) => void;
@@ -359,7 +356,6 @@ function PositionTemplateSheet({
         {draft ? (
           <PositionTemplateBody
             key={draft.clientId}
-            kind={kind}
             draft={draft}
             onChange={onChange}
             onRemove={onRemove}
@@ -372,13 +368,11 @@ function PositionTemplateSheet({
 }
 
 function PositionTemplateBody({
-  kind,
   draft,
   onChange,
   onRemove,
   onClose,
 }: {
-  kind: EventGroupKind;
   draft: SeriesPositionTemplateDraft;
   onChange: (clientId: string, patch: Partial<SeriesPositionTemplateDraft>) => void;
   onRemove: (clientId: string) => void;
