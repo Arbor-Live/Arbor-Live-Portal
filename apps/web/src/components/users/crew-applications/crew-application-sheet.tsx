@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { CheckIcon } from "@phosphor-icons/react";
 import { StatusPill } from "@/components/page-header";
@@ -40,6 +40,7 @@ import {
   type CrewApplicationStatus,
   type OutreachStage,
 } from "./crew-application-progress";
+import { TraineeReadinessDialog, TraineeReadinessNotice } from "./trainee-readiness";
 
 export type CrewApplicationRow = {
   _id: Id<"crewApplications">;
@@ -179,7 +180,13 @@ function OutreachStepper({
 /** Turns the form into mutation args; throws a readable error when something is missing. */
 type SubmitHandler<T> = (getArgs: () => T) => void;
 
-function TraineeAssignForm({ onSubmit }: { onSubmit: SubmitHandler<TraineeAssignArgs> }) {
+function TraineeAssignForm({
+  staffOptions,
+  onSubmit,
+}: {
+  staffOptions: UserSelectOption[];
+  onSubmit: SubmitHandler<TraineeAssignArgs>;
+}) {
   const [eventId, setEventId] = useState("");
   const [presenceMode, setPresenceMode] = useState<PresenceMode>("entire_event");
   const [scheduleBlockId, setScheduleBlockId] = useState("");
@@ -189,7 +196,16 @@ function TraineeAssignForm({ onSubmit }: { onSubmit: SubmitHandler<TraineeAssign
   // block (setup), which is before the show stored on event.startAt.
   const [callTimeOverride, setCallTimeOverride] = useState<string | null>(null);
 
+  const [fixOpen, setFixOpen] = useState(false);
+  const [submitQueued, setSubmitQueued] = useState(false);
+
   const eventDetails = useQuery(api.events.get, eventId ? { id: eventId as Id<"events"> } : "skip");
+  // Checked as soon as an event is picked, so a missing venue address or lead
+  // shows up before the form is filled in, not as an error after Assign.
+  const readiness = useQuery(
+    api.crewApplications.traineeEventReadiness,
+    eventId ? { eventId: eventId as Id<"events"> } : "skip",
+  );
 
   // Crew are scheduled per section; doors, soundchecks, and sets aren't shifts.
   const scheduleBlocks = useMemo(
@@ -204,6 +220,24 @@ function TraineeAssignForm({ onSubmit }: { onSubmit: SubmitHandler<TraineeAssign
 
   const callTimeInput =
     callTimeOverride ?? (defaultCallTimeMs != null ? toLocalDateTimeInput(new Date(defaultCallTimeMs)) : "");
+
+  /** Assign when the event is ready; otherwise open the fix dialog. */
+  function submitOrFix() {
+    if (readiness && readiness.missing.length > 0) {
+      setFixOpen(true);
+      return;
+    }
+    onSubmit(buildArgs);
+  }
+
+  // Finish a click that came in while the readiness check was loading.
+  useEffect(() => {
+    if (!submitQueued || readiness === undefined) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- run the queued Assign once readiness arrives
+    setSubmitQueued(false);
+    submitOrFix();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire only when the check lands
+  }, [readiness, submitQueued]);
 
   function buildArgs(): TraineeAssignArgs {
     if (!eventId) throw new Error("Select an event.");
@@ -234,7 +268,13 @@ function TraineeAssignForm({ onSubmit }: { onSubmit: SubmitHandler<TraineeAssign
       data-testid="crew-application-trainee-form"
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit(buildArgs);
+        // Still checking the event: hold the click until the check lands, rather
+        // than let the mutation fail with the raw list.
+        if (eventId && readiness === undefined) {
+          setSubmitQueued(true);
+          return;
+        }
+        submitOrFix();
       }}
     >
       <div className="space-y-2">
@@ -243,6 +283,8 @@ function TraineeAssignForm({ onSubmit }: { onSubmit: SubmitHandler<TraineeAssign
           value={eventId}
           onChange={(value) => {
             setEventId(value);
+            // A click queued for the previous event must not submit this one.
+            setSubmitQueued(false);
             setPresenceMode("entire_event");
             setScheduleBlockId("");
             setStartsAtInput("");
@@ -254,6 +296,23 @@ function TraineeAssignForm({ onSubmit }: { onSubmit: SubmitHandler<TraineeAssign
           They get an intro email and a calendar invite. Trainees don&apos;t get a portal login.
         </p>
       </div>
+
+      {eventId && readiness ? (
+        <>
+          <TraineeReadinessNotice readiness={readiness} onFix={() => setFixOpen(true)} />
+          <TraineeReadinessDialog
+            open={fixOpen}
+            onOpenChange={setFixOpen}
+            eventId={eventId as Id<"events">}
+            readiness={readiness}
+            staffOptions={staffOptions}
+            onAssign={() => {
+              setFixOpen(false);
+              onSubmit(buildArgs);
+            }}
+          />
+        </>
+      ) : null}
 
       {eventId ? (
         <>
@@ -569,7 +628,7 @@ export function CrewApplicationSheetBody({
             </ToggleGroupItem>
           </ToggleGroup>
           {mode === "trainee" ? (
-            <TraineeAssignForm onSubmit={onAssignTrainee} />
+            <TraineeAssignForm staffOptions={ownerOptions} onSubmit={onAssignTrainee} />
           ) : (
             <ConvertForm application={application} onSubmit={onConvert} />
           )}

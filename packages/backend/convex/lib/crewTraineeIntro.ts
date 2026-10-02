@@ -93,7 +93,7 @@ export function traineeScheduleSpan(
 async function resolveVenueLocation(
   ctx: QueryCtx | MutationCtx,
   event: Doc<"events">,
-): Promise<{ venueName?: string; address?: string; googleMapsUrl?: string }> {
+): Promise<TraineeVenueStatus> {
   const venueName = event.venueName?.trim() || undefined;
   if (!event.venueId) {
     return { venueName };
@@ -107,43 +107,141 @@ async function resolveVenueLocation(
   const googleMapsUrl =
     venue.googleMapsUrl?.trim() || inherited.googleMapsUrl?.value.trim() || undefined;
   return {
+    venueId: venue._id,
     venueName: venueName || venue.path || venue.name,
     address,
     googleMapsUrl,
   };
 }
 
+export type TraineeVenueStatus = {
+  /** Unset when the event only has a free-text venue name (no saved venue, so no address). */
+  venueId?: Id<"venues">;
+  venueName?: string;
+  address?: string;
+  googleMapsUrl?: string;
+};
+
+export type TraineeContactStatus = {
+  role: "event_manager" | "day_of_lead";
+  userId: string;
+  name?: string;
+  /** Fields the intro email needs that this person lacks ("name", "email", "phone"), or "user" when the account is gone. */
+  missing: Array<"user" | "name" | "email" | "phone">;
+  contact?: TraineeIntroContact;
+};
+
+/** What an event still needs before a trainee intro can go out (venue and a reachable contact). */
+export type TraineeEventReadiness = {
+  venue: TraineeVenueStatus;
+  eventManager?: TraineeContactStatus;
+  dayOfLead?: TraineeContactStatus;
+  /** Complete contacts, manager first; the same person once. */
+  contacts: TraineeIntroContact[];
+  /** True when manager and lead resolve to the same person. */
+  contactsCollapsed: boolean;
+  /** Gaps on the event itself (title, times), fixed on the event page rather than in the dialog. */
+  eventMissing: string[];
+  /** Plain-words list of everything missing, event gaps included; empty when ready. */
+  missing: string[];
+};
+
+const ROLE_LABELS = { event_manager: "Event manager", day_of_lead: "Event lead" } as const;
+
 async function resolveRoleContact(
   ctx: QueryCtx | MutationCtx,
-  args: {
-    role: "event_manager" | "day_of_lead";
-    userId?: string;
-  },
-): Promise<{ contact?: TraineeIntroContact; missing: string[] }> {
-  const missing: string[] = [];
-  const roleLabel = args.role === "event_manager" ? "Event manager" : "Event lead";
-
-  const userId = args.userId?.trim();
-  if (!userId) return { missing: [] };
+  role: "event_manager" | "day_of_lead",
+  rawUserId: string | undefined,
+): Promise<TraineeContactStatus | undefined> {
+  const userId = rawUserId?.trim();
+  if (!userId) return undefined;
 
   const userContact = await resolveUserContact(ctx, userId);
-  if (!userContact) {
-    missing.push(`${roleLabel}: user not found`);
-    return { missing };
-  }
-  if (!userContact.name) missing.push(`${roleLabel}: name`);
-  if (!userContact.email || !isValidEmail(userContact.email)) missing.push(`${roleLabel}: email`);
-  if (!userContact.phone) missing.push(`${roleLabel}: phone`);
-  if (missing.length > 0) return { missing };
+  if (!userContact) return { role, userId, missing: ["user"] };
+  const missing: TraineeContactStatus["missing"] = [];
+  if (!userContact.name) missing.push("name");
+  if (!userContact.email || !isValidEmail(userContact.email)) missing.push("email");
+  if (!userContact.phone) missing.push("phone");
+  if (missing.length > 0) return { role, userId, name: userContact.name, missing };
   return {
+    role,
+    userId,
+    name: userContact.name,
+    missing,
     contact: {
-      role: args.role,
+      role,
       name: userContact.name!,
       email: userContact.email!,
       phone: userContact.phone!,
       userId,
     },
-    missing: [],
+  };
+}
+
+function describeContactGap(status: TraineeContactStatus) {
+  const label = ROLE_LABELS[status.role];
+  if (status.missing.includes("user")) return `${label}: the assigned user no longer exists`;
+  return `${label}${status.name ? ` ${status.name}` : ""}: no ${status.missing.join(" or ")} on their profile`;
+}
+
+/**
+ * The venue and contact half of the trainee send gate, shared by the assign
+ * mutation and the early warning in the admin panel. One complete contact is
+ * enough: an incomplete manager is skipped when the lead is reachable.
+ */
+export async function resolveTraineeEventReadiness(
+  ctx: QueryCtx | MutationCtx,
+  event: Doc<"events">,
+): Promise<TraineeEventReadiness> {
+  const eventMissing: string[] = [];
+  if (!event.title?.trim()) eventMissing.push("Event title");
+  if (!event.startAt) eventMissing.push("Event start time");
+  if (!event.endAt) eventMissing.push("Event end time");
+  if (event.startAt && event.endAt && event.endAt <= event.startAt) {
+    eventMissing.push("Event end time (must be after start)");
+  }
+
+  const missing: string[] = [...eventMissing];
+  const venue = await resolveVenueLocation(ctx, event);
+  if (!venue.venueName) missing.push("Venue");
+  else if (!venue.address) {
+    missing.push(
+      venue.venueId
+        ? `Venue address for ${venue.venueName}`
+        : `Venue address (“${venue.venueName}” isn't a saved venue yet)`,
+    );
+  }
+
+  const eventManager = await resolveRoleContact(ctx, "event_manager", event.eventManagerUserId);
+  const dayOfLead = await resolveRoleContact(ctx, "day_of_lead", event.dayOfLeadUserId);
+
+  const contacts: TraineeIntroContact[] = [];
+  if (eventManager?.contact) contacts.push(eventManager.contact);
+  if (dayOfLead?.contact) {
+    const manager = eventManager?.contact;
+    const sameAsManager =
+      manager &&
+      ((manager.userId && dayOfLead.contact.userId && manager.userId === dayOfLead.contact.userId) ||
+        (manager.email === dayOfLead.contact.email &&
+          manager.phone === dayOfLead.contact.phone &&
+          manager.name === dayOfLead.contact.name));
+    if (!sameAsManager) contacts.push(dayOfLead.contact);
+  }
+
+  if (contacts.length === 0) {
+    const assigned = [eventManager, dayOfLead].filter((entry): entry is TraineeContactStatus => Boolean(entry));
+    if (assigned.length === 0) missing.push("Event lead (or an event manager) to be the trainee's contact");
+    else missing.push(...assigned.map(describeContactGap));
+  }
+
+  return {
+    venue,
+    eventManager,
+    dayOfLead,
+    contacts,
+    contactsCollapsed: contacts.length === 1 && Boolean(eventManager?.contact && dayOfLead?.contact),
+    eventMissing,
+    missing,
   };
 }
 
@@ -169,12 +267,6 @@ export async function assertTraineeIntroReady(
   }
 
   const eventTitle = event.title?.trim();
-  if (!eventTitle) missing.push("Event title");
-  if (!event.startAt) missing.push("Event start time");
-  if (!event.endAt) missing.push("Event end time");
-  if (event.startAt && event.endAt && event.endAt <= event.startAt) {
-    missing.push("Event end time (must be after start)");
-  }
 
   if (!Number.isFinite(args.callTime) || args.callTime <= 0) {
     missing.push("Trainee call time");
@@ -215,23 +307,8 @@ export async function assertTraineeIntroReady(
     }
   }
 
-  const venue = await resolveVenueLocation(ctx, event);
-  if (!venue.venueName) missing.push("Venue name");
-  if (!venue.address) missing.push("Venue address");
-
-  const managerResult = await resolveRoleContact(ctx, {
-    role: "event_manager",
-    userId: event.eventManagerUserId,
-  });
-  const leadResult = await resolveRoleContact(ctx, {
-    role: "day_of_lead",
-    userId: event.dayOfLeadUserId,
-  });
-  missing.push(...managerResult.missing, ...leadResult.missing);
-
-  if (!managerResult.contact && !leadResult.contact) {
-    missing.push("Event manager or Event lead (at least one assigned with name, email, and phone)");
-  }
+  const readiness = await resolveTraineeEventReadiness(ctx, event);
+  missing.push(...readiness.missing);
 
   if (missing.length > 0) {
     throw new Error(
@@ -239,21 +316,7 @@ export async function assertTraineeIntroReady(
     );
   }
 
-  const contacts: TraineeIntroContact[] = [];
-  if (managerResult.contact) contacts.push(managerResult.contact);
-  if (leadResult.contact) {
-    const sameAsManager =
-      managerResult.contact &&
-      ((managerResult.contact.userId &&
-        leadResult.contact.userId &&
-        managerResult.contact.userId === leadResult.contact.userId) ||
-        (managerResult.contact.email === leadResult.contact.email &&
-          managerResult.contact.phone === leadResult.contact.phone &&
-          managerResult.contact.name === leadResult.contact.name));
-    if (!sameAsManager) {
-      contacts.push(leadResult.contact);
-    }
-  }
+  const { venue, contacts, contactsCollapsed } = readiness;
 
   return {
     eventTitle: eventTitle!,
@@ -267,6 +330,6 @@ export async function assertTraineeIntroReady(
     endsAt,
     scheduleBlockId,
     contacts,
-    contactsCollapsed: contacts.length === 1 && Boolean(managerResult.contact && leadResult.contact),
+    contactsCollapsed,
   };
 }

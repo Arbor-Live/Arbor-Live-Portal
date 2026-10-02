@@ -153,4 +153,66 @@ test.describe("crew application triage", () => {
     expect(state.traineeShiftCount).toBe(1);
     expect(state.traineeShiftEventIds).toContain(seededEvent.eventId);
   });
+
+  test("an event missing its venue and lead is fixed from the dialog, then the trainee is assigned", async ({ page }) => {
+    const stamp = Date.now();
+    const seededEvent = runConvex("e2eHelpers:seedCrewedEventWithSchedule", {
+      title: `E2E Unready Trainee Event ${stamp}`,
+    }) as { eventId: string; title: string };
+
+    const seeded = seedApplication("Unready");
+    const sheet = await openSheet(page, seeded);
+    const form = sheet.getByTestId("crew-application-trainee-form");
+
+    await form.getByTestId("searchable-select-trigger").first().click();
+    const eventMenu = page.getByTestId("searchable-select-menu");
+    await fillSearchableSelectQuery(eventMenu, seededEvent.title);
+    await eventMenu.getByRole("option", { name: seededEvent.title }).first().click();
+
+    // Warned as soon as the event is picked, before Assign.
+    await expect(form.getByTestId("trainee-readiness-missing")).toBeVisible({ timeout: 20_000 });
+    await expect(form.getByTestId("date-time-picker")).not.toHaveAttribute("data-value", "", {
+      timeout: 30_000,
+    });
+
+    // Assign opens the fix dialog instead of failing.
+    await sheet.getByRole("button", { name: "Assign as trainee" }).click();
+    const dialog = page.getByTestId("trainee-readiness-dialog");
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+    // Venue: create one with its address from the picker.
+    const venueName = `E2E Trainee Fix Venue ${stamp}`;
+    await dialog.getByTestId("trainee-readiness-venue").getByTestId("searchable-select-trigger").click();
+    const venueMenu = page.getByTestId("searchable-select-menu");
+    await fillSearchableSelectQuery(venueMenu, venueName);
+    await venueMenu.getByRole("button", { name: /Create venue/i }).click();
+    const createDialog = page.getByTestId("venue-create-dialog");
+    await createDialog.getByLabel("Address").fill("450 Serra Mall, Stanford, CA 94305");
+    await createDialog.getByRole("button", { name: /Create & select/i }).click();
+    await expect(dialog.getByTestId("trainee-readiness-venue")).toContainText("450 Serra Mall", {
+      timeout: 20_000,
+    });
+
+    // Contact: make the admin the event lead, adding a phone if their profile lacks one.
+    const contact = dialog.getByTestId("trainee-readiness-contact");
+    await contact.getByTestId("searchable-select-trigger").click();
+    const staffMenu = page.getByTestId("searchable-select-menu");
+    await fillSearchableSelectQuery(staffMenu, "E2E Admin");
+    await staffMenu.getByRole("option", { name: /E2E Admin/ }).first().click();
+    const phone = contact.getByLabel(/Phone for/);
+    await expect(phone.or(contact.getByText(/is their contact/))).toBeVisible({ timeout: 20_000 });
+    if (await phone.isVisible()) {
+      await phone.fill("6505550123");
+      await contact.getByRole("button", { name: "Save phone" }).click();
+    }
+    await expect(contact).toContainText("is their contact", { timeout: 20_000 });
+
+    await dialog.getByRole("button", { name: "Assign as trainee" }).click();
+    const state = await pollConvex<ApplicationState>(
+      "e2eHelpers:getCrewApplicationState",
+      { applicationId: seeded.applicationId },
+      (row) => row?.status === "trainee",
+    );
+    expect(state.traineeShiftEventIds).toContain(seededEvent.eventId);
+  });
 });

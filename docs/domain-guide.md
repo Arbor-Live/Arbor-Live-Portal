@@ -71,7 +71,11 @@ canonical description of the domain itself.
   table → admin queue at `/dashboard/users/crew-applications`. Statuses:
   `submitted` → `closed` (farewell email), `trainee` (no Better Auth user —
   shifts use `crewApplicationId`; ICS + trainee intro email go to the
-  application email once every required field passes the send gate), or
+  application email once every required field passes the send gate — a saved
+  venue with an address, and one event lead or manager with a name, email and
+  phone; an incomplete second contact is skipped. The panel checks
+  `traineeEventReadiness` as soon as an event is picked and fixes gaps in a
+  dialog: venue + address, event lead, a missing phone), or
   `converted` (invite into Arbor Live via the normal member invite path →
   `/accept-invite` → crew onboarding). Crew applicants pick a vertical
   (`Operations` / `Crew` / `Trivia` / `Marketing`); Crew and Marketing also pick

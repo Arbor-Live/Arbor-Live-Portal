@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { components } from "./_generated/api";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { formatDateTime } from "@arbor/format";
 import {
@@ -8,12 +8,14 @@ import {
   getUserId,
   listAdminEmailsForVertical,
   requireAdmin,
+  requireArborInternalContext,
   type AuthUser,
 } from "./lib/auth";
 import {
   CREW_STORAGE_CLOSET_LABEL,
   CREW_STORAGE_CLOSET_MAPS_URL,
   assertTraineeIntroReady,
+  resolveTraineeEventReadiness,
   type TraineePresenceMode,
 } from "./lib/crewTraineeIntro";
 import {
@@ -94,6 +96,16 @@ const presenceModeValue = v.union(
   v.literal("first_8_hours"),
   v.literal("schedule_block"),
 );
+
+/**
+ * Arbor staff only. The admin role alone has been shared by band/DJ org admins
+ * (see `requireAdmin`), so pair it with the Arbor-internal context, as venues do.
+ */
+async function requireStaffAdmin(ctx: QueryCtx | MutationCtx): Promise<AuthUser> {
+  const admin = await requireAdmin(ctx);
+  await requireArborInternalContext(ctx);
+  return admin;
+}
 
 function trimRequired(value: string, label: string) {
   const trimmed = value.trim();
@@ -297,7 +309,7 @@ export const listAdmin = query({
     }),
   ),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireStaffAdmin(ctx);
     // Read each status off its own index so a busy status (hundreds of closed
     // applications) never pushes the newest submitted ones past the cap.
     const statuses = args.statuses
@@ -355,7 +367,7 @@ export const setAssignee = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireStaffAdmin(ctx);
     const application = await ctx.db.get(args.applicationId);
     if (!application) throw new Error("Application not found.");
     const assigneeUserId = args.assigneeUserId?.trim() || undefined;
@@ -380,7 +392,7 @@ export const setOutreachStage = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
+    const admin = await requireStaffAdmin(ctx);
     const adminId = getUserId(admin) || undefined;
     const application = await ctx.db.get(args.applicationId);
     if (!application) throw new Error("Application not found.");
@@ -403,7 +415,7 @@ export const countPendingSubmitted = query({
   args: {},
   returns: v.number(),
   handler: async (ctx) => {
-    await requireAdmin(ctx);
+    await requireStaffAdmin(ctx);
     const rows = await ctx.db
       .query("crewApplications")
       .withIndex("by_status", (q) => q.eq("status", "submitted"))
@@ -416,7 +428,7 @@ export const close = mutation({
   args: { applicationId: v.id("crewApplications") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
+    const admin = await requireStaffAdmin(ctx);
     const adminId = getUserId(admin);
     const application = await ctx.db.get(args.applicationId);
     if (!application) throw new Error("Application not found.");
@@ -453,7 +465,7 @@ export const remove = mutation({
   args: { applicationId: v.id("crewApplications") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireStaffAdmin(ctx);
     const application = await ctx.db.get(args.applicationId);
     if (!application) throw new Error("Application not found.");
 
@@ -472,6 +484,53 @@ export const remove = mutation({
   },
 });
 
+const traineeContactStatusValue = v.object({
+  userId: v.string(),
+  name: v.optional(v.string()),
+  missing: v.array(v.union(v.literal("user"), v.literal("name"), v.literal("email"), v.literal("phone"))),
+});
+
+/**
+ * The early warning for "Assign as trainee": what the picked event still
+ * needs (a saved venue with an address, a reachable event lead or manager)
+ * before the intro email can go out. Same checks the assign mutation enforces.
+ */
+export const traineeEventReadiness = query({
+  args: { eventId: v.id("events") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      eventTitle: v.string(),
+      venue: v.object({
+        venueId: v.optional(v.id("venues")),
+        venueName: v.optional(v.string()),
+        address: v.optional(v.string()),
+        googleMapsUrl: v.optional(v.string()),
+      }),
+      eventManager: v.optional(traineeContactStatusValue),
+      dayOfLead: v.optional(traineeContactStatusValue),
+      eventMissing: v.array(v.string()),
+      missing: v.array(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requireStaffAdmin(ctx);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) return null;
+    const readiness = await resolveTraineeEventReadiness(ctx, event);
+    const contactStatus = (status: typeof readiness.eventManager) =>
+      status ? { userId: status.userId, name: status.name, missing: status.missing } : undefined;
+    return {
+      eventTitle: event.title,
+      venue: readiness.venue,
+      eventManager: contactStatus(readiness.eventManager),
+      dayOfLead: contactStatus(readiness.dayOfLead),
+      eventMissing: readiness.eventMissing,
+      missing: readiness.missing,
+    };
+  },
+});
+
 export const assignTraineeToEvent = mutation({
   args: {
     applicationId: v.id("crewApplications"),
@@ -484,7 +543,7 @@ export const assignTraineeToEvent = mutation({
   },
   returns: v.object({ shiftId: v.id("eventCrewShifts") }),
   handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
+    const admin = await requireStaffAdmin(ctx);
     const adminId = getUserId(admin);
     const application = await ctx.db.get(args.applicationId);
     if (!application) throw new Error("Application not found.");
@@ -640,7 +699,7 @@ export const convertToMember = mutation({
   },
   returns: v.object({ invitationId: v.string(), email: v.string() }),
   handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
+    const admin = await requireStaffAdmin(ctx);
     const adminId = getUserId(admin);
     if (!adminId) throw new Error("Unable to resolve admin user.");
 
