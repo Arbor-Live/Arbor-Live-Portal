@@ -12,8 +12,6 @@ import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { isArtistOrganizationType } from "@/lib/artist-types";
 import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
-import { ArtistSelect, artistSelectOptions } from "@/components/bands/artist-select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const STORAGE_KEY = "arbor.adminBandOrganizationId";
 
@@ -108,49 +106,5 @@ export function AdminBandSelectionProvider({ children }: { children: ReactNode }
     >
       {children}
     </AdminBandSelectionContext.Provider>
-  );
-}
-
-export function AdminBandPickerCard() {
-  const { organizationId, setOrganizationId, isAdminManaging } = useAdminBandSelection();
-  const bands = useQuery(
-    api.users.listBandOrganizationsAdmin,
-    isAdminManaging ? { includeArchived: false } : "skip",
-  );
-
-  const options = useMemo(
-    () => artistSelectOptions(bands),
-    [bands],
-  );
-
-  if (!isAdminManaging) return null;
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Manage an artist</CardTitle>
-        <CardDescription>
-          Pick any artist organization to edit its profile or technical riders. You do not need to
-          join the organization.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {bands === undefined ? (
-          <p className="text-sm text-muted-foreground">Loading artists…</p>
-        ) : bands.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No artist organizations yet.</p>
-        ) : (
-          <div className="max-w-md" data-testid="admin-band-picker">
-            <ArtistSelect
-              value={organizationId ?? ""}
-              onChange={setOrganizationId}
-              options={options}
-              placeholder="Search artists…"
-              emptyLabel="No matching artists"
-            />
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
