@@ -36,7 +36,12 @@ export function sharedGroupId(
   return events.every((event) => event.seriesId === groupId) ? groupId : null;
 }
 
-/** `events` are the invoice's primary days in calendar order. */
+/**
+ * Resolve unscoped artist lines to every day only when all supplied events
+ * share an existing recurring group; otherwise they apply to the first event.
+ * `events` must be the invoice's primary days in calendar order. A missing
+ * group falls back to the first day; database read errors propagate.
+ */
 export async function resolveArtistLineDayScope(
   ctx: QueryCtx | MutationCtx,
   events: ReadonlyArray<Doc<"events">>,
@@ -46,7 +51,11 @@ export async function resolveArtistLineDayScope(
   return artistLineDayScope(events, group ? eventGroupKind(group) : null);
 }
 
-/** Whether an artist line applies to a given event. */
+/**
+ * Match an explicitly scoped line only to its event; otherwise use the scope's
+ * all-days flag or first event. With no first event and no all-days flag, an
+ * unscoped line matches nothing.
+ */
 export function artistLineAppliesToEvent(args: {
   lineEventId?: Id<"events">;
   eventId: Id<"events">;

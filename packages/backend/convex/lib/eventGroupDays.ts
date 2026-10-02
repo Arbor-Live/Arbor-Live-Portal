@@ -22,6 +22,10 @@ type GroupDay = Pick<
   "_id" | "startAt" | "status" | "occurrenceIndex" | "seriesDetached" | "seriesId"
 >;
 
+/**
+ * Return up to 200 group members, including detached and cancelled days,
+ * ordered by occurrence index (missing indices count as zero), then start time.
+ */
 export async function listGroupDays(
   ctx: QueryCtx | MutationCtx,
   groupId: Id<"eventSeries">,
@@ -36,8 +40,11 @@ export async function listGroupDays(
 }
 
 /**
- * Which days an apply reaches. `referenceIndex` is the day the user picked
- * (0-based `occurrenceIndex`). Pure, so the scope rules are unit-tested.
+ * Return days in input order, excluding detached and cancelled days.
+ * `referenceIndex` is a zero-based occurrence index; missing day indices count
+ * as zero. `this` selects that index, and `all` includes past days. `future`
+ * requires both an index at or after the reference and a start at or after
+ * `now` (Unix milliseconds).
  */
 export function selectDaysInScope<T extends GroupDay>(
   days: readonly T[],

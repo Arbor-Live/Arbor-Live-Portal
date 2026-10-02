@@ -93,6 +93,12 @@ export function blockIdsByTemplateIndex(
   return byIndex;
 }
 
+/**
+ * Capture shifts attached to matching block templates, ordered by start time,
+ * with millisecond offsets from occurrence start. Trainees are always skipped;
+ * assigned shifts are skipped unless `copyingDay` is enabled (see `options`).
+ * Returns no templates when block templates are absent or no shifts match.
+ */
 export function shiftsToTemplates(
   shifts: Array<{
     role: string;
@@ -153,6 +159,14 @@ export function shiftsToTemplates(
     });
 }
 
+/**
+ * Add open crew slots at millisecond offsets from occurrence start, consuming
+ * one matching staffed shift per template (same trimmed role and times).
+ * Matching reads at most 500 shifts and 500 blocks. Existing open slots are
+ * not deduplicated. A positive template rate takes precedence over the default;
+ * Billed hours use the template override or the duration in hours, rounded to
+ * two decimals.
+ */
 export async function insertShiftsFromTemplates(
   ctx: MutationCtx,
   eventId: Id<"events">,
@@ -214,6 +228,11 @@ export async function insertShiftsFromTemplates(
   }
 }
 
+/**
+ * Delete open non-trainee slots among the first 500 shifts, then insert the
+ * template slots. Assigned crew and trainees remain; absent or empty templates
+ * still clear open slots. The caller must recalculate crew cost afterward.
+ */
 export async function replaceEmptyShiftsFromTemplates(
   ctx: MutationCtx,
   eventId: Id<"events">,
@@ -714,6 +733,11 @@ export function multiDayTitle(groupTitle: string, startAt: number) {
   return `${groupTitle} — ${formatPacificShortDate(pacificDateKey(startAt))}`;
 }
 
+/**
+ * Build shared-field updates for a multi-day booking, preserving day-specific
+ * title, times, and costs. Recurring groups also supply those fields and derive
+ * the end time from their anchor window and `startAt` (Unix milliseconds).
+ */
 export function buildEventPatchFromSeriesTemplate(
   series: Doc<"eventSeries">,
   startAt: number,
