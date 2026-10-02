@@ -2258,6 +2258,17 @@ export default defineSchema({
     reviewedAt: v.optional(v.number()),
     reviewedByUserId: v.optional(v.string()),
     convertedUserId: v.optional(v.string()),
+    /** Admin handling the applicant (reaching out, the intro meeting). */
+    assigneeUserId: v.optional(v.string()),
+    /**
+     * Outreach progress while `submitted`: reached out (Calendly sent), meeting
+     * booked, met. Unset means nobody has reached out yet.
+     */
+    outreachStage: v.optional(
+      v.union(v.literal("contacted"), v.literal("meeting_booked"), v.literal("met")),
+    ),
+    outreachUpdatedAt: v.optional(v.number()),
+    outreachUpdatedByUserId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

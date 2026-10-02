@@ -1,4 +1,5 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
+import { acceptAppDialog } from "../helpers/auth";
 import { pollConvex, runConvex } from "../helpers/convex";
 import { fillSearchableSelectQuery } from "../helpers/select";
 
@@ -12,6 +13,8 @@ type SeededApplication = {
 type ApplicationState = {
   status: string;
   convertedUserId: string | null;
+  assigneeUserId: string | null;
+  outreachStage: string | null;
   traineeShiftCount: number;
   traineeShiftEventIds: string[];
 };
@@ -22,23 +25,59 @@ function seedApplication(label: string): SeededApplication {
   }) as SeededApplication;
 }
 
-/** Open the Submitted queue and return the card for one applicant. */
-async function openSubmittedCard(page: Page, seeded: SeededApplication): Promise<Locator> {
+/** The applicant's row in the list (open applications show by default). */
+async function findRow(page: Page, seeded: SeededApplication): Promise<Locator> {
   await page.goto(seeded.queuePath);
-  await expect(page.getByText(/Crew applications/i).first()).toBeVisible({ timeout: 25_000 });
-  await page.getByRole("button", { name: "Submitted" }).click();
+  await expect(page.getByTestId("crew-applications-page")).toBeVisible({ timeout: 25_000 });
+  const row = page.getByTestId("crew-application-row").filter({ hasText: seeded.name }).first();
+  await expect(row).toBeVisible({ timeout: 25_000 });
+  return row;
+}
 
-  const card = page.locator("article").filter({ hasText: seeded.name }).first();
-  await expect(card).toBeVisible({ timeout: 25_000 });
-  return card;
+/** Open the applicant's side panel. */
+async function openSheet(page: Page, seeded: SeededApplication): Promise<Locator> {
+  const row = await findRow(page, seeded);
+  await row.getByRole("button", { name: new RegExp(seeded.name) }).first().click();
+  const sheet = page.getByTestId("crew-application-sheet");
+  await expect(sheet).toBeVisible({ timeout: 20_000 });
+  return sheet;
 }
 
 test.describe("crew application triage", () => {
+  test("marking an applicant reached out makes the admin the owner", async ({ page }) => {
+    const seeded = seedApplication("Outreach");
+    const row = await findRow(page, seeded);
+    await expect(page.getByTestId("crew-applications-group-new")).toContainText(seeded.name);
+
+    await row.getByRole("button", { name: "Mark reached out" }).click();
+
+    const state = await pollConvex<ApplicationState>(
+      "e2eHelpers:getCrewApplicationState",
+      { applicationId: seeded.applicationId },
+      (current) => current?.outreachStage === "contacted",
+    );
+    expect(state.assigneeUserId).toBeTruthy();
+    await expect(page.getByTestId("crew-applications-group-contacted")).toContainText(seeded.name, {
+      timeout: 20_000,
+    });
+
+    // Later steps keep the owner.
+    const sheet = await openSheet(page, seeded);
+    await sheet.getByTestId("crew-application-stage").getByRole("radio", { name: "Meeting booked" }).click();
+    const booked = await pollConvex<ApplicationState>(
+      "e2eHelpers:getCrewApplicationState",
+      { applicationId: seeded.applicationId },
+      (current) => current?.outreachStage === "meeting_booked",
+    );
+    expect(booked.assigneeUserId).toBe(state.assigneeUserId);
+  });
+
   test("admin can turn away a submitted application", async ({ page }) => {
     const seeded = seedApplication("Turn Away");
-    const card = await openSubmittedCard(page, seeded);
+    const sheet = await openSheet(page, seeded);
 
-    await card.getByRole("button", { name: "Turn away" }).click();
+    await sheet.getByRole("button", { name: "Turn away" }).click();
+    await acceptAppDialog(page, "Turn away");
 
     const state = await pollConvex<ApplicationState>(
       "e2eHelpers:getCrewApplicationState",
@@ -47,20 +86,19 @@ test.describe("crew application triage", () => {
     );
     expect(state.status).toBe("closed");
 
-    // Closed applications drop out of the Submitted queue.
-    await expect(page.locator("article").filter({ hasText: seeded.name })).toHaveCount(0, {
-      timeout: 20_000,
-    });
-    await page.getByRole("button", { name: "Closed" }).click();
-    await expect(page.getByText(seeded.name).first()).toBeVisible({ timeout: 20_000 });
+    // Turned-away applications drop out of the default (open) view.
+    await expect(
+      page.getByTestId("crew-application-row").filter({ hasText: seeded.name }),
+    ).toHaveCount(0, { timeout: 20_000 });
   });
 
   test("admin can convert an applicant to a member and an invite is created", async ({ page }) => {
     const seeded = seedApplication("Convert");
-    const card = await openSubmittedCard(page, seeded);
+    const sheet = await openSheet(page, seeded);
 
     // Vertical/discipline default from the application; take the defaults.
-    await card.getByRole("button", { name: "Convert to member" }).click();
+    await sheet.getByRole("radio", { name: "Convert to member" }).click();
+    await sheet.getByRole("button", { name: "Convert to member" }).click();
 
     const state = await pollConvex<ApplicationState>(
       "e2eHelpers:getCrewApplicationState",
@@ -75,9 +113,6 @@ test.describe("crew application triage", () => {
       (row) => Boolean(row?.token),
     );
     expect(invite.url).toContain(invite.token);
-
-    await page.getByRole("button", { name: "Converted" }).click();
-    await expect(page.getByText(seeded.name).first()).toBeVisible({ timeout: 20_000 });
   });
 
   test("admin can assign a submitted applicant as a trainee on an event", async ({ page }) => {
@@ -88,7 +123,9 @@ test.describe("crew application triage", () => {
     }) as { eventId: string; title: string };
 
     const seeded = seedApplication("Trainee");
-    const card = await openSubmittedCard(page, seeded);
+    const sheet = await openSheet(page, seeded);
+    // Trainee is the default decision for a submitted applicant.
+    const card = sheet.getByTestId("crew-application-trainee-form");
 
     await card.getByTestId("searchable-select-trigger").first().click();
     const menu = page.getByTestId("searchable-select-menu");
@@ -103,7 +140,7 @@ test.describe("crew application triage", () => {
       timeout: 30_000,
     });
 
-    const assign = card.getByRole("button", { name: "Assign as trainee" });
+    const assign = sheet.getByRole("button", { name: "Assign as trainee" });
     await expect(assign).toBeEnabled({ timeout: 20_000 });
     await assign.click();
 

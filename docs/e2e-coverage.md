@@ -160,7 +160,7 @@ the URL looks like cloud.
 | Surface | Status | Spec / notes |
 |---------|--------|--------------|
 | Public `/crew/apply` → admin list | Covered | `crew/crew-application.spec.ts` |
-| Admin trainee / convert / turn away | Covered | `crew/crew-application-triage.spec.ts` (Batch 4) |
+| Admin outreach / trainee / convert / turn away | Covered | `crew/crew-application-triage.spec.ts` (Batch 4) |
 
 ### Bands and payouts
 
@@ -228,7 +228,7 @@ the URL looks like cloud.
 | `quotes/invoice-finalize.spec.ts` | Staff invoice create → public link (Batch 3) |
 | `quotes/payment-proof-verify.spec.ts` | Staff mark payment received (Batch 3) |
 | `events/venue-create-pick.spec.ts` | Venue create + pick on event (Batch 3) |
-| `crew/crew-application-triage.spec.ts` | Turn away / convert / trainee assign (Batch 4) |
+| `crew/crew-application-triage.spec.ts` | Outreach owner/stage, turn away / convert / trainee assign (Batch 4) |
 | `crew/crew-onboarding-complete.spec.ts` | Crew onboarding wizard end-to-end (Batch 4) |
 | `bands/band-onboarding-complete.spec.ts` | Band onboarding wizard end-to-end, including mailing-address Next after the empty-address prompt (Batch 4) |
 | `inventory/pull-list-edit.spec.ts` | Pull-list qty edit + add type (Batch 5) |

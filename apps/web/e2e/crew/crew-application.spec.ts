@@ -56,7 +56,6 @@ test.describe("public crew application", () => {
     await expect(adminPage.getByText(/Crew applications/i).first()).toBeVisible({
       timeout: 25_000,
     });
-    await adminPage.getByRole("button", { name: "Submitted" }).click();
     await expect(adminPage.getByText(name).first()).toBeVisible({ timeout: 20_000 });
     await expect(adminPage.getByText(email).first()).toBeVisible();
     await adminContext.close();

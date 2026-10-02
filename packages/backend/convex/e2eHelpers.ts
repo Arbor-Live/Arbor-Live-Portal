@@ -3750,6 +3750,8 @@ export const getCrewApplicationState = query({
       email: v.string(),
       reviewedAt: v.union(v.number(), v.null()),
       convertedUserId: v.union(v.string(), v.null()),
+      assigneeUserId: v.union(v.string(), v.null()),
+      outreachStage: v.union(v.string(), v.null()),
       traineeShiftCount: v.number(),
       traineeShiftEventIds: v.array(v.id("events")),
     }),
@@ -3771,6 +3773,8 @@ export const getCrewApplicationState = query({
       email: application.email,
       reviewedAt: application.reviewedAt ?? null,
       convertedUserId: application.convertedUserId ?? null,
+      assigneeUserId: application.assigneeUserId ?? null,
+      outreachStage: application.outreachStage ?? null,
       traineeShiftCount: shifts.length,
       traineeShiftEventIds: shifts.map((shift) => shift.eventId),
     };
