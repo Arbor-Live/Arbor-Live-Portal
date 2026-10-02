@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { CaretDownIcon, CaretRightIcon, MapPinIcon, PlusIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, MapPinIcon, PlusIcon } from "@phosphor-icons/react";
 import {
   DetailSheet,
   DetailSheetHeader,
@@ -13,6 +13,15 @@ import {
   RowText,
 } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
+import { TreeRowLeading } from "@/components/tree-row";
+import {
+  buildTree,
+  collectParentIds,
+  countDescendants,
+  filterTree,
+  flattenVisibleIds,
+  type TreeNode,
+} from "@/lib/tree";
 import { MetaItem, PageHeader } from "@/components/page-header";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -68,10 +77,7 @@ type VenueRow = {
   contactPhone?: string;
 };
 
-type VenueTreeNode = {
-  venue: VenueRow;
-  children: VenueTreeNode[];
-};
+type VenueTreeNode = TreeNode<VenueRow>;
 
 function toFormValues(venue: VenueRow): VenueFormValues {
   return {
@@ -129,74 +135,6 @@ function compareVenueNames(a: VenueRow, b: VenueRow, sortDir: "asc" | "desc") {
   return sortDir === "asc" ? cmp : -cmp;
 }
 
-function buildVenueTree(venues: VenueRow[], sortDir: "asc" | "desc"): VenueTreeNode[] {
-  const byId = new Map<string, VenueTreeNode>();
-  for (const venue of venues) {
-    byId.set(venue._id, { venue, children: [] });
-  }
-
-  const roots: VenueTreeNode[] = [];
-  for (const venue of venues) {
-    const node = byId.get(venue._id)!;
-    const parentId = venue.parentId;
-    if (parentId && byId.has(parentId)) {
-      byId.get(parentId)!.children.push(node);
-    } else {
-      roots.push(node);
-    }
-  }
-
-  const sortRecursive = (nodes: VenueTreeNode[]) => {
-    nodes.sort((a, b) => compareVenueNames(a.venue, b.venue, sortDir));
-    for (const node of nodes) sortRecursive(node.children);
-  };
-  sortRecursive(roots);
-  return roots;
-}
-
-/** Keep a node if it matches, or any descendant matches (so its path stays visible). */
-function filterVenueTree(nodes: VenueTreeNode[], matches: (venue: VenueRow) => boolean): VenueTreeNode[] {
-  const filtered: VenueTreeNode[] = [];
-  for (const node of nodes) {
-    const children = filterVenueTree(node.children, matches);
-    if (matches(node.venue) || children.length > 0) {
-      filtered.push({ venue: node.venue, children });
-    }
-  }
-  return filtered;
-}
-
-function flattenVisibleIds(nodes: VenueTreeNode[], expandedIds: Set<string>): string[] {
-  const ids: string[] = [];
-  for (const node of nodes) {
-    ids.push(node.venue._id);
-    if (node.children.length > 0 && expandedIds.has(node.venue._id)) {
-      ids.push(...flattenVisibleIds(node.children, expandedIds));
-    }
-  }
-  return ids;
-}
-
-function countDescendants(node: VenueTreeNode): number {
-  let n = node.children.length;
-  for (const child of node.children) n += countDescendants(child);
-  return n;
-}
-
-function collectParentIds(nodes: VenueTreeNode[]): Set<string> {
-  const ids = new Set<string>();
-  const walk = (list: VenueTreeNode[]) => {
-    for (const node of list) {
-      if (node.children.length > 0) {
-        ids.add(node.venue._id);
-        walk(node.children);
-      }
-    }
-  };
-  walk(nodes);
-  return ids;
-}
-
 export function VenuesManager() {
   const { confirm } = useAppDialog();
   const [search, setSearch] = useState("");
@@ -241,9 +179,9 @@ export function VenuesManager() {
 
   const tree = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const roots = buildVenueTree((venues ?? []) as VenueRow[], sortDir);
+    const roots = buildTree((venues ?? []) as VenueRow[], (a, b) => compareVenueNames(a, b, sortDir));
     if (!narrowed) return roots;
-    return filterVenueTree(
+    return filterTree(
       roots,
       (venue) =>
         venueMatchesQuery(venue, q) &&
@@ -322,7 +260,7 @@ export function VenuesManager() {
   function renderRows(nodes: VenueTreeNode[], depth: number): ReactNode[] {
     const rows: ReactNode[] = [];
     for (const node of nodes) {
-      const { venue } = node;
+      const venue = node.item;
       const hasChildren = node.children.length > 0;
       const isExpanded = hasChildren && displayExpandedIds.has(venue._id);
       const descendantCount = hasChildren ? countDescendants(node) : 0;
@@ -333,7 +271,13 @@ export function VenuesManager() {
           onOpen={() => setPanel(venue._id)}
           className={editingId === venue._id ? "bg-muted/40" : undefined}
           leading={
-            <div className="flex items-center gap-1" style={{ paddingLeft: `${depth * 1.5}rem` }}>
+            <TreeRowLeading
+              depth={depth}
+              name={venue.name}
+              hasChildren={hasChildren}
+              expanded={isExpanded}
+              onToggle={() => toggleExpanded(venue._id)}
+            >
               <Checkbox
                 aria-label={`Select ${venue.name}`}
                 checked={selectedIds.includes(venue._id)}
@@ -343,21 +287,7 @@ export function VenuesManager() {
                   )
                 }
               />
-              {hasChildren ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={isExpanded ? `Collapse ${venue.name}` : `Expand ${venue.name}`}
-                  aria-expanded={isExpanded}
-                  onClick={() => toggleExpanded(venue._id)}
-                >
-                  {isExpanded ? <CaretDownIcon weight="bold" /> : <CaretRightIcon weight="bold" />}
-                </Button>
-              ) : (
-                <span className="size-6 shrink-0" aria-hidden />
-              )}
-            </div>
+            </TreeRowLeading>
           }
           actions={
             <RowMenu label={`More for ${venue.name}`}>

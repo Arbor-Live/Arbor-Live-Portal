@@ -1,33 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { CommentsSection } from "@/components/comments/comments-section";
+import {
+  DetailSheet,
+  DetailSheetFooter,
+  DetailSheetHeader,
+  SheetField,
+  SheetFields,
+  SheetSection,
+} from "@/components/list-page";
+import { StatusPill, StatusPillSelect } from "@/components/page-header";
 import { useSessionViewer } from "@/components/session-shell-provider";
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
   optimisticDecommissionDamageReport,
   optimisticUpdateDamageStatus,
 } from "@/lib/damage-reports-optimistic";
+import {
+  DAMAGE_STATUS_LABELS,
+  DAMAGE_STATUS_OPTIONS,
+  damageStatusTone,
+  OPERABILITY_LABELS,
+  type DamageStatus,
+} from "@/lib/damage-status";
 import { formatDateTime } from "@/lib/format";
+import { notify } from "@/lib/notify";
 
-function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[8rem_1fr] gap-2 py-1 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="min-w-0 break-words">{value}</span>
-    </div>
-  );
+async function attempt(action: () => Promise<unknown>, success: string) {
+  try {
+    await action();
+    notify.success(success);
+    return true;
+  } catch (error) {
+    notify.error(getConvexErrorMessage(error));
+    return false;
+  }
 }
 
 export function DamageReportSheet({
@@ -40,11 +52,7 @@ export function DamageReportSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   const { confirm } = useAppDialog();
-  const [error, setError] = useState<string | null>(null);
-  const details = useQuery(
-    api.damageReports.getById,
-    reportId && open ? { reportId } : "skip",
-  );
+  const details = useQuery(api.damageReports.getById, reportId && open ? { reportId } : "skip");
   const updateStatus = useMutation(api.damageReports.updateStatus).withOptimisticUpdate(
     optimisticUpdateDamageStatus,
   );
@@ -57,169 +65,131 @@ export function DamageReportSheet({
 
   const report = details?.report;
   const siblings = details?.siblings ?? [];
+  const name = report ? [report.assetId, report.typeName].filter(Boolean).join(" · ") || "Damage report" : "Damage report";
+
+  function setStatus(status: DamageStatus) {
+    if (!report || status === report.status) return;
+    void attempt(
+      () => updateStatus({ reportId: report._id, status }),
+      `Marked ${report.assetId ?? "the report"} ${DAMAGE_STATUS_LABELS[status].toLowerCase()}`,
+    );
+  }
+
+  async function decommissionAsset() {
+    if (!report) return;
+    const ok = await confirm({
+      title: `Decommission ${report.assetId ?? report.typeName ?? "this asset"}?`,
+      description:
+        "The asset is marked out of service and this report is resolved. Its history and comments stay.",
+      confirmLabel: "Decommission",
+      destructive: true,
+    });
+    if (!ok) return;
+    await attempt(() => decommission({ reportId: report._id }), `Decommissioned ${report.assetId ?? "the asset"}`);
+  }
 
   return (
-    <Sheet
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) setError(null);
-        onOpenChange(next);
-      }}
-    >
-      <SheetContent
-        side="right"
-        className="w-full overflow-y-auto sm:max-w-xl"
-        data-testid="damage-report-sheet"
-      >
-        <SheetHeader>
-          <SheetTitle>
-            {report
-              ? [report.assetId, report.typeName].filter(Boolean).join(" · ") || "Damage report"
-              : "Damage report"}
-          </SheetTitle>
-          <SheetDescription>
-            {report
-              ? `Reported by ${report.reportedByName} on ${formatDateTime(report.reportedAt)}`
-              : "Loading…"}
-          </SheetDescription>
-        </SheetHeader>
+    <DetailSheet open={open} onOpenChange={onOpenChange} testId="damage-report-sheet">
+      <DetailSheetHeader
+        title={name}
+        pill={
+          report ? (
+            <StatusPillSelect
+              value={report.status}
+              options={DAMAGE_STATUS_OPTIONS}
+              onChange={setStatus}
+              disabled={!canTriage}
+            />
+          ) : null
+        }
+        description={
+          report
+            ? `Reported by ${report.reportedByName} on ${formatDateTime(report.reportedAt)}`
+            : details === null
+              ? undefined
+              : "Loading…"
+        }
+      />
 
-        {details === undefined ? (
-          <p className="px-4 text-sm text-muted-foreground">Loading…</p>
-        ) : !report ? (
-          <p className="px-4 text-sm text-muted-foreground">This damage report no longer exists.</p>
-        ) : (
-          <div className="space-y-4 px-4 pb-6">
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-            <div className="rounded-md border p-3">
-              <DetailRow
-                label="Status"
-                value={
-                  <span className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
-                        report.status === "resolved"
-                          ? "bg-muted text-muted-foreground"
-                          : "bg-primary text-primary-foreground"
-                      }`}
-                    >
-                      {report.status.replace("_", " ")}
-                    </span>
-                    <span>
-                      Severity {report.severity}/5 ·{" "}
-                      <span className="capitalize">{report.operability.replace("_", " ")}</span>
-                    </span>
-                  </span>
-                }
-              />
-              <DetailRow
-                label="Event"
-                value={
-                  report.eventTitle ? (
-                    <a className="underline" href={`/dashboard/events/${report.eventId}`}>
-                      {report.eventTitle}
-                    </a>
-                  ) : (
-                    "Unknown / not linked"
-                  )
-                }
-              />
-              <DetailRow label="Last updated" value={formatDateTime(report.updatedAt)} />
-              {report.resolvedAt ? (
-                <DetailRow label="Resolved" value={formatDateTime(report.resolvedAt)} />
-              ) : null}
-              {report.notes ? <DetailRow label="Notes" value={report.notes} /> : null}
-            </div>
-
+      {details === undefined ? (
+        <p className="px-4 text-sm text-muted-foreground">Loading…</p>
+      ) : !report ? (
+        <p className="px-4 text-sm text-muted-foreground">This damage report no longer exists.</p>
+      ) : (
+        <>
+          <SheetSection title="Details">
+            <SheetFields>
+              <SheetField label="Severity">{report.severity} of 5</SheetField>
+              <SheetField label="Operability">{OPERABILITY_LABELS[report.operability]}</SheetField>
+              <SheetField label="Event">
+                {report.eventTitle && report.eventId ? (
+                  <Link className="underline" href={`/dashboard/events/${report.eventId}`}>
+                    {report.eventTitle}
+                  </Link>
+                ) : (
+                  "Not linked to an event"
+                )}
+              </SheetField>
+              <SheetField label="Last updated">{formatDateTime(report.updatedAt)}</SheetField>
+              {report.resolvedAt ? <SheetField label="Resolved">{formatDateTime(report.resolvedAt)}</SheetField> : null}
+              {report.notes ? <SheetField label="Notes">{report.notes}</SheetField> : null}
+            </SheetFields>
             {report.photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={report.photoUrl}
                 alt={`Damage photo for ${report.assetId ?? report.typeName ?? "asset"}`}
-                className="max-h-64 w-full rounded border object-contain"
+                className="max-h-64 w-full border object-contain"
               />
             ) : null}
+          </SheetSection>
 
-            {siblings.length ? (
-              <div className="space-y-1 rounded-md border p-3">
-                <p className="text-sm font-medium">
-                  Reported together ({siblings.length} other asset
-                  {siblings.length === 1 ? "" : "s"})
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  These share this conversation, but are triaged individually.
-                </p>
-                <ul className="pt-1 text-sm text-muted-foreground">
-                  {siblings.map((sibling) => (
-                    <li key={sibling._id}>
+          {siblings.length ? (
+            <SheetSection title={`Reported together (${siblings.length})`}>
+              <p className="text-xs text-muted-foreground">
+                These share this conversation, but each is triaged on its own.
+              </p>
+              <ul className="divide-y border text-sm">
+                {siblings.map((sibling) => (
+                  <li key={sibling._id} className="flex items-center justify-between gap-2 px-3 py-2">
+                    <span className="min-w-0 truncate">
                       {sibling.assetId ?? "No ID"}
-                      {sibling.typeName ? ` · ${sibling.typeName}` : ""} —{" "}
-                      <span className="capitalize">{sibling.status.replace("_", " ")}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+                      {sibling.typeName ? ` · ${sibling.typeName}` : ""}
+                    </span>
+                    <StatusPill tone={damageStatusTone(sibling.status)} className="h-6">
+                      {DAMAGE_STATUS_LABELS[sibling.status]}
+                    </StatusPill>
+                  </li>
+                ))}
+              </ul>
+            </SheetSection>
+          ) : null}
 
-            {canTriage && report.status !== "resolved" ? (
-              <div className="flex flex-wrap gap-2">
-                {report.status === "open" ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      void updateStatus({ reportId: report._id, status: "in_progress" }).catch(
-                        (err) => setError(getConvexErrorMessage(err)),
-                      )
-                    }
-                  >
-                    Mark in progress
-                  </Button>
-                ) : null}
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() =>
-                    void updateStatus({ reportId: report._id, status: "resolved" }).catch((err) =>
-                      setError(getConvexErrorMessage(err)),
-                    )
-                  }
-                >
-                  Resolve (repaired)
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => {
-                    void (async () => {
-                      if (
-                        !(await confirm({
-                          title: `Decommission ${report.assetId ?? report.typeName ?? "this asset"}?`,
-                          description: "It will be marked out of service and this report will close.",
-                          confirmLabel: "Decommission",
-                          destructive: true,
-                        }))
-                      ) {
-                        return;
-                      }
-                      await decommission({ reportId: report._id }).catch((err) =>
-                        setError(getConvexErrorMessage(err)),
-                      );
-                    })();
-                  }}
-                >
-                  Decommission
-                </Button>
-              </div>
-            ) : null}
-
+          {/* CommentsSection brings its own heading. */}
+          <div className="border-t px-4 py-4">
             <CommentsSection subjectType="damage_batch" subjectId={report.threadId} />
           </div>
-        )}
-      </SheetContent>
-    </Sheet>
+
+          {canTriage && report.status !== "resolved" ? (
+            <DetailSheetFooter
+              start={
+                <Button type="button" variant="destructive" size="sm" onClick={() => void decommissionAsset()}>
+                  Decommission
+                </Button>
+              }
+            >
+              {report.status === "open" ? (
+                <Button type="button" variant="outline" size="sm" onClick={() => setStatus("in_progress")}>
+                  Mark in progress
+                </Button>
+              ) : null}
+              <Button type="button" size="sm" onClick={() => setStatus("resolved")}>
+                Resolve (repaired)
+              </Button>
+            </DetailSheetFooter>
+          ) : null}
+        </>
+      )}
+    </DetailSheet>
   );
 }

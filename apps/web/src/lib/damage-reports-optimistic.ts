@@ -5,7 +5,9 @@ import { api, type Id } from "@/lib/convex-api";
 type DamageReport = FunctionReturnType<typeof api.damageReports.list>[number];
 type DamageStatus = DamageReport["status"];
 
-const LIST_STATUS_ARGS: Array<{ status?: DamageStatus }> = [
+type ListArgs = { status?: DamageStatus; statuses?: DamageStatus[] };
+
+const LIST_STATUS_ARGS: ListArgs[] = [
   { status: "open" },
   { status: "in_progress" },
   { status: "resolved" },
@@ -16,7 +18,8 @@ function isPendingStatus(status: DamageStatus) {
   return status === "open" || status === "in_progress";
 }
 
-function matchesListFilter(reportStatus: DamageStatus, args: { status?: DamageStatus }) {
+function matchesListFilter(reportStatus: DamageStatus, args: ListArgs) {
+  if (args.statuses) return args.statuses.includes(reportStatus);
   if (!args.status) return true;
   return reportStatus === args.status;
 }

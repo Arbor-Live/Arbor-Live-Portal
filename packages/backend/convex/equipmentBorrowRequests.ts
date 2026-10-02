@@ -9,7 +9,7 @@ import {
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { getUserId, requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
+import { getUserId, isAdmin, requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { insertPullListItemsFromLines } from "./eventPullLists";
 import { allocateBorrowRequestNumber } from "./lib/publicReferenceIds";
 import { resolveVenueLink } from "./lib/venues";
@@ -217,6 +217,27 @@ export const list = query({
       .withIndex("by_createdAt")
       .order("desc")
       .take(LIST_TAKE);
+  },
+});
+
+/**
+ * One request for the detail panel (`?request=<id>` deep links). Admins can
+ * open any request; everyone else only their own. Null when the id is
+ * malformed, the request is gone, or it isn't the viewer's to see. Takes a
+ * plain string because the id comes straight from the URL.
+ */
+export const get = query({
+  args: { id: v.string() },
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const id = ctx.db.normalizeId("equipmentBorrowRequests", args.id);
+    if (!id) return null;
+    const request = await ctx.db.get(id);
+    if (!request) return null;
+    const isMine = request.requesterUserId === getUserId(user);
+    if (!isMine && !isAdmin(user)) return null;
+    return { request, isMine };
   },
 });
 

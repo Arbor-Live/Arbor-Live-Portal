@@ -1,7 +1,7 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { runConvex } from "../helpers/convex";
 import { formField } from "../helpers/form";
-import { pickSearchableOption, pickSelectOption } from "../helpers/select";
+import { pickSearchableOption } from "../helpers/select";
 import {
   deleteInventoryFixtures,
   confirmAppDialog,
@@ -46,28 +46,34 @@ test.describe.serial("inventory items and storage locations", () => {
   });
 
   test("admin creates a nested storage location and its path is composed", async ({ page }) => {
-    await page.goto("/dashboard/inventory/storage-locations");
-    await expect(page.getByRole("heading", { name: "Storage Locations" })).toBeVisible({
-      timeout: 30_000,
-    });
+    await gotoStorageLocations(page);
 
-    const form = page.locator("form");
-    await formField(form, "Name").fill(parentLocation);
-    await form.getByRole("button", { name: "Create", exact: true }).click();
+    await page.getByRole("button", { name: "New location", exact: true }).click();
+    let sheet = page.getByTestId("storage-location-sheet");
+    await formField(sheet, "Name").fill(parentLocation);
+    await sheet.getByRole("button", { name: "Create location", exact: true }).click();
+    // The panel closes once the create lands.
+    await expect(sheet).toHaveCount(0, { timeout: 30_000 });
 
     const parent = await waitForStorageLocation(parentLocation, (state) => Boolean(state?.path));
     expect(parent.path).toBe(parentLocation);
     expect(parent.parentPath).toBeNull();
 
-    await formField(form, "Name").fill(childLocation);
-    await pickSelectOption(page, form.locator("#storage-location-parent"), parentLocation);
-    await form.getByRole("button", { name: "Create", exact: true }).click();
+    // "Add a location inside" opens a new location already nested in the row.
+    await searchLocations(page, parentLocation);
+    await openLocationMenu(page, parent.locationId, "Add a location inside");
+    sheet = page.getByTestId("storage-location-sheet");
+    await expect(sheet).toContainText(`Inside ${parentLocation}`, { timeout: 20_000 });
+    await formField(sheet, "Name").fill(childLocation);
+    await sheet.getByRole("button", { name: "Create location", exact: true }).click();
+    await expect(sheet).toHaveCount(0, { timeout: 30_000 });
 
     const child = await waitForStorageLocation(childLocation, (state) => Boolean(state?.parentPath));
     expect(child.path).toBe(`${parentLocation} > ${childLocation}`);
     expect(child.parentPath).toBe(parentLocation);
 
-    await expect(page.getByTestId(`location-row-${child.locationId}`)).toContainText(child.path, {
+    // Nested under the parent, which starts expanded.
+    await expect(page.getByTestId(`location-row-${child.locationId}`)).toContainText(childLocation, {
       timeout: 30_000,
     });
   });
@@ -175,26 +181,46 @@ test.describe.serial("inventory items and storage locations", () => {
     const child = await waitForStorageLocation(childLocation, (state) => Boolean(state?.path));
     expect(child.linkedItemCount).toBeGreaterThan(0);
 
-    await page.goto("/dashboard/inventory/storage-locations");
-    await expect(page.getByRole("heading", { name: "Storage Locations" })).toBeVisible({
-      timeout: 30_000,
-    });
+    await gotoStorageLocations(page);
+    await searchLocations(page, parentLocation);
 
     const childRow = page.getByTestId(`location-row-${child.locationId}`);
     await expect(childRow).toBeVisible({ timeout: 30_000 });
-    await childRow.getByRole("button", { name: "Delete", exact: true }).click();
+    await openLocationMenu(page, child.locationId, "Delete…");
+    await confirmAppDialog(page, "Delete location");
+    // `storageLocations.remove` refuses while items are stored there.
     await page.waitForTimeout(3_000);
     await expect(page.getByTestId(`location-row-${child.locationId}`)).toBeVisible();
 
-    // The parent is refused for a different reason: it still has a child.
+    // The parent is refused for a different reason: it still has a child. The
+    // page says so up front instead of asking to confirm a delete that can't land.
     const parent = await waitForStorageLocation(parentLocation, (state) => Boolean(state?.path));
     expect(parent.childPaths).toEqual([child.path]);
-    const parentRow = page.getByTestId(`location-row-${parent.locationId}`);
-    await parentRow.getByRole("button", { name: "Delete", exact: true }).click();
+    await openLocationMenu(page, parent.locationId, "Delete…");
+    await expect(page.getByTestId("app-dialog")).toHaveCount(0);
     await page.waitForTimeout(3_000);
     await expect(page.getByTestId(`location-row-${parent.locationId}`)).toBeVisible();
   });
 });
+
+async function gotoStorageLocations(page: Page) {
+  await page.goto("/dashboard/inventory/storage-locations");
+  await expect(page.getByTestId("storage-locations-page")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("storage-locations-summary")).toBeVisible({ timeout: 30_000 });
+}
+
+/** The storage locations page's search box (matches name or path). */
+async function searchLocations(page: Page, query: string) {
+  await page.getByRole("textbox", { name: "Search storage locations" }).fill(query);
+}
+
+/** Pick an item from a location row's `⋯` menu. */
+async function openLocationMenu(page: Page, locationId: string, item: string) {
+  const row = page.getByTestId(`location-row-${locationId}`);
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.getByRole("button", { name: /^More for / }).click();
+  await page.getByRole("menuitem", { name: item, exact: true }).click();
+}
 
 /** Open an item row's side panel: the row's main area is its first button. */
 async function openItemRow(row: Locator) {

@@ -22,9 +22,9 @@ let secondType: SeededType;
  * `inventoryPackages.update` replaces option groups + BOM lines on save, so the
  * edit path is still the interesting one: qty change and removal share a write.
  *
- * The editor is a hand-rolled modal; contents live in draft state mirrored into
- * the form on save — "add from the catalog" and "the form is dirty" are both
- * required for the save to carry the lines.
+ * The editor is the side panel (`package-sheet`, `?package=<id>`); contents
+ * live in draft state mirrored into the form on save — "add from the catalog"
+ * and "the form is dirty" are both required for the save to carry the lines.
  */
 test.describe.serial("inventory package CRUD", () => {
   test.setTimeout(180_000);
@@ -57,13 +57,12 @@ test.describe.serial("inventory package CRUD", () => {
   });
 
   test("admin builds a package from the catalog panel", async ({ page }) => {
-    await page.goto("/dashboard/inventory/packages");
-    await expect(page.getByText("Packages", { exact: true }).first()).toBeVisible({
-      timeout: 30_000,
-    });
+    await gotoPackages(page);
 
-    await page.getByRole("button", { name: "Create Package" }).click();
-    await expect(page.getByRole("heading", { name: "Create Package" })).toBeVisible({
+    // The empty state has its own New package button, so take the header's.
+    await page.getByRole("button", { name: "New package", exact: true }).first().click();
+    const sheet = packageSheet(page);
+    await expect(sheet.getByText("New package", { exact: true })).toBeVisible({
       timeout: 20_000,
     });
 
@@ -80,11 +79,11 @@ test.describe.serial("inventory package CRUD", () => {
     await expect(page.getByText(/2 units · 2 included types · 3 total/)).toBeVisible({
       timeout: 20_000,
     });
-    await page.getByRole("button", { name: "Use suggested prices" }).click();
+    await sheet.getByRole("button", { name: "Use suggested prices" }).click();
     await expect(formField(editor, "Non-Subsidized Package Price (USD)")).toHaveValue("50");
     await expect(formField(editor, /^Subsidized Package Price/)).toHaveValue("25");
 
-    await page.getByRole("button", { name: "Create", exact: true }).click();
+    await sheet.getByRole("button", { name: "Create package", exact: true }).click();
 
     const created = await waitForInventoryPackage(packageName, (state) => Boolean(state?.packageId));
     expect(created.active).toBe(true);
@@ -100,21 +99,17 @@ test.describe.serial("inventory package CRUD", () => {
 
     // A successful save closes the editor, which is the only signal the
     // operator gets that the package landed.
-    await expect(page.locator("#package-editor-form")).toHaveCount(0, { timeout: 20_000 });
+    await expect(packageSheet(page)).toHaveCount(0, { timeout: 20_000 });
   });
 
   test("editing re-writes the line rows rather than patching them", async ({ page }) => {
     const created = await waitForInventoryPackage(packageName, (state) => Boolean(state?.packageId));
 
-    await page.goto("/dashboard/inventory/packages");
-    const card = page.getByTestId(`package-card-${created.packageId}`);
-    await expect(card).toBeVisible({ timeout: 30_000 });
-    await expect(card).toContainText("2 included types");
-    await card.getByRole("button", { name: "Edit", exact: true }).click();
-
-    await expect(page.getByRole("heading", { name: "Edit Package" })).toBeVisible({
-      timeout: 20_000,
-    });
+    await gotoPackages(page);
+    const row = page.getByTestId(`package-row-${created.packageId}`);
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await expect(row).toContainText("2 units");
+    const sheet = await openPackageRow(page, created.packageId);
 
     const firstUnit = page.getByTestId("package-content-unit").filter({
       has: page.getByTestId(`package-content-row-${firstType.typeId}`),
@@ -128,7 +123,7 @@ test.describe.serial("inventory package CRUD", () => {
     await secondUnit.getByRole("button", { name: "Remove unit" }).click();
     await expect(secondUnit).toHaveCount(0, { timeout: 20_000 });
 
-    await page.getByRole("button", { name: "Update", exact: true }).click();
+    await sheet.getByRole("button", { name: "Save changes", exact: true }).click();
 
     const updated = await waitForInventoryPackage(
       packageName,
@@ -145,26 +140,23 @@ test.describe.serial("inventory package CRUD", () => {
   test("closing a dirty editor asks before discarding", async ({ page }) => {
     const created = await waitForInventoryPackage(packageName, (state) => Boolean(state?.packageId));
 
-    await page.goto("/dashboard/inventory/packages");
-    const card = page.getByTestId(`package-card-${created.packageId}`);
-    await expect(card).toBeVisible({ timeout: 30_000 });
-    await card.getByRole("button", { name: "Edit", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Edit Package" })).toBeVisible({
-      timeout: 20_000,
-    });
+    // `?package=<id>` opens the panel straight from a link.
+    await page.goto(`/dashboard/inventory/packages?package=${created.packageId}`);
+    const sheet = packageSheet(page);
+    await expect(formField(sheet, "Name")).toHaveValue(packageName, { timeout: 30_000 });
 
-    await formField(page.locator("#package-editor-form"), "Name").fill(`${packageName} (dirty)`);
+    await formField(sheet, "Name").fill(`${packageName} (dirty)`);
 
-    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await sheet.getByRole("button", { name: "Cancel", exact: true }).click();
     const dialog = page.getByTestId("app-dialog");
     await expect(dialog).toBeVisible({ timeout: 15_000 });
-    await expect(dialog).toContainText("Discard unsaved changes?");
+    await expect(dialog).toContainText(`Discard your changes to ${packageName}?`);
     await dismissAppDialog(page);
     await expect(page.locator("#package-editor-form")).toBeVisible();
 
-    await page.getByRole("button", { name: "Cancel", exact: true }).click();
-    await acceptAppDialog(page);
-    await expect(page.locator("#package-editor-form")).toHaveCount(0, { timeout: 20_000 });
+    await sheet.getByRole("button", { name: "Cancel", exact: true }).click();
+    await acceptAppDialog(page, "Discard changes");
+    await expect(packageSheet(page)).toHaveCount(0, { timeout: 20_000 });
 
     // Declining to save must leave the stored name alone.
     const unchanged = await waitForInventoryPackage(packageName, (state) => Boolean(state));
@@ -174,12 +166,14 @@ test.describe.serial("inventory package CRUD", () => {
   test("deleting the package releases its types", async ({ page }) => {
     const created = await waitForInventoryPackage(packageName, (state) => Boolean(state?.packageId));
 
-    await page.goto("/dashboard/inventory/packages");
-    const card = page.getByTestId(`package-card-${created.packageId}`);
-    await expect(card).toBeVisible({ timeout: 30_000 });
-    await card.getByRole("button", { name: "Delete", exact: true }).click();
+    await gotoPackages(page);
+    const row = page.getByTestId(`package-row-${created.packageId}`);
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await row.getByRole("button", { name: /^More for / }).click();
+    await page.getByRole("menuitem", { name: "Delete package" }).click();
+    await acceptAppDialog(page, "Delete package");
 
-    await expect(page.getByTestId(`package-card-${created.packageId}`)).toHaveCount(0, {
+    await expect(page.getByTestId(`package-row-${created.packageId}`)).toHaveCount(0, {
       timeout: 30_000,
     });
     expect(runConvex("e2eHelpers:getInventoryPackageByName", { name: packageName })).toBeNull();
@@ -193,15 +187,33 @@ test.describe.serial("inventory package CRUD", () => {
   });
 });
 
+/** The packages list, once its summary line has loaded. */
+async function gotoPackages(page: Page) {
+  await page.goto("/dashboard/inventory/packages");
+  await expect(page.getByTestId("packages-summary")).toBeVisible({ timeout: 30_000 });
+}
+
+function packageSheet(page: Page) {
+  return page.getByTestId("package-sheet");
+}
+
+/** Open a row's panel: the row's main area is its first button (the checkbox has role="checkbox"). */
+async function openPackageRow(page: Page, packageId: string) {
+  await page.getByTestId(`package-row-${packageId}`).getByRole("button").first().click();
+  const sheet = packageSheet(page);
+  await expect(sheet.getByRole("button", { name: "Save changes" })).toBeVisible({ timeout: 20_000 });
+  return sheet;
+}
+
 /**
  * Add one unit of a type from the editor's "Add equipment" panel.
  *
- * The panel is a tab inside the modal, and `addType` flips back to the contents
+ * The panel is a tab inside the side panel, and `addType` flips back to the contents
  * tab on the first add — so re-opening it is part of the interaction, not a
  * workaround.
  */
 async function addCatalogType(page: Page, typeId: string) {
-  await page.getByRole("button", { name: "Add equipment" }).click();
+  await packageSheet(page).getByRole("button", { name: "Add equipment" }).click();
   const row = page.getByTestId(`package-catalog-row-${typeId}`);
   await expect(row).toBeVisible({ timeout: 20_000 });
   await row.getByRole("button", { name: /^Add (to package|another)$/ }).click();

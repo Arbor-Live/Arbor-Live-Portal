@@ -1,30 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useFormState } from "react-hook-form";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
-import { api, type Id } from "@/lib/convex-api";
-import { useAppDialog } from "@/components/ui/app-dialog";
-import { Form } from "@/components/ui/form";
-import { TextFormField } from "@/components/forms/text-form-field";
-import { TextareaFormField } from "@/components/forms/textarea-form-field";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useConvexForm } from "@/hooks/use-convex-form";
-import {
-  inventoryPackageSchema,
-  type InventoryPackageFormValues,
-} from "@/lib/validations/inventory";
-import { formatCurrency, inventoryItemLabel } from "./constants";
-import { FileUploadField } from "@/components/files/file-upload-field";
+import { CaretDownIcon, GlobeIcon, PackageIcon, PlusIcon } from "@phosphor-icons/react";
 import {
   activeFilters,
   FilterBar,
@@ -32,6 +11,10 @@ import {
   type FilterDefinition,
   type FilterState,
 } from "@/components/filter-bar";
+import { EmptyState, ListSummary } from "@/components/list-page";
+import { MetaItem, PageHeader } from "@/components/page-header";
+import { useAppDialog } from "@/components/ui/app-dialog";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,23 +24,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CaretDownIcon } from "@phosphor-icons/react";
-import {
-  PackageItemsEditor,
-  useSuggestedPackagePricing,
-  type ContentUnitDraft,
-} from "./package-items-editor";
+import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/convex-api";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
+import { inventoryItemLabel } from "./constants";
+import { packageSection, packageStatus, packageTypeIds, packagePriceUsd, type PackageRow } from "./package-form";
 import {
   bucketForCategoryKey,
   formatTypeDisplay,
   groupRowsBySection,
   publicBucketLabels,
-  sectionOrder,
   sectionFilterOptions,
-  type PublicPackageBucket,
+  sectionOrder,
 } from "./package-section-utils";
-import { cn } from "@/lib/utils";
-import { StoredAssetImage } from "@/components/files/stored-asset-image";
+import { PackageSheet } from "./package-sheet";
+import { PackagesTable } from "./packages-table";
 
 const SORT_LABELS = {
   section: "Section",
@@ -65,6 +47,15 @@ const SORT_LABELS = {
   price: "Price",
   value: "Est. value",
 } as const;
+
+type SortKey = keyof typeof SORT_LABELS;
+
+const ORDER_RULES: Record<SortKey, { asc: string; desc: string }> = {
+  section: { asc: "By section, then A to Z.", desc: "By section in reverse, then Z to A." },
+  name: { asc: "A to Z by name.", desc: "Z to A by name." },
+  price: { asc: "Cheapest first.", desc: "Most expensive first." },
+  value: { asc: "Lowest estimated value first.", desc: "Highest estimated value first." },
+};
 
 const STATUS_OPTIONS = [
   { value: "active", label: "Active" },
@@ -76,195 +67,49 @@ const PUBLIC_OPTIONS = [
   { value: "hidden", label: "Hidden" },
 ];
 
-const defaultPackageValues: InventoryPackageFormValues = {
-  name: "",
-  description: "",
-  subsidizedPackagePriceUsd: 0,
-  nonSubsidizedPackagePriceUsd: 0,
-  active: true,
-  publicListing: false,
-  publicBucket: "",
-  publicHeroImageUrl: "",
-  publicSlug: "",
-  contents: [],
-};
+/** `?package=<id>` opens that package's panel; `?package=new` opens an empty one. */
+const PACKAGE_PARAM = "package";
 
-function parsePositiveInt(value: string) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1;
+function setPackageParam(value: string | null) {
+  const url = new URL(window.location.href);
+  if (value) url.searchParams.set(PACKAGE_PARAM, value);
+  else url.searchParams.delete(PACKAGE_PARAM);
+  window.history.replaceState(null, "", url);
 }
 
-function contentsFromDraft(units: ContentUnitDraft[]): InventoryPackageFormValues["contents"] {
-  return units.map((unit) => ({
-    quantity: parsePositiveInt(unit.quantity),
-    options: unit.options.map((option) => ({
-      name: option.name.trim() || undefined,
-      items: option.items
-        .filter((item) => item.typeId)
-        .map((item) => ({
-          typeId: item.typeId,
-          quantity: parsePositiveInt(item.quantity),
-          role: item.role,
-        })),
-    })),
-  }));
+function plural(count: number, noun: string, nouns = `${noun}s`) {
+  return `${count.toLocaleString()} ${count === 1 ? noun : nouns}`;
 }
 
-function draftFromContents(
-  contents: Array<{
-    quantity: number;
-    options: Array<{
-      name?: string;
-      items: Array<{ typeId: string; quantity: number; role: "primary" | "accessory" }>;
-    }>;
-  }>,
-): ContentUnitDraft[] {
-  return contents.map((unit, unitIndex) => ({
-    key: `loaded-unit-${unitIndex}`,
-    quantity: String(unit.quantity),
-    options: unit.options.map((option, optionIndex) => ({
-      key: `loaded-option-${unitIndex}-${optionIndex}`,
-      name: option.name ?? "",
-      items: option.items.map((item) => ({
-        typeId: item.typeId,
-        quantity: String(item.quantity),
-        role: item.role,
-      })),
-    })),
-  }));
-}
-
-function packageSection(pkg: {
-  publicListing?: boolean;
-  publicBucket?: PublicPackageBucket;
-  items: Array<{ typeId: string; type?: { category: string } | null }>;
-  contents?: Array<{
-    options: Array<{
-      items: Array<{ type?: { category: string } | null }>;
-    }>;
-  }>;
-}, categories: Array<{ key: string; publicBucket?: PublicPackageBucket | null }> | undefined): PublicPackageBucket {
-  if (pkg.publicListing && pkg.publicBucket) return pkg.publicBucket;
-  const counts = new Map<PublicPackageBucket, number>();
-  const categorySources = [
-    ...pkg.items.map((item) => item.type?.category),
-    ...(pkg.contents ?? []).flatMap((unit) =>
-      unit.options.flatMap((option) => option.items.map((item) => item.type?.category)),
-    ),
-  ];
-  for (const category of categorySources) {
-    if (!category) continue;
-    const bucket = bucketForCategoryKey(category, categories);
-    counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
+async function attempt(action: () => Promise<unknown>, success: string) {
+  try {
+    await action();
+    notify.success(success);
+    return true;
+  } catch (error) {
+    notify.error(getConvexErrorMessage(error));
+    return false;
   }
-  let dominant: PublicPackageBucket = "misc";
-  let max = 0;
-  for (const section of sectionOrder) {
-    const count = counts.get(section) ?? 0;
-    if (count > max) {
-      max = count;
-      dominant = section;
-    }
-  }
-  return dominant;
 }
 
 export function PackagesManager() {
   const { confirm } = useAppDialog();
+  const searchParams = useSearchParams();
+  const [panel, setPanel] = useState<string | null>(() => searchParams.get(PACKAGE_PARAM));
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<FilterState>({});
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState<"section" | "name" | "price" | "value">("section");
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [bulkPending, setBulkPending] = useState(false);
+  const [sortBy, setSortBy] = useState<SortKey>("section");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [contentUnits, setContentUnits] = useState<ContentUnitDraft[]>([]);
 
+  // The list is bounded server-side (500), so it loads whole and filters run here.
   const packages = useQuery(api.inventoryPackages.list, {});
   const types = useQuery(api.inventoryTypes.listOptions, {});
   const inventoryItems = useQuery(api.inventoryItems.listSummaries, {});
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: true });
-  type InventoryTypeRow = NonNullable<typeof types>[number];
 
-  const createPackage = useMutation(api.inventoryPackages.create);
-  const updatePackage = useMutation(api.inventoryPackages.update);
   const removePackage = useMutation(api.inventoryPackages.remove);
-
-  const packageForm = useConvexForm<InventoryPackageFormValues>({
-    schema: inventoryPackageSchema,
-    defaultValues: defaultPackageValues,
-    mode: "onTouched",
-  });
-
-  /**
-   * Subscribed rather than read off `packageForm.formState`.
-   *
-   * `useConvexForm` memoises what it returns on `[form, isDirty, saveStatus,
-   * …]`, so the `formState` snapshot it hands back does not change when a
-   * validation error appears — and this component's only other re-render
-   * trigger is `watch()`, which submit-time validation does not fire. Reading
-   * the snapshot directly would leave the error below permanently invisible.
-   */
-  const { errors: packageErrors } = useFormState({ control: packageForm.control });
-
-  useEffect(() => {
-    packageForm.setValue("contents", contentsFromDraft(contentUnits), {
-      shouldDirty: true,
-    });
-  }, [contentUnits, packageForm]);
-
-  function buildPackagePayload(values: InventoryPackageFormValues) {
-    const contents = contentsFromDraft(contentUnits)
-      .map((unit) => ({
-        quantity: unit.quantity,
-        options: unit.options
-          .map((option) => ({
-            ...(option.name ? { name: option.name } : {}),
-            items: option.items.map((item) => ({
-              typeId: item.typeId as Id<"inventoryTypes">,
-              quantity: item.quantity,
-              role: item.role,
-            })),
-          }))
-          .filter((option) => option.items.length > 0),
-      }))
-      .filter((unit) => unit.options.length > 0);
-
-    return {
-      name: values.name,
-      description: values.description || undefined,
-      packagePriceCents: Math.round(values.nonSubsidizedPackagePriceUsd * 100),
-      subsidizedPackagePriceUsd: values.subsidizedPackagePriceUsd,
-      nonSubsidizedPackagePriceUsd: values.nonSubsidizedPackagePriceUsd,
-      active: values.active,
-      publicListing: values.publicListing,
-      publicBucket:
-        values.publicListing && values.publicBucket
-          ? (values.publicBucket as PublicPackageBucket)
-          : undefined,
-      publicHeroImageUrl: values.publicHeroImageUrl?.trim() || undefined,
-      publicSlug: values.publicSlug?.trim() || undefined,
-      contents,
-    };
-  }
-
-  const onSubmitPackage = packageForm.submitMutation(async (values) => {
-    const payload = buildPackagePayload(values);
-    if (editingId) {
-      await updatePackage({ id: editingId as Id<"inventoryPackages">, ...payload });
-    } else {
-      await createPackage(payload);
-    }
-    closeEditor();
-  });
-
-  const typeLookup = useMemo(() => {
-    const map = new Map<string, InventoryTypeRow>();
-    for (const type of types ?? []) {
-      map.set(type._id, type);
-    }
-    return map;
-  }, [types]);
 
   /** Item ids → their type ids: a package "has" an item when one of its lines uses that item's type. */
   const itemTypeById = useMemo(
@@ -272,566 +117,330 @@ export function PackagesManager() {
     [inventoryItems],
   );
 
-  const typeOptions = useMemo(
-    () =>
-      (types ?? []).map((type) => ({
-        value: type._id,
-        label: formatTypeDisplay(type),
-        description: publicBucketLabels[bucketForCategoryKey(type.category, categories)],
-        keywords: type.category,
-      })),
-    [categories, types],
-  );
-
-  const inventoryItemOptions = useMemo(
-    () =>
-      (inventoryItems ?? []).map((item) => ({
-        value: item._id,
-        label: inventoryItemLabel(item),
-        description: item.type ? formatTypeDisplay(item.type) : "Unknown type",
-        keywords: item.type?.category,
-      })),
-    [inventoryItems],
-  );
-
   const filterDefinitions = useMemo<FilterDefinition[]>(
     () => [
       { id: "section", label: "Section", options: sectionFilterOptions },
-      { id: "type", label: "Type", options: typeOptions },
-      { id: "item", label: "Inventory item", options: inventoryItemOptions },
+      {
+        id: "type",
+        label: "Type",
+        options: (types ?? []).map((type) => ({
+          value: type._id,
+          label: formatTypeDisplay(type),
+          description: publicBucketLabels[bucketForCategoryKey(type.category, categories)],
+          keywords: type.category,
+        })),
+      },
+      {
+        id: "item",
+        label: "Inventory item",
+        options: (inventoryItems ?? []).map((item) => ({
+          value: item._id,
+          label: inventoryItemLabel(item),
+          description: item.type ? formatTypeDisplay(item.type) : "Unknown type",
+          keywords: item.type?.category,
+        })),
+      },
       { id: "status", label: "Status", options: STATUS_OPTIONS, single: true },
       { id: "public", label: "Public", options: PUBLIC_OPTIONS, single: true },
     ],
-    [inventoryItemOptions, typeOptions],
+    [categories, inventoryItems, types],
   );
 
-  const filteredPackages = useMemo(() => {
-    const loweredSearch = search.trim().toLowerCase();
-    // Everything is loaded (the list is bounded), so filters run here.
+  const sections = useMemo(
+    () => new Map((packages ?? []).map((pkg) => [pkg._id as string, packageSection(pkg, categories)])),
+    [categories, packages],
+  );
+  const sectionOf = useCallback(
+    (pkg: PackageRow) => sections.get(pkg._id) ?? packageSection(pkg, categories),
+    [categories, sections],
+  );
+
+  const rows = useMemo(() => {
+    const needle = search.trim().toLowerCase();
     const itemFilter = filters.item
       ? {
           ...filters.item,
-          values: filters.item.values.map((id) => itemTypeById.get(id)).filter((id): id is string => Boolean(id)),
+          values: filters.item.values
+            .map((id) => itemTypeById.get(id))
+            .filter((id): id is string => Boolean(id)),
         }
       : undefined;
-    const rows = [...(packages ?? [])].filter((pkg) => {
-      if (loweredSearch && !pkg.name.toLowerCase().includes(loweredSearch)) return false;
-      const packageTypeIds = [
-        ...pkg.items.map((row) => row.typeId as string),
-        ...(pkg.contents ?? []).flatMap((unit) =>
-          unit.options.flatMap((option) => option.items.map((item) => item.typeId as string)),
-        ),
-      ];
+    const filtered = (packages ?? []).filter((pkg) => {
+      if (
+        needle &&
+        !`${pkg.name} ${pkg.publicSlug ?? ""} ${pkg.description ?? ""}`.toLowerCase().includes(needle)
+      ) {
+        return false;
+      }
+      const typeIds = packageTypeIds(pkg);
       return (
-        matchesFilter(filters.section, packageSection(pkg, categories)) &&
-        matchesFilter(filters.type, packageTypeIds) &&
-        matchesFilter(itemFilter, packageTypeIds) &&
+        matchesFilter(filters.section, sectionOf(pkg)) &&
+        matchesFilter(filters.type, typeIds) &&
+        matchesFilter(itemFilter, typeIds) &&
         matchesFilter(filters.status, pkg.active ? "active" : "inactive") &&
         matchesFilter(filters.public, pkg.publicListing ? "listed" : "hidden")
       );
     });
 
-    rows.sort((a, b) => {
-      const direction = sortDir === "asc" ? 1 : -1;
+    const direction = sortDir === "asc" ? 1 : -1;
+    return filtered.sort((a, b) => {
       if (sortBy === "section") {
-        const sectionCompare =
-          sectionOrder.indexOf(packageSection(a, categories)) -
-          sectionOrder.indexOf(packageSection(b, categories));
-        if (sectionCompare !== 0) return sectionCompare * direction;
-        return a.name.localeCompare(b.name) * direction;
+        const bySection = sectionOrder.indexOf(sectionOf(a)) - sectionOrder.indexOf(sectionOf(b));
+        if (bySection !== 0) return bySection * direction;
       }
-      if (sortBy === "price") return (a.packagePriceCents - b.packagePriceCents) * direction;
+      if (sortBy === "price") return (packagePriceUsd(a) - packagePriceUsd(b)) * direction;
       if (sortBy === "value") {
         return ((a.estimatedRentalValueUsd ?? 0) - (b.estimatedRentalValueUsd ?? 0)) * direction;
       }
       return a.name.localeCompare(b.name) * direction;
     });
-    return rows;
-  }, [categories, filters, itemTypeById, packages, search, sortBy, sortDir]);
+  }, [filters, itemTypeById, packages, search, sectionOf, sortBy, sortDir]);
 
-  const groupedPackages = useMemo(() => {
+  const groups = useMemo(() => {
     if (sortBy !== "section") return null;
-    return groupRowsBySection(
-      filteredPackages.map((pkg) => ({
-        pkg,
-        section: packageSection(pkg, categories),
-      })),
-    );
-  }, [categories, filteredPackages, sortBy]);
+    return groupRowsBySection(rows.map((pkg) => ({ pkg, section: sectionOf(pkg) }))).map((group) => ({
+      section: group.section,
+      rows: group.rows.map((entry) => entry.pkg),
+    }));
+  }, [rows, sectionOf, sortBy]);
 
-  const activeFilterCount = (search.trim() ? 1 : 0) + Object.keys(activeFilters(filters)).length;
+  const panelIsNew = panel === "new";
+  const panelId = panel && !panelIsNew ? panel : null;
+  const panelRow = panelId ? (packages?.find((pkg) => pkg._id === panelId) ?? null) : null;
+  // Set while this page deletes a package, so its own delete isn't reported as a dead link.
+  const deletingIdRef = useRef<string | null>(null);
 
-  const suggestedPricing = useSuggestedPackagePricing(contentUnits, typeLookup);
-  const packageValues = packageForm.watch();
-
-  function closeEditor() {
-    setEditorOpen(false);
-    setEditingId(null);
-    packageForm.reset(defaultPackageValues);
-    packageForm.resetSaveState();
-    setContentUnits([]);
-  }
-
-  async function requestCloseEditor() {
-    if (packageForm.formState.isDirty) {
-      if (!(await confirm({ title: "Discard unsaved changes?" }))) return;
+  // A `?package=` link to a package that doesn't exist: say so and drop the param.
+  useEffect(() => {
+    if (!panelId || packages === undefined || panelRow) return;
+    if (deletingIdRef.current !== panelId) {
+      notify.error("That package doesn't exist anymore. It may have been deleted.");
     }
-    closeEditor();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- close the panel once the list says the package is gone
+    setPanel(null);
+    setPackageParam(null);
+  }, [packages, panelId, panelRow]);
+
+  const applied = activeFilters(filters);
+  const filterCount = (search.trim() ? 1 : 0) + Object.keys(applied).length;
+  const selectedRows = rows.filter((row) => selected.has(row._id));
+  const activeCount = rows.filter((row) => row.active).length;
+  const listedCount = rows.filter((row) => packageStatus(row) === "listed").length;
+  const allPackages = packages ?? [];
+
+  function openPanel(value: string | null) {
+    setPanel(value);
+    setPackageParam(value);
   }
 
-  function openCreateEditor() {
-    setEditingId(null);
-    packageForm.reset(defaultPackageValues);
-    packageForm.resetSaveState();
-    setContentUnits([]);
-    setEditorOpen(true);
-  }
-
-  function openEditEditor(pkg: NonNullable<typeof packages>[number]) {
-    const units = draftFromContents(pkg.contents ?? []);
-    setEditingId(pkg._id);
-    packageForm.reset({
-      name: pkg.name,
-      description: pkg.description ?? "",
-      subsidizedPackagePriceUsd: pkg.subsidizedPackagePriceUsd ?? 0,
-      nonSubsidizedPackagePriceUsd:
-        pkg.nonSubsidizedPackagePriceUsd ?? pkg.packagePriceCents / 100,
-      active: pkg.active,
-      publicListing: Boolean(pkg.publicListing),
-      publicBucket: (pkg.publicBucket ?? "") as InventoryPackageFormValues["publicBucket"],
-      publicHeroImageUrl: pkg.publicHeroImageUrl ?? "",
-      publicSlug: pkg.publicSlug ?? "",
-      contents: contentsFromDraft(units),
-    });
-    packageForm.resetSaveState();
-    setContentUnits(units);
-    setEditorOpen(true);
-  }
-
-  async function bulkDeleteSelected() {
-    await Promise.all(selectedIds.map((id) => removePackage({ id: id as never })));
-    setSelectedIds([]);
+  // Any filter change starts the selection over, so a bulk action only covers rows on screen.
+  function withClearedSelection<T>(setter: (value: T) => void) {
+    return (value: T) => {
+      setter(value);
+      setSelected(new Set());
+    };
   }
 
   function clearFilters() {
     setSearch("");
     setFilters({});
+    setSelected(new Set());
   }
 
-  function renderPackageCard(pkg: NonNullable<typeof packages>[number]) {
-    const section = packageSection(pkg, categories);
-    const isSelected = selectedIds.includes(pkg._id);
-    return (
-      <Card
-        key={pkg._id}
-        data-testid={`package-card-${pkg._id}`}
-        className={cn(
-          "overflow-hidden py-0 transition-shadow hover:shadow-md",
-          isSelected && "ring-2 ring-primary/40",
-        )}
-      >
-        {pkg.publicHeroImageUrl ? (
-          <div className="relative h-36 w-full border-b">
-            <StoredAssetImage
-              storedValue={pkg.publicHeroImageUrl}
-              alt=""
-              className="h-full w-full object-cover"
-              fallbackClassName="h-full w-full"
-            />
-          </div>
-        ) : (
-          <div className="flex h-24 items-center justify-center border-b bg-gradient-to-br from-muted/70 to-background px-4 text-center text-xs text-muted-foreground">
-            {pkg.name}
-          </div>
-        )}
-        <CardHeader className="space-y-2 px-4 pt-4 pb-2">
-          <div className="flex items-start justify-between gap-2">
-            <label className="flex min-w-0 items-start gap-2">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={isSelected}
-                onChange={(event) =>
-                  setSelectedIds((prev) =>
-                    event.target.checked
-                      ? [...prev, pkg._id]
-                      : prev.filter((id) => id !== pkg._id),
-                  )
-                }
-              />
-              <span className="min-w-0">
-                <CardTitle className="text-base leading-snug">{pkg.name}</CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                  {pkg.description || "No description"}
-                </p>
-              </span>
-            </label>
-            <span className="shrink-0 rounded-full border px-2 py-0.5 text-2xs font-medium">
-              {publicBucketLabels[section]}
-            </span>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3 px-4 pb-4 text-sm">
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div>
-              <p className="text-muted-foreground">Subsidized</p>
-              <p className="font-medium">{formatCurrency(pkg.subsidizedPackagePriceUsd)}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Non-Subsidized</p>
-              <p className="font-medium">
-                {formatCurrency(pkg.nonSubsidizedPackagePriceUsd ?? pkg.packagePriceCents / 100)}
-              </p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Est. Subsidized</p>
-              <p>{formatCurrency(pkg.estimatedSubsidizedRentalValueUsd)}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Est. Non-Subsidized</p>
-              <p>{formatCurrency(pkg.estimatedRentalValueUsd)}</p>
-            </div>
-          </div>
-          <div className="rounded-md border bg-muted/20 p-2 text-xs">
-            <p className="mb-1 font-medium">
-              {(pkg.contents ?? []).length} content unit
-              {(pkg.contents ?? []).length === 1 ? "" : "s"}
-              {pkg.items.length
-                ? ` · ${pkg.items.length} included type${pkg.items.length === 1 ? "" : "s"}`
-                : ""}
-            </p>
-            <p className="line-clamp-3 text-muted-foreground">
-              {(pkg.contents ?? [])
-                .map((unit) => {
-                  const labels = unit.options.map((option) => option.name).join(" / ");
-                  return unit.exclusive
-                    ? `${unit.quantity}× (${labels})`
-                    : `${unit.quantity}× ${labels}`;
-                })
-                .join(" · ") || "No contents yet"}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={() => openEditEditor(pkg)}>
-              Edit
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="destructive"
-              onClick={() => void removePackage({ id: pkg._id })}
-            >
-              Delete
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
+  async function deletePackage(row: PackageRow) {
+    const ok = await confirm({
+      title: `Delete ${row.name}?`,
+      description: row.publicListing
+        ? "The package and its contents list are removed, and it drops off the public package pages. The equipment types it used stay in the catalog."
+        : "The package and its contents list are removed. The equipment types it used stay in the catalog.",
+      destructive: true,
+      confirmLabel: "Delete package",
+    });
+    if (!ok) return false;
+    deletingIdRef.current = row._id;
+    const deleted = await attempt(() => removePackage({ id: row._id }), `Deleted ${row.name}`);
+    if (deleted) {
+      if (panel === row._id) openPanel(null);
+      setSelected((current) => {
+        const next = new Set(current);
+        next.delete(row._id);
+        return next;
+      });
+    }
+    deletingIdRef.current = null;
+    return deleted;
+  }
+
+  async function bulkDelete() {
+    const targets = selectedRows;
+    const ok = await confirm({
+      title: `Delete ${plural(targets.length, "package")}?`,
+      description:
+        "Each package and its contents list are removed, and listed ones drop off the public pages. The equipment types they used stay in the catalog.",
+      destructive: true,
+      confirmLabel: `Delete ${plural(targets.length, "package")}`,
+    });
+    if (!ok) return;
+    setBulkPending(true);
+    const outcomes = await Promise.allSettled(targets.map((row) => removePackage({ id: row._id })));
+    setBulkPending(false);
+    const failed = outcomes.filter((outcome) => outcome.status === "rejected");
+    const deleted = outcomes.length - failed.length;
+    if (deleted) notify.success(`Deleted ${plural(deleted, "package")}`);
+    if (failed.length) {
+      notify.error(
+        `${plural(failed.length, "package")} couldn't be deleted: ${getConvexErrorMessage((failed[0] as PromiseRejectedResult).reason)}`,
+      );
+    }
+    setSelected(new Set());
   }
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Packages</CardTitle>
-          <div className="space-y-3">
-            <FilterBar
-              search={search}
-              onSearchChange={setSearch}
-              searchPlaceholder="Search packages"
-              searchLabel="Search packages"
-              filters={filterDefinitions}
-              value={filters}
-              onChange={setFilters}
-            >
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="outline" className="font-normal">
-                    Sort: {SORT_LABELS[sortBy]}, {sortDir === "asc" ? "ascending" : "descending"}
-                    <CaretDownIcon className="size-3" aria-hidden />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-48">
-                  <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-                  <DropdownMenuRadioGroup value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
-                    {(Object.keys(SORT_LABELS) as (keyof typeof SORT_LABELS)[]).map((key) => (
-                      <DropdownMenuRadioItem key={key} value={key}>
-                        {SORT_LABELS[key]}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuRadioGroup value={sortDir} onValueChange={(value) => setSortDir(value as typeof sortDir)}>
-                    <DropdownMenuRadioItem value="asc">Ascending</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="desc">Descending</DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </FilterBar>
-            <p className="text-sm text-muted-foreground" data-testid="packages-summary">
-              {filteredPackages.length} package{filteredPackages.length === 1 ? "" : "s"}
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={!selectedIds.length}
-                onClick={() => void bulkDeleteSelected()}
-              >
-                Delete Selected ({selectedIds.length})
-              </Button>
-              <Button type="button" onClick={openCreateEditor}>
-                Create Package
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {!filteredPackages.length ? (
-            <div className="space-y-2 border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-              <p>
-                {activeFilterCount
-                  ? "No packages match this search and these filters."
-                  : "No packages yet. Create one to bundle types into a rentable kit."}
-              </p>
-              {activeFilterCount ? (
-                <Button type="button" variant="outline" size="sm" onClick={clearFilters}>
-                  Clear search and filters
-                </Button>
-              ) : null}
-            </div>
-          ) : groupedPackages ? (
-            groupedPackages.map((group) => (
-              <section key={group.section} className="space-y-3">
-                <h3 className="text-sm font-semibold">{publicBucketLabels[group.section]}</h3>
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {group.rows.map(({ pkg }) => renderPackageCard(pkg))}
-                </div>
-              </section>
-            ))
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {filteredPackages.map((pkg) => renderPackageCard(pkg))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+    <div className="space-y-4 pb-24" data-testid="packages-page">
+      <PageHeader
+        title="Packages"
+        description="Ready-made kits of equipment, priced as one. Listed packages also show on the public package pages."
+        actions={
+          <Button type="button" size="sm" onClick={() => openPanel("new")}>
+            <PlusIcon />
+            New package
+          </Button>
+        }
+        meta={
+          packages ? (
+            <>
+              <MetaItem icon={PackageIcon}>
+                {plural(allPackages.length, "package")} · {allPackages.filter((pkg) => pkg.active).length} active
+              </MetaItem>
+              <MetaItem icon={GlobeIcon}>
+                {allPackages.filter((pkg) => packageStatus(pkg) === "listed").length} listed publicly
+              </MetaItem>
+            </>
+          ) : undefined
+        }
+      />
 
-      {editorOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
-          onClick={() => void requestCloseEditor()}
-        >
-          <div
-            className="relative flex max-h-[92vh] w-full max-w-6xl flex-col rounded-lg border bg-background shadow-xl"
-            onClick={(event) => event.stopPropagation()}
+      <FilterBar
+        search={search}
+        onSearchChange={withClearedSelection(setSearch)}
+        searchPlaceholder="Search name, slug, description…"
+        searchLabel="Search packages"
+        filters={filterDefinitions}
+        value={filters}
+        onChange={withClearedSelection(setFilters)}
+      >
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="outline" className="font-normal">
+              Sort: {SORT_LABELS[sortBy]}, {sortDir === "asc" ? "ascending" : "descending"}
+              <CaretDownIcon className="size-3" aria-hidden />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-48">
+            <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={sortBy} onValueChange={(value) => setSortBy(value as SortKey)}>
+              {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+                <DropdownMenuRadioItem key={key} value={key}>
+                  {SORT_LABELS[key]}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup value={sortDir} onValueChange={(value) => setSortDir(value as "asc" | "desc")}>
+              <DropdownMenuRadioItem value="asc">Ascending</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="desc">Descending</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </FilterBar>
+
+      {packages === undefined ? (
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-72" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      ) : (
+        <>
+          <ListSummary
+            testId="packages-summary"
+            order={`${ORDER_RULES[sortBy][sortDir]} Open a package to edit it.`}
           >
-            <div className="flex items-start justify-between gap-3 border-b p-4">
-              <div>
-                <h2 className="text-lg font-semibold">{editingId ? "Edit Package" : "Create Package"}</h2>
-                <p className="text-sm text-muted-foreground">
-                  Fill in package details, then add equipment from the catalog.
-                </p>
-              </div>
+            {plural(rows.length, "package")} · {activeCount} active · {listedCount} listed publicly
+            {filterCount ? ` (of ${allPackages.length.toLocaleString()})` : ""}
+          </ListSummary>
+
+          {selectedRows.length ? (
+            <div
+              className="flex flex-wrap items-center gap-2 border border-status-blue-500/40 bg-status-blue-500/10 px-3 py-2 text-sm"
+              data-testid="packages-bulk-bar"
+            >
+              <span className="mr-auto font-medium">{plural(selectedRows.length, "package")} selected</span>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="shrink-0"
-                aria-label="Close"
-                onClick={() => void requestCloseEditor()}
+                disabled={bulkPending}
+                onClick={() => setSelected(new Set())}
               >
-                Close
+                Clear selection
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-destructive"
+                disabled={bulkPending}
+                onClick={() => void bulkDelete()}
+              >
+                Delete selected
               </Button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <Form {...packageForm}>
-                <form
-                  id="package-editor-form"
-                  onSubmit={packageForm.handleSubmit(onSubmitPackage)}
-                  className="grid gap-6 lg:grid-cols-2 lg:items-start"
-                >
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-semibold">Details</h3>
-                    <TextFormField name="name" label="Name" />
-                    <TextareaFormField
-                      name="description"
-                      label="Description"
-                      placeholder="Supports Markdown"
-                    />
-                    <p className="-mt-2 text-xs text-muted-foreground">
-                      Multi-line; Markdown supported on the public package page.
-                    </p>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <TextFormField
-                        name="subsidizedPackagePriceUsd"
-                        label="Subsidized Package Price (USD)"
-                        type="number"
-                      />
-                      <TextFormField
-                        name="nonSubsidizedPackagePriceUsd"
-                        label="Non-Subsidized Package Price (USD)"
-                        type="number"
-                      />
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          packageForm.setValue(
-                            "subsidizedPackagePriceUsd",
-                            Number(suggestedPricing.subsidized.toFixed(2)),
-                            { shouldDirty: true },
-                          );
-                          packageForm.setValue(
-                            "nonSubsidizedPackagePriceUsd",
-                            Number(suggestedPricing.nonSubsidized.toFixed(2)),
-                            { shouldDirty: true },
-                          );
-                        }}
-                      >
-                        Use suggested prices
-                      </Button>
-                    </div>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={packageValues.active}
-                        onChange={(event) =>
-                          packageForm.setValue("active", event.target.checked, { shouldDirty: true })
-                        }
-                      />
-                      Active
-                    </label>
-                    <div className="space-y-3 rounded-md border p-3">
-                      <p className="text-sm font-medium">Public listing</p>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={packageValues.publicListing}
-                          onChange={(event) => {
-                            packageForm.setValue("publicListing", event.target.checked, { shouldDirty: true });
-                            if (!event.target.checked) {
-                              packageForm.setValue("publicBucket", "", { shouldDirty: true });
-                            }
-                          }}
-                        />
-                        List publicly
-                      </label>
-                      {packageValues.publicListing ? (
-                        <div className="space-y-2">
-                          <Label htmlFor="package-public-bucket">Public browse section</Label>
-                          <Select
-                            value={packageValues.publicBucket || "none"}
-                            onValueChange={(value) =>
-                              packageForm.setValue(
-                                "publicBucket",
-                                (value === "none"
-                                  ? ""
-                                  : value) as InventoryPackageFormValues["publicBucket"],
-                                { shouldDirty: true },
-                              )
-                            }
-                          >
-                            <SelectTrigger id="package-public-bucket" className="w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">Select section…</SelectItem>
-                              {(Object.keys(publicBucketLabels) as PublicPackageBucket[]).map((key) => (
-                                <SelectItem key={key} value={key}>
-                                  {publicBucketLabels[key]}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {/*
-                            The section picker is not a FormField, so nothing
-                            else renders its error. The schema refuses
-                            `publicListing` without a bucket, and without this
-                            the operator just sees Create do nothing.
-                          */}
-                          {packageErrors.publicBucket ? (
-                            <p className="text-sm text-destructive">
-                              {packageErrors.publicBucket.message}
-                            </p>
-                          ) : null}
-                        </div>
-                      ) : null}
-                      <FileUploadField
-                        label="Hero image"
-                        entityKind="package"
-                        purpose="hero"
-                        entityId={editingId ?? undefined}
-                        currentUrl={packageValues.publicHeroImageUrl}
-                        urlValue={packageValues.publicHeroImageUrl}
-                        onUploaded={(url) =>
-                          packageForm.setValue("publicHeroImageUrl", url, { shouldDirty: true })
-                        }
-                        onUrlChange={(url) =>
-                          packageForm.setValue("publicHeroImageUrl", url, { shouldDirty: true })
-                        }
-                        onClear={() =>
-                          packageForm.setValue("publicHeroImageUrl", "", { shouldDirty: true })
-                        }
-                        helperText="Upload an image or paste an https URL."
-                      />
-                      <TextFormField
-                        name="publicSlug"
-                        label="Optional public slug"
-                        placeholder="e.g. basic-foh-package"
-                      />
-                    </div>
-                  </div>
+          ) : null}
 
-                  <div className="space-y-3 lg:sticky lg:top-0">
-                    <h3 className="text-sm font-semibold">Package contents</h3>
-                    <PackageItemsEditor
-                      units={contentUnits}
-                      onUnitsChange={setContentUnits}
-                      types={types ?? []}
-                      inventoryItems={inventoryItems ?? []}
-                      categories={categories}
-                    />
-                    {packageErrors.contents ? (
-                      <p className="text-sm text-destructive">{packageErrors.contents.message}</p>
-                    ) : null}
-                  </div>
-                </form>
-              </Form>
-            </div>
-            <div className="flex shrink-0 items-center justify-between gap-3 border-t p-4">
-              <div className="min-w-0 text-sm">
-                {packageForm.saveStatus === "saving" ? (
-                  <span className="text-muted-foreground">Saving…</span>
-                ) : packageForm.saveStatus === "error" ? (
-                  <span className="text-destructive">{packageForm.saveError ?? "Save failed"}</span>
-                ) : packageForm.formState.isDirty ? (
-                  <span className="text-muted-foreground">Unsaved changes</span>
-                ) : null}
-              </div>
-              <div className="flex shrink-0 gap-2">
-                <Button type="button" variant="outline" onClick={() => void requestCloseEditor()}>
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  form="package-editor-form"
-                  disabled={packageForm.saveStatus === "saving"}
-                >
-                  {packageForm.saveStatus === "saving"
-                    ? "Saving…"
-                    : editingId
-                      ? "Update"
-                      : "Create"}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+          {rows.length === 0 ? (
+            <EmptyState
+              action={
+                filterCount ? (
+                  <Button type="button" variant="outline" size="sm" onClick={clearFilters}>
+                    Clear search and filters
+                  </Button>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" onClick={() => openPanel("new")}>
+                    <PlusIcon />
+                    New package
+                  </Button>
+                )
+              }
+            >
+              {filterCount
+                ? "No packages match this search and these filters."
+                : "No packages yet. Bundle equipment types into a rentable kit with New package."}
+            </EmptyState>
+          ) : (
+            <PackagesTable
+              rows={rows}
+              groups={groups}
+              sectionOf={sectionOf}
+              selected={selected}
+              onSelectedChange={setSelected}
+              onOpen={(row) => openPanel(row._id)}
+              onDelete={(row) => void deletePackage(row)}
+            />
+          )}
+        </>
+      )}
+
+      <PackageSheet
+        open={panelIsNew || panelRow !== null}
+        row={panelIsNew ? null : panelRow}
+        types={types ?? []}
+        inventoryItems={inventoryItems ?? []}
+        categories={categories}
+        onOpenChange={(open) => {
+          if (!open) openPanel(null);
+        }}
+        onDelete={deletePackage}
+      />
     </div>
   );
 }

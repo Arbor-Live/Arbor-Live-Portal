@@ -56,15 +56,22 @@ test.describe("inventory CSV import", () => {
 
   test("admin uploads CSVs and types and assets are created", async ({ page }) => {
     await page.goto("/dashboard/inventory/import");
-    await expect(page.getByText("CSV Importer")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Import inventory" })).toBeVisible({ timeout: 30_000 });
 
-    const fileInputs = page.locator('input[type="file"]');
-    await fileInputs.nth(0).setInputFiles(typesCsvPath);
-    await fileInputs.nth(1).setInputFiles(assetsCsvPath);
+    const runImport = page.getByRole("button", { name: "Run import" });
+    await expect(page.getByTestId("import-blocker")).toBeVisible({ timeout: 30_000 });
+    await expect(runImport).toBeDisabled();
 
-    await page.getByRole("button", { name: "Run Import" }).click();
+    await page.getByTestId("import-types-file-input").setInputFiles(typesCsvPath);
+    await expect(page.getByTestId("import-types-file")).toContainText("1 row");
+    await page.getByTestId("import-items-file-input").setInputFiles(assetsCsvPath);
+    await expect(page.getByTestId("import-items-file")).toContainText("2 rows");
 
-    await expect(page.getByText(/Import complete:/)).toBeVisible({ timeout: 60_000 });
+    await expect(runImport).toBeEnabled({ timeout: 30_000 });
+    await runImport.click();
+
+    await expect(page.getByTestId("import-summary")).toContainText("Import finished", { timeout: 60_000 });
+    await expect(page.getByTestId("import-step-items")).toHaveAttribute("data-status", "done");
 
     const created = await pollConvex<{
       typeId: string;

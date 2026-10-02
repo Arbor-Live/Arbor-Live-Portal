@@ -537,7 +537,9 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   and a resend action once an invoice email exists.
 - Damage reports (`damageReports.ts`): any arbor_internal crew can create
   reports (scope for containers, operability, severity, photo, optional event).
-  Operations/admin triage at `/dashboard/inventory/damage`.
+  Operations/admin triage at `/dashboard/inventory/damage`: rows default to a
+  Status chip of Open + In progress (`damageReports.list` `statuses`, newest 500
+  per status merged), and `?report=<id>` opens the report's side panel.
 - **Borrow requests** (`equipmentBorrowRequests.ts`): crew submit an
   `ALBRW-`-numbered request for equipment by type or package + quantity, with a
   purpose and pickup/return window (`/dashboard/inventory/borrow-requests`).
