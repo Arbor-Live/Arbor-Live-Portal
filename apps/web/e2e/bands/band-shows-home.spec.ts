@@ -68,7 +68,7 @@ test.describe("band shows home", () => {
     await page.goto("/dashboard");
     const row = page.getByTestId("band-show-row").filter({ hasText: seeded.eventTitle }).first();
     await expect(row).toBeVisible({ timeout: 30_000 });
-    await row.getByRole("button", { name: new RegExp(seeded.eventTitle) }).click();
+    await row.getByText(seeded.eventTitle, { exact: true }).click();
 
     const sheet = page.getByTestId("band-show-sheet");
     await expect(sheet.getByText(seeded.eventTitle).first()).toBeVisible({ timeout: 20_000 });
