@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { CheckIcon } from "@phosphor-icons/react";
 import { StatusPill } from "@/components/page-header";
@@ -197,6 +197,7 @@ function TraineeAssignForm({
   const [callTimeOverride, setCallTimeOverride] = useState<string | null>(null);
 
   const [fixOpen, setFixOpen] = useState(false);
+  const [submitQueued, setSubmitQueued] = useState(false);
 
   const eventDetails = useQuery(api.events.get, eventId ? { id: eventId as Id<"events"> } : "skip");
   // Checked as soon as an event is picked, so a missing venue address or lead
@@ -219,6 +220,24 @@ function TraineeAssignForm({
 
   const callTimeInput =
     callTimeOverride ?? (defaultCallTimeMs != null ? toLocalDateTimeInput(new Date(defaultCallTimeMs)) : "");
+
+  /** Assign when the event is ready; otherwise open the fix dialog. */
+  function submitOrFix() {
+    if (readiness && readiness.missing.length > 0) {
+      setFixOpen(true);
+      return;
+    }
+    onSubmit(buildArgs);
+  }
+
+  // Finish a click that came in while the readiness check was loading.
+  useEffect(() => {
+    if (!submitQueued || readiness === undefined) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- run the queued Assign once readiness arrives
+    setSubmitQueued(false);
+    submitOrFix();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire only when the check lands
+  }, [readiness, submitQueued]);
 
   function buildArgs(): TraineeAssignArgs {
     if (!eventId) throw new Error("Select an event.");
@@ -249,11 +268,13 @@ function TraineeAssignForm({
       data-testid="crew-application-trainee-form"
       onSubmit={(event) => {
         event.preventDefault();
-        if (readiness && readiness.missing.length > 0) {
-          setFixOpen(true);
+        // Still checking the event: hold the click until the check lands, rather
+        // than let the mutation fail with the raw list.
+        if (eventId && readiness === undefined) {
+          setSubmitQueued(true);
           return;
         }
-        onSubmit(buildArgs);
+        submitOrFix();
       }}
     >
       <div className="space-y-2">

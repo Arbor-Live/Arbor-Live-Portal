@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { components } from "./_generated/api";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { formatDateTime } from "@arbor/format";
 import {
@@ -8,6 +8,7 @@ import {
   getUserId,
   listAdminEmailsForVertical,
   requireAdmin,
+  requireArborInternalContext,
   type AuthUser,
 } from "./lib/auth";
 import {
@@ -95,6 +96,16 @@ const presenceModeValue = v.union(
   v.literal("first_8_hours"),
   v.literal("schedule_block"),
 );
+
+/**
+ * Arbor staff only. The admin role alone has been shared by band/DJ org admins
+ * (see `requireAdmin`), so pair it with the Arbor-internal context, as venues do.
+ */
+async function requireStaffAdmin(ctx: QueryCtx | MutationCtx): Promise<AuthUser> {
+  const admin = await requireAdmin(ctx);
+  await requireArborInternalContext(ctx);
+  return admin;
+}
 
 function trimRequired(value: string, label: string) {
   const trimmed = value.trim();
@@ -298,7 +309,7 @@ export const listAdmin = query({
     }),
   ),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireStaffAdmin(ctx);
     // Read each status off its own index so a busy status (hundreds of closed
     // applications) never pushes the newest submitted ones past the cap.
     const statuses = args.statuses
@@ -356,7 +367,7 @@ export const setAssignee = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireStaffAdmin(ctx);
     const application = await ctx.db.get(args.applicationId);
     if (!application) throw new Error("Application not found.");
     const assigneeUserId = args.assigneeUserId?.trim() || undefined;
@@ -381,7 +392,7 @@ export const setOutreachStage = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
+    const admin = await requireStaffAdmin(ctx);
     const adminId = getUserId(admin) || undefined;
     const application = await ctx.db.get(args.applicationId);
     if (!application) throw new Error("Application not found.");
@@ -404,7 +415,7 @@ export const countPendingSubmitted = query({
   args: {},
   returns: v.number(),
   handler: async (ctx) => {
-    await requireAdmin(ctx);
+    await requireStaffAdmin(ctx);
     const rows = await ctx.db
       .query("crewApplications")
       .withIndex("by_status", (q) => q.eq("status", "submitted"))
@@ -417,7 +428,7 @@ export const close = mutation({
   args: { applicationId: v.id("crewApplications") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
+    const admin = await requireStaffAdmin(ctx);
     const adminId = getUserId(admin);
     const application = await ctx.db.get(args.applicationId);
     if (!application) throw new Error("Application not found.");
@@ -454,7 +465,7 @@ export const remove = mutation({
   args: { applicationId: v.id("crewApplications") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireStaffAdmin(ctx);
     const application = await ctx.db.get(args.applicationId);
     if (!application) throw new Error("Application not found.");
 
@@ -502,7 +513,7 @@ export const traineeEventReadiness = query({
     }),
   ),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireStaffAdmin(ctx);
     const event = await ctx.db.get(args.eventId);
     if (!event) return null;
     const readiness = await resolveTraineeEventReadiness(ctx, event);
@@ -530,7 +541,7 @@ export const assignTraineeToEvent = mutation({
   },
   returns: v.object({ shiftId: v.id("eventCrewShifts") }),
   handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
+    const admin = await requireStaffAdmin(ctx);
     const adminId = getUserId(admin);
     const application = await ctx.db.get(args.applicationId);
     if (!application) throw new Error("Application not found.");
@@ -686,7 +697,7 @@ export const convertToMember = mutation({
   },
   returns: v.object({ invitationId: v.string(), email: v.string() }),
   handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
+    const admin = await requireStaffAdmin(ctx);
     const adminId = getUserId(admin);
     if (!adminId) throw new Error("Unable to resolve admin user.");
 
