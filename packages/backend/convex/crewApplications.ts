@@ -4,6 +4,7 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { formatDateTime } from "@arbor/format";
 import {
+  findAuthUsersByIds,
   getUserId,
   listAdminEmailsForVertical,
   requireAdmin,
@@ -55,6 +56,12 @@ const applicationStatusValue = v.union(
   v.literal("converted"),
 );
 
+const outreachStageValue = v.union(
+  v.literal("contacted"),
+  v.literal("meeting_booked"),
+  v.literal("met"),
+);
+
 const stanfordPositionValue = v.union(
   v.literal("undergrad"),
   v.literal("coterm"),
@@ -100,6 +107,16 @@ function normalizeEmail(email: string) {
 
 function isStanfordEmail(email: string) {
   return /^[^\s@]+@(?:stanford\.edu|alumni\.stanford\.edu)$/i.test(email.trim());
+}
+
+function authUserDisplayName(
+  userByKey: Map<string, { name?: string | null; email?: string | null }>,
+  userId: string | undefined,
+) {
+  if (!userId) return undefined;
+  const user = userByKey.get(userId);
+  if (!user) return undefined;
+  return user.name?.trim() || user.email?.trim() || undefined;
 }
 
 function hoursBetween(start: number, end: number) {
@@ -252,7 +269,8 @@ export const submitPublic = mutation({
 
 export const listAdmin = query({
   args: {
-    status: v.optional(applicationStatusValue),
+    /** Statuses to include; omit for all of them. */
+    statuses: v.optional(v.array(applicationStatusValue)),
   },
   returns: v.array(
     v.object({
@@ -271,17 +289,38 @@ export const listAdmin = query({
       submittedAt: v.number(),
       reviewedAt: v.optional(v.number()),
       convertedUserId: v.optional(v.string()),
+      assigneeUserId: v.optional(v.string()),
+      assigneeName: v.optional(v.string()),
+      outreachStage: v.optional(outreachStageValue),
+      outreachUpdatedAt: v.optional(v.number()),
+      outreachUpdatedByName: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
-    const rows = args.status
-      ? await ctx.db
-          .query("crewApplications")
-          .withIndex("by_status_and_submittedAt", (q) => q.eq("status", args.status!))
-          .order("desc")
-          .take(200)
-      : await ctx.db.query("crewApplications").withIndex("by_submittedAt").order("desc").take(200);
+    // Read each status off its own index so a busy status (hundreds of closed
+    // applications) never pushes the newest submitted ones past the cap.
+    const statuses = args.statuses
+      ? [...new Set(args.statuses)]
+      : (["submitted", "trainee", "converted", "closed"] as const);
+    const rows = (
+      await Promise.all(
+        statuses.map((status) =>
+          ctx.db
+            .query("crewApplications")
+            .withIndex("by_status_and_submittedAt", (q) => q.eq("status", status))
+            .order("desc")
+            .take(200),
+        ),
+      )
+    )
+      .flat()
+      .sort((a, b) => b.submittedAt - a.submittedAt);
+
+    const userIds = rows.flatMap((row) =>
+      [row.assigneeUserId, row.outreachUpdatedByUserId].filter((id): id is string => Boolean(id)),
+    );
+    const userByKey = await findAuthUsersByIds(ctx, userIds);
 
     return rows
       .map((row) => ({
@@ -300,7 +339,63 @@ export const listAdmin = query({
         submittedAt: row.submittedAt,
         reviewedAt: row.reviewedAt,
         convertedUserId: row.convertedUserId,
+        assigneeUserId: row.assigneeUserId,
+        assigneeName: authUserDisplayName(userByKey, row.assigneeUserId),
+        outreachStage: row.outreachStage,
+        outreachUpdatedAt: row.outreachUpdatedAt,
+        outreachUpdatedByName: authUserDisplayName(userByKey, row.outreachUpdatedByUserId),
       }));
+  },
+});
+
+export const setAssignee = mutation({
+  args: {
+    applicationId: v.id("crewApplications"),
+    assigneeUserId: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) throw new Error("Application not found.");
+    const assigneeUserId = args.assigneeUserId?.trim() || undefined;
+    if (assigneeUserId) {
+      const users = await findAuthUsersByIds(ctx, [assigneeUserId]);
+      if (!users.has(assigneeUserId)) throw new Error("Owner not found.");
+    }
+    await ctx.db.patch(application._id, { assigneeUserId, updatedAt: Date.now() });
+    return null;
+  },
+});
+
+/**
+ * Move a submitted application along the outreach steps (or back to "not
+ * contacted" with no stage). Whoever reaches out first becomes the owner, so
+ * other admins can see the applicant is already being handled.
+ */
+export const setOutreachStage = mutation({
+  args: {
+    applicationId: v.id("crewApplications"),
+    stage: v.optional(outreachStageValue),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const admin = await requireAdmin(ctx);
+    const adminId = getUserId(admin) || undefined;
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) throw new Error("Application not found.");
+    if (application.status !== "submitted") {
+      throw new Error("Outreach applies only to submitted applications.");
+    }
+    const now = Date.now();
+    await ctx.db.patch(application._id, {
+      outreachStage: args.stage,
+      outreachUpdatedAt: args.stage ? now : undefined,
+      outreachUpdatedByUserId: args.stage ? adminId : undefined,
+      assigneeUserId: application.assigneeUserId ?? (args.stage ? adminId : undefined),
+      updatedAt: now,
+    });
+    return null;
   },
 });
 
@@ -313,7 +408,7 @@ export const countPendingSubmitted = query({
       .query("crewApplications")
       .withIndex("by_status", (q) => q.eq("status", "submitted"))
       .take(200);
-    return rows.length;
+    return rows.filter((row) => !row.outreachStage).length;
   },
 });
 

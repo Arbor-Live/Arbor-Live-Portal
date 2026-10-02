@@ -79,6 +79,12 @@ canonical description of the domain itself.
   Marketing: `Design` / `Photography` / `Videography` (each with unsure) — and
   Crew picks Fri/Sat standing availability (5pm–midnight PT) as a scheduling
   preference only — not auto-matched to shifts.
+  While `submitted`, an application tracks outreach: an owner
+  (`assigneeUserId`) and `outreachStage` (unset = not contacted, then
+  `contacted` = Calendly sent, `meeting_booked`, `met`). Whoever first marks
+  outreach becomes the owner if nobody is. The queue groups rows by that
+  progress, and the sidebar badge counts only applicants nobody has reached out
+  to yet.
 - Local UI iteration: `?devPreview=1` (Dev menu) re-opens setup/onboarding
   wizards without redirect — development builds only; see
   [getting-started.md](getting-started.md#dev-preview-wizards).

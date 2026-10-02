@@ -222,12 +222,13 @@ async function countSubmittedBandApplications(ctx: QueryCtx) {
   return rows.length;
 }
 
+/** Submitted applicants nobody has reached out to yet. */
 async function countSubmittedCrewApplications(ctx: QueryCtx) {
   const rows = await ctx.db
     .query("crewApplications")
     .withIndex("by_status", (q) => q.eq("status", "submitted"))
     .take(BADGE_STATUS_TAKE);
-  return rows.length;
+  return rows.filter((row) => !row.outreachStage).length;
 }
 
 async function countPendingEquipmentBorrowRequests(ctx: QueryCtx) {
