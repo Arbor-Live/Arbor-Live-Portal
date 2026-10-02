@@ -270,31 +270,31 @@ export async function copyPullListBetweenDays(
   }
 }
 
+type ShiftRow = Pick<
+  Doc<"eventCrewShifts">,
+  "_id" | "role" | "startsAt" | "endsAt" | "scheduleBlockId" | "userId" | "crewApplicationId"
+>;
+
 /**
- * Crew shifts not tied to a Run of Show section (e.g. a load-in call) aren't
- * part of the section-based crew template; copying a day carries them across
- * as open slots, at the same offset from the day's start.
+ * Plan copying one day's shifts that sit outside any Run of Show section onto
+ * another day, as open slots. Idempotent: the target's own open unsectioned
+ * shifts (an earlier copy, or hand-added) are replaced rather than added to,
+ * and a slot a staffed shift already fills (same role and times) isn't opened
+ * again. Trainees (applicants shadowing one day) are never part of it.
  */
-export async function copyUnlinkedShiftsBetweenDays(
-  ctx: MutationCtx,
-  source: Pick<Doc<"events">, "_id" | "startAt">,
-  target: Pick<Doc<"events">, "_id" | "startAt">,
-  now: number,
+export function planUnlinkedShiftCopy<S extends ShiftRow>(
+  sourceShifts: readonly S[],
+  targetShifts: readonly ShiftRow[],
+  deltaMs: number,
 ) {
-  const shifts = await ctx.db
-    .query("eventCrewShifts")
-    .withIndex("by_eventId", (q) => q.eq("eventId", source._id))
-    .take(500);
-  const deltaMs = target.startAt - source.startAt;
-  const staffed = (
-    await ctx.db
-      .query("eventCrewShifts")
-      .withIndex("by_eventId", (q) => q.eq("eventId", target._id))
-      .take(500)
-  ).filter((shift) => Boolean(shift.userId?.trim()));
-  for (const shift of shifts) {
-    // Section slots come from the template; trainees shadow one day only.
-    if (shift.scheduleBlockId || isTraineeShift(shift)) continue;
+  const isUnlinkedSlot = (shift: ShiftRow) => !shift.scheduleBlockId && !isTraineeShift(shift);
+  const staffed = targetShifts.filter((shift) => Boolean(shift.userId?.trim()));
+  const deleteIds = targetShifts
+    .filter((shift) => isUnlinkedSlot(shift) && !shift.userId?.trim())
+    .map((shift) => shift._id);
+  const inserts: Array<{ source: S; startsAt: number; endsAt: number }> = [];
+  for (const shift of sourceShifts) {
+    if (!isUnlinkedSlot(shift)) continue;
     const startsAt = shift.startsAt + deltaMs;
     const endsAt = shift.endsAt + deltaMs;
     const filled = staffed.findIndex(
@@ -304,6 +304,38 @@ export async function copyUnlinkedShiftsBetweenDays(
       staffed.splice(filled, 1);
       continue;
     }
+    inserts.push({ source: shift, startsAt, endsAt });
+  }
+  return { deleteIds, inserts };
+}
+
+/**
+ * Crew shifts not tied to a Run of Show section (e.g. a load-in call) aren't
+ * part of the section-based crew template; copying a day carries them across
+ * as open slots, at the same offset from the day's start (see
+ * `planUnlinkedShiftCopy`).
+ */
+export async function copyUnlinkedShiftsBetweenDays(
+  ctx: MutationCtx,
+  source: Pick<Doc<"events">, "_id" | "startAt">,
+  target: Pick<Doc<"events">, "_id" | "startAt">,
+  now: number,
+) {
+  const [sourceShifts, targetShifts] = await Promise.all([
+    ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", source._id))
+      .take(500),
+    ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", target._id))
+      .take(500),
+  ]);
+  const plan = planUnlinkedShiftCopy(sourceShifts, targetShifts, target.startAt - source.startAt);
+  for (const id of plan.deleteIds) {
+    await ctx.db.delete(id);
+  }
+  for (const { source: shift, startsAt, endsAt } of plan.inserts) {
     await ctx.db.insert("eventCrewShifts", {
       eventId: target._id,
       role: shift.role,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Doc, Id } from "../_generated/dataModel";
 import { groupTitleFromDayTitles, planMultiDayMembership } from "./eventGroups";
-import { planDaySetup, selectDaysInScope } from "./eventGroupTemplates";
+import { planDaySetup, planUnlinkedShiftCopy, selectDaysInScope } from "./eventGroupTemplates";
 import {
   editedSharedDayFields,
   shiftsToTemplates,
@@ -268,5 +268,53 @@ describe("planDaySetup", () => {
     expect(plan.copyUnlinkedShifts).toBe(false);
     expect(plan.copyPullList).toBe(false);
     expect(plan.nothingToApply).toBe(true);
+  });
+});
+
+describe("planUnlinkedShiftCopy", () => {
+  const HOUR = 60 * 60 * 1000;
+  const shift = (id: string, partial: Record<string, unknown> = {}) => ({
+    _id: id as Id<"eventCrewShifts">,
+    role: "Load-in",
+    startsAt: 1_000 * HOUR,
+    endsAt: 1_000 * HOUR + 2 * HOUR,
+    scheduleBlockId: undefined,
+    userId: undefined,
+    crewApplicationId: undefined,
+    ...partial,
+  });
+  const DAY = 24 * HOUR;
+
+  it("copies an unsectioned shift one day later as an open slot", () => {
+    const plan = planUnlinkedShiftCopy([shift("s1")], [], DAY);
+    expect(plan.deleteIds).toEqual([]);
+    expect(plan.inserts.map((row) => [row.startsAt, row.endsAt])).toEqual([
+      [1_000 * HOUR + DAY, 1_000 * HOUR + DAY + 2 * HOUR],
+    ]);
+  });
+
+  it("is idempotent: the previous copy is replaced, not added to", () => {
+    const first = planUnlinkedShiftCopy([shift("s1")], [], DAY);
+    const copied = [shift("t1", { startsAt: first.inserts[0]!.startsAt, endsAt: first.inserts[0]!.endsAt })];
+    const again = planUnlinkedShiftCopy([shift("s1")], copied, DAY);
+    expect(again.deleteIds).toEqual(["t1"]);
+    expect(again.inserts).toHaveLength(1);
+  });
+
+  it("keeps staffed shifts and doesn't reopen a slot they fill", () => {
+    const filled = shift("t1", { userId: "user-1", startsAt: 1_000 * HOUR + DAY, endsAt: 1_000 * HOUR + DAY + 2 * HOUR });
+    const plan = planUnlinkedShiftCopy([shift("s1")], [filled], DAY);
+    expect(plan.deleteIds).toEqual([]);
+    expect(plan.inserts).toEqual([]);
+  });
+
+  it("leaves section slots and trainees alone on both days", () => {
+    const sectioned = shift("s2", { scheduleBlockId: "block-1" });
+    const trainee = shift("s3", { crewApplicationId: "application-1" });
+    const targetTrainee = shift("t2", { crewApplicationId: "application-2" });
+    const targetSectioned = shift("t3", { scheduleBlockId: "block-2" });
+    const plan = planUnlinkedShiftCopy([sectioned, trainee], [targetTrainee, targetSectioned], DAY);
+    expect(plan.deleteIds).toEqual([]);
+    expect(plan.inserts).toEqual([]);
   });
 });
