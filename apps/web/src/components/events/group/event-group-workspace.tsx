@@ -173,6 +173,7 @@ function EventGroupNav({ activeTab }: { activeTab: EventGroupTabId }) {
   );
 }
 
+/** Keep all loaded panels mounted, hiding inactive tabs so local drafts survive navigation. */
 function EventGroupPanels({ activeTab }: { activeTab: EventGroupTabId }) {
   const { groupId, data, kind, setTabDirty } = useEventGroup();
   const dirtyHandlers = useMemo(

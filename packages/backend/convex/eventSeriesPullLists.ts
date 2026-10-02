@@ -18,6 +18,14 @@ async function listTemplateItems(ctx: QueryCtx | MutationCtx, seriesId: Id<"even
   return rows.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
 }
 
+/**
+ * Rebuild a recurring group's equipment pull-list template from its invoice,
+ * preserving manual rows and flooring total quantities per billable occurrence.
+ * By default, apply to all attached, non-cancelled days, including past days;
+ * `regenerateFuture: false` saves only the template. Return the generated row
+ * count, excluding manual rows. Requires Arbor internal access; throws for a
+ * missing or multi-day group, no linked invoice, or no equipment lines.
+ */
 export const scaffoldFromInvoice = mutation({
   args: {
     seriesId: v.id("eventSeries"),
@@ -181,6 +189,11 @@ export const scaffoldFromInvoice = mutation({
   },
 });
 
+/**
+ * Replace non-manual pull-list rows on days selected by `selectDaysInScope`,
+ * resetting copied rows' pull and checkout progress. Reads up to 500 template
+ * and existing rows per day. Returns the day count, or zero for an empty template.
+ */
 async function regenerateFuturePullLists(
   ctx: MutationCtx,
   args: {

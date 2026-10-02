@@ -361,12 +361,14 @@ const groupApplyScopeValue = v.union(v.literal("future"), v.literal("all"));
 /** Pull-list rows copied per day; matches the pull list's own read cap. */
 const MAX_PULL_LIST_ROWS = 500;
 
+/** Return the group or throw when it no longer exists. */
 async function requireGroup(ctx: MutationCtx, id: Id<"eventSeries">) {
   const series = await ctx.db.get(id);
   if (!series) throw new Error("Event series not found.");
   return series;
 }
 
+/** Return a member day or throw if the event is missing or belongs to another group. */
 async function requireGroupDay(ctx: MutationCtx, id: Id<"eventSeries">, eventId: Id<"events">) {
   const event = await ctx.db.get(eventId);
   if (!event || event.seriesId !== id) {
@@ -375,6 +377,12 @@ async function requireGroupDay(ctx: MutationCtx, id: Id<"eventSeries">, eventId:
   return event;
 }
 
+/**
+ * Save supplied schedule templates and apply them to the selected days; return
+ * the day count. Requires Arbor internal access and a nonnegative integer
+ * occurrence index. Throws if the group or templates are missing; application
+ * errors propagate. Scope selection follows `selectDaysInScope`.
+ */
 export const regenerateFutureBlocks = mutation({
   args: {
     id: v.id("eventSeries"),
@@ -406,6 +414,12 @@ export const regenerateFutureBlocks = mutation({
   },
 });
 
+/**
+ * Replace the group's schedule template from a member day's non-act blocks,
+ * returning the template count. Requires Arbor internal access. Throws for a
+ * missing group/member, no importable blocks, or more than 500 source blocks;
+ * capture and database errors propagate.
+ */
 export const importScheduleFromOccurrence = mutation({
   args: {
     id: v.id("eventSeries"),
@@ -427,6 +441,13 @@ export const importScheduleFromOccurrence = mutation({
   },
 });
 
+/**
+ * Save nonempty supplied crew templates, then rebuild schedule sections and
+ * open slots on selected days; return the day count. An empty supplied list
+ * uses the saved crew template. Requires Arbor internal access; throws for a
+ * missing group, invalid index, or missing crew/schedule templates. Application
+ * errors propagate, and scope selection follows `selectDaysInScope`.
+ */
 export const regenerateFutureShifts = mutation({
   args: {
     id: v.id("eventSeries"),
@@ -465,6 +486,12 @@ export const regenerateFutureShifts = mutation({
   },
 });
 
+/**
+ * Replace crew templates with a member day's open, non-trainee shifts that
+ * match saved schedule templates, returning the template count. Reads up to
+ * 500 blocks and shifts. Requires Arbor internal access; throws for a missing
+ * group/member, missing schedule templates, or no importable slots.
+ */
 export const importShiftsFromOccurrence = mutation({
   args: {
     id: v.id("eventSeries"),
@@ -500,6 +527,13 @@ export const importShiftsFromOccurrence = mutation({
   },
 });
 
+/**
+ * Save supplied position templates and apply them to the selected days;
+ * return the day count. An empty list removes unlocked template positions.
+ * Requires Arbor internal access; missing groups, invalid indexes, invalid
+ * templates, and position-application errors throw. Scopes follow
+ * `selectDaysInScope`.
+ */
 export const regenerateFuturePositions = mutation({
   args: {
     id: v.id("eventSeries"),
@@ -529,6 +563,12 @@ export const regenerateFuturePositions = mutation({
   },
 });
 
+/**
+ * Capture a member day's position rows as the group's templates and return
+ * their count, stamping template keys on source positions. Requires Arbor
+ * internal access; throws for a missing group/member, no positions, capture
+ * limits, or invalid templates. Errors roll back source key stamps.
+ */
 export const importPositionsFromOccurrence = mutation({
   args: {
     id: v.id("eventSeries"),
@@ -796,6 +836,12 @@ export const addOccurrences = mutation({
   },
 });
 
+/**
+ * Cancel non-cancelled days at or after the zero-based occurrence index and
+ * return the count. Past and detached days are included. Re-syncs multi-day
+ * membership without sending cancellation emails. Requires Arbor internal
+ * access; missing groups and sync/database errors throw.
+ */
 export const cancelFuture = mutation({
   args: {
     id: v.id("eventSeries"),
@@ -903,6 +949,13 @@ export const endSeries = mutation({
   },
 });
 
+/**
+ * Save supplied USD budget/cost fields, retaining omitted values, and return
+ * the group id. Propagation defaults on for recurring groups and skips
+ * detached/cancelled days; crew budget becomes day cost only when no staffing
+ * slots exist. Multi-day groups keep costs on individual days. Requires Arbor
+ * internal access; missing groups and database errors throw.
+ */
 export const updateSeriesCosts = mutation({
   args: {
     id: v.id("eventSeries"),

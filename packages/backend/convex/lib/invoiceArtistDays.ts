@@ -16,7 +16,11 @@ export type ArtistLineDayScope = {
   unscopedAppliesToEveryDay: boolean;
 };
 
-/** Pure: the scope once the owning group (if every day shares one) is known. */
+/**
+ * Build artist-line scope from days already in calendar order and their shared
+ * group kind. Only recurring groups apply unscoped lines to every day; other
+ * kinds use the first supplied day, or no fallback when the list is empty.
+ */
 export function artistLineDayScope(
   events: ReadonlyArray<Pick<Doc<"events">, "_id" | "seriesId">>,
   owningGroupKind: EventGroupKind | null,

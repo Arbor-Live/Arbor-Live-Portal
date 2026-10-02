@@ -55,6 +55,7 @@ export type SeriesEditScope = "this" | "future" | "all";
  */
 export type EventGroupKind = "recurring" | "multi_day";
 
+/** Default missing groups and legacy groups without a kind to recurring. */
 export function eventGroupKind(group: { kind?: EventGroupKind } | null | undefined): EventGroupKind {
   return group?.kind ?? "recurring";
 }

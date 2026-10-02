@@ -14,10 +14,12 @@ export function eventGroupKind(group: Pick<Doc<"eventSeries">, "kind">): EventGr
   return group.kind ?? "recurring";
 }
 
+/** Whether the group is recurring, including legacy rows without a kind. */
 export function isRecurringGroup(group: Pick<Doc<"eventSeries">, "kind">) {
   return eventGroupKind(group) === "recurring";
 }
 
+/** Whether the group explicitly represents a multi-day booking. */
 export function isMultiDayGroup(group: Pick<Doc<"eventSeries">, "kind">) {
   return eventGroupKind(group) === "multi_day";
 }

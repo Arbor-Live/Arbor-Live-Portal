@@ -65,6 +65,12 @@ export async function findRequestForInvoice(
   return await ctx.db.get(invoice.sourceEventRequestId);
 }
 
+/**
+ * Delete an invoice's lines, exports, feedback, status history, and additional
+ * links, dissolving its multi-day groups first. Primary event/request links
+ * must be unlinked or deleted by the caller. Throws if drained child rows
+ * exceed 5,000; database and group-dissolution errors propagate.
+ */
 export async function deleteInvoiceRecord(ctx: MutationCtx, invoiceId: Id<"invoices">) {
   const drainRows = withCascadeBudget();
   await dissolveMultiDayGroupsForInvoice(ctx, invoiceId);
@@ -111,6 +117,11 @@ export async function deleteInvoiceRecord(ctx: MutationCtx, invoiceId: Id<"invoi
   await ctx.db.delete(invoiceId);
 }
 
+/**
+ * Delete an event and its dependent records, then sync its surviving primary
+ * invoice's group unless `skipGroupSync` is set. Throws if drained child rows
+ * exceed 5,000; database and group-sync errors propagate to the caller.
+ */
 export async function deleteEventRecord(
   ctx: MutationCtx,
   eventId: Id<"events">,
@@ -346,6 +357,11 @@ export async function deleteEventRecord(
   }
 }
 
+/**
+ * Clear invoice links on its request, up to 50 primary days, and linked series;
+ * dissolve multi-day groups while retaining their days. Throws if more than
+ * 5,000 series rows are drained; lookup and database errors propagate.
+ */
 export async function unlinkInvoicePeers(ctx: MutationCtx, invoiceId: Id<"invoices">) {
   const drainRows = withCascadeBudget();
   const request = await findRequestForInvoice(ctx, invoiceId);

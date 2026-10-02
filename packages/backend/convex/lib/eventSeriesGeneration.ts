@@ -539,6 +539,13 @@ export async function applyPositionTemplates(
   return plan.actions.length + plan.removeIds.length + plan.stampKeys.length;
 }
 
+/**
+ * Create an attached group day and its schedule, open crew slots, and positions;
+ * return the event id. Times are Unix milliseconds and the index is zero-based.
+ * The day inherits group details and costs; an invoice determines its status.
+ * Crew cost is recalculated when shift templates exist. Template, billing,
+ * and database errors propagate.
+ */
 export async function materializeOccurrence(
   ctx: MutationCtx,
   series: Doc<"eventSeries">,
@@ -644,6 +651,7 @@ export function editedSharedDayFields(args: Partial<Record<string, unknown>>): S
   return SHARED_DAY_FIELDS.filter((field) => edited.has(field));
 }
 
+/** Copy only shared day fields present on the source, retaining explicit undefined values. */
 function pickSharedDayFields(source: Partial<SharedDayFields>): Partial<SharedDayFields> {
   const out: Partial<SharedDayFields> = {};
   for (const field of SHARED_DAY_FIELDS) {
@@ -652,6 +660,7 @@ function pickSharedDayFields(source: Partial<SharedDayFields>): Partial<SharedDa
   return out;
 }
 
+/** Project group fields shared across booking days, excluding titles, times, and costs. */
 export function buildSharedDayPatchFromGroup(group: Doc<"eventSeries">): Partial<Doc<"events">> {
   return pickSharedDayFields(group);
 }
@@ -719,7 +728,10 @@ export async function propagateSharedDayFields(
   return affected;
 }
 
-/** Where a group day starts: recurring days follow the rule; multi-day days are their own. */
+/**
+ * Return the start in Unix milliseconds: recurring days follow their rule;
+ * multi-day groups and groups without a recurrence interval keep the day's start.
+ */
 export function groupDayStartAt(
   group: Doc<"eventSeries">,
   day: Pick<Doc<"events">, "startAt" | "occurrenceIndex">,
@@ -774,6 +786,11 @@ export function buildEventPatchFromSeriesTemplate(
 
 export type SeriesEditScope = GroupApplyScope;
 
+/**
+ * Set or clear the primary invoice on days selected by `selectDaysInScope`.
+ * Linking also removes duplicate additional links and syncs status from the
+ * invoice; unlinking leaves status unchanged. Database and sync errors propagate.
+ */
 export async function propagateInvoiceIdToSeriesOccurrences(
   ctx: MutationCtx,
   seriesId: Id<"eventSeries">,
@@ -813,6 +830,11 @@ export type SeriesOverviewAffectedOccurrence = {
   invoiceId: Id<"invoices"> | undefined;
 };
 
+/**
+ * Apply the group's overview and optional overrides to days selected by
+ * `selectDaysInScope`. Return each affected id, previous status, and invoice
+ * for follow-up status handling. Database errors propagate.
+ */
 export async function propagateOverviewToSeriesOccurrences(
   ctx: MutationCtx,
   series: Doc<"eventSeries">,

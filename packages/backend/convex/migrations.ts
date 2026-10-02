@@ -771,10 +771,12 @@ export const backfillEventGroupKinds = migrations.define({
 });
 
 /**
- * Event groups (#341), step 3: each invoice whose primary days number two or
- * more (and aren't one recurring series) becomes a `multi_day` group, with its
- * templates derived from Day 1. Idempotent: re-running re-syncs membership.
- * No day's schedule, crew or lineup changes.
+ * Event groups (#341), step 3: form a `multi_day` group once an invoice has
+ * two non-cancelled primary days. Skip invoices over 200 days or with any day
+ * owned by a recurring group. Templates come from the first non-cancelled day;
+ * capture failures leave the group without templates. Re-running syncs
+ * membership. Capturing positions may stamp keys, but does not change their
+ * content, the day's schedule, or crew assignments.
  */
 export const groupMultiDayBookings = migrations.define({
   table: "invoices",

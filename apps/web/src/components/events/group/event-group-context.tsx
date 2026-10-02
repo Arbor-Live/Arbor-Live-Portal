@@ -20,6 +20,7 @@ type EventGroupContextValue = {
 
 export const EventGroupContext = createContext<EventGroupContextValue | null>(null);
 
+/** Read group data and unsaved-tab state; throw outside the group provider. */
 export function useEventGroup() {
   const value = useContext(EventGroupContext);
   if (!value) throw new Error("useEventGroup must be used inside the event group page.");

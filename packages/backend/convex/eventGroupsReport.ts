@@ -18,6 +18,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const ODD_SPAN_DAYS = 31;
 const SAMPLE_LIMIT = 12;
 
+/**
+ * Read one invoice page and return grouping counts plus at most 12 diagnostic
+ * samples without writing. `numItems` defaults to 50; continue with `nextCursor`
+ * until `isDone`. Counts are per page and may overlap. This reports eligibility
+ * and unusual dates; it does not attempt template capture or validate templates.
+ */
 export const previewMultiDayGrouping = internalQuery({
   args: {
     cursor: v.optional(v.string()),

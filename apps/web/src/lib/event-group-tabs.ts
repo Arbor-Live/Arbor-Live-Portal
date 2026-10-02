@@ -19,6 +19,7 @@ export function getEventGroupBasePath(groupId: string) {
   return `/dashboard/events/series/${groupId}`;
 }
 
+/** Use the group root for Days and a child route for each template or budget tab. */
 export function getEventGroupTabPath(groupId: string, tab: EventGroupTabId) {
   const base = getEventGroupBasePath(groupId);
   return tab === "days" ? base : `${base}/${tab}`;

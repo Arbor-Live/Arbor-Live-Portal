@@ -176,6 +176,10 @@ async function createMultiDayGroup(
  */
 const MAX_BOOKING_DAYS = 200;
 
+/**
+ * Read at most 201 primary invoice days, ordered by start and creation time.
+ * The extra row lets the caller detect bookings beyond the 200-day limit.
+ */
 async function listBookingDays(ctx: MutationCtx, invoiceId: Id<"invoices">) {
   const rows = await ctx.db
     .query("events")

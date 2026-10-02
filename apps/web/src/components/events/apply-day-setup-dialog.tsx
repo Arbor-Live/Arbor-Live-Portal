@@ -24,9 +24,10 @@ export type ApplyDaySetupArgs = {
 };
 
 /**
- * "Apply this day's setup to…": the group apply model from one day. The day's
- * sections, open crew slots and positions become the group template, then land
- * on all other days or the later ones. Replaces "copy day setup".
+ * Choose the scope and parts of a day's setup to apply through `onApply`.
+ * Each opening resets to all other days with every part selected. A true
+ * result closes the dialog; false keeps it open. Rejections propagate after
+ * clearing the busy state. Replaces "copy day setup".
  */
 export function ApplyDaySetupDialog({
   open,
