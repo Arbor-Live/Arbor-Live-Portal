@@ -185,7 +185,7 @@ export function RiderListClient() {
                       Default
                     </span>
                   ) : null}
-                  <RowCell className="w-28" hideBelow="md" muted>
+                  <RowCell className="w-40 whitespace-nowrap" hideBelow="md" muted>
                     Updated {formatDate(rider.updatedAt)}
                   </RowCell>
                   <span className="flex w-24 shrink-0 justify-end">
