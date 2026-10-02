@@ -368,6 +368,16 @@ type ShowLinkRow = {
   soundcheckEndsAt?: number;
 };
 
+/**
+ * Payouts the artist can see: not cancelled, and past staff's draft stage
+ * (the Payments tab, `bandPayments.listForActiveBand`, hides drafts too).
+ */
+function isArtistVisiblePayment(
+  payment: Doc<"eventBandPayments"> | null,
+): payment is Doc<"eventBandPayments"> {
+  return payment !== null && payment.status !== "cancelled" && payment.status !== "draft";
+}
+
 async function loadPayeeComplete(ctx: QueryCtx, organizationId: string) {
   const profile = await ctx.db
     .query("organizationProfiles")
@@ -436,9 +446,7 @@ export const listShowsForActiveBand = query({
       .withIndex("by_organizationId", (q) => q.eq("organizationId", bandContext.organizationId))
       .take(200);
     const paymentByEvent = new Map(
-      payments
-        .filter((row) => row.status !== "cancelled")
-        .map((row) => [row.eventId, row] as const),
+      payments.filter(isArtistVisiblePayment).map((row) => [row.eventId, row] as const),
     );
 
     const result = [];
@@ -460,7 +468,9 @@ export const listShowsForActiveBand = query({
  * of show stay staff-only. `null` when the act isn't on the event.
  */
 export const getShowForActiveBand = query({
-  args: { eventId: v.id("events") },
+  // A string, not v.id: it comes from a `?show=` link, and a mangled link
+  // should read as "not found" rather than fail validation.
+  args: { eventId: v.string() },
   returns: v.union(
     v.null(),
     v.object({
@@ -483,26 +493,30 @@ export const getShowForActiveBand = query({
     const bandContext = await requireBandContext(ctx);
     const user = await requireAuth(ctx);
     const userId = getUserId(user);
-    const event = await ctx.db.get(args.eventId);
+    const eventId = ctx.db.normalizeId("events", args.eventId);
+    if (!eventId) return null;
+    const event = await ctx.db.get(eventId);
     if (!event) return null;
 
     const participation = await ctx.db
       .query("eventBandParticipations")
       .withIndex("by_eventId_and_organizationId", (q) =>
-        q.eq("eventId", args.eventId).eq("organizationId", bandContext.organizationId),
+        q.eq("eventId", eventId).eq("organizationId", bandContext.organizationId),
       )
       .first();
     const payment = await ctx.db
       .query("eventBandPayments")
       .withIndex("by_eventId_and_organizationId", (q) =>
-        q.eq("eventId", args.eventId).eq("organizationId", bandContext.organizationId),
+        q.eq("eventId", eventId).eq("organizationId", bandContext.organizationId),
       )
       .unique();
-    const activePayment = payment && payment.status !== "cancelled" ? payment : null;
-    // Same membership rule as the list: a lineup row, or a live payout.
-    if (!participation && !activePayment) return null;
+    // Same membership rule as the list (`listBandLinkedEvents`): a lineup row,
+    // or any payout that isn't cancelled. A draft payout links the show but
+    // isn't shown yet.
+    if (!participation && (!payment || payment.status === "cancelled")) return null;
+    const activePayment = isArtistVisiblePayment(payment) ? payment : null;
 
-    const row: ShowLinkRow = participation ?? { eventId: args.eventId, role: "headliner" };
+    const row: ShowLinkRow = participation ?? { eventId, role: "headliner" };
     const payeeComplete = await loadPayeeComplete(ctx, bandContext.organizationId);
     const location = await resolveVenueLocation(ctx, event);
 

@@ -1,6 +1,6 @@
 import type { Tone } from "@/components/page-header";
 
-export type BandPaymentStatus =
+type BandPaymentStatus =
   | "draft"
   | "pending_onboarding"
   | "pending_payee"

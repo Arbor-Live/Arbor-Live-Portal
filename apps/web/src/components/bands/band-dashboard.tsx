@@ -99,11 +99,14 @@ function ShowListRow({
         </div>
       }
     >
-      <span className="w-10 shrink-0 text-center leading-tight" aria-hidden>
-        <span className="block text-2xs font-medium tracking-wide text-muted-foreground uppercase">
+      <span className="w-10 shrink-0 text-center leading-tight">
+        <span className="sr-only">{formatDate(show.startAt, show.timezone)}</span>
+        <span className="block text-2xs font-medium tracking-wide text-muted-foreground uppercase" aria-hidden>
           {month}
         </span>
-        <span className="block text-lg font-semibold tabular-nums">{day}</span>
+        <span className="block text-lg font-semibold tabular-nums" aria-hidden>
+          {day}
+        </span>
       </span>
       <RowText
         eyebrow={`${weekday} · ${SHOW_ROLE_LABELS[show.role]}`}
