@@ -59,7 +59,12 @@ export function GroupApplyScopeFields({
           data-testid={`${idPrefix}-apply-scope`}
         >
           {SCOPE_ORDER.map((value) => (
-            <ToggleGroupItem key={value} value={value} className="flex-1">
+            // Series labels are long ("This and all future occurrences"): wrap, don't clip.
+            <ToggleGroupItem
+              key={value}
+              value={value}
+              className="h-auto min-h-7 flex-1 self-stretch py-1 whitespace-normal"
+            >
               {labels[value]}
             </ToggleGroupItem>
           ))}
