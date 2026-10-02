@@ -151,9 +151,8 @@ export function BandDashboard() {
   const profile = useQuery(api.users.getActiveBandProfile, {});
   const riders = useQuery(api.bandRiders.listForActiveBand, {});
   const [nowMs] = useState(() => Date.now());
-  const [openShowId, setOpenShowId] = useState<Id<"events"> | null>(
-    () => (searchParams.get("show") as Id<"events"> | null) ?? null,
-  );
+  // `?show=` is the open panel: links, reloads and back/forward all follow it.
+  const openShowId = searchParams.get("show") as Id<"events"> | null;
   const [signing, setSigning] = useState<SignablePayment | null>(null);
   const [showAllPast, setShowAllPast] = useState(false);
 
@@ -169,8 +168,6 @@ export function BandDashboard() {
   }, [shows, nowMs]);
 
   function openShow(eventId: Id<"events"> | null) {
-    setOpenShowId(eventId);
-    // Keep `?show=` in step so the open panel is shareable and survives reloads.
     const params = new URLSearchParams(searchParams.toString());
     if (eventId) params.set("show", eventId);
     else params.delete("show");
