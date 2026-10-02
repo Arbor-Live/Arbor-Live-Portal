@@ -208,9 +208,6 @@ export function AdminBandProfileClient() {
                     </CardDescription>
                   </div>
                   <BandPublicListingToggle control={form.control} />
-                  <CardDescription>
-                    Editing {org.displayName || org.name} without joining the organization.
-                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <TextFormField name="displayName" label="Display name" />
