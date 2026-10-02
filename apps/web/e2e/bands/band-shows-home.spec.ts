@@ -3,6 +3,7 @@ import { bandAuthFile, selectSearchableOption } from "../helpers/auth";
 import { e2eEnv } from "../helpers/env";
 import { e2eTestEmail } from "../helpers/email";
 import { pollConvex, runConvex } from "../helpers/convex";
+import { pickSelectOption } from "../helpers/select";
 
 function ensurePayee() {
   return runConvex("e2eHelpers:ensureBandPayeeUser", {
@@ -81,6 +82,34 @@ test.describe("band shows home", () => {
     await expect(
       page.getByTestId("band-show-sheet").getByText(seeded.eventTitle).first(),
     ).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("the artist picks a rider for one show from its panel", async ({ page }) => {
+    const band = ensurePayee();
+    const stamp = Date.now();
+    const acoustic = runConvex("e2eHelpers:seedBandRider", {
+      organizationId: band.organizationId,
+      name: `E2E Acoustic ${stamp}`,
+      isDefault: false,
+    }) as { riderId: string; name: string };
+    const seeded = runConvex("e2eHelpers:seedUpcomingBandShow", {
+      organizationId: band.organizationId,
+      eventTitle: `E2E Show Rider ${stamp}`,
+    }) as { eventId: string; eventTitle: string };
+
+    await page.goto(`/dashboard?show=${seeded.eventId}`);
+    const sheet = page.getByTestId("band-show-sheet");
+    await expect(sheet.getByText(seeded.eventTitle).first()).toBeVisible({ timeout: 30_000 });
+
+    await pickSelectOption(page, sheet.getByLabel("Rider for this show"), acoustic.name);
+    await expect(sheet.getByText(`Crew will use ${acoustic.name}.`)).toBeVisible({
+      timeout: 20_000,
+    });
+
+    await page.reload();
+    await expect(
+      page.getByTestId("band-show-sheet").getByLabel("Rider for this show"),
+    ).toHaveText(acoustic.name, { timeout: 30_000 });
   });
 
   test("payee can e-sign from the Needs you group", async ({ page }) => {

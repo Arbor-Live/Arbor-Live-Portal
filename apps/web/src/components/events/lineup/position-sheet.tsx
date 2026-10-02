@@ -423,6 +423,9 @@ function PlatformAct({
               ? `Published · ${rider.rider.name}`
               : `Draft · ${rider.rider.name}`
             : "None yet"}
+          {rider?.rider && rider.riderChosenForShow ? (
+            <span className="block text-xs text-muted-foreground">Picked by the artist for this show</span>
+          ) : null}
         </dd>
         {contact?.name || contact?.email || contact?.phone ? (
           <>

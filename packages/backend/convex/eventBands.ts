@@ -8,6 +8,8 @@ import { scheduleBandEventOnboardingInviteEmail } from "./email/bandEventInviteE
 import { listBandLinkedEvents } from "./lib/eventBandAccess";
 import { resolveUserContact } from "./lib/userContact";
 import { resolveVenueLocation } from "./lib/crewTraineeIntro";
+import { pickShowRider } from "./lib/showRider";
+import { riderStatusValue } from "./lib/riderSchema";
 import { syncInvoiceLineForSlot } from "./lib/artistLineSync";
 import {
   claimSlot,
@@ -477,6 +479,18 @@ export const getShowForActiveBand = query({
       ...showFields,
       venueAddress: v.optional(v.string()),
       venueMapsUrl: v.optional(v.string()),
+      /** Only acts on the lineup can pick a rider (a payout alone has no lineup row). */
+      canChooseRider: v.boolean(),
+      /** The rider crew will use for this show, and whether the act picked it. */
+      rider: v.union(
+        v.null(),
+        v.object({
+          _id: v.id("bandRiders"),
+          name: v.string(),
+          status: riderStatusValue,
+          chosenForShow: v.boolean(),
+        }),
+      ),
       /** The Arbor person to reach on the day: the day-of lead, else the event manager. */
       contact: v.union(
         v.null(),
@@ -532,13 +546,66 @@ export const getShowForActiveBand = query({
       break;
     }
 
+    const riders = await ctx.db
+      .query("bandRiders")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", bandContext.organizationId))
+      .take(50);
+    const showRider = pickShowRider(riders, participation?.riderId);
+
     return {
       ...buildShow(event, row, activePayment, { userId, payeeComplete }),
+      canChooseRider: participation !== null,
+      rider: showRider.rider
+        ? {
+            _id: showRider.rider._id,
+            name: showRider.rider.name,
+            status: showRider.rider.status,
+            chosenForShow: showRider.chosenForShow,
+          }
+        : null,
       venueName: location.venueName,
       venueAddress: location.address,
       venueMapsUrl: location.googleMapsUrl,
       contact,
     };
+  },
+});
+
+/**
+ * The act picks which of its riders crew should use for one show. `null` goes
+ * back to the default rider. The show file, night rider and brief all read
+ * the pick through `loadEventRiders`.
+ */
+export const setShowRiderForActiveBand = mutation({
+  args: {
+    eventId: v.id("events"),
+    riderId: v.union(v.id("bandRiders"), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const bandContext = await requireBandContext(ctx);
+    const participation = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", args.eventId).eq("organizationId", bandContext.organizationId),
+      )
+      .first();
+    if (!participation) {
+      throw new Error("You're not on this show's lineup yet, so there's no rider to pick.");
+    }
+    const now = Date.now();
+    if (args.riderId === null) {
+      // `patch` can't drop a field, so rewrite the row without it.
+      const { _id, _creationTime, riderId: _cleared, ...rest } = participation;
+      await ctx.db.replace(_id, { ...rest, updatedAt: now });
+      return null;
+    }
+    const rider = await ctx.db.get(args.riderId);
+    if (!rider || rider.organizationId !== bandContext.organizationId) {
+      throw new Error("That rider doesn't belong to your act.");
+    }
+    await ctx.db.patch(participation._id, { riderId: rider._id, updatedAt: now });
+    return null;
   },
 });
 

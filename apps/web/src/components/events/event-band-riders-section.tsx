@@ -105,6 +105,7 @@ function EventBandRidersPanel({ eventId }: { eventId: Id<"events"> }) {
                     {row.rider.status === "published" ? "Published" : "Draft"}
                     {" · "}
                     Updated {formatDate(row.rider.updatedAt)}
+                    {row.riderChosenForShow ? " · Picked by the artist for this show" : null}
                   </p>
                   <div className="overflow-hidden rounded-md border bg-muted/20">
                     <StagePlotCanvas

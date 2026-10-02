@@ -67,6 +67,15 @@ canonical description of the domain itself.
   Contacts card; it feeds the event brief, the public quote contacts, and the
   event Contacts inherited rows. Per-rider day-of contact is still printed on the
   rider itself and used where no event/band context exists.
+- **Which rider a show uses.** An act can keep several riders and marks one
+  default. From a show's panel on their home (`/dashboard?show=<eventId>`) the
+  act can pick a different rider for that show
+  (`eventBands.setShowRiderForActiveBand`, stored as
+  `eventBandParticipations.riderId`). `lib/showRider.ts` (`pickShowRider`)
+  resolves it everywhere (show file, night rider, brief, staff lineup): the pick
+  wins while it still exists, else the default, else the latest published
+  rider. The printed brief skips a picked draft. Staff see "Picked by the
+  artist for this show" next to the rider.
 - Public self-serve crew applications: `/crew/apply` → `crewApplications`
   table → admin queue at `/dashboard/users/crew-applications`. Statuses:
   `submitted` → `closed` (farewell email), `trainee` (no Better Auth user —
