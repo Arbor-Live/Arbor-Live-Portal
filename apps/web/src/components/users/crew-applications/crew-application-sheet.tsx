@@ -40,6 +40,7 @@ import {
   type CrewApplicationStatus,
   type OutreachStage,
 } from "./crew-application-progress";
+import { TraineeReadinessDialog, TraineeReadinessNotice } from "./trainee-readiness";
 
 export type CrewApplicationRow = {
   _id: Id<"crewApplications">;
@@ -179,7 +180,13 @@ function OutreachStepper({
 /** Turns the form into mutation args; throws a readable error when something is missing. */
 type SubmitHandler<T> = (getArgs: () => T) => void;
 
-function TraineeAssignForm({ onSubmit }: { onSubmit: SubmitHandler<TraineeAssignArgs> }) {
+function TraineeAssignForm({
+  staffOptions,
+  onSubmit,
+}: {
+  staffOptions: UserSelectOption[];
+  onSubmit: SubmitHandler<TraineeAssignArgs>;
+}) {
   const [eventId, setEventId] = useState("");
   const [presenceMode, setPresenceMode] = useState<PresenceMode>("entire_event");
   const [scheduleBlockId, setScheduleBlockId] = useState("");
@@ -189,7 +196,15 @@ function TraineeAssignForm({ onSubmit }: { onSubmit: SubmitHandler<TraineeAssign
   // block (setup), which is before the show stored on event.startAt.
   const [callTimeOverride, setCallTimeOverride] = useState<string | null>(null);
 
+  const [fixOpen, setFixOpen] = useState(false);
+
   const eventDetails = useQuery(api.events.get, eventId ? { id: eventId as Id<"events"> } : "skip");
+  // Checked as soon as an event is picked, so a missing venue address or lead
+  // shows up before the form is filled in, not as an error after Assign.
+  const readiness = useQuery(
+    api.crewApplications.traineeEventReadiness,
+    eventId ? { eventId: eventId as Id<"events"> } : "skip",
+  );
 
   // Crew are scheduled per section; doors, soundchecks, and sets aren't shifts.
   const scheduleBlocks = useMemo(
@@ -234,6 +249,10 @@ function TraineeAssignForm({ onSubmit }: { onSubmit: SubmitHandler<TraineeAssign
       data-testid="crew-application-trainee-form"
       onSubmit={(event) => {
         event.preventDefault();
+        if (readiness && readiness.missing.length > 0) {
+          setFixOpen(true);
+          return;
+        }
         onSubmit(buildArgs);
       }}
     >
@@ -254,6 +273,23 @@ function TraineeAssignForm({ onSubmit }: { onSubmit: SubmitHandler<TraineeAssign
           They get an intro email and a calendar invite. Trainees don&apos;t get a portal login.
         </p>
       </div>
+
+      {eventId && readiness ? (
+        <>
+          <TraineeReadinessNotice readiness={readiness} onFix={() => setFixOpen(true)} />
+          <TraineeReadinessDialog
+            open={fixOpen}
+            onOpenChange={setFixOpen}
+            eventId={eventId as Id<"events">}
+            readiness={readiness}
+            staffOptions={staffOptions}
+            onAssign={() => {
+              setFixOpen(false);
+              onSubmit(buildArgs);
+            }}
+          />
+        </>
+      ) : null}
 
       {eventId ? (
         <>
@@ -569,7 +605,7 @@ export function CrewApplicationSheetBody({
             </ToggleGroupItem>
           </ToggleGroup>
           {mode === "trainee" ? (
-            <TraineeAssignForm onSubmit={onAssignTrainee} />
+            <TraineeAssignForm staffOptions={ownerOptions} onSubmit={onAssignTrainee} />
           ) : (
             <ConvertForm application={application} onSubmit={onConvert} />
           )}

@@ -37,9 +37,13 @@ test.describe("venue create and pick", () => {
     await expect(menu).toBeVisible({ timeout: 20_000 });
     await fillSearchableSelectQuery(menu, venueName);
     await menu.getByRole("button", { name: /Create venue/i }).click();
-    await expect(page.getByText("Create venue").first()).toBeVisible({ timeout: 10_000 });
-    // Dialog name field should already be filled from the query.
-    await page.getByRole("button", { name: /Create & select|Create and select/i }).click();
+    const createDialog = page.getByTestId("venue-create-dialog");
+    await expect(createDialog).toBeVisible({ timeout: 10_000 });
+    // Name is already filled from the query; crew emails need the location.
+    await createDialog.getByLabel("Address").fill("459 Lagunita Dr, Stanford, CA 94305");
+    await createDialog.getByLabel("Google Maps link").fill("https://maps.app.goo.gl/e2e");
+    await createDialog.getByRole("button", { name: /Create & select/i }).click();
+    await expect(createDialog).toHaveCount(0);
 
     await page.getByRole("button", { name: "Create Event" }).first().click();
     await page.waitForURL(/\/dashboard\/events\/(?!new(?:\/|$))[^/?#]+/, { timeout: 45_000 });
@@ -49,11 +53,15 @@ test.describe("venue create and pick", () => {
       venueId: string;
       name: string;
       path: string;
+      address: string | null;
+      googleMapsUrl: string | null;
     }>(
       "e2eHelpers:getLatestVenueByName",
       { name: venueName },
       (row) => row?.name === venueName,
     );
+    expect(venue.address).toBe("459 Lagunita Dr, Stanford, CA 94305");
+    expect(venue.googleMapsUrl).toBe("https://maps.app.goo.gl/e2e");
 
     const eventId = page.url().replace(/\/$/, "").split("/").pop()!;
     const eventState = await pollConvex<{

@@ -496,6 +496,27 @@ export const remove = mutation({
 });
 
 /** Compact create used by the venue picker dialog. */
+/** Set just a venue's address and maps link (blank clears them, so a nested space inherits its parent's). */
+export const setLocation = mutation({
+  args: {
+    id: v.id("venues"),
+    address: v.optional(v.string()),
+    googleMapsUrl: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireAdminVenueAccess(ctx);
+    const venue = await ctx.db.get(args.id);
+    if (!venue) throw new Error("Venue not found.");
+    await ctx.db.patch(args.id, {
+      address: trimOptional(args.address),
+      googleMapsUrl: trimOptional(args.googleMapsUrl),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const createQuick = mutation({
   args: {
     name: v.string(),
@@ -503,6 +524,8 @@ export const createQuick = mutation({
     parentId: v.optional(v.id("venues")),
     kind: venueKindValue,
     venueType: v.string(),
+    address: v.optional(v.string()),
+    googleMapsUrl: v.optional(v.string()),
   },
   returns: v.id("venues"),
   handler: async (ctx, args) => {
@@ -526,6 +549,8 @@ export const createQuick = mutation({
       path,
       kind,
       venueType: args.venueType.trim(),
+      address: trimOptional(args.address),
+      googleMapsUrl: trimOptional(args.googleMapsUrl),
       createdAt: now,
       updatedAt: now,
     });

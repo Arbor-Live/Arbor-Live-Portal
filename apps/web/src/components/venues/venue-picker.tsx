@@ -9,6 +9,14 @@ import {
 } from "@/components/inventory/searchable-select";
 import { useSessionViewer } from "@/components/session-shell-provider";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -57,6 +65,15 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
   return debounced;
 }
 
+function isUrl(value: string) {
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function toSelectOption(venue: VenueOption): SearchableSelectOption {
   return {
     value: venue._id,
@@ -103,6 +120,8 @@ export function VenuePicker({
   const [kind, setKind] = useState<VenueKind>("building");
   const [venueType, setVenueType] = useState(venueTypesForKind("building")[0]!);
   const [parentId, setParentId] = useState("");
+  const [address, setAddress] = useState("");
+  const [googleMapsUrl, setGoogleMapsUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -125,9 +144,13 @@ export function VenuePicker({
     setKind("building");
     setVenueType(venueTypesForKind("building")[0]!);
     setParentId("");
+    setAddress("");
+    setGoogleMapsUrl("");
     setError(null);
     setCreateOpen(true);
   }
+
+  const mapsUrlInvalid = Boolean(googleMapsUrl.trim()) && !isUrl(googleMapsUrl.trim());
 
   async function submitCreate() {
     setSaving(true);
@@ -143,6 +166,8 @@ export function VenuePicker({
         kind,
         venueType,
         parentId: parentId ? (parentId as Id<"venues">) : undefined,
+        address: address.trim() || undefined,
+        googleMapsUrl: googleMapsUrl.trim() || undefined,
       });
       onChange(id);
       setCreateOpen(false);
@@ -178,26 +203,51 @@ export function VenuePicker({
         )}
       />
 
-      {createOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-          <div className="w-full max-w-md space-y-3 rounded-md border bg-background p-4 shadow-lg">
-            <h3 className="text-base font-semibold">Create venue</h3>
+      <Dialog open={createOpen} onOpenChange={(open) => !saving && setCreateOpen(open)}>
+        <DialogContent className="sm:max-w-md" data-testid="venue-create-dialog">
+          <DialogHeader>
+            <DialogTitle>Create venue</DialogTitle>
+            <DialogDescription>
+              Crew and trainees get the address and maps link in their call emails.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              // Portaled, but React bubbles submit to any form the picker sits in.
+              event.stopPropagation();
+              void submitCreate();
+            }}
+          >
             <div className="space-y-1">
               <Label htmlFor="venue-create-name">Name</Label>
-              <Input
-                id="venue-create-name"
-                value={draftName}
-                onChange={(e) => setDraftName(e.target.value)}
-              />
+              <Input id="venue-create-name" value={draftName} onChange={(e) => setDraftName(e.target.value)} />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="venue-create-nicknames">Nicknames (comma-separated)</Label>
+              <Label htmlFor="venue-create-address">Address</Label>
               <Input
-                id="venue-create-nicknames"
-                value={nicknamesText}
-                onChange={(e) => setNicknamesText(e.target.value)}
-                placeholder="Llaga, Yaga"
+                id="venue-create-address"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="459 Lagunita Dr, Stanford, CA 94305"
+                autoComplete="off"
               />
+              {parentId ? (
+                <p className="text-xs text-muted-foreground">Leave blank to use the parent venue&apos;s address.</p>
+              ) : null}
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="venue-create-maps">Google Maps link</Label>
+              <Input
+                id="venue-create-maps"
+                value={googleMapsUrl}
+                onChange={(e) => setGoogleMapsUrl(e.target.value)}
+                placeholder="https://maps.app.goo.gl/…"
+                inputMode="url"
+                aria-invalid={mapsUrlInvalid || undefined}
+              />
+              {mapsUrlInvalid ? <p className="text-xs text-destructive">Enter a full link, starting with https://</p> : null}
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
@@ -238,7 +288,7 @@ export function VenuePicker({
               </div>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="venue-create-parent">Parent (optional)</Label>
+              <Label htmlFor="venue-create-parent">Inside another venue (optional)</Label>
               <SearchableSelect
                 id="venue-create-parent"
                 value={parentId}
@@ -254,22 +304,27 @@ export function VenuePicker({
                 emptyLabel="No parent (top-level)"
               />
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="venue-create-nicknames">Nicknames (comma-separated)</Label>
+              <Input
+                id="venue-create-nicknames"
+                value={nicknamesText}
+                onChange={(e) => setNicknamesText(e.target.value)}
+                placeholder="Llaga, Yaga"
+              />
+            </div>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={saving} onClick={() => setCreateOpen(false)}>
                 Cancel
               </Button>
-              <Button
-                type="button"
-                disabled={saving || !draftName.trim()}
-                onClick={() => void submitCreate()}
-              >
+              <Button type="submit" disabled={saving || !draftName.trim() || mapsUrlInvalid}>
                 {saving ? "Creating…" : "Create & select"}
               </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

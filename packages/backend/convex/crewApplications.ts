@@ -14,6 +14,7 @@ import {
   CREW_STORAGE_CLOSET_LABEL,
   CREW_STORAGE_CLOSET_MAPS_URL,
   assertTraineeIntroReady,
+  resolveTraineeEventReadiness,
   type TraineePresenceMode,
 } from "./lib/crewTraineeIntro";
 import {
@@ -469,6 +470,51 @@ export const remove = mutation({
 
     await ctx.db.delete(args.applicationId);
     return null;
+  },
+});
+
+const traineeContactStatusValue = v.object({
+  userId: v.string(),
+  name: v.optional(v.string()),
+  missing: v.array(v.union(v.literal("user"), v.literal("name"), v.literal("email"), v.literal("phone"))),
+});
+
+/**
+ * The early warning for "Assign as trainee": what the picked event still
+ * needs (a saved venue with an address, a reachable event lead or manager)
+ * before the intro email can go out. Same checks the assign mutation enforces.
+ */
+export const traineeEventReadiness = query({
+  args: { eventId: v.id("events") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      eventTitle: v.string(),
+      venue: v.object({
+        venueId: v.optional(v.id("venues")),
+        venueName: v.optional(v.string()),
+        address: v.optional(v.string()),
+        googleMapsUrl: v.optional(v.string()),
+      }),
+      eventManager: v.optional(traineeContactStatusValue),
+      dayOfLead: v.optional(traineeContactStatusValue),
+      missing: v.array(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) return null;
+    const readiness = await resolveTraineeEventReadiness(ctx, event);
+    const contactStatus = (status: typeof readiness.eventManager) =>
+      status ? { userId: status.userId, name: status.name, missing: status.missing } : undefined;
+    return {
+      eventTitle: event.title,
+      venue: readiness.venue,
+      eventManager: contactStatus(readiness.eventManager),
+      dayOfLead: contactStatus(readiness.dayOfLead),
+      missing: readiness.missing,
+    };
   },
 });
 

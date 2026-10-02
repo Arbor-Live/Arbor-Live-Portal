@@ -3632,6 +3632,8 @@ export const getLatestVenueByName = query({
       path: v.string(),
       kind: v.string(),
       venueType: v.string(),
+      address: v.union(v.string(), v.null()),
+      googleMapsUrl: v.union(v.string(), v.null()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -3646,6 +3648,8 @@ export const getLatestVenueByName = query({
       path: match.path,
       kind: match.kind,
       venueType: match.venueType,
+      address: match.address ?? null,
+      googleMapsUrl: match.googleMapsUrl ?? null,
     };
   },
 });
