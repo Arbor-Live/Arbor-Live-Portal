@@ -133,12 +133,15 @@ function ShowRiderSection({ show }: { show: ShowDetail }) {
             <SelectItem value={DEFAULT_RIDER_VALUE}>
               {defaultRider ? `My default (${defaultRider.name})` : "My default (none set)"}
             </SelectItem>
-            {riders.map((rider) => (
-              <SelectItem key={rider._id} value={rider._id}>
-                {rider.name}
-                {rider.status === "draft" ? " · Draft" : ""}
-              </SelectItem>
-            ))}
+            {/* The default is already the first option; listing it again reads as two choices. */}
+            {riders
+              .filter((rider) => !rider.isDefault || rider._id === value)
+              .map((rider) => (
+                <SelectItem key={rider._id} value={rider._id}>
+                  {rider.name}
+                  {rider.status === "draft" ? " · Draft" : ""}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
       </div>
