@@ -16,7 +16,7 @@ export const ARTIST_WORKSPACE_TAB_LABELS: Record<ArtistWorkspaceTabId, string> =
 /** Tabs an admin sees while managing an artist they aren't a member of. */
 export const ADMIN_ARTIST_WORKSPACE_TABS: readonly ArtistWorkspaceTabId[] = ["profile", "riders"];
 
-export const ARTIST_WORKSPACE_BASE_PATH = "/dashboard/artists";
+const ARTIST_WORKSPACE_BASE_PATH = "/dashboard/artists";
 
 export function getArtistWorkspaceTabPath(tab: ArtistWorkspaceTabId) {
   return tab === "profile" ? ARTIST_WORKSPACE_BASE_PATH : `${ARTIST_WORKSPACE_BASE_PATH}/${tab}`;

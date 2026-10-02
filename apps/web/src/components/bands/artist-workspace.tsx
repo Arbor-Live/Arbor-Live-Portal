@@ -206,8 +206,6 @@ function AdminWorkspaceChrome({ activeTab }: { activeTab: ArtistWorkspaceTabId }
             publicSlug: band.publicSlug,
           }
         : null;
-  const tab = ADMIN_ARTIST_WORKSPACE_TABS.includes(activeTab) ? activeTab : "profile";
-
   return (
     <>
       <WorkspaceHeader
@@ -233,7 +231,8 @@ function AdminWorkspaceChrome({ activeTab }: { activeTab: ArtistWorkspaceTabId }
           )}
         </div>
       </WorkspaceHeader>
-      <WorkspaceTabs tabs={ADMIN_ARTIST_WORKSPACE_TABS} activeTab={tab} />
+      {/* On an artist-only tab (team, payments) nothing is highlighted; the page explains. */}
+      <WorkspaceTabs tabs={ADMIN_ARTIST_WORKSPACE_TABS} activeTab={activeTab} />
     </>
   );
 }
