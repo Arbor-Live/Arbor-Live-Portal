@@ -18,6 +18,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -89,6 +92,7 @@ function EventArtistBillPanel({
   const acceptInquiry = useMutation(api.eventArtistNeeds.acceptInquiry);
   const dismissInquiry = useMutation(api.eventArtistNeeds.dismissInquiry);
   const updateSlotLineup = useMutation(api.eventArtistNeeds.updateSlotLineup);
+  const swapPositions = useMutation(api.eventArtistNeeds.swapPositions);
   const updateParticipationLineup = useMutation(api.eventBands.updateParticipationLineup);
   const cancelPayment = useMutation(api.bandPayments.cancelPayment);
   const { confirm } = useAppDialog();
@@ -338,6 +342,29 @@ function EventArtistBillPanel({
     dismissInquiry: (inquiryId) => attempt(() => dismissInquiry({ inquiryId }), "Inquiry dismissed."),
   };
 
+  /** Trade who fills two positions; each keeps its label and set times. */
+  async function onSwap(from: BillRow, to: BillRow) {
+    if (!from.slot || !to.slot) return;
+    const fromAct = rowActName(from);
+    const toAct = rowActName(to);
+    // With one side open this is a move: the act goes to the open position.
+    const moving = fromAct && toAct ? null : fromAct ? { act: fromAct, to: to.slot } : { act: toAct, to: from.slot };
+    const ok = await confirm({
+      title: moving
+        ? `Move ${moving.act} to ${slotTitle(moving.to)}?`
+        : `Swap ${fromAct} and ${toAct}?`,
+      description: moving
+        ? "They take over that position's set and soundcheck times in the Run of Show. Their payout and invoice line go with them."
+        : "Each act takes over the other's set and soundcheck times in the Run of Show. Payouts and invoice lines go with the act.",
+      confirmLabel: moving ? "Move" : "Swap",
+    });
+    if (!ok) return;
+    await attempt(
+      () => swapPositions({ eventId, needIdA: from.slot!.needId, needIdB: to.slot!.needId }),
+      moving ? `Moved ${moving.act}.` : `Swapped ${fromAct} and ${toAct}.`,
+    );
+  }
+
   if (performers === undefined || bill === undefined) {
     return (
       <Card>
@@ -457,6 +484,38 @@ function EventArtistBillPanel({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onSelect={() => setSelectedKey(row.key)}>Open details</DropdownMenuItem>
+                          {row.slot && rows.length > 1 ? (
+                            <DropdownMenuSub>
+                              <DropdownMenuSubTrigger>Swap with…</DropdownMenuSubTrigger>
+                              <DropdownMenuSubContent>
+                                {rows.map((other, otherIndex) => {
+                                  if (other.key === row.key || !other.slot) return null;
+                                  const otherName = rowActName(other);
+                                  const [otherStart] = rowSetWindow(other);
+                                  return (
+                                    <DropdownMenuItem
+                                      key={other.key}
+                                      // Two open positions have no act to trade.
+                                      disabled={!actName && !otherName}
+                                      onSelect={() => void onSwap(row, other)}
+                                    >
+                                      <span className="w-4 text-right text-xs text-muted-foreground tabular-nums">
+                                        {otherStart != null ? otherIndex + 1 : "–"}
+                                      </span>
+                                      <span className="truncate">
+                                        {otherName ?? `Open · ${slotTitle(other.slot)}`}
+                                      </span>
+                                      {otherStart != null ? (
+                                        <span className="ml-auto pl-3 text-xs text-muted-foreground tabular-nums">
+                                          {formatTime(otherStart)}
+                                        </span>
+                                      ) : null}
+                                    </DropdownMenuItem>
+                                  );
+                                })}
+                              </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                          ) : null}
                           {row.performer?.payment?.status !== "paid" ? (
                             <>
                               <DropdownMenuSeparator />

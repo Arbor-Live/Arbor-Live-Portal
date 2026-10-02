@@ -261,6 +261,107 @@ export const reorderSlots = mutation({
   },
 });
 
+const ACT_TIME_FIELDS = ["setStartsAt", "setEndsAt", "soundcheckStartsAt", "soundcheckEndsAt"] as const;
+type ActTimes = Partial<Record<(typeof ACT_TIME_FIELDS)[number], number>>;
+
+function pickActTimes(row: ActTimes): ActTimes {
+  const out: ActTimes = {};
+  for (const field of ACT_TIME_FIELDS) {
+    if (row[field] != null) out[field] = row[field];
+  }
+  return out;
+}
+
+/** Copy of `row` with exactly `times`; for `replace`, since `patch` can't clear fields. */
+function withActTimes<T extends ActTimes>(row: T, times: ActTimes): T {
+  const next = { ...row };
+  for (const field of ACT_TIME_FIELDS) delete next[field];
+  return { ...next, ...times };
+}
+
+/**
+ * Two acts trade places on the bill (e.g. the opener and the headliner swap
+ * slots). Each position keeps its label and Run of Show times; only who fills
+ * it changes, so each act takes over the other's set and soundcheck. Either
+ * position may be open, which moves the other act into it.
+ */
+export const swapPositions = mutation({
+  args: {
+    eventId: v.id("events"),
+    needIdA: v.id("eventArtistNeeds"),
+    needIdB: v.id("eventArtistNeeds"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    if (args.needIdA === args.needIdB) return null;
+    const [slotA, slotB] = await Promise.all([ctx.db.get(args.needIdA), ctx.db.get(args.needIdB)]);
+    if (!slotA || !slotB || slotA.eventId !== args.eventId || slotB.eventId !== args.eventId) {
+      throw new Error("Position not found on this event.");
+    }
+    const [actA, actB] = await Promise.all([
+      findActForSlot(ctx, slotA._id),
+      findActForSlot(ctx, slotB._id),
+    ]);
+    const externalA = slotA.externalArtistName?.trim() || undefined;
+    const externalB = slotB.externalArtistName?.trim() || undefined;
+    if (!actA && !actB && !externalA && !externalB) {
+      throw new Error("Both positions are open — there is no act to swap.");
+    }
+    // A position's times are its act's when a platform act fills it (see
+    // `updateSlotLineup`), otherwise the position's own.
+    const timesA = pickActTimes(actA ?? slotA);
+    const timesB = pickActTimes(actB ?? slotB);
+    const now = Date.now();
+
+    // Positions keep their times (whoever fills them next shows them) and
+    // trade outside-act names.
+    const nextSlotA = withActTimes({ ...slotA, updatedAt: now }, timesA);
+    const nextSlotB = withActTimes({ ...slotB, updatedAt: now }, timesB);
+    delete nextSlotA.externalArtistName;
+    delete nextSlotB.externalArtistName;
+    if (externalB) nextSlotA.externalArtistName = externalB;
+    if (externalA) nextSlotB.externalArtistName = externalA;
+    await ctx.db.replace(slotA._id, nextSlotA);
+    await ctx.db.replace(slotB._id, nextSlotB);
+
+    if (actA) {
+      await ctx.db.replace(
+        actA._id,
+        withActTimes({ ...actA, needId: slotB._id, updatedAt: now }, timesB),
+      );
+    }
+    if (actB) {
+      await ctx.db.replace(
+        actB._id,
+        withActTimes({ ...actB, needId: slotA._id, updatedAt: now }, timesA),
+      );
+    }
+
+    // Invoice artist lines carry the act's fee and headcount, so they go with
+    // the act. Read both before writing: the index sees this mutation's writes.
+    const [lineA, lineB] = await Promise.all(
+      [slotA._id, slotB._id].map((needId) =>
+        ctx.db
+          .query("invoiceLineItems")
+          .withIndex("by_needId", (q) => q.eq("needId", needId))
+          .first(),
+      ),
+    );
+    if (lineA) await ctx.db.patch(lineA._id, { needId: slotB._id, updatedAt: now });
+    if (lineB) await ctx.db.patch(lineB._id, { needId: slotA._id, updatedAt: now });
+
+    for (const act of [actA, actB]) {
+      if (act) await syncParticipationBlocks(ctx, act._id);
+    }
+    for (const needId of [slotA._id, slotB._id]) {
+      await syncNeedBlocks(ctx, needId);
+      await syncInvoiceLineForSlot(ctx, needId, now);
+    }
+    return null;
+  },
+});
+
 /**
  * Fill a position with an outside act — a name only, no platform organization —
  * and set its run of show. Uses `replace` because `patch` ignores `undefined`.

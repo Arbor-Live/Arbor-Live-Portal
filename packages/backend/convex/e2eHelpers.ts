@@ -32,6 +32,7 @@ import {
 } from "./lib/publicReferenceIds";
 import { listFulfillmentPackageBom } from "./lib/packageBom";
 import { eventStatusValue } from "./lib/eventStatus";
+import { syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
 
 const makeToken = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 24);
 const makeInvoiceSuffix = customAlphabet(
@@ -3326,6 +3327,78 @@ export const seedUpcomingBandShow = mutation({
       organizationId,
       linked: Boolean(organizationId),
     };
+  },
+});
+
+/**
+ * Test-only: an upcoming show with two timed positions — "Opener" filled by
+ * the platform act `organizationId`, "Headliner" by an outside act — so staff
+ * can swap them.
+ */
+export const seedLineupForSwap = mutation({
+  args: {
+    organizationId: v.string(),
+    eventTitle: v.string(),
+    externalArtistName: v.string(),
+  },
+  returns: v.object({ eventId: v.id("events"), eventPath: v.string() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const startAt = now + 24 * 60 * 60 * 1000;
+    const hour = 60 * 60 * 1000;
+    const eventId = await ctx.db.insert("events", {
+      title: args.eventTitle,
+      status: "ready",
+      visibility: "internal",
+      publicToken: makeToken(),
+      startAt,
+      endAt: startAt + 4 * hour,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      eventType: "Crewed Event",
+      teamsInterested: [],
+      venueName: "E2E Stage",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const openerId = await ctx.db.insert("eventArtistNeeds", {
+      eventId,
+      sortOrder: 0,
+      label: "Opener",
+      artistType: "band",
+      status: "open",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const headlinerId = await ctx.db.insert("eventArtistNeeds", {
+      eventId,
+      sortOrder: 1,
+      label: "Headliner",
+      artistType: "band",
+      status: "open",
+      externalArtistName: args.externalArtistName,
+      setStartsAt: startAt + 2 * hour,
+      setEndsAt: startAt + 3 * hour,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const participationId = await ctx.db.insert("eventBandParticipations", {
+      eventId,
+      organizationId: args.organizationId,
+      role: "support",
+      needId: openerId,
+      setStartsAt: startAt + hour,
+      setEndsAt: startAt + 2 * hour,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await syncParticipationBlocks(ctx, participationId);
+    await syncNeedBlocks(ctx, headlinerId);
+    return { eventId, eventPath: `/dashboard/events/${eventId}` };
   },
 });
 
