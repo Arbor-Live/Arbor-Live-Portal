@@ -139,7 +139,7 @@ test.describe("band shows home", () => {
     await row.getByRole("button", { name: "E-sign", exact: true }).click();
 
     await expect(page.getByText("E-sign payment").first()).toBeVisible();
-    await page.locator('input[type="checkbox"]').check();
+    await page.getByRole("checkbox", { name: /I agree to the payment amount/ }).check();
     await page.locator("#band-payment-sign-name").fill(e2eEnv.bandName);
     await page.getByRole("button", { name: "Submit signature" }).click();
 

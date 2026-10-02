@@ -4,6 +4,9 @@ import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SheetField, SheetFields } from "@/components/list-page";
+import { notify } from "@/lib/notify";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -54,6 +57,7 @@ export function BandPaymentSignSheet({
     try {
       await signPayment({ paymentId: payment._id, typedName, agreed });
       reset();
+      notify.success("Payment signed. Arbor Live will process payout next.");
       onOpenChange(false);
       onSigned?.();
     } catch (err) {
@@ -71,7 +75,7 @@ export function BandPaymentSignSheet({
         onOpenChange(next);
       }}
     >
-      <SheetContent className="sm:max-w-md">
+      <SheetContent className="sm:max-w-md" data-testid="band-payment-sign-sheet">
         <SheetHeader>
           <SheetTitle>E-sign payment</SheetTitle>
           <SheetDescription>
@@ -81,31 +85,32 @@ export function BandPaymentSignSheet({
         {payment ? (
           <div className="space-y-4 px-4">
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            <div className="rounded-md border bg-muted/20 p-3 text-sm">
-              <p>
-                <span className="font-medium">Amount:</span> {formatUsd(payment.totalUsd)}
-              </p>
+            <SheetFields>
+              <SheetField label="Amount">
+                <span className="font-medium tabular-nums">{formatUsd(payment.totalUsd)}</span>
+              </SheetField>
               {payment.confirmationToken ? (
-                <p>
-                  <span className="font-medium">Payment ID:</span>{" "}
+                <SheetField label="Payment ID">
                   <span className="font-mono text-xs">{payment.confirmationToken}</span>
-                </p>
+                </SheetField>
               ) : null}
-            </div>
+            </SheetFields>
             <p className="text-sm">
               I agree that the payment amount of{" "}
               <span className="font-medium">{formatUsd(payment.totalUsd)}</span> for{" "}
               {payment.eventTitle} is accurate and authorize Arbor Live to proceed with payout.
             </p>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="mt-1"
+            <div className="flex items-start gap-2 text-sm">
+              <Checkbox
+                id="band-payment-sign-agree"
+                className="mt-0.5"
                 checked={agreed}
-                onChange={(e) => setAgreed(e.target.checked)}
+                onCheckedChange={(checked) => setAgreed(checked === true)}
               />
-              <span>I agree to the payment amount of {formatUsd(payment.totalUsd)}.</span>
-            </label>
+              <Label htmlFor="band-payment-sign-agree" className="font-normal">
+                I agree to the payment amount of {formatUsd(payment.totalUsd)}.
+              </Label>
+            </div>
             <div className="space-y-1">
               <Label htmlFor="band-payment-sign-name">Full legal name</Label>
               <Input

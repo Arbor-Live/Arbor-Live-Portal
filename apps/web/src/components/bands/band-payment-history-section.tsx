@@ -1,81 +1,65 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { api, type Id } from "@/lib/convex-api";
-import { BandPaymentAgreementPdfButton } from "@/components/financial/band-payment-agreement-pdf-button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useAction, useQuery } from "convex/react";
+import { SignatureIcon } from "@phosphor-icons/react";
+import { api } from "@/lib/convex-api";
+import { bandPaymentStatusTone } from "@/lib/band-payment-status";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { downloadBytes } from "@/lib/download-bytes";
+import { formatDate, formatUsd } from "@/lib/format";
+import { notify } from "@/lib/notify";
+import { BandPaymentSignSheet, type SignablePayment } from "@/components/bands/band-payment-sign-sheet";
+import {
+  FilterBar,
+  matchesFilter,
+  type FilterDefinition,
+  type FilterState,
+} from "@/components/filter-bar";
+import { ListRow } from "@/components/list-row";
+import { EmptyState, ListSummary, RowCell, RowList, RowMenu, RowText } from "@/components/list-page";
+import { StatusPill } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ListSummary, RowCell, RowList } from "@/components/list-page";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { getConvexErrorMessage } from "@/lib/convex-error";
-import { formatDate, formatUsd } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+
+type PaymentRow = NonNullable<
+  ReturnType<typeof useQuery<typeof api.bandPayments.listForActiveBand>>
+>[number];
 
 const PAGE_SIZE = 10;
 
-type StatusFilter = "all" | "action_needed" | "awaiting_confirmation" | "confirmed" | "paid";
+/** "Needs my signature" is about the viewer, the rest are the payout's stage. */
+const STATUS_FILTER: FilterDefinition = {
+  id: "status",
+  label: "Status",
+  options: [
+    { value: "action_needed", label: "Needs my signature" },
+    { value: "awaiting_confirmation", label: "Awaiting signature" },
+    { value: "confirmed", label: "Ready to pay" },
+    { value: "paid", label: "Paid" },
+  ],
+};
 
-function statusBadgeClass(status: string) {
-  switch (status) {
-    case "awaiting_confirmation":
-      return "bg-status-amber-100 text-status-amber-900 dark:bg-status-amber-500/15 dark:text-status-amber-200";
-    case "confirmed":
-      return "bg-status-blue-100 text-status-blue-900 dark:bg-status-blue-500/15 dark:text-status-blue-200";
-    case "paid":
-      return "bg-status-emerald-100 text-status-emerald-800 dark:bg-status-emerald-500/15 dark:text-status-emerald-300";
-    case "pending_onboarding":
-    case "pending_payee":
-    case "pending_email":
-      return "bg-status-slate-100 text-status-slate-800 dark:bg-status-slate-500/15 dark:text-status-slate-200";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
+function statusCandidates(payment: PaymentRow) {
+  return payment.canSign ? [payment.status, "action_needed"] : [payment.status];
 }
 
 export function BandPaymentHistorySection() {
   const payments = useQuery(api.bandPayments.listForActiveBand, {});
-  const signPayment = useMutation(api.bandPayments.signPayment);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const downloadPdf = useAction(api.bandPaymentPdfDownload.downloadByPaymentId);
   const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<FilterState>({});
   const [page, setPage] = useState(0);
-  const [signingId, setSigningId] = useState<Id<"eventBandPayments"> | null>(null);
-  const [typedName, setTypedName] = useState("");
-  const [agreed, setAgreed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [signing, setSigning] = useState<SignablePayment | null>(null);
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return (payments ?? []).filter((payment) => {
-      if (statusFilter === "action_needed" && !payment.canSign) return false;
-      if (
-        statusFilter !== "all" &&
-        statusFilter !== "action_needed" &&
-        payment.status !== statusFilter
-      ) {
-        return false;
-      }
+      if (!matchesFilter(filters.status, statusCandidates(payment))) return false;
       if (!needle) return true;
-      const haystack = [
+      return [
         payment.eventTitle,
         payment.venueName,
         payment.confirmationToken,
@@ -85,306 +69,181 @@ export function BandPaymentHistorySection() {
       ]
         .filter(Boolean)
         .join(" ")
-        .toLowerCase();
-      return haystack.includes(needle);
+        .toLowerCase()
+        .includes(needle);
     });
-  }, [payments, search, statusFilter]);
+  }, [payments, search, filters]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
   const pageRows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
-  const signingPayment = payments?.find((payment) => payment._id === signingId) ?? null;
-  const actionNeededCount = (payments ?? []).filter((payment) => payment.canSign).length;
+  const toSign = (payments ?? []).filter((payment) => payment.canSign).length;
+  const paidTotal = filtered
+    .filter((payment) => payment.status === "paid")
+    .reduce((sum, payment) => sum + payment.totalUsd, 0);
 
-  async function onSign() {
-    if (!signingId) return;
-    setBusy(true);
-    setError(null);
-    setSuccess(null);
+  async function onDownload(payment: PaymentRow) {
     try {
-      await signPayment({ paymentId: signingId, typedName, agreed });
-      setSuccess("Payment signed. Arbor Live will process payout next.");
-      setSigningId(null);
-      setTypedName("");
-      setAgreed(false);
-    } catch (err) {
-      setError(getConvexErrorMessage(err));
-    } finally {
-      setBusy(false);
+      const result = await downloadPdf({ paymentId: payment._id });
+      downloadBytes(result.bytes, result.fileName);
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
   return (
     <Card>
-      <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1.5">
-          <CardTitle>Payment history</CardTitle>
-          <CardDescription>
-            Track payout status for your performances. Only the designated payee can e-sign pending
-            amounts.
-          </CardDescription>
-        </div>
-        {actionNeededCount > 0 ? (
-          <span className="inline-flex shrink-0 items-center rounded-full bg-status-amber-500/15 px-2.5 py-1 text-xs font-medium text-status-amber-800 dark:text-status-amber-200">
-            {actionNeededCount} need{actionNeededCount === 1 ? "s" : ""} your signature
-          </span>
-        ) : null}
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <SignatureIcon className="size-4 text-muted-foreground" aria-hidden />
+          Payment history
+        </CardTitle>
+        <CardDescription>
+          Every payout for your performances. Only the designated payee can e-sign a pending amount.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {error ? (
-          <Alert variant="destructive">
-            <AlertTitle>Could not sign</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
-        {success ? (
-          <Alert>
-            <AlertTitle>Signed</AlertTitle>
-            <AlertDescription>{success}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <Label htmlFor="band-payment-search" className="text-xs text-muted-foreground">
-              Search
-            </Label>
-            <Input
-              id="band-payment-search"
-              className="w-56"
-              placeholder="Event, payment ID…"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(0);
-              }}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="band-payment-status-filter" className="text-xs text-muted-foreground">
-              Status
-            </Label>
-            <Select
-              value={statusFilter}
-              onValueChange={(value) => {
-                setStatusFilter(value as StatusFilter);
-                setPage(0);
-              }}
-            >
-              <SelectTrigger id="band-payment-status-filter" className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="action_needed">Needs my signature</SelectItem>
-                <SelectItem value="awaiting_confirmation">Awaiting signature</SelectItem>
-                <SelectItem value="confirmed">Ready to pay</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
+        <FilterBar
+          search={search}
+          onSearchChange={(next) => {
+            setSearch(next);
+            setPage(0);
+          }}
+          searchPlaceholder="Event, payment ID…"
+          searchLabel="Search payments"
+          filters={[STATUS_FILTER]}
+          value={filters}
+          onChange={(next) => {
+            setFilters(next);
+            setPage(0);
+          }}
+        />
         {payments === undefined ? (
           <p className="text-sm text-muted-foreground">Loading payments…</p>
         ) : (
           <>
-            <ListSummary testId="band-payments-summary">
-              {filtered.length} payment{filtered.length === 1 ? "" : "s"}
-              {actionNeededCount > 0
-                ? ` · ${actionNeededCount} need${actionNeededCount === 1 ? "s" : ""} your signature`
-                : ""}
+            <ListSummary testId="band-payments-summary" order="Newest show first.">
+              {[
+                `${filtered.length} payment${filtered.length === 1 ? "" : "s"}`,
+                toSign > 0 ? `${toSign} need${toSign === 1 ? "s" : ""} your signature` : null,
+                paidTotal > 0 ? `${formatUsd(paidTotal)} paid` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </ListSummary>
-
-            <RowList joined testId="band-payments-list">
-              {pageRows.map((payment) => (
-                <li
-                  key={payment._id}
-                  className="flex flex-wrap items-start gap-x-3 gap-y-2 px-3 py-3 text-sm"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">{payment.eventTitle}</p>
-                    {payment.venueName ? (
-                      <p className="text-xs text-muted-foreground">{payment.venueName}</p>
-                    ) : null}
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatDate(payment.eventStartAt)}
-                      {" · "}
-                      <span className="font-mono">{payment.confirmationToken}</span>
-                    </p>
-                  </div>
-                  <RowCell className="w-24">{formatUsd(payment.totalUsd)}</RowCell>
-                  <div className="w-44 shrink-0">
-                    <span
-                      className={cn(
-                        "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                        statusBadgeClass(payment.status),
-                      )}
-                    >
-                      {payment.statusLabel}
-                    </span>
-                    {payment.status === "awaiting_confirmation" && !payment.canSign ? (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Waiting on
-                        {payment.designatedPayeeName
-                          ? ` ${payment.designatedPayeeName}`
-                          : " designated payee"}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex shrink-0 flex-wrap gap-2">
-                    {payment.canSign ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => {
-                          setSigningId(payment._id);
-                          setTypedName("");
-                          setAgreed(false);
-                          setError(null);
-                        }}
-                      >
-                        E-sign
-                      </Button>
-                    ) : null}
-                    {payment.canDownloadAgreementPdf ? (
-                      <BandPaymentAgreementPdfButton
-                        paymentId={payment._id}
-                        label="PDF"
-                        size="sm"
-                      />
-                    ) : null}
-                    {!payment.canSign && !payment.canDownloadAgreementPdf ? (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    ) : null}
-                  </div>
-                </li>
-              ))}
-            </RowList>
             {pageRows.length === 0 ? (
-              <div className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+              <EmptyState>
                 {payments.length === 0
-                  ? "No payments yet."
+                  ? "No payments yet. Arbor adds a payout once a booking is confirmed."
                   : "No payments match your filters."}
+              </EmptyState>
+            ) : (
+              <RowList joined testId="band-payments-list">
+                {pageRows.map((payment) => (
+                  <ListRow
+                    key={payment._id}
+                    data-testid="band-payment-row"
+                    href={`/dashboard?show=${payment.eventId}`}
+                    actions={
+                      <div className="flex shrink-0 items-center gap-1">
+                        {payment.canSign ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() =>
+                              setSigning({
+                                _id: payment._id,
+                                eventTitle: payment.eventTitle,
+                                totalUsd: payment.totalUsd,
+                                confirmationToken: payment.confirmationToken,
+                              })
+                            }
+                          >
+                            E-sign
+                          </Button>
+                        ) : null}
+                        <RowMenu label={`More for ${payment.eventTitle}`}>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/dashboard?show=${payment.eventId}`}>Open show</Link>
+                          </DropdownMenuItem>
+                          {payment.canDownloadAgreementPdf ? (
+                            <DropdownMenuItem onSelect={() => void onDownload(payment)}>
+                              Download agreement
+                            </DropdownMenuItem>
+                          ) : null}
+                        </RowMenu>
+                      </div>
+                    }
+                  >
+                    <RowCell className="w-20" align="left" muted>
+                      {formatDate(payment.eventStartAt)}
+                    </RowCell>
+                    <RowText
+                      eyebrow={payment.venueName}
+                      title={payment.eventTitle}
+                      detail={
+                        <>
+                          <span className="font-mono">{payment.confirmationToken}</span>
+                          {payment.status === "awaiting_confirmation" && !payment.canSign
+                            ? ` · Waiting on ${payment.designatedPayeeName || "your designated payee"}`
+                            : null}
+                        </>
+                      }
+                    />
+                    <RowCell className="w-24" hideBelow="sm">
+                      {formatUsd(payment.totalUsd)}
+                    </RowCell>
+                    <span className="flex w-40 shrink-0 justify-end">
+                      <StatusPill tone={bandPaymentStatusTone(payment.status)}>
+                        {payment.statusLabel}
+                      </StatusPill>
+                    </span>
+                  </ListRow>
+                ))}
+              </RowList>
+            )}
+            {pageCount > 1 ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                <p className="text-muted-foreground">
+                  Showing {safePage * PAGE_SIZE + 1}–
+                  {Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={safePage <= 0}
+                    onClick={() => setPage((current) => Math.max(0, current - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-muted-foreground tabular-nums">
+                    Page {safePage + 1} of {pageCount}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={safePage >= pageCount - 1}
+                    onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
             ) : null}
-
-            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-              <p className="text-muted-foreground">
-                {filtered.length === 0
-                  ? "0 payments"
-                  : `Showing ${safePage * PAGE_SIZE + 1}–${Math.min(
-                      (safePage + 1) * PAGE_SIZE,
-                      filtered.length,
-                    )} of ${filtered.length}`}
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={safePage <= 0}
-                  onClick={() => setPage((current) => Math.max(0, current - 1))}
-                >
-                  Previous
-                </Button>
-                <span className="text-muted-foreground">
-                  Page {safePage + 1} of {pageCount}
-                </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={safePage >= pageCount - 1}
-                  onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
           </>
         )}
       </CardContent>
 
-      <Sheet
-        open={signingId !== null}
+      <BandPaymentSignSheet
+        payment={signing}
+        open={signing !== null}
         onOpenChange={(open) => {
-          if (!open) {
-            setSigningId(null);
-            setTypedName("");
-            setAgreed(false);
-          }
+          if (!open) setSigning(null);
         }}
-      >
-        <SheetContent className="sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>E-sign payment</SheetTitle>
-            <SheetDescription>
-              Confirm the payout amount for {signingPayment?.eventTitle ?? "this performance"}.
-            </SheetDescription>
-          </SheetHeader>
-          {signingPayment ? (
-            <div className="space-y-4 px-4">
-              <div className="rounded-md border bg-muted/20 p-3 text-sm">
-                <p>
-                  <span className="font-medium">Amount:</span>{" "}
-                  {formatUsd(signingPayment.totalUsd)}
-                </p>
-                <p>
-                  <span className="font-medium">Payment ID:</span>{" "}
-                  <span className="font-mono text-xs">{signingPayment.confirmationToken}</span>
-                </p>
-              </div>
-              <p className="text-sm">
-                I agree that the payment amount of{" "}
-                <span className="font-medium">{formatUsd(signingPayment.totalUsd)}</span> for{" "}
-                {signingPayment.eventTitle} is accurate and authorize Arbor Live to proceed with
-                payout.
-              </p>
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={agreed}
-                  onChange={(e) => setAgreed(e.target.checked)}
-                />
-                <span>
-                  I agree to the payment amount of {formatUsd(signingPayment.totalUsd)}.
-                </span>
-              </label>
-              <div className="space-y-1">
-                <Label htmlFor="band-payment-sign-name">Full legal name</Label>
-                <Input
-                  id="band-payment-sign-name"
-                  value={typedName}
-                  onChange={(e) => setTypedName(e.target.value)}
-                  placeholder="Type your full legal name"
-                />
-              </div>
-            </div>
-          ) : null}
-          <SheetFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setSigningId(null);
-                setTypedName("");
-                setAgreed(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabled={busy || !agreed || typedName.trim().length < 2}
-              onClick={() => void onSign()}
-            >
-              {busy ? "Signing…" : "Submit signature"}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      />
     </Card>
   );
 }
