@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Doc, Id } from "../_generated/dataModel";
 import { groupTitleFromDayTitles, planMultiDayMembership } from "./eventGroups";
-import { selectDaysInScope } from "./eventGroupTemplates";
+import { planDaySetup, selectDaysInScope } from "./eventGroupTemplates";
 import {
   editedSharedDayFields,
   shiftsToTemplates,
@@ -226,5 +226,47 @@ describe("shared day fields on an 'all days' edit", () => {
       dayOfLeadUserId: "lead-1",
       host: "Host B",
     });
+  });
+});
+
+describe("planDaySetup", () => {
+  const empty = {
+    wantSchedule: true,
+    wantPositions: true,
+    wantPullList: true,
+    captured: {},
+    hasUnlinkedShifts: false,
+    pullListRows: 0,
+  };
+
+  it("does nothing for a day with nothing set up", () => {
+    expect(planDaySetup(empty).nothingToApply).toBe(true);
+  });
+
+  it("unlinked shifts alone copy across without touching the section templates", () => {
+    const plan = planDaySetup({ ...empty, hasUnlinkedShifts: true });
+    expect(plan.parts.schedule).toBe(false);
+    expect(plan.parts.crew).toBe(false);
+    expect(plan.copyUnlinkedShifts).toBe(true);
+    expect(plan.nothingToApply).toBe(false);
+  });
+
+  it("a Run of Show turns the schedule and crew template parts on", () => {
+    const block = { blockType: "setup" as const, label: "Setup", dayIndex: 0, offsetMs: 0, durationMs: 1 };
+    const plan = planDaySetup({ ...empty, captured: { blockTemplates: [block] } });
+    expect(plan.parts).toEqual({ schedule: true, crew: true, positions: false });
+  });
+
+  it("respects what the user unticked", () => {
+    const plan = planDaySetup({
+      ...empty,
+      wantSchedule: false,
+      wantPullList: false,
+      hasUnlinkedShifts: true,
+      pullListRows: 3,
+    });
+    expect(plan.copyUnlinkedShifts).toBe(false);
+    expect(plan.copyPullList).toBe(false);
+    expect(plan.nothingToApply).toBe(true);
   });
 });

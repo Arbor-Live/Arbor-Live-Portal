@@ -33,6 +33,7 @@ import {
   copyPullListBetweenDays,
   copyUnlinkedShiftsBetweenDays,
   listGroupDays,
+  planDaySetup,
   selectDaysInScope,
 } from "./lib/eventGroupTemplates";
 import { isMultiDayGroup } from "./lib/eventGroupKind";
@@ -635,19 +636,15 @@ export const applyDaySetup = mutation({
             .take(500)
         ).some((shift) => !shift.scheduleBlockId && !isTraineeShift(shift))
       : false;
-    // A part this day has nothing for is skipped, never used to wipe the
-    // other days (e.g. no Run of Show yet must not clear their crew slots).
-    const hasSchedule =
-      (captured.blockTemplates?.length ?? 0) > 0 ||
-      (captured.shiftTemplates?.length ?? 0) > 0 ||
-      hasUnlinkedShifts;
-    const parts = {
-      schedule: wanted.schedule && hasSchedule,
-      crew: wanted.crew && hasSchedule,
-      positions: wanted.positions && (captured.positionTemplates?.length ?? 0) > 0,
-    };
-    const copyPullList = sourcePullList.length > 0;
-    if (!parts.schedule && !parts.positions && !copyPullList) {
+    const { parts, copyUnlinkedShifts, copyPullList, nothingToApply } = planDaySetup({
+      wantSchedule: wanted.schedule,
+      wantPositions: wanted.positions,
+      wantPullList: args.pullList !== false,
+      captured,
+      hasUnlinkedShifts,
+      pullListRows: sourcePullList.length,
+    });
+    if (nothingToApply) {
       throw new Error(
         "This day has nothing to apply yet: no Run of Show, crew, positions or pull list.",
       );
@@ -664,8 +661,10 @@ export const applyDaySetup = mutation({
     const defaultHourlyRateUsd = parts.crew ? await resolveDefaultCrewHourlyRateUsd(ctx) : undefined;
     for (const target of targets) {
       await applyGroupTemplatesToDay(ctx, group, target, parts, { now, defaultHourlyRateUsd });
-      if (parts.crew) {
+      if (copyUnlinkedShifts) {
         await copyUnlinkedShiftsBetweenDays(ctx, sourceDay, target, now);
+      }
+      if (parts.crew || copyUnlinkedShifts) {
         await syncEventCrewCostUsd(ctx, target._id, now);
       }
       if (copyPullList) {

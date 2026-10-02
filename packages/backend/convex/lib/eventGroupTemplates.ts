@@ -197,6 +197,39 @@ export async function captureDayTemplates(
 }
 
 /**
+ * What "apply this day's setup" actually does for one source day. A part the
+ * day has nothing for is skipped, never used to wipe the other days (no Run of
+ * Show yet must not clear their crew slots), and shifts outside any section
+ * aren't part of the section template: they copy across on their own and never
+ * switch the template parts on.
+ */
+export function planDaySetup(args: {
+  wantSchedule: boolean;
+  wantPositions: boolean;
+  wantPullList: boolean;
+  captured: CapturedDayTemplates;
+  hasUnlinkedShifts: boolean;
+  pullListRows: number;
+}) {
+  const hasTemplateSchedule =
+    (args.captured.blockTemplates?.length ?? 0) > 0 ||
+    (args.captured.shiftTemplates?.length ?? 0) > 0;
+  const parts: GroupTemplateParts = {
+    schedule: args.wantSchedule && hasTemplateSchedule,
+    crew: args.wantSchedule && hasTemplateSchedule,
+    positions: args.wantPositions && (args.captured.positionTemplates?.length ?? 0) > 0,
+  };
+  const copyUnlinkedShifts = args.wantSchedule && args.hasUnlinkedShifts;
+  const copyPullList = args.wantPullList && args.pullListRows > 0;
+  return {
+    parts,
+    copyUnlinkedShifts,
+    copyPullList,
+    nothingToApply: !parts.schedule && !parts.positions && !copyUnlinkedShifts && !copyPullList,
+  };
+}
+
+/**
  * Replace a day's pull list with another day's (quantities to pull reset, so
  * each day tracks its own pull progress). Pull lists are per day, not a group
  * template: equipment differs by day far more often than the schedule does.
@@ -222,8 +255,9 @@ export async function copyPullListBetweenDays(
       packageId: item.packageId,
       label: item.label,
       quantityRequired: item.quantityRequired,
+      // Each day tracks its own pull and checkout progress.
       quantityPulled: 0,
-      quantityCheckedOut: item.quantityCheckedOut,
+      quantityCheckedOut: 0,
       source: item.source,
       sourcePackageId: item.sourcePackageId,
       sourceInvoiceLineKey: item.sourceInvoiceLineKey,
