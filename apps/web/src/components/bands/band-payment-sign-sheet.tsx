@@ -17,7 +17,7 @@ import {
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatUsd } from "@/lib/format";
 
-type SignablePayment = {
+export type SignablePayment = {
   _id: Id<"eventBandPayments">;
   eventTitle: string;
   totalUsd: number;

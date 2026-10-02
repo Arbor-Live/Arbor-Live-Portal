@@ -131,13 +131,10 @@ test.describe("event artist needed", () => {
       timeout: 30_000,
     });
 
-    const card = bandPage
-      .locator("div.rounded-lg.border")
-      .filter({ hasText: seeded.eventTitle })
-      .first();
-    await expect(card).toBeVisible({ timeout: 20_000 });
-    await expect(card.getByText(/Set: /)).toBeVisible({ timeout: 20_000 });
-    await expect(card.getByText(/Soundcheck: /)).toBeVisible({ timeout: 20_000 });
+    const row = bandPage.getByTestId("band-show-row").filter({ hasText: seeded.eventTitle }).first();
+    await expect(row).toBeVisible({ timeout: 20_000 });
+    await expect(row.getByText(/Set \d/)).toBeVisible({ timeout: 20_000 });
+    await expect(row.getByText(/Soundcheck \d/)).toBeVisible({ timeout: 20_000 });
 
     await bandContext.close();
   });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AdminDashboard } from "@/components/admin-dashboard/admin-dashboard";
 import { BandDashboard } from "@/components/bands/band-dashboard";
@@ -38,7 +38,12 @@ export function DashboardHomeClient() {
   }
 
   if (activeOrganization?.organizationType === "band") {
-    return <BandDashboard />;
+    // The shows list reads `?show=` with useSearchParams, which needs a Suspense boundary.
+    return (
+      <Suspense fallback={<Skeleton className="h-48 w-full" />}>
+        <BandDashboard />
+      </Suspense>
+    );
   }
 
   if (viewer.isAdmin) {

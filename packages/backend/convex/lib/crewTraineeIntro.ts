@@ -90,7 +90,8 @@ export function traineeScheduleSpan(
   return { earliestSetupStartsAt, earliestBlockStartsAt, latestBlockEndsAt };
 }
 
-async function resolveVenueLocation(
+/** An event's venue label, address and map link, inheriting from parent venues. */
+export async function resolveVenueLocation(
   ctx: QueryCtx | MutationCtx,
   event: Doc<"events">,
 ): Promise<TraineeVenueStatus> {

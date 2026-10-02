@@ -6,6 +6,8 @@ import { requireArborInternalContext, requireAuth, requireBandContext, getUserId
 import { inviteEmailToBandOrg, provisionBandOrganization } from "./lib/bandOrgInvite";
 import { scheduleBandEventOnboardingInviteEmail } from "./email/bandEventInviteEmails";
 import { listBandLinkedEvents } from "./lib/eventBandAccess";
+import { resolveUserContact } from "./lib/userContact";
+import { resolveVenueLocation } from "./lib/crewTraineeIntro";
 import { syncInvoiceLineForSlot } from "./lib/artistLineSync";
 import {
   claimSlot,
@@ -322,49 +324,112 @@ export const listLinkedEventsForActiveBand = query({
   },
 });
 
+/** A show's payout as the artist sees it: what it is and what they can do. */
+const showPaymentValidator = v.union(
+  v.null(),
+  v.object({
+    _id: v.id("eventBandPayments"),
+    totalUsd: v.number(),
+    status: paymentStatusValue,
+    statusLabel: v.string(),
+    confirmationToken: v.string(),
+    designatedPayeeName: v.optional(v.string()),
+    canSign: v.boolean(),
+    canDownloadAgreementPdf: v.boolean(),
+    needsPayeeSetup: v.boolean(),
+  }),
+);
+
+const showFields = {
+  eventId: v.id("events"),
+  title: v.string(),
+  startAt: v.number(),
+  endAt: v.number(),
+  timezone: v.optional(v.string()),
+  venueName: v.optional(v.string()),
+  /** The event was cancelled after the act was booked. */
+  cancelled: v.boolean(),
+  role: participationRoleValue,
+  /** Run-of-show windows, when staff have set them. */
+  setStartsAt: v.union(v.number(), v.null()),
+  setEndsAt: v.union(v.number(), v.null()),
+  soundcheckStartsAt: v.union(v.number(), v.null()),
+  soundcheckEndsAt: v.union(v.number(), v.null()),
+  paymentChipLabel: v.string(),
+  payment: showPaymentValidator,
+};
+
+type ShowLinkRow = {
+  eventId: Id<"events">;
+  role: "headliner" | "support" | "other";
+  setStartsAt?: number;
+  setEndsAt?: number;
+  soundcheckStartsAt?: number;
+  soundcheckEndsAt?: number;
+};
+
+async function loadPayeeComplete(ctx: QueryCtx, organizationId: string) {
+  const profile = await ctx.db
+    .query("organizationProfiles")
+    .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+    .unique();
+  return isBandPayeeComplete(payeeFieldsFromProfile(profile));
+}
+
+/** The fields shared by the shows list and a single show. */
+function buildShow(
+  event: Doc<"events">,
+  row: ShowLinkRow,
+  payment: Doc<"eventBandPayments"> | null,
+  viewer: { userId: string; payeeComplete: boolean },
+) {
+  const canSign =
+    payment !== null &&
+    payment.status === "awaiting_confirmation" &&
+    Boolean(payment.designatedPayeeUserId) &&
+    payment.designatedPayeeUserId === viewer.userId;
+  return {
+    eventId: row.eventId,
+    title: event.title,
+    startAt: event.startAt,
+    endAt: event.endAt,
+    timezone: event.timezone,
+    venueName: event.venueName,
+    cancelled: event.status === "cancelled",
+    role: row.role,
+    setStartsAt: row.setStartsAt ?? null,
+    setEndsAt: row.setEndsAt ?? null,
+    soundcheckStartsAt: row.soundcheckStartsAt ?? null,
+    soundcheckEndsAt: row.soundcheckEndsAt ?? null,
+    paymentChipLabel: paymentChipLabel({
+      hasPayment: payment !== null,
+      status: payment?.status,
+    }),
+    payment: payment
+      ? {
+          _id: payment._id,
+          totalUsd: payment.totalUsd,
+          status: payment.status,
+          statusLabel: bandPaymentStatusLabel(payment.status),
+          confirmationToken: payment.confirmationToken,
+          designatedPayeeName: payment.designatedPayeeName,
+          canSign,
+          canDownloadAgreementPdf: bandPaymentHasAgreementPdf(payment),
+          needsPayeeSetup: payment.status === "pending_payee" && !viewer.payeeComplete,
+        }
+      : null,
+  };
+}
+
 export const listShowsForActiveBand = query({
   args: {},
-  returns: v.array(
-    v.object({
-      eventId: v.id("events"),
-      title: v.string(),
-      startAt: v.number(),
-      endAt: v.number(),
-      timezone: v.optional(v.string()),
-      venueName: v.optional(v.string()),
-      role: participationRoleValue,
-      /** Run-of-show windows, when staff have set them. */
-      setStartsAt: v.union(v.number(), v.null()),
-      setEndsAt: v.union(v.number(), v.null()),
-      soundcheckStartsAt: v.union(v.number(), v.null()),
-      soundcheckEndsAt: v.union(v.number(), v.null()),
-      paymentChipLabel: v.string(),
-      payment: v.union(
-        v.null(),
-        v.object({
-          _id: v.id("eventBandPayments"),
-          totalUsd: v.number(),
-          status: paymentStatusValue,
-          statusLabel: v.string(),
-          designatedPayeeName: v.optional(v.string()),
-          canSign: v.boolean(),
-          canDownloadAgreementPdf: v.boolean(),
-          needsPayeeSetup: v.boolean(),
-        }),
-      ),
-    }),
-  ),
+  returns: v.array(v.object(showFields)),
   handler: async (ctx) => {
     const bandContext = await requireBandContext(ctx);
     const user = await requireAuth(ctx);
     const userId = getUserId(user);
     const linkedEvents = await listBandLinkedEvents(ctx, bandContext.organizationId);
-
-    const profile = await ctx.db
-      .query("organizationProfiles")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", bandContext.organizationId))
-      .unique();
-    const payeeComplete = isBandPayeeComplete(payeeFieldsFromProfile(profile));
+    const payeeComplete = await loadPayeeComplete(ctx, bandContext.organizationId);
 
     const payments = await ctx.db
       .query("eventBandPayments")
@@ -380,47 +445,86 @@ export const listShowsForActiveBand = query({
     for (const row of linkedEvents.values()) {
       const event = await ctx.db.get(row.eventId);
       if (!event) continue;
-      const payment = paymentByEvent.get(row.eventId) ?? null;
-      const canSign =
-        Boolean(payment) &&
-        payment!.status === "awaiting_confirmation" &&
-        Boolean(payment!.designatedPayeeUserId) &&
-        payment!.designatedPayeeUserId === userId;
-      const needsPayeeSetup =
-        Boolean(payment) && payment!.status === "pending_payee" && !payeeComplete;
-
-      result.push({
-        eventId: row.eventId,
-        title: event.title,
-        startAt: event.startAt,
-        endAt: event.endAt,
-        timezone: event.timezone,
-        venueName: event.venueName,
-        role: row.role,
-        setStartsAt: row.setStartsAt ?? null,
-        setEndsAt: row.setEndsAt ?? null,
-        soundcheckStartsAt: row.soundcheckStartsAt ?? null,
-        soundcheckEndsAt: row.soundcheckEndsAt ?? null,
-        paymentChipLabel: paymentChipLabel({
-          hasPayment: Boolean(payment),
-          status: payment?.status,
-        }),
-        payment: payment
-          ? {
-              _id: payment._id,
-              totalUsd: payment.totalUsd,
-              status: payment.status,
-              statusLabel: bandPaymentStatusLabel(payment.status),
-              designatedPayeeName: payment.designatedPayeeName,
-              canSign,
-              canDownloadAgreementPdf: bandPaymentHasAgreementPdf(payment),
-              needsPayeeSetup,
-            }
-          : null,
-      });
+      result.push(
+        buildShow(event, row, paymentByEvent.get(row.eventId) ?? null, { userId, payeeComplete }),
+      );
     }
 
     return result.sort((a, b) => a.startAt - b.startAt);
+  },
+});
+
+/**
+ * One show for the artist's detail panel: where it is, the act's own times,
+ * who to call on the day, and the payout. Other acts and the rest of the run
+ * of show stay staff-only. `null` when the act isn't on the event.
+ */
+export const getShowForActiveBand = query({
+  args: { eventId: v.id("events") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      ...showFields,
+      venueAddress: v.optional(v.string()),
+      venueMapsUrl: v.optional(v.string()),
+      /** The Arbor person to reach on the day: the day-of lead, else the event manager. */
+      contact: v.union(
+        v.null(),
+        v.object({
+          roleLabel: v.string(),
+          name: v.optional(v.string()),
+          email: v.optional(v.string()),
+          phone: v.optional(v.string()),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const bandContext = await requireBandContext(ctx);
+    const user = await requireAuth(ctx);
+    const userId = getUserId(user);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) return null;
+
+    const participation = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", args.eventId).eq("organizationId", bandContext.organizationId),
+      )
+      .first();
+    const payment = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", args.eventId).eq("organizationId", bandContext.organizationId),
+      )
+      .unique();
+    const activePayment = payment && payment.status !== "cancelled" ? payment : null;
+    // Same membership rule as the list: a lineup row, or a live payout.
+    if (!participation && !activePayment) return null;
+
+    const row: ShowLinkRow = participation ?? { eventId: args.eventId, role: "headliner" };
+    const payeeComplete = await loadPayeeComplete(ctx, bandContext.organizationId);
+    const location = await resolveVenueLocation(ctx, event);
+
+    let contact = null;
+    for (const lead of [
+      { userId: event.dayOfLeadUserId, roleLabel: "Day-of lead" },
+      { userId: event.eventManagerUserId, roleLabel: "Event manager" },
+    ]) {
+      if (!lead.userId?.trim()) continue;
+      const person = await resolveUserContact(ctx, lead.userId);
+      if (!person) continue;
+      contact = { roleLabel: lead.roleLabel, ...person };
+      break;
+    }
+
+    return {
+      ...buildShow(event, row, activePayment, { userId, payeeComplete }),
+      venueName: location.venueName,
+      venueAddress: location.address,
+      venueMapsUrl: location.googleMapsUrl,
+      contact,
+    };
   },
 });
 
