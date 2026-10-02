@@ -226,6 +226,18 @@ export function planPositionTemplateApplication(
   return { actions, removeIds, stampKeys };
 }
 
+const UNNAMED_POSITION_LABELS: Record<ArtistNeedType, string> = {
+  band: "Live band",
+  dj: "DJ",
+  no_preference: "Open position",
+};
+
+/** A window's length, or undefined when it has no usable end (end at or before start). */
+function positiveDuration(startsAt: number | undefined, endsAt: number | undefined) {
+  if (startsAt === undefined || endsAt === undefined) return undefined;
+  return endsAt > startsAt ? endsAt - startsAt : undefined;
+}
+
 /** Capture an occurrence's position as a template, relative to the event start. */
 export function positionTemplateFromSlot(
   slot: {
@@ -243,18 +255,12 @@ export function positionTemplateFromSlot(
 ): EventSeriesPositionTemplate {
   const setOffsetMs =
     slot.setStartsAt !== undefined ? slot.setStartsAt - occurrenceStartAt : undefined;
-  const setDurationMs =
-    slot.setStartsAt !== undefined && slot.setEndsAt !== undefined
-      ? slot.setEndsAt - slot.setStartsAt
-      : undefined;
+  const setDurationMs = positiveDuration(slot.setStartsAt, slot.setEndsAt);
   const soundcheckOffsetMs =
     slot.soundcheckStartsAt !== undefined
       ? slot.soundcheckStartsAt - occurrenceStartAt
       : undefined;
-  const soundcheckDurationMs =
-    slot.soundcheckStartsAt !== undefined && slot.soundcheckEndsAt !== undefined
-      ? slot.soundcheckEndsAt - slot.soundcheckStartsAt
-      : undefined;
+  const soundcheckDurationMs = positiveDuration(slot.soundcheckStartsAt, slot.soundcheckEndsAt);
   const anchorTime =
     setOffsetMs !== undefined
       ? slot.setStartsAt!
@@ -263,7 +269,8 @@ export function positionTemplateFromSlot(
         : occurrenceStartAt;
   return {
     templateKey: slot.templateKey ?? `pos_${crypto.randomUUID().replaceAll("-", "")}`,
-    label: slot.label?.trim() ?? "",
+    // An unnamed position still imports: it is named after what it's looking for.
+    label: slot.label?.trim() || UNNAMED_POSITION_LABELS[slot.artistType],
     artistType: slot.artistType,
     genres: slot.genres?.trim() || undefined,
     dayIndex: dayIndexFromAnchor(anchorTime),

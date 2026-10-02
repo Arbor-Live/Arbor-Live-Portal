@@ -57,7 +57,9 @@ function hoursToMs(value: string): number | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
   const hours = Number(trimmed);
-  return Number.isFinite(hours) ? Math.round(hours * HOUR_MS) : undefined;
+  // Draft hours are rounded for display; snap back to whole minutes so a
+  // load/save round trip never shifts an imported offset by seconds.
+  return Number.isFinite(hours) ? Math.round((hours * HOUR_MS) / 60_000) * 60_000 : undefined;
 }
 
 function minutesToMs(value: string, fallbackMinutes: number): number | undefined {

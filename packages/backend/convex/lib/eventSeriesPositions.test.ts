@@ -234,3 +234,25 @@ describe("assertValidPositionTemplates", () => {
     expect(() => assertValidPositionTemplates(many)).toThrow(/at most 50/);
   });
 });
+
+describe("positionTemplateFromSlot for unusual positions", () => {
+  it("names an unnamed position after what it's looking for", () => {
+    expect(
+      positionTemplateFromSlot({ artistType: "dj" }, 0, () => 0).label,
+    ).toBe("DJ");
+    expect(
+      positionTemplateFromSlot({ label: "  ", artistType: "band" }, 0, () => 0).label,
+    ).toBe("Live band");
+  });
+
+  it("drops a window whose end is not after its start", () => {
+    const exported = positionTemplateFromSlot(
+      { artistType: "band", setStartsAt: 1000, setEndsAt: 1000, soundcheckStartsAt: 500, soundcheckEndsAt: 100 },
+      0,
+      () => 0,
+    );
+    expect(exported.setDurationMs).toBeUndefined();
+    expect(exported.soundcheckDurationMs).toBeUndefined();
+    expect(() => assertValidPositionTemplates([exported])).not.toThrow();
+  });
+});

@@ -637,6 +637,8 @@ export const importPositionsFromOccurrence = mutation({
         await ctx.db.patch(slot._id, { templateKey: template.templateKey, updatedAt: now });
       }
     }
+    // Same rules as create/regenerate; throwing rolls back the key stamps above.
+    assertValidPositionTemplates(templates);
     await ctx.db.patch(args.id, { positionTemplates: templates, updatedAt: now });
     return { templateCount: templates.length };
   },
