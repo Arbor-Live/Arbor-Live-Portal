@@ -193,9 +193,6 @@ export function EventSeriesPositionEditor({
               <MicrophoneStageIcon className="size-4 text-muted-foreground" aria-hidden />
               Series positions
             </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Define the bill once and apply it to every occurrence. Acts are booked per day.
-            </p>
           </div>
           <Button type="button" size="sm" variant="outline" onClick={addDraft}>
             <PlusIcon aria-hidden />
@@ -308,10 +305,6 @@ export function EventSeriesPositionEditor({
               </Button>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Applying adds missing open positions, moves open ones, and removes open template
-            positions you delete. Filled positions are never changed.
-          </p>
           {form.saveError ? <p className="text-sm text-destructive">{form.saveError}</p> : null}
         </CardContent>
       </Card>
@@ -406,9 +399,7 @@ function PositionTemplateBody({
     <>
       <SheetHeader>
         <SheetTitle>{draft.label.trim() || "New position"}</SheetTitle>
-        <SheetDescription>
-          The bill slot applied to each occurrence. Times are measured from the occurrence start.
-        </SheetDescription>
+        <SheetDescription className="sr-only">Position template</SheetDescription>
       </SheetHeader>
 
       <Section title="Position">
