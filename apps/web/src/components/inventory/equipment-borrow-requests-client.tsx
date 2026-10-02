@@ -10,7 +10,7 @@ import { useAppDialog } from "@/components/ui/app-dialog";
 import { EquipmentBorrowRequestForm } from "@/components/inventory/equipment-borrow-request-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
-import { formatDateTimeRange } from "@/lib/format";
+import { formatDateTime, formatDateTimeRange } from "@/lib/format";
 import {
   activeFilters,
   FilterBar,
@@ -36,6 +36,13 @@ type BorrowRequest = {
   startAt: number;
   endAt: number;
   lines: BorrowLine[];
+  agreement?: {
+    version: string;
+    terms: Array<{ key: string; text: string }>;
+    signedName: string;
+    signedEmail: string;
+    signedAt: number;
+  };
   reviewNote?: string;
   convertedEventId?: Id<"events">;
 };
@@ -98,6 +105,28 @@ function equipmentSummary(lines: BorrowLine[]) {
   return lines.map((line) => `${line.quantity}× ${line.label}`).join(", ");
 }
 
+function AgreementSummary({ agreement }: { agreement: BorrowRequest["agreement"] }) {
+  if (!agreement) {
+    return <p className="mt-1 text-xs text-muted-foreground">No loan agreement on file (older request).</p>;
+  }
+  return (
+    <details className="mt-1 text-xs text-muted-foreground">
+      <summary className="cursor-pointer">
+        Loan agreement e-signed by <span className="text-foreground">{agreement.signedName}</span> on{" "}
+        {formatDateTime(agreement.signedAt)}
+      </summary>
+      <ul className="mt-1 list-disc space-y-0.5 pl-5">
+        {agreement.terms.map((term) => (
+          <li key={term.key}>{term.text}</li>
+        ))}
+      </ul>
+      <p className="mt-1">
+        Signed as {agreement.signedEmail} · version {agreement.version}
+      </p>
+    </details>
+  );
+}
+
 function RequestCard({
   request,
   footer,
@@ -126,6 +155,7 @@ function RequestCard({
           {request.reviewNote ? (
             <p className="mt-1 text-xs text-muted-foreground">Note: {request.reviewNote}</p>
           ) : null}
+          <AgreementSummary agreement={request.agreement} />
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             <span className={`rounded-full px-2 py-0.5 ${statusBadgeClass(request.status)}`}>
               {formatStatusLabel(request.status)}

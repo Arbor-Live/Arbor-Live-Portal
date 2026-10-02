@@ -1979,6 +1979,20 @@ export default defineSchema({
         quantity: v.number(),
       }),
     ),
+    /**
+     * E-signed loan agreement (`@arbor/format` borrowAgreement), with the term
+     * text frozen as signed. Required on submit; missing on older rows.
+     */
+    agreement: v.optional(
+      v.object({
+        version: v.string(),
+        terms: v.array(v.object({ key: v.string(), text: v.string() })),
+        signedName: v.string(),
+        signedEmail: v.string(),
+        signedByUserId: v.string(),
+        signedAt: v.number(),
+      }),
+    ),
     reviewedByUserId: v.optional(v.string()),
     reviewedByUserName: v.optional(v.string()),
     reviewedAt: v.optional(v.number()),

@@ -1,5 +1,11 @@
 import { v } from "convex/values";
-import { pacificDateKey, PORTAL_TIMEZONE } from "@arbor/format";
+import {
+  BORROW_AGREEMENT_TERM_KEYS,
+  BORROW_AGREEMENT_TERMS,
+  BORROW_AGREEMENT_VERSION,
+  pacificDateKey,
+  PORTAL_TIMEZONE,
+} from "@arbor/format";
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -24,6 +30,12 @@ const borrowLineInput = v.object({
   typeId: v.optional(v.id("inventoryTypes")),
   packageId: v.optional(v.id("inventoryPackages")),
   quantity: v.number(),
+});
+
+const agreementInput = v.object({
+  version: v.string(),
+  acceptedTermKeys: v.array(v.string()),
+  signedName: v.string(),
 });
 
 export const borrowRequestStatusValue = v.union(
@@ -83,6 +95,11 @@ async function resolveLine(
 
 function buildEventNotes(request: Doc<"equipmentBorrowRequests">) {
   const parts = [`Borrow request ${request.requestNumber} from ${request.requesterName}.`];
+  if (request.agreement) {
+    parts.push(
+      `Loan agreement e-signed by ${request.agreement.signedName} (${request.agreement.signedEmail}) — no Arbor Live support; borrower is fully liable for the equipment.`,
+    );
+  }
   if (request.notes?.trim()) parts.push(request.notes.trim());
   return parts.join("\n");
 }
@@ -95,6 +112,7 @@ export const submit = mutation({
     startAt: v.number(),
     endAt: v.number(),
     lines: v.array(borrowLineInput),
+    agreement: agreementInput,
   },
   returns: v.object({
     id: v.id("equipmentBorrowRequests"),
@@ -119,7 +137,18 @@ export const submit = mutation({
       lines.push(await resolveLine(ctx, line));
     }
 
+    if (args.agreement.version !== BORROW_AGREEMENT_VERSION) {
+      throw new Error("The loan agreement was updated. Reload the page and review it again.");
+    }
+    const accepted = new Set(args.agreement.acceptedTermKeys);
+    if (BORROW_AGREEMENT_TERM_KEYS.some((key) => !accepted.has(key))) {
+      throw new Error("Tick every box in the loan agreement before submitting.");
+    }
+    const signedName = args.agreement.signedName.trim();
+    if (signedName.length < 2) throw new Error("Type your full legal name to sign the loan agreement.");
+
     const venueLink = await resolveVenueLink(ctx, args.venueId);
+    const requesterEmail = user.email?.trim().toLowerCase() ?? "";
 
     const now = Date.now();
     const requestNumber = await allocateBorrowRequestNumber(ctx);
@@ -128,7 +157,7 @@ export const submit = mutation({
       requestNumber,
       requesterUserId: getUserId(user),
       requesterName: displayNameForUser(user),
-      requesterEmail: user.email?.trim().toLowerCase() ?? "",
+      requesterEmail,
       purpose,
       venueId: venueLink.venueId,
       venueName: venueLink.venueName,
@@ -136,6 +165,14 @@ export const submit = mutation({
       startAt: args.startAt,
       endAt: args.endAt,
       lines,
+      agreement: {
+        version: BORROW_AGREEMENT_VERSION,
+        terms: BORROW_AGREEMENT_TERMS.map((term) => ({ key: term.key, text: term.text })),
+        signedName,
+        signedEmail: requesterEmail,
+        signedByUserId: getUserId(user),
+        signedAt: now,
+      },
       createdAt: now,
       updatedAt: now,
     });

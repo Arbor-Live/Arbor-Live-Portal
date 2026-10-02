@@ -471,3 +471,10 @@ export {
   type BookingDeclineReasonCode,
   type EventCancelReasonCode,
 } from "./statusReasonCodes";
+
+export {
+  BORROW_AGREEMENT_TERM_KEYS,
+  BORROW_AGREEMENT_TERMS,
+  BORROW_AGREEMENT_VERSION,
+  type BorrowAgreementTerm,
+} from "./borrowAgreement";
