@@ -30,8 +30,6 @@ type BorrowRequest = {
   requestNumber: string;
   requesterUserId: string;
   requesterName: string;
-  requesterKind?: "crew" | "artist";
-  requesterOrganizationName?: string;
   purpose: string;
   venueName?: string;
   notes?: string;
@@ -84,11 +82,6 @@ const STATUS_OPTIONS = (["submitted", "approved", "rejected", "cancelled"] as co
   label: formatStatusLabel(value),
 }));
 
-const REQUESTER_KIND_OPTIONS = [
-  { value: "crew", label: "Crew" },
-  { value: "artist", label: "Artist" },
-];
-
 const WHEN_OPTIONS = [
   { value: "upcoming", label: "Upcoming" },
   { value: "now", label: "Happening now" },
@@ -110,12 +103,6 @@ function isReviewQueue(filters: FilterState) {
 function equipmentSummary(lines: BorrowLine[]) {
   if (lines.length === 0) return "No equipment";
   return lines.map((line) => `${line.quantity}× ${line.label}`).join(", ");
-}
-
-function requesterLabel(request: BorrowRequest) {
-  return request.requesterOrganizationName
-    ? `${request.requesterName} · ${request.requesterOrganizationName}`
-    : request.requesterName;
 }
 
 function AgreementSummary({ agreement }: { agreement: BorrowRequest["agreement"] }) {
@@ -143,12 +130,9 @@ function AgreementSummary({ agreement }: { agreement: BorrowRequest["agreement"]
 function RequestCard({
   request,
   footer,
-  showEventLink = true,
 }: {
   request: BorrowRequest;
   footer?: React.ReactNode;
-  /** Artists can't open dashboard events, so their own cards skip the link. */
-  showEventLink?: boolean;
 }) {
   return (
     <div className="rounded-md border p-3">
@@ -159,7 +143,7 @@ function RequestCard({
             {request.purpose}
           </p>
           <p className="text-xs text-muted-foreground">
-            {requesterLabel(request)} · {formatDateTimeRange(request.startAt, request.endAt)}
+            {request.requesterName} · {formatDateTimeRange(request.startAt, request.endAt)}
           </p>
           {request.venueName ? (
             <p className="text-xs text-muted-foreground">Venue: {request.venueName}</p>
@@ -176,12 +160,9 @@ function RequestCard({
             <span className={`rounded-full px-2 py-0.5 ${statusBadgeClass(request.status)}`}>
               {formatStatusLabel(request.status)}
             </span>
-            {request.requesterKind === "artist" ? (
-              <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">Artist</span>
-            ) : null}
           </div>
         </div>
-        {request.convertedEventId && showEventLink ? (
+        {request.convertedEventId ? (
           <Button asChild variant="outline" size="sm">
             <Link href={`/dashboard/events/${request.convertedEventId}`}>View event</Link>
           </Button>
@@ -304,14 +285,9 @@ function CancelButton({ request }: { request: BorrowRequest }) {
   );
 }
 
-export function EquipmentBorrowRequestsClient({
-  variant = "crew",
-}: {
-  /** `artist`: an artist org's own requests only — no admin review queue. */
-  variant?: "crew" | "artist";
-}) {
+export function EquipmentBorrowRequestsClient() {
   const shell = useSessionShell();
-  const isAdmin = variant === "crew" && (shell?.viewer?.isAdmin ?? false);
+  const isAdmin = shell?.viewer?.isAdmin ?? false;
   const [formOpen, setFormOpen] = useState(false);
 
   const mine = useQuery(api.equipmentBorrowRequests.listMine);
@@ -338,7 +314,6 @@ export function EquipmentBorrowRequestsClient({
           .map(([value, label]) => ({ value, label }))
           .sort((a, b) => a.label.localeCompare(b.label)),
       },
-      { id: "requesterKind", label: "Crew / artist", options: REQUESTER_KIND_OPTIONS },
       { id: "when", label: "When", options: WHEN_OPTIONS },
     ],
     [requests],
@@ -350,23 +325,15 @@ export function EquipmentBorrowRequestsClient({
       const when = request.endAt < nowMs ? "past" : request.startAt > nowMs ? "upcoming" : "now";
       return (
         (!needle ||
-          [
-            request.requestNumber,
-            request.purpose,
-            request.requesterName,
-            request.requesterOrganizationName,
-            request.venueName,
-            request.notes,
-          ]
+          [request.requestNumber, request.purpose, request.requesterName, request.venueName, request.notes]
             .concat(request.lines.map((line) => line.label))
             .some((field) => field?.toLowerCase().includes(needle))) &&
         matchesFilter(applied.status, request.status) &&
         matchesFilter(applied.requester, request.requesterUserId) &&
-        matchesFilter(applied.requesterKind, request.requesterKind ?? "crew") &&
         matchesFilter(applied.when, when)
       );
     });
-  }, [applied.requester, applied.requesterKind, applied.status, applied.when, nowMs, requests, search]);
+  }, [applied.requester, applied.status, applied.when, nowMs, requests, search]);
 
   return (
     <div className="space-y-6">
@@ -409,7 +376,7 @@ export function EquipmentBorrowRequestsClient({
       ) : null}
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">{variant === "artist" ? "Your requests" : "My requests"}</h2>
+        <h2 className="text-sm font-semibold">My requests</h2>
         {mine === undefined ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : mine.length === 0 ? (
@@ -421,7 +388,6 @@ export function EquipmentBorrowRequestsClient({
             <RequestCard
               key={request._id}
               request={request}
-              showEventLink={variant === "crew"}
               footer={
                 <div className="mt-3 flex justify-end">
                   <CancelButton request={request} />

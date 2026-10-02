@@ -1947,10 +1947,10 @@ export default defineSchema({
     .index("by_seriesId", ["seriesId"]),
 
   /**
-   * Crew- or artist-initiated equipment borrow. Reviewed by admins; approval
-   * spawns an internal ("private") Dry Rental event whose pull list drives the
-   * normal scan-based checkout/return flow. Deliberately separate from
-   * `eventRequests` — no billing profile, quote, or public client portal.
+   * Crew-initiated equipment borrow. Reviewed by admins; approval spawns an
+   * internal ("private") Dry Rental event whose pull list drives the normal
+   * scan-based checkout/return flow. Deliberately separate from `eventRequests`
+   * — no billing profile, quote, or public client portal.
    */
   equipmentBorrowRequests: defineTable({
     status: v.union(
@@ -1963,11 +1963,6 @@ export default defineSchema({
     requesterUserId: v.string(),
     requesterName: v.string(),
     requesterEmail: v.string(),
-    /** Missing on older rows, which were all crew. */
-    requesterKind: v.optional(v.union(v.literal("crew"), v.literal("artist"))),
-    /** Artist org the request was made from (artist requests only). */
-    requesterOrganizationId: v.optional(v.string()),
-    requesterOrganizationName: v.optional(v.string()),
     purpose: v.string(),
     /** Venue where the equipment will be used (snapshot of the venue path). */
     venueId: v.optional(v.id("venues")),

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { isArtistOrganizationType } from "@/lib/artist-types";
@@ -71,20 +70,8 @@ export function ArborOnlyGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/**
- * The session shell can briefly read as loading again (preloaded → live
- * handoff). Keep the last loaded shell so guarded pages — and any half-filled
- * form inside them — don't unmount during that gap.
- */
-function useSettledSessionShell() {
-  const shell = useSessionShell();
-  const [settled, setSettled] = useState(shell);
-  if (shell !== undefined && shell !== settled) setSettled(shell);
-  return shell ?? settled;
-}
-
 export function BandOnlyGuard({ children }: { children: React.ReactNode }) {
-  const shell = useSettledSessionShell();
+  const shell = useSessionShell();
   const activeOrg = shell === undefined ? undefined : (shell?.activeOrganization ?? null);
   if (activeOrg === undefined) return null;
   if (!activeOrg) {

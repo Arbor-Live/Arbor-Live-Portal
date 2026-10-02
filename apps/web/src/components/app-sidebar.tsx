@@ -139,7 +139,6 @@ const bandsSubItems: NavSubItem[] = [
   { title: "Profile", url: "/dashboard/artists" },
   { title: "Technical rider", url: "/dashboard/artists/riders" },
   { title: "Payments", url: "/dashboard/artists/payments" },
-  { title: "Equipment", url: "/dashboard/artists/equipment" },
   { title: "Organizations", url: "/dashboard/users/organizations", adminOnly: true },
   { title: "Artist applications", url: "/dashboard/users/artist-applications", adminOnly: true },
 ]
@@ -394,8 +393,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                 !(
                   !isBandContext &&
                   item.url === "/dashboard/artists" &&
-                  (subItem.url === "/dashboard/artists/payments" ||
-                    subItem.url === "/dashboard/artists/equipment")
+                  subItem.url === "/dashboard/artists/payments"
                 ),
             )
             const activeSubItemUrl = (subItems ?? [])

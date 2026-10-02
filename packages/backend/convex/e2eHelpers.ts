@@ -6804,8 +6804,6 @@ export const getLatestBorrowRequestByPurpose = query({
     v.object({
       requestId: v.id("equipmentBorrowRequests"),
       status: v.string(),
-      requesterKind: v.union(v.string(), v.null()),
-      requesterOrganizationName: v.union(v.string(), v.null()),
       convertedEventId: v.union(v.id("events"), v.null()),
       agreementSignedName: v.union(v.string(), v.null()),
       agreementTermKeys: v.array(v.string()),
@@ -6823,8 +6821,6 @@ export const getLatestBorrowRequestByPurpose = query({
     return {
       requestId: match._id,
       status: match.status,
-      requesterKind: match.requesterKind ?? null,
-      requesterOrganizationName: match.requesterOrganizationName ?? null,
       convertedEventId: match.convertedEventId ?? null,
       agreementSignedName: match.agreement?.signedName ?? null,
       agreementTermKeys: match.agreement?.terms.map((term) => term.key) ?? [],

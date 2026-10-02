@@ -142,10 +142,6 @@ export function equipmentBorrowRequestsUrl() {
   return `${SITE_URL}/dashboard/inventory/borrow-requests`;
 }
 
-export function artistEquipmentRequestsUrl() {
-  return `${SITE_URL}/dashboard/artists/equipment`;
-}
-
 export function publicQuoteUrl(token: string) {
   return `${SITE_URL}/event/${encodeURIComponent(token)}`;
 }

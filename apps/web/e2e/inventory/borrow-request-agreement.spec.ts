@@ -1,13 +1,11 @@
 import { test, expect, type Page } from "@playwright/test";
-import { adminAuthFile, bandAuthFile, crewAuthFile } from "../helpers/auth";
+import { adminAuthFile, crewAuthFile } from "../helpers/auth";
 import { pollConvex, runConvex } from "../helpers/convex";
 import { pickSearchableOption } from "../helpers/select";
 
 type BorrowRequestState = {
   requestId: string;
   status: string;
-  requesterKind: string | null;
-  requesterOrganizationName: string | null;
   convertedEventId: string | null;
   agreementSignedName: string | null;
   agreementTermKeys: string[];
@@ -89,7 +87,6 @@ test.describe.serial("borrow request loan agreement", () => {
   const stamp = Date.now();
   const typeName = `E2E Borrow Speaker ${stamp}`;
   const crewPurpose = `E2E crew borrow ${stamp}`;
-  const bandPurpose = `E2E artist borrow ${stamp}`;
 
   test.beforeAll(() => {
     runConvex("e2eHelpers:seedBorrowableInventoryType", { name: typeName });
@@ -116,7 +113,6 @@ test.describe.serial("borrow request loan agreement", () => {
         { purpose: crewPurpose },
         (row) => row?.status === "submitted",
       );
-      expect(request.requesterKind).toBe("crew");
       expect(request.agreementSignedName).toBe("Casey Crew");
       expect(request.agreementTermKeys).toHaveLength(TERM_COUNT);
     });
@@ -147,34 +143,6 @@ test.describe.serial("borrow request loan agreement", () => {
         (row) => row?.status === "approved",
       );
       expect(request.convertedEventId).not.toBeNull();
-    });
-  });
-
-  test.describe("artist", () => {
-    test.use({ storageState: bandAuthFile });
-
-    test("artist borrows from their artist org with the same agreement", async ({ page }) => {
-      test.setTimeout(120_000);
-      await page.goto("/dashboard/artists/equipment");
-      await expect(page.getByRole("heading", { name: "Equipment" })).toBeVisible({
-        timeout: 25_000,
-      });
-
-      await submitBorrowRequest(page, {
-        purpose: bandPurpose,
-        typeName,
-        signedName: "Alex Artist",
-      });
-      await expect(page.getByText(bandPurpose)).toBeVisible({ timeout: 20_000 });
-
-      const request = await pollConvex<BorrowRequestState>(
-        "e2eHelpers:getLatestBorrowRequestByPurpose",
-        { purpose: bandPurpose },
-        (row) => row?.status === "submitted",
-      );
-      expect(request.requesterKind).toBe("artist");
-      expect(request.requesterOrganizationName).toBeTruthy();
-      expect(request.agreementTermKeys).toHaveLength(TERM_COUNT);
     });
   });
 });

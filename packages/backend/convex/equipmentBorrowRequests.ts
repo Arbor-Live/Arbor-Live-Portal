@@ -9,15 +9,7 @@ import {
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import {
-  getUserId,
-  requireActiveOrganizationContext,
-  requireAdmin,
-  requireArborInternalContext,
-  requireAuth,
-  type ActiveOrganizationContext,
-} from "./lib/auth";
-import { isArtistOrganizationType } from "./lib/organizationType";
+import { getUserId, requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { insertPullListItemsFromLines } from "./eventPullLists";
 import { allocateBorrowRequestNumber } from "./lib/publicReferenceIds";
 import { resolveVenueLink } from "./lib/venues";
@@ -54,22 +46,6 @@ export const borrowRequestStatusValue = v.union(
 );
 
 type ResolvedLine = Doc<"equipmentBorrowRequests">["lines"][number];
-type BorrowRequest = Doc<"equipmentBorrowRequests">;
-
-/** Crew borrow from the Arbor Live org; artists borrow from their own artist org. */
-async function requireBorrowerContext(ctx: QueryCtx | MutationCtx): Promise<ActiveOrganizationContext> {
-  const context = await requireActiveOrganizationContext(ctx);
-  if (context.organizationType !== "arbor_internal" && !isArtistOrganizationType(context.organizationType)) {
-    throw new Error("Borrow requests are only available to Arbor Live crew and artists.");
-  }
-  return context;
-}
-
-/** A user's requests made from this context: crew see crew requests, artists see that artist's. */
-function belongsToContext(request: BorrowRequest, context: ActiveOrganizationContext) {
-  if (context.organizationType === "arbor_internal") return request.requesterKind !== "artist";
-  return request.requesterOrganizationId === context.organizationId;
-}
 
 function displayNameForUser(user: { name?: string | null; email?: string | null }) {
   const name = user.name?.trim();
@@ -117,11 +93,8 @@ async function resolveLine(
   };
 }
 
-function buildEventNotes(request: BorrowRequest) {
-  const requester = request.requesterOrganizationName
-    ? `${request.requesterName} (${request.requesterOrganizationName})`
-    : request.requesterName;
-  const parts = [`Borrow request ${request.requestNumber} from ${requester}.`];
+function buildEventNotes(request: Doc<"equipmentBorrowRequests">) {
+  const parts = [`Borrow request ${request.requestNumber} from ${request.requesterName}.`];
   if (request.agreement) {
     parts.push(
       `Loan agreement e-signed by ${request.agreement.signedName} (${request.agreement.signedEmail}) — no Arbor Live support; borrower is fully liable for the equipment.`,
@@ -147,10 +120,7 @@ export const submit = mutation({
   }),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
-    const context = await requireBorrowerContext(ctx);
-    if (context.isAdminPreview) {
-      throw new Error("Admins previewing an artist can't submit borrow requests for them.");
-    }
+    await requireArborInternalContext(ctx);
 
     const purpose = args.purpose.trim();
     if (!purpose) throw new Error("Add a short purpose for the borrow.");
@@ -178,7 +148,6 @@ export const submit = mutation({
     if (signedName.length < 2) throw new Error("Type your full legal name to sign the loan agreement.");
 
     const venueLink = await resolveVenueLink(ctx, args.venueId);
-    const isArtist = context.organizationType !== "arbor_internal";
     const requesterEmail = user.email?.trim().toLowerCase() ?? "";
 
     const now = Date.now();
@@ -189,9 +158,6 @@ export const submit = mutation({
       requesterUserId: getUserId(user),
       requesterName: displayNameForUser(user),
       requesterEmail,
-      requesterKind: isArtist ? "artist" : "crew",
-      requesterOrganizationId: isArtist ? context.organizationId : undefined,
-      requesterOrganizationName: isArtist ? context.organizationName : undefined,
       purpose,
       venueId: venueLink.venueId,
       venueName: venueLink.venueName,
@@ -222,13 +188,13 @@ export const listMine = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireAuth(ctx);
-    const context = await requireBorrowerContext(ctx);
+    await requireArborInternalContext(ctx);
     const rows = await ctx.db
       .query("equipmentBorrowRequests")
       .withIndex("by_requesterUserId_and_createdAt", (q) => q.eq("requesterUserId", getUserId(user)))
       .order("desc")
       .take(LIST_TAKE);
-    return rows.filter((row) => belongsToContext(row, context));
+    return rows;
   },
 });
 
@@ -364,7 +330,7 @@ export const cancel = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
-    await requireBorrowerContext(ctx);
+    await requireArborInternalContext(ctx);
     const request = await ctx.db.get(args.id);
     if (!request) throw new Error("Borrow request not found.");
     if (request.requesterUserId !== getUserId(user)) {

@@ -1,5 +1,5 @@
 /**
- * Equipment loan agreement shown on every borrow request (crew and artists).
+ * Equipment loan agreement shown on every crew borrow request.
  * Each term is its own checkbox; the requester must tick all of them and type
  * their name to e-sign. Submitted requests snapshot the version and the exact
  * term text, so bump `BORROW_AGREEMENT_VERSION` whenever the wording changes.
