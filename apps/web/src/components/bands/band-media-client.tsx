@@ -3,15 +3,9 @@
 import { useMemo, useState } from "react";
 import { usePaginatedQuery, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/inventory/searchable-select";
+import { PageHeader } from "@/components/page-header";
 import { MediaGallery } from "@/components/media/media-gallery";
 import { MediaAlbumLink } from "@/components/media/media-album-link";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
@@ -69,71 +63,63 @@ export function BandMediaClient() {
     [linkedEvents],
   );
 
+  const albumOptions = [
+    {
+      value: "band",
+      label: activeOrg?.name ? `${activeOrg.name} (all artist media)` : "Artist album",
+      description: "Photos and videos for your profile",
+    },
+    ...eventOptions,
+  ];
+
   return (
     <BandOnlyGuard>
-      <div className="space-y-4 pb-20">
-        <Card>
-          <CardHeader>
-            <CardTitle>Media</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              View and upload photos and videos for your artist profile or linked events.
-            </p>
-
-            <div className="space-y-2 max-w-md">
-              <Label>Album</Label>
-              <Select
-                value={selectedEventId || "band"}
-                onValueChange={(value) => {
-                  setSelectedEventId(value === "band" ? "" : value);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Artist album" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="band">
-                    {activeOrg?.name ? `${activeOrg.name} (all artist media)` : "Artist album"}
-                  </SelectItem>
-                  {eventOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-            {album ? (
+      <div className="space-y-4 pb-20" data-testid="band-media">
+        <PageHeader
+          title="Media"
+          description="Photos and videos for your artist profile and your shows. Uploads go to the album you pick."
+          meta={
+            album?.albumUrl ? (
               <MediaAlbumLink albumName={album.albumName} albumUrl={album.albumUrl} />
-            ) : null}
-
-            <MediaUploadDropzone
-              targetType={uploadTargetType}
-              targetId={uploadTargetId}
-              disabled={!albumReady || !uploadTargetId}
+            ) : undefined
+          }
+        >
+          <div className="max-w-md space-y-1.5">
+            <Label htmlFor="band-media-album">Album</Label>
+            <SearchableSelect
+              id="band-media-album"
+              value={selectedEventId || "band"}
+              onChange={(value) => setSelectedEventId(value === "band" ? "" : value)}
+              options={albumOptions}
+              placeholder="Artist album"
+              emptyLabel="No matching shows"
             />
+          </div>
+        </PageHeader>
 
-            {assetsStatus === "LoadingFirstPage" ? (
-              <p className="text-sm text-muted-foreground">Loading media…</p>
-            ) : (
-              <MediaGallery
-                assets={assets}
-                emptyMessage={
-                  selectedEventId
-                    ? "No event media yet. Upload photos or videos above."
-                    : "No artist media yet. Upload photos or videos above."
-                }
-                loadMore={() => loadMore(60)}
-                canLoadMore={assetsStatus === "CanLoadMore"}
-                isLoadingMore={assetsStatus === "LoadingMore"}
-              />
-            )}
-          </CardContent>
-        </Card>
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+        <MediaUploadDropzone
+          targetType={uploadTargetType}
+          targetId={uploadTargetId}
+          disabled={!albumReady || !uploadTargetId}
+        />
+
+        {assetsStatus === "LoadingFirstPage" ? (
+          <p className="text-sm text-muted-foreground">Loading media…</p>
+        ) : (
+          <MediaGallery
+            assets={assets}
+            emptyMessage={
+              selectedEventId
+                ? "No photos or videos from this show yet. Upload some above."
+                : "No artist media yet. Upload photos or videos above."
+            }
+            loadMore={() => loadMore(60)}
+            canLoadMore={assetsStatus === "CanLoadMore"}
+            isLoadingMore={assetsStatus === "LoadingMore"}
+          />
+        )}
       </div>
     </BandOnlyGuard>
   );
