@@ -1,3 +1,4 @@
+import { pacificDateKey } from "@arbor/format";
 import { v } from "convex/values";
 import { internalQuery } from "./_generated/server";
 import { isMultiDayGroup, isRecurringGroup } from "./lib/eventGroupKind";
@@ -95,7 +96,7 @@ export const previewMultiDayGrouping = internalQuery({
         counts.oddSpan += 1;
         note(invoice._id, `days span ${Math.round(spanDays)} days`, days.length, live.length);
       }
-      const dateKeys = new Set(starts.map((ms) => new Date(ms).toISOString().slice(0, 10)));
+      const dateKeys = new Set(starts.map((ms) => pacificDateKey(ms)));
       if (dateKeys.size < days.length) {
         counts.sameDateDuplicates += 1;
         note(invoice._id, "two days on the same date", days.length, live.length);
