@@ -175,11 +175,10 @@ export function BandPaymentHistorySection() {
                       </div>
                     }
                   >
-                    <RowCell className="w-32 whitespace-nowrap" align="left" muted>
-                      {formatDate(payment.eventStartAt)}
-                    </RowCell>
                     <RowText
-                      eyebrow={payment.venueName}
+                      eyebrow={[formatDate(payment.eventStartAt), payment.venueName]
+                        .filter(Boolean)
+                        .join(" · ")}
                       title={payment.eventTitle}
                       detail={
                         <>
@@ -193,7 +192,7 @@ export function BandPaymentHistorySection() {
                     <RowCell className="w-24" hideBelow="sm">
                       {formatUsd(payment.totalUsd)}
                     </RowCell>
-                    <span className="hidden w-40 shrink-0 justify-end sm:flex">
+                    <span className="hidden w-36 shrink-0 justify-end sm:flex">
                       <StatusPill tone={bandPaymentStatusTone(payment.status)}>
                         {payment.statusLabel}
                       </StatusPill>
