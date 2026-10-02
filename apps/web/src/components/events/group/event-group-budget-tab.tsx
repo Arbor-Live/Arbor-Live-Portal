@@ -114,13 +114,9 @@ export function EventGroupBudgetTab({
   );
 
   if (!data || !series) return null;
-  const { costSummary, occurrences } = data;
+  const { costSummary } = data;
   const multiDay = kind === "multi_day";
   const noun = groupDayNoun(kind);
-  const nouns = groupDayNoun(kind, true);
-  const billableCount = occurrences.filter(
-    (row) => !row.seriesDetached && row.status !== "cancelled",
-  ).length;
   const invoiceLinkId = invoiceLinkOverride ?? series.invoiceId ?? "";
   const linkedInvoiceNumber = data.invoiceNumber ?? "Linked invoice";
 
@@ -161,11 +157,6 @@ export function EventGroupBudgetTab({
             <ReceiptIcon className="size-4 text-muted-foreground" aria-hidden />
             Billing
           </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {multiDay
-              ? `The booking's days share one invoice; moving a day to another invoice takes it out of this booking.`
-              : `One invoice can bill the whole series. ${billableCount} billable ${billableCount === 1 ? noun : nouns}.`}
-          </p>
         </CardHeader>
         <CardContent className="space-y-3">
           {series.invoiceId ? (
@@ -275,10 +266,6 @@ export function EventGroupBudgetTab({
             <CurrencyDollarIcon className="size-4 text-muted-foreground" aria-hidden />
             Cost summary
           </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Per-{noun} costs are summed across active {nouns}.{" "}
-            {multiDay ? "Booking-wide" : "Series recurring"} costs count once.
-          </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 md:grid-cols-4">
@@ -371,7 +358,9 @@ export function EventGroupBudgetTab({
                   name="seriesBandsCostUsd"
                   label={multiDay ? "Booking-wide artists (USD)" : "Series-wide artists (USD)"}
                 />
-                <p className="text-xs text-muted-foreground">Counted once for the whole group.</p>
+                {!multiDay ? (
+                  <p className="text-xs text-muted-foreground">Counted once for the whole series.</p>
+                ) : null}
               </div>
               <div className="space-y-1">
                 <TextFormField

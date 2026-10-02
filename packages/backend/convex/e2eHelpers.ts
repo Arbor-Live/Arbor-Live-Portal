@@ -4378,6 +4378,7 @@ export const seedMultiDayBooking = mutation({
     invoiceId: v.id("invoices"),
     groupId: v.id("eventSeries"),
     eventIds: v.array(v.id("events")),
+    startAts: v.array(v.number()),
     groupPath: v.string(),
   }),
   handler: async (ctx, args) => {
@@ -4410,12 +4411,16 @@ export const seedMultiDayBooking = mutation({
       updatedAt: now,
     });
     const eventIds: Id<"events">[] = [];
+    const startAts: number[] = [];
     for (const [index, daysAhead] of [20, 21].entries()) {
       const window = futureEventWindow(daysAhead);
+      startAts.push(window.startAt);
       eventIds.push(
         await ctx.db.insert("events", {
           title: `${args.title} — Day ${index + 1}`,
-          status: "tentative",
+          // Day 2 differs from Day 1 so tests can tell an edit stayed on one day.
+          status: index === 0 ? "tentative" : "ready",
+          notes: index === 0 ? undefined : "Day 2 notes",
           visibility: "public",
           publicToken: makeToken(),
           invoiceId,
@@ -4439,7 +4444,30 @@ export const seedMultiDayBooking = mutation({
       invoiceId,
       groupId,
       eventIds,
+      startAts,
       groupPath: `/dashboard/events/series/${groupId}`,
+    };
+  },
+});
+
+/** Test-only: the event fields group edits can touch. */
+export const getEventFields = query({
+  args: { eventId: v.id("events") },
+  returns: v.object({
+    title: v.string(),
+    status: v.string(),
+    notes: v.union(v.string(), v.null()),
+    teamsInterested: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+    return {
+      title: event.title,
+      status: event.status,
+      notes: event.notes ?? null,
+      teamsInterested: event.teamsInterested ?? [],
     };
   },
 });

@@ -75,6 +75,7 @@ export async function findMultiDayGroupForInvoice(
   const groups = await ctx.db
     .query("eventSeries")
     .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
+    // An invoice has at most one booking group; a few stale rows is the worst case.
     .take(10);
   return groups.find((group) => isMultiDayGroup(group)) ?? null;
 }
@@ -137,13 +138,24 @@ async function createMultiDayGroup(
   });
   // Derive the template from Day 1, so "apply to all days" starts from what
   // the booking already looks like. Nothing on any day changes here.
-  const captured = await captureDayTemplates(
-    ctx,
-    first,
-    { schedule: true, crew: true, positions: true },
-    now,
-  );
-  await ctx.db.patch(groupId, { ...captured, updatedAt: now });
+  try {
+    // Capture reads everything before it writes anything, so a refusal below
+    // leaves no partial stamps behind.
+    const captured = await captureDayTemplates(
+      ctx,
+      first,
+      { schedule: true, crew: true, positions: true },
+      now,
+    );
+    await ctx.db.patch(groupId, { ...captured, updatedAt: now });
+  } catch (error) {
+    // Grouping must not fail on an unusually large Day 1 (the migration runs
+    // over every invoice). The booking forms without templates; staff build
+    // them on the group page, and no day changes either way.
+    console.warn(
+      `Booking group for invoice ${invoiceId} formed without templates: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
   const group = await ctx.db.get(groupId);
   if (!group) throw new Error("Event group not found.");
   return group;

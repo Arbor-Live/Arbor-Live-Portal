@@ -11,6 +11,10 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 
 export type GroupApplyScope = "this" | "future" | "all";
 
+/**
+ * Days read per group. Matches the 200-occurrence caps the series code has
+ * always used (a weekly series is ~4 years at 200); real bookings are a handful.
+ */
 const MAX_GROUP_DAYS = 200;
 
 type GroupDay = Pick<

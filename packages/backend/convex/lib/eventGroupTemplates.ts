@@ -12,7 +12,11 @@ import {
   type EventSeriesBlockTemplate,
   type EventSeriesShiftTemplate,
 } from "./eventSeriesGeneration";
-import { positionTemplateFromSlot, type EventSeriesPositionTemplate } from "./eventSeriesPositions";
+import {
+  MAX_OCCURRENCE_POSITIONS,
+  positionTemplateFromSlot,
+  type EventSeriesPositionTemplate,
+} from "./eventSeriesPositions";
 import { isActBlock } from "./runOfShow";
 import { isTraineeShift } from "./crewShiftKinds";
 import { listGroupDays, selectDaysInScope, type GroupApplyScope } from "./eventGroupDays";
@@ -109,6 +113,21 @@ export type CapturedDayTemplates = {
  * Capturing positions also stamps each position's template key on the source
  * day, so applying the template back to it updates rather than duplicates.
  */
+/** Rows read per kind when capturing a day (a day's blocks and shifts are in the dozens). */
+const MAX_DAY_ROWS = 500;
+
+/**
+ * Capturing a day's setup must see all of it: a template built from a
+ * truncated read would quietly drop the rest from every day it is applied to.
+ * `rows` was read with one extra row so overflow is detectable.
+ */
+function withinCap<T>(rows: T[], what: string, max: number = MAX_DAY_ROWS): T[] {
+  if (rows.length > max) {
+    throw new Error(`This day has more than ${max} ${what}, too many to use as a template.`);
+  }
+  return rows;
+}
+
 export async function captureDayTemplates(
   ctx: MutationCtx,
   day: Doc<"events">,
@@ -118,29 +137,37 @@ export async function captureDayTemplates(
   const captured: CapturedDayTemplates = {};
   if (parts.schedule || parts.crew) {
     // An act's soundcheck/set blocks belong to one day's lineup, not the group.
-    const blocks = (
+    const blocks = withinCap(
       await ctx.db
         .query("eventScheduleBlocks")
         .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", day._id))
-        .take(500)
+        .take(MAX_DAY_ROWS + 1),
+      "Run of Show blocks",
     ).filter((block) => !isActBlock(block));
     const blockTemplates = blocksToTemplates(blocks, day.startAt);
     captured.blockTemplates = blockTemplates;
     if (parts.crew) {
-      const shifts = await ctx.db
-        .query("eventCrewShifts")
-        .withIndex("by_eventId", (q) => q.eq("eventId", day._id))
-        .take(500);
+      const shifts = withinCap(
+        await ctx.db
+          .query("eventCrewShifts")
+          .withIndex("by_eventId", (q) => q.eq("eventId", day._id))
+          .take(MAX_DAY_ROWS + 1),
+        "crew shifts",
+      );
       captured.shiftTemplates = shiftsToTemplates(shifts, blocks, blockTemplates, day.startAt, {
         copyingDay: true,
       });
     }
   }
   if (parts.positions) {
-    const slots = await ctx.db
-      .query("eventArtistNeeds")
-      .withIndex("by_eventId", (q) => q.eq("eventId", day._id))
-      .take(100);
+    const slots = withinCap(
+      await ctx.db
+        .query("eventArtistNeeds")
+        .withIndex("by_eventId", (q) => q.eq("eventId", day._id))
+        .take(MAX_OCCURRENCE_POSITIONS + 1),
+      "positions",
+      MAX_OCCURRENCE_POSITIONS,
+    );
     const seenKeys = new Set<string>();
     const templates: EventSeriesPositionTemplate[] = [];
     const ordered = slots
