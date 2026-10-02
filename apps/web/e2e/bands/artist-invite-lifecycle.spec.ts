@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { acceptAppDialog, bandAuthFile, dismissAppDialog } from "../helpers/auth";
 import { runConvex } from "../helpers/convex";
 import { getLatestEmailNotification } from "../helpers/email";
@@ -6,10 +6,32 @@ import { formField } from "../helpers/form";
 import { waitForInvitationState } from "../helpers/users";
 
 /**
- * Artist-org self-service on `/dashboard/artists`: invite a teammate, resend
+ * Artist-org self-service on the Team tab (`/dashboard/artists/team`): invite a teammate, resend
  * the same pending row, then remove it. Retyping the email at the top used to
  * be the only way to resend; cancelling was not available at all.
  */
+async function openTeam(page: Page) {
+  await page.goto("/dashboard/artists/team");
+  const team = page.getByTestId("artist-team");
+  await expect(team).toBeVisible({ timeout: 30_000 });
+  return team;
+}
+
+async function sendInvite(page: Page, email: string, options?: { role?: string }) {
+  await page.getByRole("button", { name: "Invite member" }).click();
+  const dialog = page.getByTestId("artist-invite-dialog");
+  await expect(dialog).toBeVisible({ timeout: 15_000 });
+  await formField(dialog, "Email address").fill(email);
+  if (options?.role) await formField(dialog, "Role").fill(options.role);
+  await dialog.getByRole("button", { name: "Send invitation" }).click();
+  return dialog;
+}
+
+async function removeInvite(page: Page, inviteRow: Locator) {
+  await inviteRow.getByRole("button", { name: /More for the invitation/ }).click();
+  await page.getByRole("menuitem", { name: "Remove invitation" }).click();
+}
+
 test.describe("artist page invite lifecycle", () => {
   test.use({ storageState: bandAuthFile });
   test.setTimeout(180_000);
@@ -26,15 +48,11 @@ test.describe("artist page invite lifecycle", () => {
   });
 
   test("artist invites, resends, then removes a pending teammate", async ({ page }) => {
-    await page.goto("/dashboard/artists");
-    const teamCard = page.getByTestId("artist-team-card");
-    await expect(teamCard).toBeVisible({ timeout: 30_000 });
-    await expect(teamCard.getByText("Pending invitations")).toBeVisible();
+    const team = await openTeam(page);
+    await expect(team.getByText("Pending invitations")).toBeVisible();
 
-    await formField(teamCard, "Email address").fill(inviteEmail);
-    await formField(teamCard, "Role").fill("Vocals");
-    await teamCard.getByRole("button", { name: "Send invitation" }).click();
-    await expect(teamCard.getByText(`Invitation sent to ${inviteEmail}.`)).toBeVisible({
+    await sendInvite(page, inviteEmail, { role: "Vocals" });
+    await expect(page.getByText(`Invitation sent to ${inviteEmail}.`)).toBeVisible({
       timeout: 30_000,
     });
 
@@ -46,7 +64,7 @@ test.describe("artist page invite lifecycle", () => {
     const inviteRow = page.getByTestId(`artist-invite-row-${invited.invitationId}`);
     await expect(inviteRow).toContainText(inviteEmail, { timeout: 30_000 });
     await expect(inviteRow.getByRole("button", { name: "Resend" })).toBeVisible();
-    await expect(inviteRow.getByRole("button", { name: "Remove" })).toBeVisible();
+    await expect(inviteRow).toContainText("Vocals");
 
     const firstEmail = await waitForInviteEmail(inviteEmail, 0);
     expect(firstEmail.template).toBe("user_invite");
@@ -66,7 +84,7 @@ test.describe("artist page invite lifecycle", () => {
     expect(resent.invitationId).toBe(invited.invitationId);
     expect(resent.hasPendingToken).toBe(true);
 
-    await inviteRow.getByRole("button", { name: "Remove" }).click();
+    await removeInvite(page, inviteRow);
     await acceptAppDialog(page, "Remove");
     await expect(page.getByText(`Invitation removed for ${inviteEmail}.`)).toBeVisible({
       timeout: 30_000,
@@ -80,13 +98,10 @@ test.describe("artist page invite lifecycle", () => {
   });
 
   test("dismissing the remove confirm leaves the invite pending", async ({ page }) => {
-    await page.goto("/dashboard/artists");
-    const teamCard = page.getByTestId("artist-team-card");
-    await expect(teamCard).toBeVisible({ timeout: 30_000 });
+    await openTeam(page);
 
-    await formField(teamCard, "Email address").fill(dismissEmail);
-    await teamCard.getByRole("button", { name: "Send invitation" }).click();
-    await expect(teamCard.getByText(`Invitation sent to ${dismissEmail}.`)).toBeVisible({
+    await sendInvite(page, dismissEmail);
+    await expect(page.getByText(`Invitation sent to ${dismissEmail}.`)).toBeVisible({
       timeout: 30_000,
     });
 
@@ -94,7 +109,7 @@ test.describe("artist page invite lifecycle", () => {
     const inviteRow = page.getByTestId(`artist-invite-row-${seeded.invitationId}`);
     await expect(inviteRow).toBeVisible({ timeout: 30_000 });
 
-    await inviteRow.getByRole("button", { name: "Remove" }).click();
+    await removeInvite(page, inviteRow);
     await dismissAppDialog(page);
 
     const after = await waitForInvitationState(dismissEmail, (state) => state?.status === "pending");
@@ -104,13 +119,10 @@ test.describe("artist page invite lifecycle", () => {
   });
 
   test("retyping a pending email with a different access level is refused", async ({ page }) => {
-    await page.goto("/dashboard/artists");
-    const teamCard = page.getByTestId("artist-team-card");
-    await expect(teamCard).toBeVisible({ timeout: 30_000 });
+    await openTeam(page);
 
-    await formField(teamCard, "Email address").fill(mismatchEmail);
-    await teamCard.getByRole("button", { name: "Send invitation" }).click();
-    await expect(teamCard.getByText(`Invitation sent to ${mismatchEmail}.`)).toBeVisible({
+    await sendInvite(page, mismatchEmail);
+    await expect(page.getByText(`Invitation sent to ${mismatchEmail}.`)).toBeVisible({
       timeout: 30_000,
     });
     const seeded = await waitForInvitationState(
@@ -119,13 +131,16 @@ test.describe("artist page invite lifecycle", () => {
     );
     expect(seeded.role).toBe("org_member");
 
-    await formField(teamCard, "Email address").fill(mismatchEmail);
-    await teamCard.getByRole("combobox").click();
+    await page.getByRole("button", { name: "Invite member" }).click();
+    const dialog = page.getByTestId("artist-invite-dialog");
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    await formField(dialog, "Email address").fill(mismatchEmail);
+    await dialog.getByRole("combobox").click();
     await page.getByRole("option", { name: "Admin", exact: true }).click();
-    await teamCard.getByRole("button", { name: "Send invitation" }).click();
-    await expect(teamCard.getByText("Invitation not sent")).toBeVisible({ timeout: 30_000 });
+    await dialog.getByRole("button", { name: "Send invitation" }).click();
+    await expect(dialog.getByText("Invitation not sent")).toBeVisible({ timeout: 30_000 });
     await expect(
-      teamCard.getByText("Remove it before sending a different access level."),
+      dialog.getByText("Remove it before sending a different access level."),
     ).toBeVisible();
 
     const after = await waitForInvitationState(
