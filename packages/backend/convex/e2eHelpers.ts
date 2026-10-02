@@ -3410,19 +3410,31 @@ export const seedLineupForSwap = mutation({
 export const seedPosterWork = mutation({
   args: {
     eventTitle: v.string(),
-    assigneeUserId: v.string(),
+    /** Omit for an unassigned event. */
+    assigneeUserId: v.optional(v.string()),
     externalArtistName: v.string(),
+    /** Optional variety for local demos; defaults match the e2e spec. */
+    daysOut: v.optional(v.number()),
+    visibility: v.optional(v.union(v.literal("public"), v.literal("internal"))),
+    venueName: v.optional(v.string()),
+    design: v.optional(
+      v.object({
+        status: v.union(v.literal("draft"), v.literal("ready"), v.literal("published")),
+        imageUrl: v.string(),
+        caption: v.optional(v.string()),
+      }),
+    ),
   },
   returns: v.object({ eventId: v.id("events") }),
   handler: async (ctx, args) => {
     assertE2eHelpersEnabled();
     const now = Date.now();
     const hour = 60 * 60 * 1000;
-    const startAt = now + 3 * 24 * hour;
+    const startAt = now + (args.daysOut ?? 3) * 24 * hour;
     const eventId = await ctx.db.insert("events", {
       title: args.eventTitle,
       status: "ready",
-      visibility: "internal",
+      visibility: args.visibility ?? "internal",
       publicToken: makeToken(),
       startAt,
       endAt: startAt + 5 * hour,
@@ -3433,7 +3445,7 @@ export const seedPosterWork = mutation({
       requiresShowWindow: true,
       eventType: "Crewed Event",
       teamsInterested: ["Design"],
-      venueName: "E2E Poster Hall",
+      venueName: args.venueName ?? "E2E Poster Hall",
       host: "E2E Poster Host",
       createdAt: now,
       updatedAt: now,
@@ -3474,14 +3486,19 @@ export const seedPosterWork = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.db.insert("eventMarketingDesigns", {
-      eventId,
-      assigneeUserId: args.assigneeUserId,
-      status: "draft",
-      createdByUserId: args.assigneeUserId,
-      createdAt: now,
-      updatedAt: now,
-    });
+    if (args.assigneeUserId || args.design) {
+      await ctx.db.insert("eventMarketingDesigns", {
+        eventId,
+        assigneeUserId: args.assigneeUserId,
+        status: args.design?.status ?? "draft",
+        imageUrl: args.design?.imageUrl,
+        caption: args.design?.caption,
+        publishedAt: args.design?.status === "published" ? now : undefined,
+        createdByUserId: args.assigneeUserId ?? "e2e",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
     return { eventId };
   },
 });

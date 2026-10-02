@@ -12,6 +12,7 @@ import {
   filterMarketingLinks,
   type MarketingAdditionalLink,
 } from "@/components/marketing/event-marketing-content-fields";
+import { EventShortLinks } from "@/components/marketing/event-short-links-card";
 import { PosterBrief } from "@/components/marketing/poster-brief";
 import { activeFilters, FilterBar, type FilterDefinition, type FilterState } from "@/components/filter-bar";
 import {
@@ -402,6 +403,8 @@ function PosterWorkPanel({
           <p className="text-sm text-destructive">Last publish error: {design.lastError}</p>
         ) : null}
       </SheetSection>
+
+      <EventShortLinks eventId={eventId} eventTitle={design.eventTitle} frame="section" />
 
       <DetailSheetFooter start={<PrintPosterButton designId={design.designId} savedImageUrl={design.imageUrl} />}>
         {canEditPoster ? (
