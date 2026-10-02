@@ -240,10 +240,15 @@ export async function copyPullListBetweenDays(
   targetEventId: Id<"events">,
   now: number,
 ) {
-  const existing = await ctx.db
-    .query("eventPullListItems")
-    .withIndex("by_eventId", (q) => q.eq("eventId", targetEventId))
-    .take(500);
+  // Replaced in full: leaving rows behind past a truncated read would mix the
+  // old list into the copy.
+  const existing = withinCap(
+    await ctx.db
+      .query("eventPullListItems")
+      .withIndex("by_eventId", (q) => q.eq("eventId", targetEventId))
+      .take(MAX_DAY_ROWS + 1),
+    "pull list rows",
+  );
   for (const row of existing) {
     await ctx.db.delete(row._id);
   }
@@ -321,16 +326,20 @@ export async function copyUnlinkedShiftsBetweenDays(
   target: Pick<Doc<"events">, "_id" | "startAt">,
   now: number,
 ) {
-  const [sourceShifts, targetShifts] = await Promise.all([
+  // Both days are read in full: a truncated read would miss the target's open
+  // copies (adding duplicates) or silently drop some of the source's shifts.
+  const [sourceRows, targetRows] = await Promise.all([
     ctx.db
       .query("eventCrewShifts")
       .withIndex("by_eventId", (q) => q.eq("eventId", source._id))
-      .take(500),
+      .take(MAX_DAY_ROWS + 1),
     ctx.db
       .query("eventCrewShifts")
       .withIndex("by_eventId", (q) => q.eq("eventId", target._id))
-      .take(500),
+      .take(MAX_DAY_ROWS + 1),
   ]);
+  const sourceShifts = withinCap(sourceRows, "crew shifts");
+  const targetShifts = withinCap(targetRows, "crew shifts");
   const plan = planUnlinkedShiftCopy(sourceShifts, targetShifts, target.startAt - source.startAt);
   for (const id of plan.deleteIds) {
     await ctx.db.delete(id);
