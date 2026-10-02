@@ -596,7 +596,11 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   when the client chose the Collaboration production area). Operations
   or Marketing can assign a poster designer from the event editor or design board;
   assignments appear immediately on the board (including internal events). The
-  design board filters: assigned to me, unassigned, and all upcoming. Design statuses:
+  design board is a list (soonest first) filtered by designer (defaults to "Me",
+  also Unassigned or a person) and poster status; `?event=<id>` opens an event's
+  side panel, which leads with the poster brief (`getPosterBrief`: when, doors
+  and show window from the Run of Show, venue and address, host, and the bill
+  with set times) above the poster fields. Design statuses:
   `draft` (staff WIP, not on site), `ready` (on the public event page; Instagram
   not yet approved), `published` (website + Instagram).   Clients can upload from
   the booking-request or invoice tracking link once an event exists
@@ -606,7 +610,9 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   same fields on the event workspace **Promo** tab.
 - `marketingPosts.ts` — case studies and blog posts, Lexical rich text,
   published/featured flags, rendered publicly via `publicMarketing.ts`
-  (`/work`). Public crew and artist directories come from
+  (`/work`). The admin page is a list; a post opens in a wide side panel
+  (`?post=<id>` or `?post=new`) where Publish / Unpublish and Feature on
+  homepage are header actions that save the whole form. Public crew and artist directories come from
   `publicDirectory.ts` with per-profile opt-in flags.
 - `shortLinks.ts` — custom `arbor.st` redirect overrides managed at
   `/dashboard/marketing/links`. The Cloudflare Worker calls a Convex HTTP

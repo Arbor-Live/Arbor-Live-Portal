@@ -29,7 +29,7 @@ test.describe("marketing posts admin", () => {
     const target = newestLabel(stamp, POST_COUNT);
 
     await page.goto("/dashboard/marketing/work");
-    const listItem = page.getByRole("button").filter({ hasText: target });
+    const listItem = page.getByTestId("work-post-row").filter({ hasText: target }).getByRole("button").first();
     await expect(listItem).toBeVisible({ timeout: 40_000 });
 
     await listItem.click();
@@ -44,11 +44,21 @@ test.describe("marketing posts admin", () => {
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.getByText("Post updated.")).toBeVisible({ timeout: 30_000 });
 
+    // Publish is a header action; it saves the post and flips it live.
+    const sheet = page.getByTestId("work-post-sheet");
+    await sheet.getByRole("button", { name: "Publish", exact: true }).click();
+    await expect(page.getByText("Post published.")).toBeVisible({ timeout: 30_000 });
+    await expect(sheet.getByRole("button", { name: "Unpublish", exact: true })).toBeVisible();
+
+    // `?post=` deep-links straight back into the editor.
     await page.reload();
-    await page.getByRole("button").filter({ hasText: target }).click();
     await expect(field(page, "Excerpt").locator("textarea")).toHaveValue(
       "E2E bulk seeded post. Edited.",
       { timeout: 25_000 },
     );
+    await page.keyboard.press("Escape");
+    await expect(
+      page.getByTestId("work-post-row").filter({ hasText: target }),
+    ).toContainText("Published");
   });
 });

@@ -1,7 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
+import { ArrowSquareOutIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import {
   EventMarketingContentFields,
@@ -9,277 +12,414 @@ import {
   filterMarketingLinks,
   type MarketingAdditionalLink,
 } from "@/components/marketing/event-marketing-content-fields";
+import { PosterBrief } from "@/components/marketing/poster-brief";
+import { activeFilters, FilterBar, type FilterDefinition, type FilterState } from "@/components/filter-bar";
+import {
+  DetailSheet,
+  DetailSheetFooter,
+  DetailSheetHeader,
+  EmptyState,
+  ListSummary,
+  RowCell,
+  RowList,
+  RowMenu,
+  RowText,
+  SheetSection,
+} from "@/components/list-page";
+import { ListRow } from "@/components/list-row";
+import { PageHeader, StatusPill, type Tone } from "@/components/page-header";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
+import { useSessionViewer } from "@/components/session-shell-provider";
 import { assignableCrewSelectOptions } from "@/lib/user-select-description";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import { usePublishStatusToasts } from "@/hooks/use-publish-status-toasts";
 import { formatDateTime } from "@/lib/format";
-import {
-  formatEventVisibilityLabel,
-  type EventVisibility,
-} from "@/lib/event-visibility";
-import { cn } from "@/lib/utils";
+import { formatEventVisibilityLabel, type EventVisibility } from "@/lib/event-visibility";
 import { PrintPosterButton } from "@/components/printing/print-poster-button";
 
-type PosterWorkView = "unassigned" | "mine" | "all";
+type PosterStatus = "none" | "draft" | "ready" | "published";
 
-const POSTER_WORK_VIEWS: Array<{ value: PosterWorkView; label: string }> = [
-  { value: "mine", label: "Assigned to me" },
-  { value: "unassigned", label: "Unassigned" },
-  { value: "all", label: "All upcoming" },
-];
+const POSTER_STATUS: Record<PosterStatus, { label: string; tone: Tone }> = {
+  none: { label: "Needs poster", tone: "amber" },
+  draft: { label: "Draft", tone: "neutral" },
+  ready: { label: "On website", tone: "blue" },
+  published: { label: "Published", tone: "emerald" },
+};
 
-function formatEventMeta(startAt: number, venueName?: string) {
-  const when = formatDateTime(startAt);
-  return venueName ? `${when} · ${venueName}` : when;
+const POSTER_STATUS_OPTIONS = (Object.keys(POSTER_STATUS) as PosterStatus[]).map((value) => ({
+  value,
+  label: POSTER_STATUS[value].label,
+}));
+
+/** `?event=<id>` opens that event's poster panel. */
+const EVENT_PARAM = "event";
+
+function setEventParam(value: string | null) {
+  const url = new URL(window.location.href);
+  if (value) url.searchParams.set(EVENT_PARAM, value);
+  else url.searchParams.delete(EVENT_PARAM);
+  window.history.replaceState(null, "", url);
+}
+
+function plural(count: number, noun: string) {
+  return `${count} ${count === 1 ? noun : `${noun}s`}`;
 }
 
 export function MarketingDesignBoard() {
+  const searchParams = useSearchParams();
   const [now] = useState(() => Date.now());
-  const [view, setView] = useState<PosterWorkView>("mine");
-  const [selectedEventId, setSelectedEventId] = useState<Id<"events"> | null>(null);
-  const [imageUrl, setImageUrl] = useState("");
-  const [caption, setCaption] = useState("");
-  const [additionalLinks, setAdditionalLinks] = useState<MarketingAdditionalLink[]>([
-    emptyMarketingLink(),
-  ]);
+  const [search, setSearch] = useState("");
+  // Designers land on their own work; clear the chip to see everything.
+  const [filters, setFilters] = useState<FilterState>({ designer: { operator: "is", values: ["me"] } });
+  const [panelEventId, setPanelEventId] = useState<Id<"events"> | null>(
+    () => (searchParams.get(EVENT_PARAM) as Id<"events"> | null) ?? null,
+  );
 
-  const events = useQuery(api.marketingDesigns.listUpcomingPosterWork, { now, view });
+  const applied = activeFilters(filters);
+  const events = useQuery(api.marketingDesigns.listUpcomingPosterWork, {
+    now,
+    search: search.trim() || undefined,
+    assignee: applied.designer,
+    posterStatus: applied.poster,
+  });
   const managerList = useQuery(api.invoices.listManagers, {});
-  const createDesign = useMutation(api.marketingDesigns.create);
-  const markReady = useMutation(api.marketingDesigns.markReady);
-  const assignPosterDesigner = useMutation(api.marketingDesigns.assignPosterDesigner);
 
   const userSelectOptions: UserSelectOption[] = useMemo(
     () => assignableCrewSelectOptions(managerList),
     [managerList],
   );
 
-  const selectedEvent = useMemo(
-    () => events?.find((row) => row.eventId === selectedEventId) ?? null,
-    [events, selectedEventId],
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () => [
+      {
+        id: "designer",
+        label: "Designer",
+        options: [
+          { value: "me", label: "Me" },
+          { value: "unassigned", label: "Unassigned" },
+          ...userSelectOptions.map((option) => ({ value: option.value, label: option.label })),
+        ],
+      },
+      { id: "poster", label: "Poster", options: POSTER_STATUS_OPTIONS },
+    ],
+    [userSelectOptions],
   );
 
-  const selectedDesign = selectedEvent?.design ?? null;
-  usePublishStatusToasts(selectedDesign, selectedEventId);
+  function openPanel(eventId: Id<"events"> | null) {
+    setPanelEventId(eventId);
+    setEventParam(eventId);
+  }
 
-  function selectEvent(eventId: Id<"events">) {
-    const event = events?.find((row) => row.eventId === eventId);
-    if (!event) return;
-    setSelectedEventId(eventId);
-    setImageUrl(event.design?.imageUrl ?? "");
-    setCaption(event.design?.caption ?? "");
-    setAdditionalLinks(
-      event.design?.additionalLinks?.length ? event.design.additionalLinks : [emptyMarketingLink()],
-    );
+  const rows = events ?? [];
+  const filterCount = (search.trim() ? 1 : 0) + Object.keys(applied).length;
+  const counts = rows.reduce<Record<PosterStatus, number>>(
+    (acc, row) => ({ ...acc, [row.posterStatus]: acc[row.posterStatus] + 1 }),
+    { none: 0, draft: 0, ready: 0, published: 0 },
+  );
+  const unassigned = rows.filter((row) => !row.assigneeUserId).length;
+
+  return (
+    <div className="space-y-4 pb-24" data-testid="design-board-page">
+      <PageHeader
+        title="Design board"
+        description="Posters for upcoming events that asked for design. Assign a designer, upload the poster, write the caption, then publish to Instagram and the public site."
+      />
+
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search event, venue, host…"
+        searchLabel="Search events"
+        filters={filterDefinitions}
+        value={filters}
+        onChange={setFilters}
+      />
+
+      {events === undefined ? (
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-72" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      ) : (
+        <>
+          <ListSummary
+            testId="design-board-summary"
+            order="Soonest first, for the next four weeks. Open an event for its details and poster."
+          >
+            {plural(rows.length, "event")}
+            {counts.none ? ` · ${counts.none} need a poster` : ""}
+            {counts.draft ? ` · ${counts.draft} in draft` : ""}
+            {counts.ready ? ` · ${counts.ready} on the website` : ""}
+            {counts.published ? ` · ${counts.published} published` : ""}
+            {unassigned ? ` · ${unassigned} without a designer` : ""}
+          </ListSummary>
+
+          {rows.length === 0 ? (
+            <EmptyState
+              action={
+                filterCount ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearch("");
+                      setFilters({});
+                    }}
+                  >
+                    Clear search and filters
+                  </Button>
+                ) : null
+              }
+            >
+              {filterCount
+                ? "No upcoming events match. Clear the filters to see every event that needs a poster."
+                : "No events need a poster in the next four weeks. Events show up here once Design is one of their teams."}
+            </EmptyState>
+          ) : (
+            <RowList testId="design-board-list">
+              {rows.map((row) => {
+                const status = POSTER_STATUS[row.posterStatus];
+                return (
+                  <ListRow
+                    key={row.eventId}
+                    data-testid="design-board-row"
+                    onOpen={() => openPanel(row.eventId)}
+                    actions={
+                      <RowMenu label={`More for ${row.title}`}>
+                        <DropdownMenuItem onSelect={() => openPanel(row.eventId)}>Open details</DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href={`/dashboard/events/${row.eventId}`}>Open event</Link>
+                        </DropdownMenuItem>
+                      </RowMenu>
+                    }
+                  >
+                    <RowCell className="w-36" align="left" muted>
+                      {formatDateTime(row.startAt)}
+                    </RowCell>
+                    <RowText
+                      eyebrow={row.visibility !== "public" ? formatEventVisibilityLabel(row.visibility as EventVisibility) : undefined}
+                      title={row.title}
+                      detail={[row.venueName, row.design?.caption ? "Caption written" : "No caption yet"]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    />
+                    <RowCell className="w-40 truncate" align="left" hideBelow="md" muted>
+                      {row.assigneeName ?? "Unassigned"}
+                    </RowCell>
+                    <span className="w-28 shrink-0">
+                      <StatusPill tone={status.tone} className="h-6">
+                        {status.label}
+                      </StatusPill>
+                    </span>
+                  </ListRow>
+                );
+              })}
+            </RowList>
+          )}
+        </>
+      )}
+
+      <DetailSheet
+        open={panelEventId !== null}
+        onOpenChange={(open) => {
+          if (!open) openPanel(null);
+        }}
+        testId="design-board-sheet"
+        className="data-[side=right]:sm:max-w-xl"
+      >
+        {panelEventId ? (
+          <PosterWorkPanel key={panelEventId} eventId={panelEventId} userSelectOptions={userSelectOptions} />
+        ) : null}
+      </DetailSheet>
+    </div>
+  );
+}
+
+function PosterWorkPanel({
+  eventId,
+  userSelectOptions,
+}: {
+  eventId: Id<"events">;
+  userSelectOptions: UserSelectOption[];
+}) {
+  const viewer = useSessionViewer();
+  const canEditPoster = Boolean(viewer?.isAdmin || viewer?.verticals.includes("Marketing"));
+  const design = useQuery(api.marketingDesigns.getForEvent, { eventId });
+  const createDesign = useMutation(api.marketingDesigns.create);
+  const markReady = useMutation(api.marketingDesigns.markReady);
+  const assignPosterDesigner = useMutation(api.marketingDesigns.assignPosterDesigner);
+  usePublishStatusToasts(design, eventId);
+
+  const [imageUrl, setImageUrl] = useState("");
+  const [caption, setCaption] = useState("");
+  const [additionalLinks, setAdditionalLinks] = useState<MarketingAdditionalLink[]>([emptyMarketingLink()]);
+  const [hydrated, setHydrated] = useState(false);
+  const [pending, setPending] = useState<"save" | "publish" | null>(null);
+
+  // Seed the drafts once, when the design arrives; later server changes don't clobber edits.
+  useEffect(() => {
+    if (hydrated || !design) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- one-time hydration from the loaded design */
+    setHydrated(true);
+    setImageUrl(design.imageUrl ?? "");
+    setCaption(design.caption ?? "");
+    setAdditionalLinks(design.additionalLinks?.length ? design.additionalLinks : [emptyMarketingLink()]);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [design, hydrated]);
+
+  if (design === undefined) {
+    return <DetailSheetHeader title="Loading…" description="Loading the event's poster work." />;
+  }
+  if (design === null) {
+    return <DetailSheetHeader title="Event not found" description="It may have been deleted." />;
+  }
+
+  const posterStatus: PosterStatus =
+    design.status === null || (design.status === "draft" && !design.imageUrl) ? "none" : design.status;
+  const status = POSTER_STATUS[posterStatus];
+
+  async function saveDraft() {
+    if (!imageUrl.trim()) {
+      notify.error("Upload a poster image first.");
+      return null;
+    }
+    return await createDesign({
+      eventId,
+      assigneeUserId: design?.assigneeUserId ?? undefined,
+      imageUrl,
+      caption: caption.trim() || undefined,
+      additionalLinks: filterMarketingLinks(additionalLinks),
+    });
+  }
+
+  async function handleSaveDraft() {
+    setPending("save");
+    try {
+      if (await saveDraft()) notify.success("Draft saved.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function handlePublish() {
+    setPending("publish");
+    try {
+      const designId = await saveDraft();
+      if (!designId) return;
+      await markReady({ id: designId });
+      notify.info("Publishing to Instagram…");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setPending(null);
+    }
   }
 
   async function handleAssigneeChange(assigneeUserId: string) {
-    if (!selectedEventId) return;
     try {
-      await assignPosterDesigner({
-        eventId: selectedEventId,
-        assigneeUserId: assigneeUserId || undefined,
-      });
+      await assignPosterDesigner({ eventId, assigneeUserId: assigneeUserId || undefined });
       notify.success(assigneeUserId ? "Poster designer assigned." : "Poster designer unassigned.");
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
     }
   }
 
-  async function handleSaveDraft() {
-    if (!selectedEventId || !imageUrl.trim()) {
-      notify.error("Choose an event and upload a poster image.");
-      return;
-    }
-    try {
-      await createDesign({
-        eventId: selectedEventId,
-        assigneeUserId: selectedEvent?.assigneeUserId ?? undefined,
-        imageUrl,
-        caption: caption.trim() || undefined,
-        additionalLinks: filterMarketingLinks(additionalLinks),
-      });
-      notify.success("Draft saved.");
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    }
-  }
-
-  async function handleMarkReady() {
-    if (!selectedEventId) return;
-    try {
-      if (!imageUrl.trim()) {
-        notify.error("Upload a poster image before publishing.");
-        return;
-      }
-      const designId = await createDesign({
-        eventId: selectedEventId,
-        assigneeUserId: selectedEvent?.assigneeUserId ?? undefined,
-        imageUrl,
-        caption: caption.trim() || undefined,
-        additionalLinks: filterMarketingLinks(additionalLinks),
-      });
-      await markReady({ id: designId });
-      notify.info("Publishing to Instagram…");
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    }
-  }
-
-  const emptyLabel =
-    view === "mine"
-      ? "No upcoming events with Marketing selected are assigned to you in the next four weeks."
-      : view === "unassigned"
-        ? "No unassigned upcoming events with Marketing selected in the next four weeks."
-        : "No upcoming events with Marketing selected in the next four weeks.";
-
   return (
-    <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-      <Card>
-        <CardHeader className="space-y-3">
-          <CardTitle className="text-base">Upcoming poster work</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Events in the next four weeks. Assignments appear immediately, including before an event is public.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {POSTER_WORK_VIEWS.map((option) => (
-              <Button
-                key={option.value}
-                type="button"
-                size="sm"
-                variant={view === option.value ? "default" : "outline"}
-                onClick={() => setView(option.value)}
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {(events ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground">{emptyLabel}</p>
-          ) : (
-            (events ?? []).map((event) => (
-              <button
-                key={event.eventId}
-                type="button"
-                onClick={() => selectEvent(event.eventId)}
-                className={cn(
-                  "w-full rounded-md border px-3 py-2 text-left text-sm transition",
-                  selectedEventId === event.eventId ? "border-primary bg-muted/40" : "hover:bg-muted/30",
-                )}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="font-medium">{event.title}</p>
-                  {event.design?.status === "published" ? (
-                    <span className="shrink-0 rounded-full bg-status-emerald-100 px-2 py-0.5 text-3xs font-medium text-status-emerald-800">
-                      Published
-                    </span>
-                  ) : event.design?.status === "ready" ? (
-                    <span className="shrink-0 rounded-full bg-status-sky-100 px-2 py-0.5 text-3xs font-medium text-status-sky-800">
-                      On website
-                    </span>
-                  ) : event.design?.imageUrl ? (
-                    <span className="shrink-0 rounded-full bg-status-amber-100 px-2 py-0.5 text-3xs font-medium text-status-amber-800">
-                      Draft
-                    </span>
-                  ) : null}
-                </div>
-                <p className="text-xs text-muted-foreground">{formatEventMeta(event.startAt, event.venueName)}</p>
-                <p className="text-xs text-muted-foreground">
-                  {event.assigneeName ? `Assigned to ${event.assigneeName}` : "Unassigned"}
-                  {event.visibility !== "public"
-                    ? ` · ${formatEventVisibilityLabel(event.visibility as EventVisibility)}`
-                    : ""}
-                </p>
-              </button>
-            ))
-          )}
-        </CardContent>
-      </Card>
+    <>
+      <DetailSheetHeader
+        title={design.eventTitle}
+        pill={
+          <StatusPill tone={status.tone} className="h-6">
+            {status.label}
+          </StatusPill>
+        }
+        description={
+          design.visibility !== "public"
+            ? `${formatEventVisibilityLabel(design.visibility as EventVisibility)} event. It can be published once it's public.`
+            : "Everything you need for the poster, then the poster itself."
+        }
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {selectedEvent ? selectedEvent.title : "Select an event"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!selectedEvent || !selectedEventId ? (
-            <p className="text-sm text-muted-foreground">
-              Pick an event to assign a designer, upload a poster, add a caption and links, then publish to
-              Instagram and the public site.
-            </p>
-          ) : (
-            <>
-              <div className="space-y-2">
-                <Label>Poster designer</Label>
-                <UserSelect
-                  value={selectedEvent.assigneeUserId ?? ""}
-                  onChange={(value) => void handleAssigneeChange(value)}
-                  options={userSelectOptions}
-                  emptyLabel="Unassigned"
-                  placeholder="Assign marketing designer..."
-                />
-              </div>
-              <EventMarketingContentFields
-                idPrefix="design-board"
-                imageUrl={imageUrl}
-                onImageUrlChange={setImageUrl}
-                caption={caption}
-                onCaptionChange={setCaption}
-                additionalLinks={additionalLinks}
-                onAdditionalLinksChange={setAdditionalLinks}
-                partifulCohostUrl={selectedDesign?.partifulCohostUrl ?? undefined}
-                captionLabel="Caption"
-                captionPlaceholder="Instagram caption and event description"
-                posterUpload={{ type: "event", eventId: selectedEventId }}
-              />
-              {selectedDesign?.status === "published" ? (
-                <p className="text-sm text-muted-foreground">
-                  Published
-                  {selectedDesign.instagramPostUrl ? (
-                    <>
-                      {" · "}
-                      <a
-                        href={selectedDesign.instagramPostUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline"
-                      >
-                        View Instagram post
-                      </a>
-                    </>
-                  ) : selectedDesign.instagramPostId ? (
-                    <>{` · Instagram ${selectedDesign.instagramPostId}`}</>
-                  ) : (
-                    ""
-                  )}
-                  {selectedDesign.lastError ? ` · Error: ${selectedDesign.lastError}` : ""}
-                </p>
-              ) : selectedDesign?.status === "ready" ? (
-                <p className="text-sm text-muted-foreground">
-                  On the public event page. Publish to post to Instagram.
-                </p>
-              ) : null}
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" onClick={() => void handleSaveDraft()}>
-                  Save draft
-                </Button>
-                <Button type="button" onClick={() => void handleMarkReady()}>
-                  Mark ready & publish
-                </Button>
-                <PrintPosterButton designId={selectedDesign?._id} savedImageUrl={selectedDesign?.imageUrl} />
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+      <SheetSection title="Poster designer">
+        <UserSelect
+          value={design.assigneeUserId ?? ""}
+          onChange={(value) => void handleAssigneeChange(value)}
+          options={userSelectOptions}
+          emptyLabel="Unassigned"
+          placeholder="Assign a designer…"
+          clearable
+        />
+      </SheetSection>
+
+      <PosterBrief eventId={eventId} />
+
+      <SheetSection title="Poster">
+        <EventMarketingContentFields
+          idPrefix="design-board"
+          imageUrl={imageUrl}
+          onImageUrlChange={setImageUrl}
+          imagePreviewUrl={design.imagePreviewUrl}
+          caption={caption}
+          onCaptionChange={setCaption}
+          additionalLinks={additionalLinks}
+          onAdditionalLinksChange={setAdditionalLinks}
+          partifulCohostUrl={design.partifulCohostUrl ?? undefined}
+          captionLabel="Caption"
+          captionPlaceholder="Instagram caption and event description"
+          disabled={pending !== null}
+          readOnly={!canEditPoster}
+          posterUpload={{ type: "event", eventId }}
+        />
+        {design.status === "published" ? (
+          <p className="text-sm text-muted-foreground">
+            Published{design.publishedAt ? ` ${formatDateTime(design.publishedAt)}` : ""}
+            {design.instagramPostUrl ? (
+              <>
+                {" · "}
+                <a
+                  href={design.instagramPostUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 underline"
+                >
+                  View Instagram post
+                  <ArrowSquareOutIcon className="size-3" aria-hidden />
+                </a>
+              </>
+            ) : null}
+          </p>
+        ) : design.status === "ready" ? (
+          <p className="text-sm text-muted-foreground">On the public event page. Publish to post it to Instagram.</p>
+        ) : null}
+        {design.lastError ? (
+          <p className="text-sm text-destructive">Last publish error: {design.lastError}</p>
+        ) : null}
+      </SheetSection>
+
+      <DetailSheetFooter start={<PrintPosterButton designId={design.designId} savedImageUrl={design.imageUrl} />}>
+        {canEditPoster ? (
+          <>
+            <Button type="button" variant="outline" disabled={pending !== null} onClick={() => void handleSaveDraft()}>
+              {pending === "save" ? "Saving…" : "Save draft"}
+            </Button>
+            <Button
+              type="button"
+              disabled={pending !== null || !design.canPublish}
+              title={design.canPublish ? undefined : "The event must be public before it can be published."}
+              onClick={() => void handlePublish()}
+            >
+              {pending === "publish" ? "Publishing…" : "Publish"}
+            </Button>
+          </>
+        ) : null}
+      </DetailSheetFooter>
+    </>
   );
 }

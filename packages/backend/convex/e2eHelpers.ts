@@ -3402,6 +3402,90 @@ export const seedLineupForSwap = mutation({
   },
 });
 
+/**
+ * Test-only: an upcoming event on the marketing design board, assigned to
+ * `assigneeUserId`, with doors / show blocks and a two-act bill (one outside
+ * act with a set time, one open position).
+ */
+export const seedPosterWork = mutation({
+  args: {
+    eventTitle: v.string(),
+    assigneeUserId: v.string(),
+    externalArtistName: v.string(),
+  },
+  returns: v.object({ eventId: v.id("events") }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const hour = 60 * 60 * 1000;
+    const startAt = now + 3 * 24 * hour;
+    const eventId = await ctx.db.insert("events", {
+      title: args.eventTitle,
+      status: "ready",
+      visibility: "internal",
+      publicToken: makeToken(),
+      startAt,
+      endAt: startAt + 5 * hour,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      eventType: "Crewed Event",
+      teamsInterested: ["Design"],
+      venueName: "E2E Poster Hall",
+      host: "E2E Poster Host",
+      createdAt: now,
+      updatedAt: now,
+    });
+    for (const [blockType, label, from, to] of [
+      ["doors", "Doors", 1, 1.25],
+      ["show", "Show", 1.5, 4.5],
+    ] as const) {
+      await ctx.db.insert("eventScheduleBlocks", {
+        eventId,
+        blockType,
+        label,
+        dayIndex: 0,
+        startsAt: startAt + from * hour,
+        endsAt: startAt + to * hour,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    await ctx.db.insert("eventArtistNeeds", {
+      eventId,
+      sortOrder: 0,
+      label: "Headliner",
+      artistType: "band",
+      status: "open",
+      externalArtistName: args.externalArtistName,
+      setStartsAt: startAt + 3 * hour,
+      setEndsAt: startAt + 4 * hour,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("eventArtistNeeds", {
+      eventId,
+      sortOrder: 1,
+      label: "Opener",
+      artistType: "dj",
+      status: "open",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("eventMarketingDesigns", {
+      eventId,
+      assigneeUserId: args.assigneeUserId,
+      status: "draft",
+      createdByUserId: args.assigneeUserId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { eventId };
+  },
+});
+
 /** Test-only: attach a draft (upcoming) payout to an existing event + org. */
 export const seedDraftBandPayment = mutation({
   args: {
