@@ -69,6 +69,7 @@ export function planMultiDayMembership(
   return { assign, release };
 }
 
+/** Return the first multi-day group among up to 10 invoice-linked groups, or null. */
 export async function findMultiDayGroupForInvoice(
   ctx: QueryCtx | MutationCtx,
   invoiceId: Id<"invoices">,
@@ -103,7 +104,12 @@ function activeDays(days: readonly Doc<"events">[]) {
 
 /**
  * Create a multi-day group for an invoice's days. Shared fields and templates
- * come from the first day that isn't cancelled.
+ * come from the first day that isn't cancelled, or the first day if all are
+ * cancelled; callers must provide at least one day in calendar order.
+ * Template capture, validation, and save errors are caught, leaving the group
+ * without saved templates. Capture may stamp position keys on the source day.
+ * Throws if the newly created group cannot be read back; other database errors
+ * outside template capture and saving propagate.
  */
 async function createMultiDayGroup(
   ctx: MutationCtx,
@@ -200,7 +206,14 @@ async function deleteMultiDayGroup(ctx: MutationCtx, groupId: Id<"eventSeries">)
  *   regrouping and a day's override survives);
  * - it is deleted (days released) when fewer than two days remain on the invoice;
  * - days are ordered by date.
- * Returns the group id, or null when the invoice has no multi-day group.
+ * Membership changes preserve event `updatedAt`; new members start attached,
+ * and existing members keep their override. `now` is Unix milliseconds for
+ * group and template timestamps. Initial template capture is best effort:
+ * capture, validation, and save errors leave the new group without templates.
+ *
+ * Returns the group id, or null if no group remains or a day belongs to a
+ * recurring series (which leaves the invoice unchanged). More than 200 days
+ * also leaves the invoice unchanged and returns its existing group id or null.
  */
 export async function syncMultiDayGroupForInvoice(
   ctx: MutationCtx,

@@ -558,10 +558,18 @@ export const importPositionsFromOccurrence = mutation({
 });
 
 /**
- * Apply one day's setup to other days of its group: the day's Run of Show
- * sections, open crew slots and positions become the group template, then the
- * template is applied to the days in scope (all days, or this day on). The
- * pull list copies straight across. Replaces "copy this day's setup".
+ * Apply selected setup from a multi-day booking's source day; omitted part
+ * flags default to true, and parts with no source content are skipped.
+ * Saves sections, crew slots (including staffed slots copied as open), and
+ * positions as group templates; copies pull lists with pull/checkout progress
+ * reset. Detached, cancelled, source, and already-ended days are excluded;
+ * `future` also excludes days before the source index or with starts before now.
+ * Returns the target count and ids. Legacy invoice days may be grouped first.
+ *
+ * Requires Arbor internal context and edit access to the source and targets.
+ * Throws for missing records, recurring groups, no eligible targets, or no
+ * selected content. Capture/copy limits and position validation/application
+ * errors propagate. Replaces "copy this day's setup".
  */
 export const applyDaySetup = mutation({
   args: {
@@ -676,7 +684,15 @@ export const applyDaySetup = mutation({
   },
 });
 
-/** Add a dated day to a multi-day booking, set up from the group templates. */
+/**
+ * Add a day at `startAt` (Unix milliseconds), returning its event id. Uses group
+ * templates and the first non-cancelled member's shared fields and visibility
+ * (falling back to the first member), clears inherited budget and costs, then
+ * recalculates templated crew cost and synchronizes invoice group membership.
+ * Requires Arbor internal context. Throws for a missing group or invoice, a
+ * recurring group, or an existing member on the same Pacific date; template
+ * application errors propagate.
+ */
 export const addDay = mutation({
   args: {
     id: v.id("eventSeries"),

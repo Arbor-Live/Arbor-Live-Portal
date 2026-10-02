@@ -39,13 +39,20 @@ export type GroupTemplateParts = {
   positions?: boolean;
 };
 
+/** Throw unless the zero-based day index is a non-negative integer. */
 export function assertValidReferenceIndex(referenceIndex: number) {
   if (!Number.isInteger(referenceIndex) || referenceIndex < 0) {
     throw new Error("Pick a day to apply from.");
   }
 }
 
-/** Apply the group's saved templates to one day. */
+/**
+ * Apply the selected template parts without checking day status or scope.
+ * Empty schedule templates leave blocks alone; empty crew templates clear open
+ * non-trainee slots, and empty position templates remove unlocked template
+ * positions. Crew application also recalculates the day's crew cost.
+ * Throws when position application exceeds 100 existing positions or 200 acts.
+ */
 export async function applyGroupTemplatesToDay(
   ctx: MutationCtx,
   group: Doc<"eventSeries">,
@@ -77,7 +84,12 @@ export async function applyGroupTemplatesToDay(
   }
 }
 
-/** Apply the group's saved templates to every day in scope; returns the day count. */
+/**
+ * Apply selected templates to days chosen by `selectDaysInScope`, from at most
+ * 200 group members. Returns the number selected, even if no parts changed.
+ * Throws for an invalid reference index or a template application failure;
+ * `now` is Unix milliseconds for scope selection and write timestamps.
+ */
 export async function applyGroupTemplates(
   ctx: MutationCtx,
   group: Doc<"eventSeries">,
@@ -108,11 +120,6 @@ export type CapturedDayTemplates = {
   positionTemplates?: EventSeriesPositionTemplate[];
 };
 
-/**
- * Read one day's setup as group templates, relative to the day's start.
- * Capturing positions also stamps each position's template key on the source
- * day, so applying the template back to it updates rather than duplicates.
- */
 /** Rows read per kind when capturing a day (a day's blocks and shifts are in the dozens). */
 const MAX_DAY_ROWS = 500;
 
@@ -128,6 +135,16 @@ function withinCap<T>(rows: T[], what: string, max: number = MAX_DAY_ROWS): T[] 
   return rows;
 }
 
+/**
+ * Capture selected setup as templates with millisecond offsets from day start.
+ * Schedule or crew capture includes non-act blocks; crew capture also includes
+ * staffed shifts as open slots, excluding trainees and shifts without a
+ * matching section. Capturing positions stamps missing or duplicate template
+ * keys on the source positions, using `now` as a Unix millisecond timestamp.
+ *
+ * Throws if a requested read exceeds 500 blocks, 500 shifts, or 100 positions,
+ * counting excluded rows toward those limits. Does not save group templates.
+ */
 export async function captureDayTemplates(
   ctx: MutationCtx,
   day: Doc<"events">,
@@ -230,9 +247,10 @@ export function planDaySetup(args: {
 }
 
 /**
- * Replace a day's pull list with another day's (quantities to pull reset, so
- * each day tracks its own pull progress). Pull lists are per day, not a group
- * template: equipment differs by day far more often than the schedule does.
+ * Replace a day's pull list with the supplied source rows, preserving required
+ * quantities and resetting pulled and checked-out quantities to zero. Empty
+ * source rows clear the list. Throws before deletion if the target exceeds
+ * 500 rows; source length is not checked here.
  */
 export async function copyPullListBetweenDays(
   ctx: MutationCtx,
@@ -318,7 +336,9 @@ export function planUnlinkedShiftCopy<S extends ShiftRow>(
  * Crew shifts not tied to a Run of Show section (e.g. a load-in call) aren't
  * part of the section-based crew template; copying a day carries them across
  * as open slots, at the same offset from the day's start (see
- * `planUnlinkedShiftCopy`).
+ * `planUnlinkedShiftCopy`). Throws before changing shifts if either day has
+ * more than 500 shifts, including section-linked shifts and trainees.
+ * The caller must recalculate crew cost after copying.
  */
 export async function copyUnlinkedShiftsBetweenDays(
   ctx: MutationCtx,

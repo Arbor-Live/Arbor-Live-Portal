@@ -25,7 +25,11 @@ export async function findSeriesByInvoiceId(
   return rows.find((row) => isRecurringGroup(row)) ?? null;
 }
 
-/** The one recurring series every linked day belongs to, if any. */
+/**
+ * Return the existing recurring series if grouped days share exactly one id.
+ * Ungrouped days are ignored; no ids, mixed ids, missing groups, or multi-day
+ * groups return null.
+ */
 async function inferRecurringSeriesFromDays(
   ctx: QueryCtx | MutationCtx,
   linkedEvents: Doc<"events">[],
@@ -38,6 +42,14 @@ async function inferRecurringSeriesFromDays(
   return seriesDoc && isRecurringGroup(seriesDoc) ? seriesDoc : null;
 }
 
+/**
+ * Count attached, non-cancelled occurrences of the invoice's recurring series,
+ * reading up to 200 occurrences. Without a directly linked series, infer one
+ * from up to 50 primary invoice days, ignoring ungrouped days for inference.
+ * If a recurring series has no billable days, fall back to its declared count
+ * or the number of rows read. Without a recurring series, count non-cancelled
+ * primary days, including detached days.
+ */
 export async function resolveBillableOccurrenceCount(
   ctx: QueryCtx | MutationCtx,
   invoiceId: Id<"invoices">,
@@ -92,6 +104,13 @@ export function perOccurrencePullQuantity(
   return { qty, remainder };
 }
 
+/**
+ * Return recurring-series identity and counts, preferring a directly linked
+ * series (up to 200 occurrences), then inference from up to 50 primary days.
+ * Return null if neither resolves a recurring series. The total uses the
+ * declared count when present; the active count excludes detached and cancelled
+ * members and can be zero even when the declared count is positive.
+ */
 export async function resolveSeriesMetadataForInvoice(
   ctx: QueryCtx | MutationCtx,
   invoiceId: Id<"invoices">,
