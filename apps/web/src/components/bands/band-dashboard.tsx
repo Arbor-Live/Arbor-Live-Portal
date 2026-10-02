@@ -112,7 +112,8 @@ function ShowListRow({
       <RowCell className="w-24" hideBelow="md">
         {payment ? formatUsd(payment.totalUsd) : <span className="text-muted-foreground">—</span>}
       </RowCell>
-      <span className="flex w-40 shrink-0 justify-end">
+      {/* On narrow screens the title needs the room; the panel still shows the status. */}
+      <span className="hidden w-40 shrink-0 justify-end sm:flex">
         <ShowStatusPill show={show} />
       </span>
     </ListRow>

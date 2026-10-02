@@ -199,6 +199,7 @@ import type * as lib_scheduleBlockTypes from "../lib/scheduleBlockTypes.js";
 import type * as lib_scheduleSiteRevalidation from "../lib/scheduleSiteRevalidation.js";
 import type * as lib_shortLinkSlug from "../lib/shortLinkSlug.js";
 import type * as lib_shortLinks from "../lib/shortLinks.js";
+import type * as lib_showRider from "../lib/showRider.js";
 import type * as lib_showShift from "../lib/showShift.js";
 import type * as lib_siteRevalidation from "../lib/siteRevalidation.js";
 import type * as lib_siteRevalidationPaths from "../lib/siteRevalidationPaths.js";
@@ -457,6 +458,7 @@ declare const fullApi: ApiFromModules<{
   "lib/scheduleSiteRevalidation": typeof lib_scheduleSiteRevalidation;
   "lib/shortLinkSlug": typeof lib_shortLinkSlug;
   "lib/shortLinks": typeof lib_shortLinks;
+  "lib/showRider": typeof lib_showRider;
   "lib/showShift": typeof lib_showShift;
   "lib/siteRevalidation": typeof lib_siteRevalidation;
   "lib/siteRevalidationPaths": typeof lib_siteRevalidationPaths;
