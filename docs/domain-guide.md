@@ -275,6 +275,11 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     platform act / invite / outside act, payout, inquiries, remove). "Add to
     bill" is one dialog for existing artist, invite, outside act, or an open
     position.
+  - **Swap positions** — a row's menu has **Swap with…** for when two acts
+    trade slots (`eventArtistNeeds.swapPositions`). Positions keep their label
+    and Run of Show times; the acts trade places, so each takes the other's
+    set and soundcheck. Payouts and invoice artist lines (`needId`) go with
+    the act. Swapping into an open position moves the act there.
   - **Payout** — from the position's side panel, via `EventBandPaymentForm`.
   - **Invoice link** — an artist line tied to a day opens the position it
     stands for (`invoiceLineItems.needId`), and filling that position fills the
