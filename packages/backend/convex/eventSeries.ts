@@ -711,6 +711,11 @@ export const addDay = mutation({
       throw new Error("A booking's days share its invoice; link one before adding a day.");
     }
     const days = await listGroupDays(ctx, args.id);
+    // Adding a day creates an invoice-backed event: the caller needs edit
+    // access to the booking, shown by being able to edit one of its days.
+    const modelDay = days.find((day) => day.status !== "cancelled") ?? days[0];
+    if (!modelDay) throw new Error("This booking has no days to add to.");
+    await requireEventEditAccess(ctx, modelDay._id);
     if (days.some((day) => pacificDateKey(day.startAt) === pacificDateKey(args.startAt))) {
       throw new Error("This booking already has a day on that date.");
     }
@@ -720,7 +725,7 @@ export const addDay = mutation({
     // visibility), not the group's snapshot from when it formed. Budget and
     // costs are per day: the group's budget is the whole booking's. Its status
     // follows the invoice, as on every linked day.
-    const model = days.find((day) => day.status !== "cancelled") ?? days[0];
+    const model = modelDay;
     const created = await ctx.db.get(eventId);
     if (created) {
       const next = withSharedDayFields(
@@ -808,6 +813,15 @@ export const cancelFuture = mutation({
     if (!series) throw new Error("Event series not found.");
     const now = Date.now();
     const occurrences = await listOccurrencesForSeries(ctx, args.id);
+    if (isMultiDayGroup(series)) {
+      // A booking's days are invoice-backed and led by different people: the
+      // caller must be able to edit every day they cancel (as applyDaySetup does).
+      for (const occurrence of occurrences) {
+        if ((occurrence.occurrenceIndex ?? 0) < args.fromOccurrenceIndex) continue;
+        if (occurrence.status === "cancelled") continue;
+        await requireEventEditAccess(ctx, occurrence._id);
+      }
+    }
     let cancelledCount = 0;
     for (const occurrence of occurrences) {
       if ((occurrence.occurrenceIndex ?? 0) < args.fromOccurrenceIndex) continue;
