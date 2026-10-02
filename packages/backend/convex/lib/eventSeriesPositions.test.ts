@@ -3,6 +3,8 @@ import type { Id } from "../_generated/dataModel";
 import {
   assertUniqueTemplateKeys,
   assertValidPositionTemplates,
+  hasPendingInquiry,
+  MAX_INQUIRIES_CHECKED,
   planPositionTemplateApplication,
   positionTemplateFromSlot,
   positionWindowFromTemplate,
@@ -254,5 +256,18 @@ describe("positionTemplateFromSlot for unusual positions", () => {
     expect(exported.setDurationMs).toBeUndefined();
     expect(exported.soundcheckDurationMs).toBeUndefined();
     expect(() => assertValidPositionTemplates([exported])).not.toThrow();
+  });
+});
+
+describe("hasPendingInquiry", () => {
+  it("is true when any inquiry is submitted, false for dismissed/accepted ones", () => {
+    expect(hasPendingInquiry([{ status: "dismissed" }, { status: "submitted" }])).toBe(true);
+    expect(hasPendingInquiry([{ status: "dismissed" }, { status: "accepted" }])).toBe(false);
+    expect(hasPendingInquiry([])).toBe(false);
+  });
+
+  it("fails closed when there are more inquiries than were checked", () => {
+    const many = Array.from({ length: MAX_INQUIRIES_CHECKED + 1 }, () => ({ status: "dismissed" }));
+    expect(hasPendingInquiry(many)).toBe(true);
   });
 });

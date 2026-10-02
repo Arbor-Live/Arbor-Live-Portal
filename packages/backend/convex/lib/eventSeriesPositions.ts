@@ -112,6 +112,24 @@ export const MAX_POSITION_TEMPLATES = 50;
 /** Positions read per occurrence when applying or importing. */
 export const MAX_OCCURRENCE_POSITIONS = 100;
 
+/** Inquiries read per position when deciding whether it is protected. */
+export const MAX_INQUIRIES_CHECKED = 50;
+/** Acts read per occurrence when deciding which positions they fill. */
+export const MAX_OCCURRENCE_ACTS = 200;
+
+/**
+ * Whether a position has a pending artist inquiry. `inquiries` was read with
+ * one row beyond `MAX_INQUIRIES_CHECKED`: if there are more than that, the
+ * answer can't be established, so it fails closed (protected) instead of
+ * risking a submitted one past the cut-off being missed.
+ */
+export function hasPendingInquiry(inquiries: ReadonlyArray<{ status: string }>) {
+  return (
+    inquiries.length > MAX_INQUIRIES_CHECKED ||
+    inquiries.some((inquiry) => inquiry.status === "submitted")
+  );
+}
+
 function isNonNegativeInteger(value: number) {
   return Number.isInteger(value) && value >= 0;
 }

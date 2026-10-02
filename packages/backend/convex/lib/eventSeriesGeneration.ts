@@ -11,6 +11,9 @@ import { syncEventCrewCostUsd } from "./crewCost";
 import { detachInvoiceFromAdditionalLinks } from "./eventInvoiceLinks";
 import { syncEventStatusForLinkedInvoice, type EventStatus } from "./eventStatus";
 import {
+  hasPendingInquiry,
+  MAX_INQUIRIES_CHECKED,
+  MAX_OCCURRENCE_ACTS,
   MAX_OCCURRENCE_POSITIONS,
   planPositionTemplateApplication,
   positionWindowFromTemplate,
@@ -369,7 +372,13 @@ async function lockedPositionIds(
   const participations = await ctx.db
     .query("eventBandParticipations")
     .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-    .take(200);
+    .take(MAX_OCCURRENCE_ACTS + 1);
+  if (participations.length > MAX_OCCURRENCE_ACTS) {
+    // Can't tell which positions are filled: refuse rather than risk changing one.
+    throw new Error(
+      `An occurrence can have at most ${MAX_OCCURRENCE_ACTS} acts for templates to apply, got more.`,
+    );
+  }
   const locked = new Set(participations.flatMap((row) => (row.needId ? [row.needId] : [])));
   for (const slot of slots) {
     if (locked.has(slot._id)) continue;
@@ -381,13 +390,13 @@ async function lockedPositionIds(
       ctx.db
         .query("eventArtistInquiries")
         .withIndex("by_needId", (q) => q.eq("needId", slot._id))
-        .take(20),
+        .take(MAX_INQUIRIES_CHECKED + 1),
       ctx.db
         .query("invoiceLineItems")
         .withIndex("by_needId", (q) => q.eq("needId", slot._id))
         .first(),
     ]);
-    if (invoiceLine || inquiries.some((inquiry) => inquiry.status === "submitted")) {
+    if (invoiceLine || hasPendingInquiry(inquiries)) {
       locked.add(slot._id);
     }
   }
