@@ -2,6 +2,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { captureDayTemplates, listGroupDays } from "./eventGroupTemplates";
 import { isMultiDayGroup, isRecurringGroup } from "./eventGroupKind";
+import { assertValidPositionTemplates } from "./eventSeriesPositions";
 
 /**
  * Multi-day groups: a booking's days are the events that share one primary
@@ -147,6 +148,7 @@ async function createMultiDayGroup(
       { schedule: true, crew: true, positions: true },
       now,
     );
+    assertValidPositionTemplates(captured.positionTemplates ?? []);
     await ctx.db.patch(groupId, { ...captured, updatedAt: now });
   } catch (error) {
     // Grouping must not fail on an unusually large Day 1 (the migration runs

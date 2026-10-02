@@ -652,6 +652,7 @@ export const applyDaySetup = mutation({
         "This day has nothing to apply yet: no Run of Show, crew, positions or pull list.",
       );
     }
+    assertValidPositionTemplates(captured.positionTemplates ?? []);
     await ctx.db.patch(groupId, {
       ...(parts.schedule
         ? { blockTemplates: captured.blockTemplates, shiftTemplates: captured.shiftTemplates }
