@@ -594,6 +594,11 @@ export const setShowRiderForActiveBand = mutation({
       throw new Error("You're not on this show's lineup yet, so there's no rider to pick.");
     }
     const now = Date.now();
+    // Past and cancelled shows keep the rider staff worked from.
+    const event = await ctx.db.get(args.eventId);
+    if (!event || event.status === "cancelled" || event.endAt < now) {
+      throw new Error("This show has ended or was cancelled, so its rider can't change.");
+    }
     if (args.riderId === null) {
       // `patch` can't drop a field, so rewrite the row without it.
       const { _id, _creationTime, riderId: _cleared, ...rest } = participation;

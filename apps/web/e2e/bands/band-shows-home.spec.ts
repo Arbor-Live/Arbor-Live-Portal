@@ -87,6 +87,8 @@ test.describe("band shows home", () => {
   test("the artist picks a rider for one show from its panel", async ({ page }) => {
     const band = ensurePayee();
     const stamp = Date.now();
+    // The shared deployment piles up riders across runs; start from none.
+    runConvex("e2eHelpers:clearBandRiders", { organizationId: band.organizationId });
     const acoustic = runConvex("e2eHelpers:seedBandRider", {
       organizationId: band.organizationId,
       name: `E2E Acoustic ${stamp}`,
