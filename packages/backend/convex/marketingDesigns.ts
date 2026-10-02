@@ -30,16 +30,13 @@ import {
 } from "./lib/eventVisibility";
 import { schedulePublicEventsSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
+import { getEventArtists } from "./lib/eventArtists";
+import { listFilter, matchesListFilter } from "./lib/listFilters";
+import { resolveEffectiveVenueAddress } from "./lib/venues";
 
 const MARKETING_POSTER_WINDOW_DAYS = 28;
 
 const designLinkInputValue = marketingDesignLinkValue;
-
-const posterWorkViewValue = v.union(
-  v.literal("unassigned"),
-  v.literal("mine"),
-  v.literal("all"),
-);
 
 type DesignDoc = Doc<"eventMarketingDesigns">;
 
@@ -164,10 +161,26 @@ export const listMine = query({
   },
 });
 
+/**
+ * Where a poster stands: `none` (no image yet), `draft` (saved, not public),
+ * `ready` (on the public event page), `published` (also posted to Instagram).
+ */
+type PosterStatus = "none" | DesignDoc["status"];
+
+function posterStatusOf(design: DesignDoc | undefined): PosterStatus {
+  if (!design) return "none";
+  if (design.status === "draft" && !design.imageUrl?.trim()) return "none";
+  return design.status;
+}
+
 export const listUpcomingPosterWork = query({
   args: {
     now: v.number(),
-    view: posterWorkViewValue,
+    search: v.optional(v.string()),
+    /** Values: `me`, `unassigned`, or a user id. */
+    assignee: listFilter,
+    /** Values: `none`, `draft`, `ready`, `published`. */
+    posterStatus: listFilter,
   },
   handler: async (ctx, args) => {
     const user = await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
@@ -175,19 +188,25 @@ export const listUpcomingPosterWork = query({
     const windowEnd = args.now + MARKETING_POSTER_WINDOW_DAYS * 24 * 60 * 60 * 1000;
     const events = await ctx.db
       .query("events")
-      .withIndex("by_startAt", (q) => q.gte("startAt", args.now))
+      .withIndex("by_startAt", (q) => q.gte("startAt", args.now).lte("startAt", windowEnd))
       .order("asc")
       .take(300);
     const designByEventId = await loadDesignByEventId(ctx);
+    const needle = args.search?.trim().toLowerCase();
 
-    const eligible = events.filter(
-      (event) => event.startAt <= windowEnd && isMarketingPosterEligible(event, args.now),
-    );
-
-    const filtered = eligible.filter((event) => {
-      const assigneeUserId = designByEventId.get(event._id)?.assigneeUserId;
-      if (args.view === "mine") return assigneeUserId === currentUserId;
-      if (args.view === "unassigned") return !assigneeUserId;
+    const filtered = events.filter((event) => {
+      if (!isMarketingPosterEligible(event, args.now)) return false;
+      const design = designByEventId.get(event._id);
+      const assigneeUserId = design?.assigneeUserId;
+      const assigneeKeys = assigneeUserId
+        ? [assigneeUserId, ...(assigneeUserId === currentUserId ? ["me"] : [])]
+        : ["unassigned"];
+      if (!matchesListFilter(args.assignee, assigneeKeys)) return false;
+      if (!matchesListFilter(args.posterStatus, [posterStatusOf(design)])) return false;
+      if (needle) {
+        const haystack = [event.title, event.venueName, event.host].filter(Boolean).join(" ").toLowerCase();
+        if (!haystack.includes(needle)) return false;
+      }
       return true;
     });
 
@@ -209,6 +228,8 @@ export const listUpcomingPosterWork = query({
           status: normalizeEventStatus(event.status),
           assigneeUserId,
           assigneeName: userDisplayName(userByKey, assigneeUserId ?? undefined),
+          posterStatus: posterStatusOf(design),
+          canPublish: canPublishMarketingDesignVisibility(event.visibility),
           design: design
             ? {
                 _id: design._id,
@@ -226,6 +247,56 @@ export const listUpcomingPosterWork = query({
         };
       }),
     );
+  },
+});
+
+/**
+ * What a designer needs to make the poster: when and where, the bill with set
+ * times, and the doors / show window from the Run of Show.
+ */
+export const getPosterBrief = query({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) return null;
+
+    const [venue, blocks, artists] = await Promise.all([
+      event.venueId ? ctx.db.get(event.venueId) : null,
+      ctx.db
+        .query("eventScheduleBlocks")
+        .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
+        .take(200),
+      getEventArtists(ctx, args.eventId),
+    ]);
+    const doors = blocks.find((block) => block.blockType === "doors");
+    const shows = blocks.filter((block) => block.blockType === "show");
+
+    return {
+      eventId: event._id,
+      title: event.title,
+      startAt: event.startAt,
+      endAt: event.endAt,
+      venueName: event.venueName ?? null,
+      venueAddress: (venue ? await resolveEffectiveVenueAddress(ctx, venue) : undefined) ?? null,
+      host: event.host?.trim() || null,
+      eventType: event.eventType ?? null,
+      expectedTurnout: event.expectedTurnout ?? null,
+      doorsAt: doors?.startsAt ?? null,
+      showStartsAt: shows.length ? Math.min(...shows.map((block) => block.startsAt)) : null,
+      showEndsAt: shows.length ? Math.max(...shows.map((block) => block.endsAt)) : null,
+      lineup: artists.map((artist) => ({
+        key: artist.key,
+        name: artist.name,
+        kind: artist.kind,
+        role: artist.role,
+        organizationType: artist.organizationType,
+        genres: artist.genres,
+        setStartsAt: artist.setStartsAt ?? null,
+        setEndsAt: artist.setEndsAt ?? null,
+      })),
+      publicEventUrl: buildPublicEventUrl(String(event._id), SITE_URL),
+    };
   },
 });
 

@@ -1,5 +1,6 @@
 import { MarketingSettingsManager } from "@/components/marketing/marketing-settings-manager";
 import { NewsletterSubscribersManager } from "@/components/marketing/newsletter-subscribers-manager";
+import { PageHeader } from "@/components/page-header";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -9,12 +10,10 @@ export const metadata: Metadata = {
 export default function MarketingSettingsPage() {
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Marketing settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Feature flags that shape public-facing marketing surfaces.
-        </p>
-      </div>
+      <PageHeader
+        title="Marketing settings"
+        description="Switches that shape the public marketing pages, and the This Week at Arbor newsletter."
+      />
       <MarketingSettingsManager />
       <NewsletterSubscribersManager />
     </div>

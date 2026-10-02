@@ -179,9 +179,9 @@ the URL looks like cloud.
 
 | Surface | Status | Spec / notes |
 |---------|--------|--------------|
-| Design board / poster publish | Deferred | Immich / Instagram deps |
+| Design board list + poster brief | Covered | `marketing/design-board.spec.ts` — "Me" default filter, row, side panel brief (venue, host, doors/show, lineup order), `?event=` deep link. Poster publish still deferred (Immich / Instagram deps) |
 | Short links CRUD | Covered | `marketing/short-link-crud.spec.ts` (Batch 6); Worker redirect still out of suite |
-| Work/stories publish | Deferred | — |
+| Work/stories publish | Covered | `marketing/work-posts-admin.spec.ts` — edit in the side panel, Publish header action, `?post=` deep link |
 | Public directories (`/crew`, `/artists`, `/events`) | Covered | `smoke/public-directories.spec.ts` (Batch 6) |
 | Public event show page (`/events/:id`) newsletter + calendar | Covered | `smoke/public-directories.spec.ts` — Add to calendar menu, Stay in the loop, this-show ICS |
 
