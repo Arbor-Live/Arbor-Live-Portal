@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation } from "convex/react";
-import { CheckIcon, WarningIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, CheckIcon, WarningIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -254,6 +255,21 @@ export function TraineeReadinessDialog({
             The intro email tells them where to go and who to call. Each change saves to the event right away.
           </DialogDescription>
         </DialogHeader>
+
+        {readiness.eventMissing.length > 0 ? (
+          <section className="space-y-3 border-t pt-4" data-testid="trainee-readiness-event">
+            <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Event</h3>
+            <SectionStatus ok={false}>
+              Fix on the event page: {readiness.eventMissing.join(", ").toLowerCase()}.
+            </SectionStatus>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/dashboard/events/${eventId}`} target="_blank" rel="noreferrer">
+                Open the event
+                <ArrowSquareOutIcon className="size-3" aria-hidden />
+              </Link>
+            </Button>
+          </section>
+        ) : null}
 
         <section className="space-y-3 border-t pt-4" data-testid="trainee-readiness-venue">
           <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Venue</h3>

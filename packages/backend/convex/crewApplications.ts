@@ -509,6 +509,7 @@ export const traineeEventReadiness = query({
       }),
       eventManager: v.optional(traineeContactStatusValue),
       dayOfLead: v.optional(traineeContactStatusValue),
+      eventMissing: v.array(v.string()),
       missing: v.array(v.string()),
     }),
   ),
@@ -524,6 +525,7 @@ export const traineeEventReadiness = query({
       venue: readiness.venue,
       eventManager: contactStatus(readiness.eventManager),
       dayOfLead: contactStatus(readiness.dayOfLead),
+      eventMissing: readiness.eventMissing,
       missing: readiness.missing,
     };
   },

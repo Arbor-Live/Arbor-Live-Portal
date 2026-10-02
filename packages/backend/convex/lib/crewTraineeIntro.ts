@@ -140,7 +140,9 @@ export type TraineeEventReadiness = {
   contacts: TraineeIntroContact[];
   /** True when manager and lead resolve to the same person. */
   contactsCollapsed: boolean;
-  /** Plain-words list of what's missing; empty when ready. */
+  /** Gaps on the event itself (title, times), fixed on the event page rather than in the dialog. */
+  eventMissing: string[];
+  /** Plain-words list of everything missing, event gaps included; empty when ready. */
   missing: string[];
 };
 
@@ -191,7 +193,15 @@ export async function resolveTraineeEventReadiness(
   ctx: QueryCtx | MutationCtx,
   event: Doc<"events">,
 ): Promise<TraineeEventReadiness> {
-  const missing: string[] = [];
+  const eventMissing: string[] = [];
+  if (!event.title?.trim()) eventMissing.push("Event title");
+  if (!event.startAt) eventMissing.push("Event start time");
+  if (!event.endAt) eventMissing.push("Event end time");
+  if (event.startAt && event.endAt && event.endAt <= event.startAt) {
+    eventMissing.push("Event end time (must be after start)");
+  }
+
+  const missing: string[] = [...eventMissing];
   const venue = await resolveVenueLocation(ctx, event);
   if (!venue.venueName) missing.push("Venue");
   else if (!venue.address) {
@@ -230,6 +240,7 @@ export async function resolveTraineeEventReadiness(
     dayOfLead,
     contacts,
     contactsCollapsed: contacts.length === 1 && Boolean(eventManager?.contact && dayOfLead?.contact),
+    eventMissing,
     missing,
   };
 }
@@ -256,12 +267,6 @@ export async function assertTraineeIntroReady(
   }
 
   const eventTitle = event.title?.trim();
-  if (!eventTitle) missing.push("Event title");
-  if (!event.startAt) missing.push("Event start time");
-  if (!event.endAt) missing.push("Event end time");
-  if (event.startAt && event.endAt && event.endAt <= event.startAt) {
-    missing.push("Event end time (must be after start)");
-  }
 
   if (!Number.isFinite(args.callTime) || args.callTime <= 0) {
     missing.push("Trainee call time");

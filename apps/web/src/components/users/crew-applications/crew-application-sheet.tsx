@@ -283,6 +283,8 @@ function TraineeAssignForm({
           value={eventId}
           onChange={(value) => {
             setEventId(value);
+            // A click queued for the previous event must not submit this one.
+            setSubmitQueued(false);
             setPresenceMode("entire_event");
             setScheduleBlockId("");
             setStartsAtInput("");
