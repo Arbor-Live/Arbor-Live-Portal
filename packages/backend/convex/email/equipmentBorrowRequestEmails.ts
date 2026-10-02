@@ -2,7 +2,11 @@ import { formatDateTimeRange } from "@arbor/format";
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { listAdminEmailsForVertical } from "../lib/auth";
-import { equipmentBorrowRequestsUrl, subjectForTemplate } from "./constants";
+import {
+  artistEquipmentRequestsUrl,
+  equipmentBorrowRequestsUrl,
+  subjectForTemplate,
+} from "./constants";
 import { enqueueEmail } from "./enqueue";
 
 type BorrowRequestSummary = Pick<
@@ -12,6 +16,8 @@ type BorrowRequestSummary = Pick<
   | "purpose"
   | "requesterName"
   | "requesterEmail"
+  | "requesterKind"
+  | "requesterOrganizationName"
   | "startAt"
   | "endAt"
   | "lines"
@@ -38,7 +44,9 @@ export async function scheduleEquipmentBorrowRequestSubmittedEmail(
       subject,
       idempotencyKey: `equipment_borrow_request_admin:${request._id}:${to}`,
       payload: {
-        requesterName: request.requesterName,
+        requesterName: request.requesterOrganizationName
+          ? `${request.requesterName} (${request.requesterOrganizationName})`
+          : request.requesterName,
         requesterEmail: request.requesterEmail,
         requestNumber: request.requestNumber,
         purpose: request.purpose,
@@ -79,7 +87,8 @@ export async function scheduleEquipmentBorrowRequestDecidedEmail(
       dateRangeLabel,
       approved,
       reviewNote: reviewNote?.trim() || undefined,
-      requestsUrl: equipmentBorrowRequestsUrl(),
+      requestsUrl:
+        request.requesterKind === "artist" ? artistEquipmentRequestsUrl() : equipmentBorrowRequestsUrl(),
     },
   });
 }

@@ -1947,10 +1947,10 @@ export default defineSchema({
     .index("by_seriesId", ["seriesId"]),
 
   /**
-   * Crew-initiated equipment borrow. Reviewed by admins; approval spawns an
-   * internal ("private") Dry Rental event whose pull list drives the normal
-   * scan-based checkout/return flow. Deliberately separate from `eventRequests`
-   * — no billing profile, quote, or public client portal.
+   * Crew- or artist-initiated equipment borrow. Reviewed by admins; approval
+   * spawns an internal ("private") Dry Rental event whose pull list drives the
+   * normal scan-based checkout/return flow. Deliberately separate from
+   * `eventRequests` — no billing profile, quote, or public client portal.
    */
   equipmentBorrowRequests: defineTable({
     status: v.union(
@@ -1963,6 +1963,11 @@ export default defineSchema({
     requesterUserId: v.string(),
     requesterName: v.string(),
     requesterEmail: v.string(),
+    /** Missing on older rows, which were all crew. */
+    requesterKind: v.optional(v.union(v.literal("crew"), v.literal("artist"))),
+    /** Artist org the request was made from (artist requests only). */
+    requesterOrganizationId: v.optional(v.string()),
+    requesterOrganizationName: v.optional(v.string()),
     purpose: v.string(),
     /** Venue where the equipment will be used (snapshot of the venue path). */
     venueId: v.optional(v.id("venues")),
@@ -1977,6 +1982,20 @@ export default defineSchema({
         packageId: v.optional(v.id("inventoryPackages")),
         label: v.string(),
         quantity: v.number(),
+      }),
+    ),
+    /**
+     * E-signed loan agreement (`@arbor/format` borrowAgreement), with the term
+     * text frozen as signed. Required on submit; missing on older rows.
+     */
+    agreement: v.optional(
+      v.object({
+        version: v.string(),
+        terms: v.array(v.object({ key: v.string(), text: v.string() })),
+        signedName: v.string(),
+        signedEmail: v.string(),
+        signedByUserId: v.string(),
+        signedAt: v.number(),
       }),
     ),
     reviewedByUserId: v.optional(v.string()),

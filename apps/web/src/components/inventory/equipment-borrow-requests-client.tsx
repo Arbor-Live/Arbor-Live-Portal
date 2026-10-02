@@ -10,7 +10,7 @@ import { useAppDialog } from "@/components/ui/app-dialog";
 import { EquipmentBorrowRequestForm } from "@/components/inventory/equipment-borrow-request-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
-import { formatDateTimeRange } from "@/lib/format";
+import { formatDateTime, formatDateTimeRange } from "@/lib/format";
 import {
   activeFilters,
   FilterBar,
@@ -30,12 +30,21 @@ type BorrowRequest = {
   requestNumber: string;
   requesterUserId: string;
   requesterName: string;
+  requesterKind?: "crew" | "artist";
+  requesterOrganizationName?: string;
   purpose: string;
   venueName?: string;
   notes?: string;
   startAt: number;
   endAt: number;
   lines: BorrowLine[];
+  agreement?: {
+    version: string;
+    terms: Array<{ key: string; text: string }>;
+    signedName: string;
+    signedEmail: string;
+    signedAt: number;
+  };
   reviewNote?: string;
   convertedEventId?: Id<"events">;
 };
@@ -75,6 +84,11 @@ const STATUS_OPTIONS = (["submitted", "approved", "rejected", "cancelled"] as co
   label: formatStatusLabel(value),
 }));
 
+const REQUESTER_KIND_OPTIONS = [
+  { value: "crew", label: "Crew" },
+  { value: "artist", label: "Artist" },
+];
+
 const WHEN_OPTIONS = [
   { value: "upcoming", label: "Upcoming" },
   { value: "now", label: "Happening now" },
@@ -98,12 +112,43 @@ function equipmentSummary(lines: BorrowLine[]) {
   return lines.map((line) => `${line.quantity}× ${line.label}`).join(", ");
 }
 
+function requesterLabel(request: BorrowRequest) {
+  return request.requesterOrganizationName
+    ? `${request.requesterName} · ${request.requesterOrganizationName}`
+    : request.requesterName;
+}
+
+function AgreementSummary({ agreement }: { agreement: BorrowRequest["agreement"] }) {
+  if (!agreement) {
+    return <p className="mt-1 text-xs text-muted-foreground">No loan agreement on file (older request).</p>;
+  }
+  return (
+    <details className="mt-1 text-xs text-muted-foreground">
+      <summary className="cursor-pointer">
+        Loan agreement e-signed by <span className="text-foreground">{agreement.signedName}</span> on{" "}
+        {formatDateTime(agreement.signedAt)}
+      </summary>
+      <ul className="mt-1 list-disc space-y-0.5 pl-5">
+        {agreement.terms.map((term) => (
+          <li key={term.key}>{term.text}</li>
+        ))}
+      </ul>
+      <p className="mt-1">
+        Signed as {agreement.signedEmail} · version {agreement.version}
+      </p>
+    </details>
+  );
+}
+
 function RequestCard({
   request,
   footer,
+  showEventLink = true,
 }: {
   request: BorrowRequest;
   footer?: React.ReactNode;
+  /** Artists can't open dashboard events, so their own cards skip the link. */
+  showEventLink?: boolean;
 }) {
   return (
     <div className="rounded-md border p-3">
@@ -114,7 +159,7 @@ function RequestCard({
             {request.purpose}
           </p>
           <p className="text-xs text-muted-foreground">
-            {request.requesterName} · {formatDateTimeRange(request.startAt, request.endAt)}
+            {requesterLabel(request)} · {formatDateTimeRange(request.startAt, request.endAt)}
           </p>
           {request.venueName ? (
             <p className="text-xs text-muted-foreground">Venue: {request.venueName}</p>
@@ -126,13 +171,17 @@ function RequestCard({
           {request.reviewNote ? (
             <p className="mt-1 text-xs text-muted-foreground">Note: {request.reviewNote}</p>
           ) : null}
+          <AgreementSummary agreement={request.agreement} />
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             <span className={`rounded-full px-2 py-0.5 ${statusBadgeClass(request.status)}`}>
               {formatStatusLabel(request.status)}
             </span>
+            {request.requesterKind === "artist" ? (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">Artist</span>
+            ) : null}
           </div>
         </div>
-        {request.convertedEventId ? (
+        {request.convertedEventId && showEventLink ? (
           <Button asChild variant="outline" size="sm">
             <Link href={`/dashboard/events/${request.convertedEventId}`}>View event</Link>
           </Button>
@@ -255,9 +304,14 @@ function CancelButton({ request }: { request: BorrowRequest }) {
   );
 }
 
-export function EquipmentBorrowRequestsClient() {
+export function EquipmentBorrowRequestsClient({
+  variant = "crew",
+}: {
+  /** `artist`: an artist org's own requests only — no admin review queue. */
+  variant?: "crew" | "artist";
+}) {
   const shell = useSessionShell();
-  const isAdmin = shell?.viewer?.isAdmin ?? false;
+  const isAdmin = variant === "crew" && (shell?.viewer?.isAdmin ?? false);
   const [formOpen, setFormOpen] = useState(false);
 
   const mine = useQuery(api.equipmentBorrowRequests.listMine);
@@ -284,6 +338,7 @@ export function EquipmentBorrowRequestsClient() {
           .map(([value, label]) => ({ value, label }))
           .sort((a, b) => a.label.localeCompare(b.label)),
       },
+      { id: "requesterKind", label: "Crew / artist", options: REQUESTER_KIND_OPTIONS },
       { id: "when", label: "When", options: WHEN_OPTIONS },
     ],
     [requests],
@@ -295,15 +350,23 @@ export function EquipmentBorrowRequestsClient() {
       const when = request.endAt < nowMs ? "past" : request.startAt > nowMs ? "upcoming" : "now";
       return (
         (!needle ||
-          [request.requestNumber, request.purpose, request.requesterName, request.venueName, request.notes]
+          [
+            request.requestNumber,
+            request.purpose,
+            request.requesterName,
+            request.requesterOrganizationName,
+            request.venueName,
+            request.notes,
+          ]
             .concat(request.lines.map((line) => line.label))
             .some((field) => field?.toLowerCase().includes(needle))) &&
         matchesFilter(applied.status, request.status) &&
         matchesFilter(applied.requester, request.requesterUserId) &&
+        matchesFilter(applied.requesterKind, request.requesterKind ?? "crew") &&
         matchesFilter(applied.when, when)
       );
     });
-  }, [applied.requester, applied.status, applied.when, nowMs, requests, search]);
+  }, [applied.requester, applied.requesterKind, applied.status, applied.when, nowMs, requests, search]);
 
   return (
     <div className="space-y-6">
@@ -346,7 +409,7 @@ export function EquipmentBorrowRequestsClient() {
       ) : null}
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">My requests</h2>
+        <h2 className="text-sm font-semibold">{variant === "artist" ? "Your requests" : "My requests"}</h2>
         {mine === undefined ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : mine.length === 0 ? (
@@ -358,6 +421,7 @@ export function EquipmentBorrowRequestsClient() {
             <RequestCard
               key={request._id}
               request={request}
+              showEventLink={variant === "crew"}
               footer={
                 <div className="mt-3 flex justify-end">
                   <CancelButton request={request} />

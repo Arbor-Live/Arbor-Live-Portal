@@ -6776,3 +6776,58 @@ export const getPrintQueueState = query({
     };
   },
 });
+
+/** A borrowable inventory type for the borrow-request specs. */
+export const seedBorrowableInventoryType = mutation({
+  args: { name: v.string() },
+  returns: v.object({ typeId: v.id("inventoryTypes"), name: v.string() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const typeId = await ctx.db.insert("inventoryTypes", {
+      name: args.name,
+      category: "misc",
+      model: "E2E-BORROW-1",
+      manualUrls: [],
+      capabilities: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { typeId, name: args.name };
+  },
+});
+
+export const getLatestBorrowRequestByPurpose = query({
+  args: { purpose: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      requestId: v.id("equipmentBorrowRequests"),
+      status: v.string(),
+      requesterKind: v.union(v.string(), v.null()),
+      requesterOrganizationName: v.union(v.string(), v.null()),
+      convertedEventId: v.union(v.id("events"), v.null()),
+      agreementSignedName: v.union(v.string(), v.null()),
+      agreementTermKeys: v.array(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const rows = await ctx.db
+      .query("equipmentBorrowRequests")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(50);
+    const match = rows.find((row) => row.purpose === args.purpose);
+    if (!match) return null;
+    return {
+      requestId: match._id,
+      status: match.status,
+      requesterKind: match.requesterKind ?? null,
+      requesterOrganizationName: match.requesterOrganizationName ?? null,
+      convertedEventId: match.convertedEventId ?? null,
+      agreementSignedName: match.agreement?.signedName ?? null,
+      agreementTermKeys: match.agreement?.terms.map((term) => term.key) ?? [],
+    };
+  },
+});

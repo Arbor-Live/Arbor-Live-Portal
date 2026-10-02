@@ -527,10 +527,18 @@ Event types (drive which workspace tabs and quick-add blocks appear):
 - Damage reports (`damageReports.ts`): any arbor_internal crew can create
   reports (scope for containers, operability, severity, photo, optional event).
   Operations/admin triage at `/dashboard/inventory/damage`.
-- **Borrow requests** (`equipmentBorrowRequests.ts`): crew submit an
+- **Borrow requests** (`equipmentBorrowRequests.ts`): crew
+  (`/dashboard/inventory/borrow-requests`) and artists
+  (`/dashboard/artists/equipment`, from their artist org) submit an
   `ALBRW-`-numbered request for equipment by type or package + quantity, with a
-  purpose and pickup/return window (`/dashboard/inventory/borrow-requests`).
-  Crew-vertical admins are emailed and see a nav badge. Approval creates an
+  purpose and pickup/return window. Step 2 is a loan agreement: one checkbox per
+  term (no support, full borrower liability, damage/loss costs, inspection,
+  deadlines, usage) plus a typed-name e-signature. Terms live in
+  `@arbor/format` `borrowAgreement.ts`; the server requires every term and the
+  current version, and freezes the signed text on the request (bump
+  `BORROW_AGREEMENT_VERSION` when wording changes). Artist requests carry
+  `requesterKind: "artist"` + the artist org; members only see requests made
+  from the org they're in. Crew-vertical admins are emailed and see a nav badge. Approval creates an
   internal (`visibility: internal`) `Dry Rental` event and scaffolds its pull
   list from the request lines, so the normal scan-based checkout/return flow
   handles the actual tags. Rejection/cancellation are terminal; requester is
