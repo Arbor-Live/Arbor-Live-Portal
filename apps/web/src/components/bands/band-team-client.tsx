@@ -95,12 +95,20 @@ function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (op
     },
   );
 
+  // Radix only calls the Dialog's onOpenChange for its own dismissals, so the
+  // Cancel button goes through this too.
+  function close() {
+    form.reset({ email: "", role: "org_member", bandRole: "" });
+    form.resetSaveState();
+    onOpenChange(false);
+  }
+
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) form.reset({ email: "", role: "org_member", bandRole: "" });
-        onOpenChange(next);
+        if (next) onOpenChange(true);
+        else close();
       }}
     >
       <DialogContent data-testid="artist-invite-dialog">
@@ -143,7 +151,7 @@ function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (op
               </Alert>
             ) : null}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              <Button type="button" variant="outline" onClick={close}>
                 Cancel
               </Button>
               <Button type="submit" disabled={form.saveStatus === "saving"}>
