@@ -93,6 +93,23 @@ export function RiderListClient() {
 
   return (
     <div className="space-y-4" data-testid="rider-list">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <ListSummary
+          testId="rider-list-summary"
+          order="Default first, then the most recently updated. Shows use your default unless you pick another for a show."
+        >
+          {riders.length === 0
+            ? "No riders yet"
+            : [
+                plural(riders.length, "rider"),
+                defaultRider ? `default: ${defaultRider.name}` : "no default yet",
+              ].join(" · ")}
+        </ListSummary>
+        <Button type="button" size="sm" onClick={() => setPickerOpen(true)}>
+          <PlusIcon weight="bold" />
+          New rider
+        </Button>
+      </div>
       {riders.length === 0 ? (
         <EmptyState
           action={
@@ -105,22 +122,6 @@ export function RiderListClient() {
           symbols to match your set. Crew prep your stage, inputs and monitors from it.
         </EmptyState>
       ) : (
-        <>
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <ListSummary
-              testId="rider-list-summary"
-              order="Default first, then the most recently updated. Shows use your default unless you pick another for a show."
-            >
-              {[
-                plural(riders.length, "rider"),
-                defaultRider ? `default: ${defaultRider.name}` : "no default yet",
-              ].join(" · ")}
-            </ListSummary>
-            <Button type="button" size="sm" onClick={() => setPickerOpen(true)}>
-              <PlusIcon weight="bold" />
-              New rider
-            </Button>
-          </div>
           <RowList joined testId="rider-rows">
             {riders.map((rider) => {
               const busy = busyId === rider._id;
@@ -197,7 +198,6 @@ export function RiderListClient() {
               );
             })}
           </RowList>
-        </>
       )}
 
       <RiderTemplatePicker
