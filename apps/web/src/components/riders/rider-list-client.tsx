@@ -122,82 +122,82 @@ export function RiderListClient() {
           symbols to match your set. Crew prep your stage, inputs and monitors from it.
         </EmptyState>
       ) : (
-          <RowList joined testId="rider-rows">
-            {riders.map((rider) => {
-              const busy = busyId === rider._id;
-              return (
-                <ListRow
-                  key={rider._id}
-                  data-testid="rider-row"
-                  href={`/dashboard/artists/riders/${rider._id}`}
-                  actions={
-                    <RowMenu label={`More for ${rider.name}`}>
-                      <DropdownMenuItem onSelect={() => void onDownload(rider)}>
-                        Download PDF
-                      </DropdownMenuItem>
-                      {!rider.isDefault ? (
-                        <DropdownMenuItem
-                          disabled={busy}
-                          onSelect={() =>
-                            void run(
-                              rider._id,
-                              () => setDefault({ riderId: rider._id }),
-                              `${rider.name} is now your default rider.`,
-                            )
-                          }
-                        >
-                          Set as default
-                        </DropdownMenuItem>
-                      ) : null}
+        <RowList joined testId="rider-rows">
+          {riders.map((rider) => {
+            const busy = busyId === rider._id;
+            return (
+              <ListRow
+                key={rider._id}
+                data-testid="rider-row"
+                href={`/dashboard/artists/riders/${rider._id}`}
+                actions={
+                  <RowMenu label={`More for ${rider.name}`}>
+                    <DropdownMenuItem onSelect={() => void onDownload(rider)}>
+                      Download PDF
+                    </DropdownMenuItem>
+                    {!rider.isDefault ? (
                       <DropdownMenuItem
                         disabled={busy}
                         onSelect={() =>
                           void run(
                             rider._id,
-                            () => duplicate({ riderId: rider._id }),
-                            `Duplicated ${rider.name}.`,
+                            () => setDefault({ riderId: rider._id }),
+                            `${rider.name} is now your default rider.`,
                           )
                         }
                       >
-                        Duplicate
+                        Set as default
                       </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        variant="destructive"
-                        disabled={busy}
-                        onSelect={() => void onDelete(rider)}
-                      >
-                        Delete rider
-                      </DropdownMenuItem>
-                    </RowMenu>
-                  }
-                >
-                  <span className="flex size-8 shrink-0 items-center justify-center border bg-muted/30 text-muted-foreground">
-                    <GridFourIcon className="size-4" aria-hidden />
+                    ) : null}
+                    <DropdownMenuItem
+                      disabled={busy}
+                      onSelect={() =>
+                        void run(
+                          rider._id,
+                          () => duplicate({ riderId: rider._id }),
+                          `Duplicated ${rider.name}.`,
+                        )
+                      }
+                    >
+                      Duplicate
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      disabled={busy}
+                      onSelect={() => void onDelete(rider)}
+                    >
+                      Delete rider
+                    </DropdownMenuItem>
+                  </RowMenu>
+                }
+              >
+                <span className="flex size-8 shrink-0 items-center justify-center border bg-muted/30 text-muted-foreground">
+                  <GridFourIcon className="size-4" aria-hidden />
+                </span>
+                <RowText
+                  eyebrow={rider.isDefault ? "Default rider" : "Rider"}
+                  title={rider.name}
+                  detail={riderDetail(rider)}
+                />
+                {rider.isDefault ? (
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-status-amber-500/15 px-2 py-0.5 text-xs text-status-amber-700 dark:text-status-amber-200">
+                    <StarIcon className="size-3" weight="fill" aria-hidden />
+                    Default
                   </span>
-                  <RowText
-                    eyebrow={rider.isDefault ? "Default rider" : "Rider"}
-                    title={rider.name}
-                    detail={riderDetail(rider)}
-                  />
-                  {rider.isDefault ? (
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-status-amber-500/15 px-2 py-0.5 text-xs text-status-amber-700 dark:text-status-amber-200">
-                      <StarIcon className="size-3" weight="fill" aria-hidden />
-                      Default
-                    </span>
-                  ) : null}
-                  <RowCell className="w-40 whitespace-nowrap" hideBelow="md" muted>
-                    Updated {formatDate(rider.updatedAt)}
-                  </RowCell>
-                  <span className="flex w-24 shrink-0 justify-end">
-                    <StatusPill tone={rider.status === "published" ? "emerald" : "neutral"}>
-                      {rider.status === "published" ? "Published" : "Draft"}
-                    </StatusPill>
-                  </span>
-                </ListRow>
-              );
-            })}
-          </RowList>
+                ) : null}
+                <RowCell className="w-40 whitespace-nowrap" hideBelow="md" muted>
+                  Updated {formatDate(rider.updatedAt)}
+                </RowCell>
+                <span className="flex w-24 shrink-0 justify-end">
+                  <StatusPill tone={rider.status === "published" ? "emerald" : "neutral"}>
+                    {rider.status === "published" ? "Published" : "Draft"}
+                  </StatusPill>
+                </span>
+              </ListRow>
+            );
+          })}
+        </RowList>
       )}
 
       <RiderTemplatePicker
