@@ -8,7 +8,7 @@ import { scheduleBandEventOnboardingInviteEmail } from "./email/bandEventInviteE
 import { listBandLinkedEvents } from "./lib/eventBandAccess";
 import { resolveUserContact } from "./lib/userContact";
 import { resolveVenueLocation } from "./lib/crewTraineeIntro";
-import { pickShowRider } from "./lib/showRider";
+import { loadShowRiderCandidates, pickShowRider } from "./lib/showRider";
 import { riderStatusValue } from "./lib/riderSchema";
 import { syncInvoiceLineForSlot } from "./lib/artistLineSync";
 import {
@@ -546,10 +546,11 @@ export const getShowForActiveBand = query({
       break;
     }
 
-    const riders = await ctx.db
-      .query("bandRiders")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", bandContext.organizationId))
-      .take(50);
+    const riders = await loadShowRiderCandidates(
+      ctx,
+      bandContext.organizationId,
+      participation?.riderId,
+    );
     const showRider = pickShowRider(riders, participation?.riderId);
 
     return {

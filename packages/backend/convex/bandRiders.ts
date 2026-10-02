@@ -23,7 +23,7 @@ import {
   riderContentValue,
   riderStatusValue,
 } from "./lib/riderSchema";
-import { pickShowRider } from "./lib/showRider";
+import { loadShowRiderCandidates, pickShowRider } from "./lib/showRider";
 
 const riderSummaryValidator = v.object({
   _id: v.id("bandRiders"),
@@ -409,12 +409,11 @@ export async function loadEventRiders(
 
   const rows: EventRiderRow[] = [];
   for (const participation of participations) {
-    const riders = await ctx.db
-      .query("bandRiders")
-      .withIndex("by_organizationId", (q) =>
-        q.eq("organizationId", participation.organizationId),
-      )
-      .take(50);
+    const riders = await loadShowRiderCandidates(
+      ctx,
+      participation.organizationId,
+      participation.riderId,
+    );
     const { rider: chosen, chosenForShow } = pickShowRider(riders, participation.riderId, options);
 
     const identity = await loadBandIdentity(ctx, participation.organizationId);
