@@ -22,13 +22,13 @@ const hours = (value: number) => `${value.toFixed(1)} h`;
 export function CrewHoursBandsCard() {
   const [now] = useState(() => Date.now());
   const quarters = useMemo(() => recentQuarters(now, 4), [now]);
-  const [quarterId, setQuarterId] = useState(quarters[0]!.id);
-  const quarter = quarters.find((option) => option.id === quarterId) ?? quarters[0]!;
-  const data = useQuery(api.analyticsCrew.getCrewHoursBands, {
-    startMs: quarter.startMs,
-    endMs: quarter.endMs,
-    now,
-  });
+  const [quarterId, setQuarterId] = useState(quarters[0]?.id ?? "");
+  // Empty only before the calendar's first quarter (a wrong clock, say).
+  const quarter = quarters.find((option) => option.id === quarterId) ?? quarters[0];
+  const data = useQuery(
+    api.analyticsCrew.getCrewHoursBands,
+    quarter ? { startMs: quarter.startMs, endMs: quarter.endMs, now } : "skip",
+  );
 
   const groups: Array<{ band: Band; title: string; description: string; tone: Tone }> = data
     ? [
@@ -68,7 +68,7 @@ export function CrewHoursBandsCard() {
         type="single"
         size="sm"
         variant="outline"
-        value={quarter.id}
+        value={quarter?.id ?? ""}
         aria-label="Quarter"
         onValueChange={(next) => next && setQuarterId(next)}
       >
@@ -79,7 +79,9 @@ export function CrewHoursBandsCard() {
         ))}
       </ToggleGroup>
 
-      {data === undefined ? (
+      {!quarter ? (
+        <EmptyState>No Stanford quarters to measure yet.</EmptyState>
+      ) : data === undefined ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : data.crew.length === 0 ? (
         <EmptyState>No active crew to measure.</EmptyState>

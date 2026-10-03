@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { computeShiftStats } from "./lib/crewShiftKinds";
@@ -13,7 +14,8 @@ const openRequestStatusValue = v.union(
   v.literal("action_required"),
 );
 
-const UPCOMING_SCAN_LIMIT = 60;
+/** Events in the crewing window, all classified (each reads its shifts). */
+const WINDOW_SCAN_LIMIT = 200;
 
 /**
  * Home's one list of upcoming events, each with the flags that need someone:
@@ -58,16 +60,24 @@ export const listUpcomingAdminEvents = query({
     await requireArborInternalContext(ctx);
     const limit = Math.min(Math.max(args.limit ?? 6, 1), 10);
     const windowEnd = args.now + DEFAULT_AVAILABILITY_WEEKS * 7 * 24 * 60 * 60 * 1000;
-    const candidates = (
+    const live = (event: Doc<"events">) => normalizeEventStatus(event.status) !== "cancelled";
+    // Every event in the crewing window is classified, so the counts cover the
+    // whole window; past it, only the soonest few fill out the list.
+    const windowEvents = (
       await ctx.db
         .query("events")
-        .withIndex("by_startAt", (q) => q.gte("startAt", args.now))
-        .take(UPCOMING_SCAN_LIMIT)
+        .withIndex("by_startAt", (q) => q.gte("startAt", args.now).lte("startAt", windowEnd))
+        .take(WINDOW_SCAN_LIMIT)
+    ).filter(live);
+    const later = (
+      await ctx.db
+        .query("events")
+        .withIndex("by_startAt", (q) => q.gt("startAt", windowEnd))
+        .take(limit * 3)
     )
-      .filter((event) => normalizeEventStatus(event.status) !== "cancelled")
-      // Only the crewing window can hold flagged events; past it, the soonest
-      // few are enough to fill the list.
-      .filter((event, index) => event.startAt <= windowEnd || index < limit);
+      .filter(live)
+      .slice(0, limit);
+    const candidates = [...windowEvents, ...later];
 
     const crewProfiles = await getActiveCrewProfiles(ctx);
     const rows = await Promise.all(
