@@ -20,6 +20,8 @@ import {
   formatEventDateTime,
   formatTimeWindow,
   getDefaultAdminSchedulingDateInputs,
+  parseLocalDateInput,
+  toLocalDateInput,
 } from "@/lib/crew-availability";
 import { formatDateTimeRange } from "@/lib/format";
 import type { ScheduleBlockType } from "@/lib/schedule-block-types";
@@ -218,29 +220,29 @@ function ResponsesList({ row }: { row: BoardRow }) {
 
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
+/** A real calendar day key (`2026-02-30` isn't one). */
+function isDateKey(value: string | null): value is string {
+  if (!value || !DATE_KEY.test(value)) return false;
+  const parsed = parseLocalDateInput(value);
+  return parsed !== null && toLocalDateInput(parsed) === value;
+}
+
 export function CrewSchedulingDashboard() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  // `?from=YYYY-MM-DD&to=YYYY-MM-DD` deep-links a range (Insights links here).
-  const defaultDates = useMemo(() => {
-    const from = searchParams.get("from");
-    const to = searchParams.get("to");
-    return from && to && DATE_KEY.test(from) && DATE_KEY.test(to)
-      ? { startDate: from, endDate: to }
-      : getDefaultAdminSchedulingDateInputs();
-    // Read once on mount; later changes write the URL from state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const [defaults] = useState(() => getDefaultAdminSchedulingDateInputs());
   const [needsCrewOnly, setNeedsCrewOnly] = useState(true);
   const [showPendingCrew, setShowPendingCrew] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [startDate, setStartDateState] = useState(defaultDates.startDate);
-  const [endDate, setEndDateState] = useState(defaultDates.endDate);
+  // The range lives in `?from=YYYY-MM-DD&to=YYYY-MM-DD` (Insights links here),
+  // so back/forward and shared links always match what's shown.
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
+  const startDate = isDateKey(fromParam) ? fromParam : defaults.startDate;
+  const endDate = isDateKey(toParam) ? toParam : defaults.endDate;
 
   function setRange(nextStart: string, nextEnd: string) {
-    setStartDateState(nextStart);
-    setEndDateState(nextEnd);
     const params = new URLSearchParams(searchParams.toString());
     params.set("from", nextStart);
     params.set("to", nextEnd);
@@ -249,10 +251,11 @@ export function CrewSchedulingDashboard() {
   const setStartDate = (next: string) => setRange(next, endDate);
   const setEndDate = (next: string) => setRange(startDate, next);
 
-  const range = useMemo(
-    () => adminSchedulingRangeFromDateInputs(startDate, endDate),
-    [startDate, endDate],
-  );
+  // A range ending before it starts is invalid: say so and skip the queries.
+  const range = useMemo(() => {
+    const candidate = adminSchedulingRangeFromDateInputs(startDate, endDate);
+    return candidate && candidate.rangeEnd >= candidate.rangeStart ? candidate : null;
+  }, [startDate, endDate]);
 
   const rows = useQuery(
     api.eventCrewAvailability.listForAdminOverview,

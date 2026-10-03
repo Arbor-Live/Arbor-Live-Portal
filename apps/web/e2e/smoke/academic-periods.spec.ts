@@ -21,6 +21,18 @@ test.describe("Stanford calendar periods", () => {
     });
   });
 
+  test("crew scheduling rejects an impossible or backwards range from the URL", async ({ page }) => {
+    // A backwards range says so instead of erroring the board.
+    await page.goto("/dashboard/events/crew-scheduling?from=2026-03-10&to=2026-03-01");
+    await expect(page.getByText("Choose a valid start and end date.")).toBeVisible({ timeout: 30_000 });
+
+    // A day that doesn't exist falls back to the default range.
+    await page.goto("/dashboard/events/crew-scheduling?from=2026-02-30&to=2026-03-05");
+    await expect(page.getByText("Date range").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("date-picker").first()).not.toHaveAttribute("data-value", "2026-02-30");
+    await expect(page.getByText("Choose a valid start and end date.")).toHaveCount(0);
+  });
+
   test("events board and calendar label weeks of the quarter", async ({ page }) => {
     await page.goto("/dashboard/events");
     await expect(page.getByTestId("board-week-label").first()).toContainText(

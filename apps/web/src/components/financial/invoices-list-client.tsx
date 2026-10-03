@@ -72,7 +72,9 @@ function issuedBuckets(issueDate: string, todayKey: string, periods: ReturnType<
     ...periods
       .filter(({ period }) => period && period.startDate <= issueDate && issueDate <= period.endDate)
       .map(({ value }) => value),
-    issueDate.slice(0, 4) === todayKey.slice(0, 4) ? "this_year" : "older",
+    // A future-dated invoice is neither this year nor "before this year".
+    ...(issueDate.slice(0, 4) === todayKey.slice(0, 4) ? ["this_year"] : []),
+    ...(issueDate.slice(0, 4) < todayKey.slice(0, 4) ? ["older"] : []),
   ];
 }
 
