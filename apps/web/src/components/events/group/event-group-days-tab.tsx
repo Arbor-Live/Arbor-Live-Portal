@@ -145,7 +145,9 @@ export function EventGroupDaysTab() {
                     ? "No crew slots"
                     : row.isCrewConfirmed
                       ? "Fully staffed"
-                      : `${row.assignedShifts}/${row.totalShifts} crew slots filled`;
+                      : `${row.assignedShifts}/${row.totalShifts} crew slots filled${
+                          row.backupShifts > 0 ? ` · ${row.backupShifts} on backup` : ""
+                        }`;
                 return (
                   <li key={row._id} className="text-sm" data-testid="event-group-day-row">
                     <Link

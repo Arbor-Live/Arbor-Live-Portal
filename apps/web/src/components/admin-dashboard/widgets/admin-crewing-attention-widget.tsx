@@ -57,7 +57,14 @@ export function AdminCrewingAttentionWidget() {
                 <p className="text-xs text-muted-foreground">
                   {event.totalShifts === 0
                     ? "No crew slots yet"
-                    : `${event.unfilledShifts} open slot${event.unfilledShifts === 1 ? "" : "s"}`}{" "}
+                    : [
+                        event.unfilledShifts > 0 || event.backupShifts === 0
+                          ? `${event.unfilledShifts} open slot${event.unfilledShifts === 1 ? "" : "s"}`
+                          : null,
+                        event.backupShifts > 0 ? `${event.backupShifts} on backup` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}{" "}
                   · waiting on {event.responseCounts.pending}
                 </p>
               </Link>

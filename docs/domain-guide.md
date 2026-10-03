@@ -234,7 +234,10 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   picker shows each person's availability for that section. *Fill open slots*
   only fills existing open slots with people available for that section and
   free elsewhere; it never adds slots or touches trainees. An event is **fully
-  staffed** when every slot has someone (`lib/crewShiftKinds.ts`).
+  staffed** when every slot has someone and none of them answered *Backup
+  only* (`lib/crewShiftKinds.ts`). A slot held by a backup counts as filled
+  ("3/3 · 1 on backup") but keeps the event on the needs-crew lists and the nav
+  badge, so a better-placed person can still replace them.
 - **Trainees** (shifts with `crewApplicationId` and no `userId`) shadow: they
   never fill a slot, never count toward staffing, crew cost, or invoice crew
   lines, and are never removed by "Delete unlinked shifts". Editors that don't

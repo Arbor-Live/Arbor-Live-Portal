@@ -17,6 +17,7 @@ import {
   requireAnalyticsAccess,
   SHIFTS_PER_EVENT_LIMIT,
 } from "./lib/analyticsQuery";
+import { loadBackupUserIds } from "./lib/crewBackups";
 import { isCrewedEventType } from "./lib/crewTeams";
 import { normalizeEventStatus } from "./lib/eventStatus";
 
@@ -88,7 +89,7 @@ export const getCrewFillRate = query({
         .query("eventCrewShifts")
         .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
         .take(SHIFTS_PER_EVENT_LIMIT);
-      const stats = computeShiftStats(shifts);
+      const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event._id));
       totalShifts += stats.totalShifts;
       filledShifts += stats.filledShifts;
       if (!stats.isCrewConfirmed) unconfirmedEvents += 1;
@@ -265,7 +266,7 @@ export const getCrewAttentionAging = query({
         .query("eventCrewShifts")
         .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
         .take(SHIFTS_PER_EVENT_LIMIT);
-      const stats = computeShiftStats(shifts);
+      const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event._id));
       if (stats.isCrewConfirmed) continue;
       unconfirmedEvents += 1;
       const days = msToDays(event.startAt - now);
@@ -289,6 +290,8 @@ export const getCrewSchedulingKpis = query({
   returns: v.object({
     fillRate: v.union(v.number(), v.null()),
     unfilledShifts: v.number(),
+    /** Filled slots held by a backup ("only if necessary"). */
+    backupShifts: v.number(),
     unconfirmedEvents: v.number(),
     noSlotEvents: v.number(),
     truncated: v.boolean(),
@@ -300,6 +303,7 @@ export const getCrewSchedulingKpis = query({
     const { events, truncated } = await loadCrewedEventsInRange(ctx, args.startMs, args.endMs);
     let totalShifts = 0;
     let filledShifts = 0;
+    let backupShifts = 0;
     let unconfirmedEvents = 0;
     let noSlotEvents = 0;
     let fillRateShifts = 0;
@@ -310,9 +314,10 @@ export const getCrewSchedulingKpis = query({
         .query("eventCrewShifts")
         .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
         .take(SHIFTS_PER_EVENT_LIMIT);
-      const stats = computeShiftStats(shifts);
+      const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event._id));
       totalShifts += stats.totalShifts;
       filledShifts += stats.filledShifts;
+      backupShifts += stats.backupShifts;
       if (!stats.isCrewConfirmed) unconfirmedEvents += 1;
       // An event with no staffing slots is not "100% filled" — it has nothing
       // scheduled yet, so count it as needing crew and keep it out of the rate.
@@ -327,6 +332,7 @@ export const getCrewSchedulingKpis = query({
     return {
       fillRate: fillRateShifts > 0 ? fillRateFilledShifts / fillRateShifts : null,
       unfilledShifts: totalShifts - filledShifts,
+      backupShifts,
       unconfirmedEvents,
       noSlotEvents,
       truncated,

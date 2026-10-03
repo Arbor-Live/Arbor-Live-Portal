@@ -4,6 +4,7 @@ import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { loadBackupUserIds } from "./lib/crewBackups";
 import { computeShiftStats as computeCrewShiftStats, isTraineeShift } from "./lib/crewShiftKinds";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { RENTAL_EVENT_TYPES } from "./eventPullLists";
@@ -114,10 +115,11 @@ async function computeShiftStats(ctx: QueryCtx | MutationCtx, eventId: Id<"event
     .query("eventCrewShifts")
     .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
     .take(500);
-  const stats = computeCrewShiftStats(shifts);
+  const stats = computeCrewShiftStats(shifts, await loadBackupUserIds(ctx, eventId));
   return {
     totalShifts: stats.totalShifts,
     assignedShifts: stats.filledShifts,
+    backupShifts: stats.backupShifts,
     isCrewConfirmed: stats.isCrewConfirmed,
   };
 }
