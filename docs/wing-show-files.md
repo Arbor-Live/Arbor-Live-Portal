@@ -104,6 +104,38 @@ group takes a DCA slot in order (D1, D2, …) and every channel is tagged into i
 every slot the bill does not fill, so the template's own DCA names ("Vox DCA",
 "FX DCA") never survive a recall.
 
+Each DCA wears its group's colour and icon (`GROUP_STYLE` in `groups.ts`) —
+the same colour as its channels, which flex sockets (horns, percussion, tracks)
+also take from their group. When the melodic frontline compresses into the
+**Melody** DCA, its channels join Melody *as well as* their own family DCA, so
+"Guitars" or "Brass & winds" still ride something.
+
+### Monitors
+
+Monitor buses are one plan for the night, built from every band's monitor
+mixes (`monitors.ts`). A wedge is a place on the stage, so wedges merge by
+where the bands drew them on the plot: the **Drum Wedge** (within 6 ft of the
+kit, or a mix named for the drums), then **Wedge L / C / R** by downstage
+third. An opener's "Vocals" wedge and a headliner's "Maya" wedge on the same
+side share a bus. A mix with no plot symbol takes the next free front
+position; more front wedges than positions get numbered **Wedge n** buses.
+IEMs are per performer: the night gets as many **IEM n** buses as the busiest
+band needs. Side fills split left/right.
+
+Buses 1–12 are rebuilt from that plan (13/14 stay the reverb returns) and any
+unused one is blanked. Outputs follow: main L/R always on box A's outputs
+7/8, and each monitor takes the next free output in bus order — one per wedge
+(the bus's left leg, `in` = 2n−1, as in the console saves), an adjacent pair
+on one box per IEM. Box A has 8 outputs; the second snake adds
+A.9–16, and a monitor with no output left is built but named in the warnings.
+Every channel sends pre-fader to each monitor bus starting at −∞.
+
+The outputs are part of the faceplate (`StageBoxDiagramModel.outputs`): the
+Lineup tab's Night rider card and the brief's Night patch page both list each
+output, its feed (Main L, Wedge L, IEM 1 R …) and what each band calls that
+mix. A band's tab shows only its own mix names and greys out outputs it does
+not use.
+
 The allocator also plans the **surface pages** (WING Compact: one 12-fader
 section, `USER1` holds two pages / 24 slots). Priority, highest first:
 

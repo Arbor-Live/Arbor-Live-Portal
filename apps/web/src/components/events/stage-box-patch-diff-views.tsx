@@ -51,8 +51,10 @@ export function StageBoxPatchDiffViews({ plan }: { plan: PatchDiffPlan }) {
             ports: activeStep.ports,
             spare: plan.night.spare,
             snakes: plan.night.snakes,
+            outputs: plan.night.outputs,
             warnings: plan.night.warnings,
           }}
+          band={activeStep.fileStem}
           colored
         />
       ) : null}

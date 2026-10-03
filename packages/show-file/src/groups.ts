@@ -43,6 +43,30 @@ const GROUP_DCA_LABEL: Partial<Record<RiderSourceFamily, string>> = {
   playback: "Tracks",
 };
 
+/**
+ * WING colour + icon per desk group, so a DCA reads as what it rides instead of
+ * every DCA wearing the blueprint's first swatch. Colours match the channels'
+ * (`FAMILY_STYLE`) so a group's DCA and its strips are the same colour; flex
+ * channels (winds, percussion, strings, tracks) take their group's style. Icons
+ * follow the console saves in `DayNMayfield/` (Brass 312, Aux Perc 224) and the
+ * blueprint's own DCAs (Drums 210, Melody 9, FX 6).
+ */
+export const GROUP_STYLE: Record<RiderSourceFamily, { col: number; icon: number }> = {
+  vocals: { col: 14, icon: 101 },
+  guitar: { col: 9, icon: 306 },
+  bass: { col: 9, icon: 300 },
+  keys: { col: 5, icon: 402 },
+  drums: { col: 11, icon: 210 },
+  percussion: { col: 3, icon: 224 },
+  winds: { col: 7, icon: 312 },
+  strings: { col: 16, icon: 300 },
+  playback: { col: 8, icon: 605 },
+  utility: { col: 18, icon: 0 },
+};
+
+export const VOCAL_FX_DCA_STYLE = { col: 5, icon: 6 };
+export const MELODY_DCA_STYLE = { col: 8, icon: 9 };
+
 const MUTE_GROUPS_BY_FAMILY: Partial<Record<RiderSourceFamily, number[]>> = {
   vocals: [1, 2],
   guitar: [1, 3],

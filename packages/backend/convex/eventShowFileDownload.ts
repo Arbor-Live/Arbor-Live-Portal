@@ -37,6 +37,10 @@ function bandsFromRows(rows: EventRiderRow[]): ShowBandInput[] {
       fileStem: fileStem(row.bandName),
       role: row.role,
       inputs: row.rider.inputs,
+      // Monitor buses are placed from the plot: which mix each wedge feeds.
+      stage: row.rider.stage,
+      items: row.rider.items,
+      monitorMixes: row.rider.monitorMixes,
     });
   }
   return bands;

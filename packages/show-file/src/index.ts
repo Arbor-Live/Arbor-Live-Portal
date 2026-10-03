@@ -17,6 +17,7 @@ export type {
   SnakeGroup,
   SnakeId,
   StageBoxDiagramModel,
+  StageBoxOutput,
   StageBoxPort,
   WingSnap,
 } from "./types";

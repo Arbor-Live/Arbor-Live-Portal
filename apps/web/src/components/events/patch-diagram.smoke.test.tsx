@@ -103,6 +103,7 @@ describe("StageBoxPatchDiagram", () => {
             ports: step.ports,
             spare: plan.night.spare,
             snakes: plan.night.snakes,
+            outputs: plan.night.outputs,
             warnings: plan.night.warnings,
           }}
           colored
@@ -121,5 +122,33 @@ describe("StageBoxPatchDiagram", () => {
     expect(rendered).toContain("2 (18)");
     expect(rendered).not.toContain("B.9");
     expect(rendered).not.toContain("B.1");
+  });
+
+  it("lists the outputs with each band's mix names", () => {
+    const withMonitors = [
+      {
+        ...bands[0]!,
+        monitorMixes: [
+          { id: "m1", mixNumber: 1, label: "Vocals", type: "wedge" as const, sends: 1 },
+          { id: "m2", mixNumber: 2, label: "Athena", type: "iem" as const, sends: 1 },
+        ],
+      },
+    ];
+    const plan = buildPatchDiffPlan(allocateEventPatch(withMonitors), "Test Night");
+    const night = text(renderToStaticMarkup(<StageBoxPatchDiagram model={plan.night} />));
+    expect(night).toContain("Outputs");
+    expect(night).toContain("Out 1 Wedge L Openers: Vocals");
+    expect(night).toContain("Out 2 IEM 1 L");
+    expect(night).toContain("Out 3 IEM 1 R");
+    expect(night).toContain("Out 7 Main L");
+    expect(night).toContain("Out 8 Main R");
+
+    const band = text(
+      renderToStaticMarkup(
+        <StageBoxPatchDiagram model={plan.night} band={plan.steps[0]!.fileStem} />,
+      ),
+    );
+    expect(band).toContain("Wedge L Vocals");
+    expect(band).not.toContain("Openers: Vocals");
   });
 });

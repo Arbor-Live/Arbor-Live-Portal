@@ -1,6 +1,10 @@
 "use client";
 
-import type { StageBoxDiagramModel, StageBoxPort } from "@arbor/show-file";
+import type {
+  StageBoxDiagramModel,
+  StageBoxOutput,
+  StageBoxPort,
+} from "@arbor/show-file";
 import { SNAKE_LABEL } from "@arbor/show-file";
 import { cn } from "@/lib/utils";
 
@@ -17,9 +21,12 @@ import { cn } from "@/lib/utils";
 export function StageBoxPatchDiagram({
   model,
   colored = false,
+  band,
 }: {
   model: StageBoxDiagramModel;
   colored?: boolean;
+  /** Band fileStem: outputs then show only that band's own mix names. */
+  band?: string;
 }) {
   return (
     <div
@@ -86,6 +93,10 @@ export function StageBoxPatchDiagram({
         );
       })}
 
+      {model.outputs.length > 0 ? (
+        <StageBoxOutputs outputs={model.outputs} snakes={model.snakes} band={band} />
+      ) : null}
+
       {model.spare.length > 0 ? (
         <p className="border-t px-3 py-2 text-2xs text-muted-foreground">
           <span className="font-semibold uppercase tracking-wide">Leave empty</span>
@@ -101,6 +112,81 @@ export function StageBoxPatchDiagram({
           ))}
         </ul>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The box's XLR outputs: mains, then each monitor bus (an IEM takes a pair).
+ * Each cell names the bus and, under it, what each band calls that mix.
+ */
+function StageBoxOutputs({
+  outputs,
+  snakes,
+  band,
+}: {
+  outputs: StageBoxOutput[];
+  snakes: StageBoxDiagramModel["snakes"];
+  band?: string;
+}) {
+  return (
+    <div className="border-t" data-testid="stage-box-outputs">
+      <div className="border-b bg-muted px-3 py-1.5 text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Outputs
+      </div>
+      {snakes.map((snake) => {
+        const boxOutputs = outputs.filter((output) => output.snake === snake);
+        if (boxOutputs.length === 0) return null;
+        return (
+          <div key={snake}>
+            {snakes.length > 1 ? (
+              <div className="border-b bg-background px-3 py-1.5 text-2xs font-semibold text-foreground">
+                {SNAKE_LABEL[snake]}
+              </div>
+            ) : null}
+            <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
+              {boxOutputs.map((output) => {
+                const mixes = band
+                  ? output.mixes.filter((mix) => mix.fileStem === band)
+                  : output.mixes;
+                const idle = Boolean(band) && output.kind !== "main" && mixes.length === 0;
+                return (
+                  <div
+                    key={`${output.snake}.${output.output}`}
+                    className={cn(
+                      "flex min-h-14 flex-col gap-1 px-2.5 py-2",
+                      idle ? "bg-muted" : "bg-background",
+                    )}
+                  >
+                    <span className="font-mono text-2xs font-semibold tabular-nums text-foreground">
+                      Out {output.outputLabel}
+                    </span>
+                    <p
+                      className={cn(
+                        "text-sm font-medium leading-tight",
+                        idle ? "text-muted-foreground" : "text-foreground",
+                      )}
+                    >
+                      {output.feed}
+                    </p>
+                    {mixes.length > 0 ? (
+                      <p className="text-3xs text-muted-foreground">
+                        {mixes
+                          .map((mix) => (band ? mix.label : `${mix.bandName}: ${mix.label}`))
+                          .join(" · ")}
+                      </p>
+                    ) : idle ? (
+                      <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Unused this set
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

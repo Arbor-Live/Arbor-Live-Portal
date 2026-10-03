@@ -57,6 +57,12 @@ export const USB_MUSIC_AUX = "1";
 export const USB_MUSIC_CHANNEL = 41;
 export const USB_MUSIC_SOURCE = 1;
 
+/** Each SD16 has 8 XLR outputs; box B's land on AES50 A outputs 9–16. */
+export const OUTPUTS_PER_BOX = 8;
+
+/** Box A's outputs 7/8 always carry the main L/R; monitors take the rest. */
+export const MAIN_OUTPUTS = [7, 8] as const;
+
 /** Box-relative port (1–16) → socket number on the shared AES50 A link. */
 export function aes50PortFor(snake: SnakeId, port: number): number {
   return port + SNAKE_PORT_OFFSET[snake];

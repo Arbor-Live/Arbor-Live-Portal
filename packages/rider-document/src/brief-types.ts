@@ -115,7 +115,20 @@ export type EventBriefPatch = {
     ports: EventBriefPatchPort[];
   }>;
   spare: string[];
+  /** Stage-box XLR outputs carrying something tonight: mains, then monitors. */
+  outputs?: EventBriefPatchOutput[];
   warnings: string[];
+};
+
+/** One stage-box output: where it is on the box, what feeds it, whose mix. */
+export type EventBriefPatchOutput = {
+  snake: "A" | "B";
+  /** Output as read at the box, e.g. "3", or "1 (9)" down the chain. */
+  outputLabel: string;
+  /** "Main L", "Wedge L", "IEM 1 R" … */
+  feed: string;
+  /** Each band's own name for the mix ("GIRLBAND: Vocals"), in show order. */
+  mixes: string[];
 };
 
 export type EventBriefDocumentData = {

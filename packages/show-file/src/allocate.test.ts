@@ -646,6 +646,139 @@ describe("one snake with a stereo row broken to mono", () => {
   });
 });
 
+describe("monitor buses", () => {
+  const wedge = (id: string, mixNumber: number, label: string) => ({
+    id,
+    mixNumber,
+    label,
+    type: "wedge" as const,
+    sends: 1,
+  });
+  const plotted = (mixId: string, xFt: number, yFt: number) => ({
+    id: `item_${mixId}`,
+    symbol: "wedge",
+    label: "",
+    xFt,
+    yFt,
+    rotation: 0,
+    scale: 1,
+    monitorMixId: mixId,
+  });
+  const kit = { id: "kit", symbol: "drum_kit", label: "Drums", xFt: 12, yFt: 3.5, rotation: 0, scale: 1 };
+  const stage = { widthFt: 24, depthFt: 12 };
+
+  function monitorBill(): ShowBandInput[] {
+    return [
+      {
+        ...band("Opener", "support", [
+          input({ id: "v", channel: 1, source: "Lead vocal", sourceKey: "vox.lead" }),
+        ]),
+        stage,
+        items: [plotted("o1", 5.75, 11), plotted("o2", 12, 11), plotted("o3", 18.5, 11)],
+        monitorMixes: [wedge("o1", 1, "Vocals"), wedge("o2", 2, "Guit"), wedge("o3", 3, "Keys + Bass")],
+      },
+      {
+        ...band("Headliner", "headliner", [
+          input({ id: "v", channel: 1, source: "Lead vocal", sourceKey: "vox.lead" }),
+        ]),
+        stage,
+        items: [kit, plotted("h1", 2.5, 11), plotted("h2", 21.5, 10.75), plotted("h3", 7.5, 6)],
+        monitorMixes: [
+          wedge("h1", 1, "Maya"),
+          wedge("h2", 2, "Guitar 2"),
+          wedge("h3", 3, "Drums"),
+          { id: "h4", mixNumber: 4, label: "Athena", type: "iem" as const, sends: 1 },
+        ],
+      },
+    ];
+  }
+
+  it("merges the bill's wedges by stage position and adds the IEMs", () => {
+    const { monitors } = allocateEventPatch(monitorBill());
+    expect(monitors.map((m) => [m.bus, m.name, m.outputs])).toEqual([
+      [1, "Wedge L", [1]],
+      [2, "Wedge C", [2]],
+      [3, "Wedge R", [3]],
+      [4, "Drum Wedge", [4]],
+      [5, "IEM 1", [5, 6]],
+    ]);
+    expect(monitors[0]!.bandMixes).toEqual({ Opener: "Vocals", Headliner: "Maya" });
+  });
+
+  it("writes the buses, their outputs and pre-fader sends into the snap", () => {
+    const allocation = allocateEventPatch(monitorBill());
+    const snap = buildNightSnap(loadDefaultTemplate(), allocation);
+    const buses = snap.ae_data.bus as Record<string, { name: string }>;
+    expect([1, 2, 3, 4, 5, 6].map((bus) => buses[String(bus)]!.name)).toEqual([
+      "Wedge L",
+      "Wedge C",
+      "Wedge R",
+      "Drum Wedge",
+      "IEM 1",
+      "",
+    ]);
+    const outputs = (snap.ae_data.io.out as Record<string, Record<string, unknown>>).A!;
+    expect(outputs["1"]).toMatchObject({ grp: "BUS", in: 1 });
+    expect(outputs["4"]).toMatchObject({ grp: "BUS", in: 7 });
+    expect(outputs["5"]).toMatchObject({ grp: "BUS", in: 9 });
+    expect(outputs["6"]).toMatchObject({ grp: "BUS", in: 10 });
+    // Main L/R always sit on box A's 7/8.
+    expect(outputs["7"]).toMatchObject({ grp: "MAIN", in: 1 });
+    expect(outputs["8"]).toMatchObject({ grp: "MAIN", in: 2 });
+    expect(outputs["9"]).toMatchObject({ grp: "OFF" });
+    const vocal = allocation.ports.find((p) => p.used)!;
+    const sends = snap.ae_data.ch[String(vocal.strip)]!.send as Record<string, { on: boolean; lvl: number; mode: string }>;
+    expect(sends["5"]).toMatchObject({ on: true, lvl: -144, mode: "PRE" });
+    expect(sends["6"]).toMatchObject({ on: false });
+  });
+
+  it("warns when the monitors outrun the stage-box outputs", () => {
+    const bill = monitorBill();
+    bill[1]!.monitorMixes!.push(
+      { id: "h5", mixNumber: 5, label: "Emily", type: "iem" as const, sends: 1 },
+    );
+    const allocation = allocateEventPatch(bill);
+    expect(allocation.monitors.find((m) => m.name === "IEM 2")!.outputs).toEqual([]);
+    expect(allocation.warnings.some((w) => w.includes("No stage-box output left for IEM 2"))).toBe(true);
+    const routed = allocateEventPatch(bill, { secondSnake: true });
+    expect(routed.monitors.find((m) => m.name === "IEM 2")!.outputs).toEqual([9, 10]);
+  });
+});
+
+describe("DCAs with a compressed Melody", () => {
+  it("keeps each melodic channel in its family DCA as well as Melody", () => {
+    const bands = [
+      band("Big", "headliner", [
+        input({ id: "v1", channel: 1, source: "Lead", sourceKey: "vox.lead" }),
+        input({ id: "v2", channel: 2, source: "BV", sourceKey: "vox.bgv" }),
+        input({ id: "v3", channel: 3, source: "BV 2", sourceKey: "vox.bgv" }),
+        input({ id: "k", channel: 4, source: "Kick", sourceKey: "drum.kick" }),
+        input({ id: "s", channel: 5, source: "Snare", sourceKey: "drum.snare.top" }),
+        input({ id: "b", channel: 6, source: "Bass", sourceKey: "bass", inputType: "di" }),
+        input({ id: "g", channel: 7, source: "Guitar", sourceKey: "gtr", inputType: "di" }),
+        input({ id: "keys", channel: 8, source: "Keys", sourceKey: "keys", inputType: "di" }),
+        input({ id: "p", channel: 9, source: "Perc", sourceKey: "perc.aux" }),
+        input({ id: "t", channel: 10, source: "Trumpet", sourceKey: "wind.trumpet" }),
+        input({ id: "sx", channel: 11, source: "Sax", sourceKey: "wind.sax.alto" }),
+      ]),
+    ];
+    const allocation = allocateEventPatch(bands);
+    expect(allocation.melodyDca).not.toBeNull();
+    const winds = allocation.groups.find((group) => group.id === "winds")!;
+    const trumpet = allocation.ports.find((p) => p.label === "Trumpet")!;
+    expect(trumpet.tags.split(",")).toEqual(
+      expect.arrayContaining([`#D${winds.dca}`, `#D${allocation.melodyDca!.dca}`]),
+    );
+
+    const snap = buildNightSnap(loadDefaultTemplate(), allocation);
+    const dcas = snap.ae_data.dca as Record<string, { name: string; col: number; icon: number }>;
+    expect(dcas[String(winds.dca)]).toMatchObject({ name: winds.label, col: 7, icon: 312 });
+    const drums = allocation.groups.find((group) => group.id === "drums")!;
+    expect(dcas[String(drums.dca)]).toMatchObject({ col: 11, icon: 210 });
+    expect(dcas[String(allocation.melodyDca!.dca)]).toMatchObject({ name: "Melody", col: 8, icon: 9 });
+  });
+});
+
 describe("unused channels", () => {
   const soloVox = [
     band("Solo", "support", [
@@ -1416,8 +1549,12 @@ describe("melody compression and reserved DCAs", () => {
       (port) => port.used && port.family === "guitar" && port.strip !== null,
     );
     expect(guitars.length).toBeGreaterThan(1);
+    // Melody rides them, and they stay in their own Guitars DCA too.
+    const guitarDca = allocation.groups.find((group) => group.id === "guitar")!.dca;
     for (const guitar of guitars) {
-      expect(guitar.tags).toBe(`#D${melody!.dca}`);
+      expect(guitar.tags.split(",")).toEqual(
+        expect.arrayContaining([`#D${guitarDca}`, `#D${melody!.dca}`]),
+      );
     }
     // The Melody DCA is named on the desk.
     const snap = buildNightSnap(loadDefaultTemplate(), allocation);
