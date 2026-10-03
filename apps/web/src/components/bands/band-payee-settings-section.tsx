@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { CurrencyDollarIcon } from "@phosphor-icons/react";
+import { StatusPill } from "@/components/page-header";
 import { api } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
 import { Form } from "@/components/ui/form";
@@ -105,20 +107,30 @@ export function BandPayeeSettingsSection() {
   }
 
   return (
-    <div className="space-y-4 pb-20">
+    <div className="space-y-4">
       <Form {...form}>
         <form className="space-y-4">
           <Card id="payee">
-            <CardHeader>
-              <CardTitle>Payment payee</CardTitle>
-              <CardDescription>
-                Designate who receives Arbor Live payouts. The payee must be a member account so
-                they can e-sign payments in the portal.
-              </CardDescription>
+            <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
+              <div className="space-y-1.5">
+                <CardTitle className="flex items-center gap-2">
+                  <CurrencyDollarIcon className="size-4 text-muted-foreground" aria-hidden />
+                  Payment payee
+                </CardTitle>
+                <CardDescription>
+                  Who receives Arbor Live payouts. The payee must be a member so they can e-sign
+                  payments here.
+                </CardDescription>
+              </div>
+              {profile.payeeComplete ? (
+                <StatusPill tone="emerald">Set up</StatusPill>
+              ) : (
+                <StatusPill tone="amber">Needed</StatusPill>
+              )}
             </CardHeader>
             <CardContent className="space-y-3">
               {!profile.payeeComplete ? (
-                <p className="rounded-md border border-dashed px-3 py-2 text-sm text-status-amber-800 dark:text-status-amber-200">
+                <p className="border border-status-amber-500/40 bg-status-amber-500/10 px-3 py-2 text-sm text-status-amber-700 dark:text-status-amber-200">
                   Required before artist payments can be processed. Provide one designated payee who
                   receives and distributes payment, a mailing address, and pickup or delivery for
                   GrantEd.
@@ -153,10 +165,8 @@ export function BandPayeeSettingsSection() {
                   emptyLabel="Select payee"
                 />
               </div>
-              <div className="grid gap-2 md:grid-cols-2">
-                <TextFormField name="designatedPayeeName" label="Payee name" />
-                <TextFormField name="designatedPayeeEmail" label="Payee email" type="email" />
-              </div>
+              <TextFormField name="designatedPayeeName" label="Payee name" />
+              <TextFormField name="designatedPayeeEmail" label="Payee email" type="email" />
               <BandPayeePayoutMethodField
                 value={payoutMethod}
                 onChange={(method: BandPayeePayoutMethod) => {

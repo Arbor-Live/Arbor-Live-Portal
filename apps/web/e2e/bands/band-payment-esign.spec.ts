@@ -41,9 +41,13 @@ test.describe("band payment e-sign loop", () => {
     await expect(bandPage.getByText("Payment history").first()).toBeVisible({ timeout: 25_000 });
     await expect(bandPage.getByText(seeded.eventTitle).first()).toBeVisible({ timeout: 20_000 });
     await expect(bandPage.getByText(seeded.confirmationToken).first()).toBeVisible();
-    await bandPage.getByRole("button", { name: "E-sign" }).first().click();
+    await bandPage
+      .getByTestId("band-payment-row")
+      .filter({ hasText: seeded.eventTitle })
+      .getByRole("button", { name: "E-sign", exact: true })
+      .click();
     await expect(bandPage.getByText("E-sign payment").first()).toBeVisible();
-    await bandPage.locator('input[type="checkbox"]').check();
+    await bandPage.getByRole("checkbox", { name: /I agree to the payment amount/ }).check();
     await bandPage.locator("#band-payment-sign-name").fill(e2eEnv.bandName);
     await bandPage.getByRole("button", { name: "Submit signature" }).click();
     await expect(bandPage.getByText(/Payment signed/i).first()).toBeVisible({ timeout: 20_000 });
