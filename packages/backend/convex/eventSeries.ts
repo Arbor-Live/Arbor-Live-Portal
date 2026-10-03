@@ -1,33 +1,44 @@
-import { occurrenceStartAt, pacificDayIndexFromAnchor } from "@arbor/format";
+import { occurrenceStartAt, pacificDateKey } from "@arbor/format";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
-import { computeShiftStats as computeCrewShiftStats } from "./lib/crewShiftKinds";
+import { computeShiftStats as computeCrewShiftStats, isTraineeShift } from "./lib/crewShiftKinds";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { RENTAL_EVENT_TYPES } from "./eventPullLists";
 import {
   applyPositionTemplates,
-  listOccurrencePositions,
-  blocksToTemplates,
   buildEventPatchFromSeriesTemplate,
   computeOccurrenceStarts,
   EVENT_TIMEZONE,
+  groupDayStartAt,
   materializeOccurrence,
+  withSharedDayFields,
   propagateInvoiceIdToSeriesOccurrences,
   replaceEmptyShiftsFromTemplates,
   replaceScheduleBlocksFromTemplates,
   resolveDefaultCrewHourlyRateUsd,
   shiftsToTemplates,
-  shouldApplySeriesUpdate,
-  type SeriesEditScope,
 } from "./lib/eventSeriesGeneration";
 import {
   assertValidPositionTemplates,
   eventSeriesPositionTemplateValue,
-  positionTemplateFromSlot,
 } from "./lib/eventSeriesPositions";
+import {
+  applyGroupTemplates,
+  applyGroupTemplatesToDay,
+  assertValidReferenceIndex,
+  captureDayTemplates,
+  copyPullListBetweenDays,
+  copyUnlinkedShiftsBetweenDays,
+  listGroupDays,
+  planDaySetup,
+  selectDaysInScope,
+} from "./lib/eventGroupTemplates";
+import { isMultiDayGroup } from "./lib/eventGroupKind";
+import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
+import { requireEventEditAccess } from "./lib/eventAccess";
 import { syncEventCrewCostUsd } from "./lib/crewCost";
 import {
   detachInvoiceFromAdditionalLinks,
@@ -70,6 +81,7 @@ const shiftTemplateValue = v.object({
   blockTemplateIndex: v.number(),
   offsetMs: v.number(),
   durationMs: v.number(),
+  hours: v.optional(v.number()),
   estimatedHourlyRateUsd: v.optional(v.number()),
   notes: v.optional(v.string()),
 });
@@ -161,11 +173,13 @@ export const get = query({
     );
     const totalOccurrences = series.occurrenceCount ?? occurrences.length;
     const costSummary = computeSeriesCostSummary(series, occurrences);
+    const invoice = series.invoiceId ? await ctx.db.get(series.invoiceId) : null;
     return {
       series,
       occurrences: occurrencesWithStats,
       totalOccurrences,
       costSummary,
+      invoiceNumber: invoice?.invoiceNumber,
     };
   },
 });
@@ -235,6 +249,7 @@ export const create = mutation({
       args.additionalHostGroupIds,
     );
     const seriesId = await ctx.db.insert("eventSeries", {
+      kind: "recurring",
       title: args.title.trim(),
       status: "active",
       anchorStartAt: args.startAt,
@@ -299,6 +314,9 @@ export const linkInvoice = mutation({
     await requireArborInternalContext(ctx);
     const series = await ctx.db.get(args.id);
     if (!series) throw new Error("Event series not found.");
+    if (isMultiDayGroup(series)) {
+      throw new Error("A multi-day booking is billed through its days' invoice.");
+    }
     const invoice = await ctx.db.get(args.invoiceId);
     if (!invoice) throw new Error("Invoice not found.");
     const now = Date.now();
@@ -323,6 +341,9 @@ export const unlinkInvoice = mutation({
     await requireArborInternalContext(ctx);
     const series = await ctx.db.get(args.id);
     if (!series) throw new Error("Event series not found.");
+    if (isMultiDayGroup(series)) {
+      throw new Error("A multi-day booking is billed through its days' invoice.");
+    }
     const now = Date.now();
     await ctx.db.patch(args.id, { invoiceId: undefined, updatedAt: now });
 
@@ -335,6 +356,25 @@ export const unlinkInvoice = mutation({
   },
 });
 
+const groupApplyScopeValue = v.union(v.literal("future"), v.literal("all"));
+
+/** Pull-list rows copied per day; matches the pull list's own read cap. */
+const MAX_PULL_LIST_ROWS = 500;
+
+async function requireGroup(ctx: MutationCtx, id: Id<"eventSeries">) {
+  const series = await ctx.db.get(id);
+  if (!series) throw new Error("Event series not found.");
+  return series;
+}
+
+async function requireGroupDay(ctx: MutationCtx, id: Id<"eventSeries">, eventId: Id<"events">) {
+  const event = await ctx.db.get(eventId);
+  if (!event || event.seriesId !== id) {
+    throw new Error("Event is not part of this series.");
+  }
+  return event;
+}
+
 export const regenerateFutureBlocks = mutation({
   args: {
     id: v.id("eventSeries"),
@@ -346,8 +386,8 @@ export const regenerateFutureBlocks = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const series = await ctx.db.get(args.id);
-    if (!series) throw new Error("Event series not found.");
+    const series = await requireGroup(ctx, args.id);
+    assertValidReferenceIndex(args.fromOccurrenceIndex);
     const templates = args.blockTemplates ?? series.blockTemplates ?? undefined;
     if (!templates || templates.length === 0) {
       throw new Error("No schedule block templates to apply.");
@@ -356,20 +396,12 @@ export const regenerateFutureBlocks = mutation({
     if (args.blockTemplates) {
       await ctx.db.patch(args.id, { blockTemplates: args.blockTemplates, updatedAt: now });
     }
-    const occurrences = await listOccurrencesForSeries(ctx, args.id);
-    const scope = args.scope as SeriesEditScope;
-    let updatedCount = 0;
-
-    for (const occurrence of occurrences) {
-      if (scope === "this") {
-        if (occurrence.occurrenceIndex !== args.fromOccurrenceIndex) continue;
-      } else if (!shouldApplySeriesUpdate(occurrence, scope, args.fromOccurrenceIndex, now)) {
-        continue;
-      }
-      if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
-      await replaceScheduleBlocksFromTemplates(ctx, occurrence._id, occurrence.startAt, templates, now);
-      updatedCount += 1;
-    }
+    const updatedCount = await applyGroupTemplates(ctx, await requireGroup(ctx, args.id), {
+      scope: args.scope,
+      referenceIndex: args.fromOccurrenceIndex,
+      parts: { schedule: true },
+      now,
+    });
     return { updatedCount };
   },
 });
@@ -383,35 +415,15 @@ export const importScheduleFromOccurrence = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const series = await ctx.db.get(args.id);
-    if (!series) throw new Error("Event series not found.");
-    const event = await ctx.db.get(args.eventId);
-    if (!event || event.seriesId !== args.id) {
-      throw new Error("Event is not part of this series.");
-    }
-    // An act's soundcheck/set blocks belong to one occurrence's lineup, not the series.
-    const blocks = (
-      await ctx.db
-        .query("eventScheduleBlocks")
-        .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
-        .take(500)
-    ).filter((block) => !isActBlock(block));
-    if (blocks.length === 0) {
+    await requireGroup(ctx, args.id);
+    const event = await requireGroupDay(ctx, args.id, args.eventId);
+    const now = Date.now();
+    const { blockTemplates = [] } = await captureDayTemplates(ctx, event, { schedule: true }, now);
+    if (blockTemplates.length === 0) {
       throw new Error("Selected occurrence has no schedule blocks to import.");
     }
-    const templates = blocksToTemplates(
-      blocks.map((block) => ({
-        blockType: block.blockType,
-        label: block.label,
-        dayIndex: block.dayIndex,
-        startsAt: block.startsAt,
-        endsAt: block.endsAt,
-        notes: block.notes,
-      })),
-      event.startAt,
-    );
-    await ctx.db.patch(args.id, { blockTemplates: templates, updatedAt: Date.now() });
-    return { templateCount: templates.length };
+    await ctx.db.patch(args.id, { blockTemplates, updatedAt: now });
+    return { templateCount: blockTemplates.length };
   },
 });
 
@@ -426,8 +438,8 @@ export const regenerateFutureShifts = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const series = await ctx.db.get(args.id);
-    if (!series) throw new Error("Event series not found.");
+    const series = await requireGroup(ctx, args.id);
+    assertValidReferenceIndex(args.fromOccurrenceIndex);
     const templates =
       args.shiftTemplates && args.shiftTemplates.length > 0
         ? args.shiftTemplates
@@ -435,48 +447,20 @@ export const regenerateFutureShifts = mutation({
     if (!templates || templates.length === 0) {
       throw new Error("No crew shift templates to apply.");
     }
-    const blockTemplates = series.blockTemplates ?? undefined;
-    if (!blockTemplates || blockTemplates.length === 0) {
+    if (!series.blockTemplates || series.blockTemplates.length === 0) {
       throw new Error("Apply schedule block templates before crew shift templates.");
     }
     const now = Date.now();
-    const defaultRate = await resolveDefaultCrewHourlyRateUsd(ctx);
     if (args.shiftTemplates && args.shiftTemplates.length > 0) {
-      await ctx.db.patch(args.id, {
-        shiftTemplates: args.shiftTemplates,
-        updatedAt: now,
-      });
+      await ctx.db.patch(args.id, { shiftTemplates: args.shiftTemplates, updatedAt: now });
     }
-    const occurrences = await listOccurrencesForSeries(ctx, args.id);
-    const scope = args.scope as SeriesEditScope;
-    let updatedCount = 0;
-
-    for (const occurrence of occurrences) {
-      if (scope === "this") {
-        if (occurrence.occurrenceIndex !== args.fromOccurrenceIndex) continue;
-      } else if (!shouldApplySeriesUpdate(occurrence, scope, args.fromOccurrenceIndex, now)) {
-        continue;
-      }
-      if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
-      await replaceScheduleBlocksFromTemplates(
-        ctx,
-        occurrence._id,
-        occurrence.startAt,
-        blockTemplates,
-        now,
-      );
-      await replaceEmptyShiftsFromTemplates(
-        ctx,
-        occurrence._id,
-        occurrence.startAt,
-        templates,
-        blockTemplates,
-        defaultRate,
-        now,
-      );
-      await syncEventCrewCostUsd(ctx, occurrence._id, now);
-      updatedCount += 1;
-    }
+    // Crew slots hang off Run of Show sections, so the sections are re-laid first.
+    const updatedCount = await applyGroupTemplates(ctx, await requireGroup(ctx, args.id), {
+      scope: args.scope,
+      referenceIndex: args.fromOccurrenceIndex,
+      parts: { schedule: true, crew: true },
+      now,
+    });
     return { updatedCount };
   },
 });
@@ -490,12 +474,8 @@ export const importShiftsFromOccurrence = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const series = await ctx.db.get(args.id);
-    if (!series) throw new Error("Event series not found.");
-    const event = await ctx.db.get(args.eventId);
-    if (!event || event.seriesId !== args.id) {
-      throw new Error("Event is not part of this series.");
-    }
+    const series = await requireGroup(ctx, args.id);
+    const event = await requireGroupDay(ctx, args.id, args.eventId);
     const blockTemplates = series.blockTemplates ?? undefined;
     if (!blockTemplates || blockTemplates.length === 0) {
       throw new Error("Import schedule block templates before importing crew shifts.");
@@ -511,20 +491,7 @@ export const importShiftsFromOccurrence = mutation({
       .query("eventCrewShifts")
       .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
       .take(500);
-    const templates = shiftsToTemplates(
-      shifts.map((shift) => ({
-        role: shift.role,
-        scheduleBlockId: shift.scheduleBlockId,
-        userId: shift.userId,
-        startsAt: shift.startsAt,
-        endsAt: shift.endsAt,
-        estimatedHourlyRateUsd: shift.estimatedHourlyRateUsd,
-        notes: shift.notes,
-      })),
-      blocks.map((block) => ({ _id: block._id, startsAt: block.startsAt })),
-      blockTemplates,
-      event.startAt,
-    );
+    const templates = shiftsToTemplates(shifts, blocks, blockTemplates, event.startAt);
     if (templates.length === 0) {
       throw new Error("Selected occurrence has no empty crew shifts to import.");
     }
@@ -544,31 +511,20 @@ export const regenerateFuturePositions = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const series = await ctx.db.get(args.id);
-    if (!series) throw new Error("Event series not found.");
-    if (!Number.isInteger(args.fromOccurrenceIndex) || args.fromOccurrenceIndex < 0) {
-      throw new Error("Occurrence index must be a non-negative integer.");
-    }
+    const series = await requireGroup(ctx, args.id);
+    assertValidReferenceIndex(args.fromOccurrenceIndex);
     const templates = args.positionTemplates ?? series.positionTemplates ?? [];
     assertValidPositionTemplates(templates);
     const now = Date.now();
     if (args.positionTemplates !== undefined) {
       await ctx.db.patch(args.id, { positionTemplates: args.positionTemplates, updatedAt: now });
     }
-    const occurrences = await listOccurrencesForSeries(ctx, args.id);
-    const scope = args.scope as SeriesEditScope;
-    let updatedCount = 0;
-
-    for (const occurrence of occurrences) {
-      if (scope === "this") {
-        if (occurrence.occurrenceIndex !== args.fromOccurrenceIndex) continue;
-      } else if (!shouldApplySeriesUpdate(occurrence, scope, args.fromOccurrenceIndex, now)) {
-        continue;
-      }
-      if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
-      await applyPositionTemplates(ctx, occurrence._id, occurrence.startAt, templates, now);
-      updatedCount += 1;
-    }
+    const updatedCount = await applyGroupTemplates(ctx, await requireGroup(ctx, args.id), {
+      scope: args.scope,
+      referenceIndex: args.fromOccurrenceIndex,
+      parts: { positions: true },
+      now,
+    });
     return { updatedCount };
   },
 });
@@ -582,65 +538,210 @@ export const importPositionsFromOccurrence = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const series = await ctx.db.get(args.id);
-    if (!series) throw new Error("Event series not found.");
-    const event = await ctx.db.get(args.eventId);
-    if (!event || event.seriesId !== args.id) {
-      throw new Error("Event is not part of this series.");
-    }
-    const slots = await listOccurrencePositions(ctx, args.eventId);
-    if (slots.length === 0) {
+    await requireGroup(ctx, args.id);
+    const event = await requireGroupDay(ctx, args.id, args.eventId);
+    const now = Date.now();
+    const { positionTemplates = [] } = await captureDayTemplates(
+      ctx,
+      event,
+      { positions: true },
+      now,
+    );
+    if (positionTemplates.length === 0) {
       throw new Error("Selected occurrence has no positions to import.");
     }
-    // A booked act's set and soundcheck live on its participation row, not the
-    // position; import the times the bill actually shows.
-    const actByNeedId = new Map(
-      (
-        await ctx.db
-          .query("eventBandParticipations")
-          .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-          .take(200)
-      ).flatMap((row) => (row.needId ? [[row.needId, row] as const] : [])),
-    );
+    // Same rules as create/regenerate; throwing rolls back the key stamps.
+    assertValidPositionTemplates(positionTemplates);
+    await ctx.db.patch(args.id, { positionTemplates, updatedAt: now });
+    return { templateCount: positionTemplates.length };
+  },
+});
+
+/**
+ * Apply selected setup from a multi-day booking's source day; omitted part
+ * flags default to true, and parts with no source content are skipped.
+ * Saves sections, crew slots (including staffed slots copied as open), and
+ * positions as group templates; copies pull lists with pull/checkout progress
+ * reset. Detached, cancelled, source, and already-ended days are excluded;
+ * `future` also excludes days before the source index or with starts before now.
+ * Returns the target count and ids. Legacy invoice days may be grouped first.
+ *
+ * Requires Arbor internal context and edit access to the source and targets.
+ * Throws for missing records, recurring groups, no eligible targets, or no
+ * selected content. Capture/copy limits and position validation/application
+ * errors propagate. Replaces "copy this day's setup".
+ */
+export const applyDaySetup = mutation({
+  args: {
+    eventId: v.id("events"),
+    scope: groupApplyScopeValue,
+    schedule: v.optional(v.boolean()),
+    positions: v.optional(v.boolean()),
+    pullList: v.optional(v.boolean()),
+  },
+  returns: v.object({ updatedCount: v.number(), eventIds: v.array(v.id("events")) }),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    await requireEventEditAccess(ctx, args.eventId);
     const now = Date.now();
-    const seenKeys = new Set<string>();
-    const templates = [];
-    for (const slot of slots
-      .slice()
-      .sort(
-        (a, b) =>
-          (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt) || a.createdAt - b.createdAt,
-      )) {
-      // A duplicated key (hand-copied row) becomes its own template.
-      const act = actByNeedId.get(slot._id);
-      const source = act
-        ? {
-            ...slot,
-            setStartsAt: act.setStartsAt ?? slot.setStartsAt,
-            setEndsAt: act.setEndsAt ?? slot.setEndsAt,
-            soundcheckStartsAt: act.soundcheckStartsAt ?? slot.soundcheckStartsAt,
-            soundcheckEndsAt: act.soundcheckEndsAt ?? slot.soundcheckEndsAt,
-          }
-        : slot;
-      const template = positionTemplateFromSlot(
-        source.templateKey && seenKeys.has(source.templateKey)
-          ? { ...source, templateKey: undefined }
-          : source,
-        event.startAt,
-        (timeMs) => pacificDayIndexFromAnchor(event.startAt, timeMs),
-      );
-      seenKeys.add(template.templateKey);
-      templates.push(template);
-      // Stamp the key on the source position so applying the template back to
-      // this occurrence updates it instead of adding a duplicate.
-      if (slot.templateKey !== template.templateKey) {
-        await ctx.db.patch(slot._id, { templateKey: template.templateKey, updatedAt: now });
-      }
+    let source = await ctx.db.get(args.eventId);
+    if (!source) throw new Error("Event not found.");
+    if (!source.seriesId && source.invoiceId) {
+      // Days booked before groups existed: group them on first use.
+      await syncMultiDayGroupForInvoice(ctx, source.invoiceId, now);
+      source = await ctx.db.get(args.eventId);
     }
-    // Same rules as create/regenerate; throwing rolls back the key stamps above.
-    assertValidPositionTemplates(templates);
-    await ctx.db.patch(args.id, { positionTemplates: templates, updatedAt: now });
-    return { templateCount: templates.length };
+    if (!source?.seriesId) throw new Error("This event has no other days to apply its setup to.");
+    const sourceDay = source;
+    const groupId = sourceDay.seriesId!;
+    if (!isMultiDayGroup(await requireGroup(ctx, groupId))) {
+      // A series already has its templates; copying one occurrence over them
+      // would rewrite the series. Edit the templates on the series page.
+      throw new Error("Apply a series' setup from its templates on the series page.");
+    }
+    // Days that already happened keep their record (pull progress, crew).
+    const targets = selectDaysInScope(
+      await listGroupDays(ctx, groupId),
+      args.scope,
+      sourceDay.occurrenceIndex ?? 0,
+      now,
+    ).filter((day) => day._id !== sourceDay._id && day.endAt >= now);
+    if (targets.length === 0) {
+      throw new Error(
+        args.scope === "future"
+          ? "There are no later upcoming days to apply this day's setup to."
+          : "There are no other upcoming days to apply this day's setup to.",
+      );
+    }
+    for (const target of targets) {
+      await requireEventEditAccess(ctx, target._id);
+    }
+
+    const wanted = {
+      schedule: args.schedule !== false,
+      crew: args.schedule !== false,
+      positions: args.positions !== false,
+    };
+    const captured = await captureDayTemplates(ctx, sourceDay, wanted, now);
+    const sourcePullList =
+      args.pullList !== false
+        ? await ctx.db
+            .query("eventPullListItems")
+            .withIndex("by_eventId", (q) => q.eq("eventId", sourceDay._id))
+            .take(MAX_PULL_LIST_ROWS + 1)
+        : [];
+    if (sourcePullList.length > MAX_PULL_LIST_ROWS) {
+      throw new Error(
+        `This day's pull list is too long to copy (max ${MAX_PULL_LIST_ROWS} rows, got more).`,
+      );
+    }
+    const hasUnlinkedShifts = wanted.crew
+      ? (
+          await ctx.db
+            .query("eventCrewShifts")
+            .withIndex("by_eventId", (q) => q.eq("eventId", sourceDay._id))
+            .take(500)
+        ).some((shift) => !shift.scheduleBlockId && !isTraineeShift(shift))
+      : false;
+    const { parts, copyUnlinkedShifts, copyPullList, nothingToApply } = planDaySetup({
+      wantSchedule: wanted.schedule,
+      wantPositions: wanted.positions,
+      wantPullList: args.pullList !== false,
+      captured,
+      hasUnlinkedShifts,
+      pullListRows: sourcePullList.length,
+    });
+    if (nothingToApply) {
+      throw new Error(
+        "This day has nothing to apply yet: no Run of Show, crew, positions or pull list.",
+      );
+    }
+    assertValidPositionTemplates(captured.positionTemplates ?? []);
+    await ctx.db.patch(groupId, {
+      ...(parts.schedule
+        ? { blockTemplates: captured.blockTemplates, shiftTemplates: captured.shiftTemplates }
+        : {}),
+      ...(parts.positions ? { positionTemplates: captured.positionTemplates } : {}),
+      updatedAt: now,
+    });
+    const group = await requireGroup(ctx, groupId);
+    const defaultHourlyRateUsd = parts.crew ? await resolveDefaultCrewHourlyRateUsd(ctx) : undefined;
+    for (const target of targets) {
+      await applyGroupTemplatesToDay(ctx, group, target, parts, { now, defaultHourlyRateUsd });
+      if (copyUnlinkedShifts) {
+        await copyUnlinkedShiftsBetweenDays(ctx, sourceDay, target, now);
+      }
+      if (parts.crew || copyUnlinkedShifts) {
+        await syncEventCrewCostUsd(ctx, target._id, now);
+      }
+      if (copyPullList) {
+        await copyPullListBetweenDays(ctx, sourcePullList, target._id, now);
+      }
+      await ctx.db.patch(target._id, { updatedAt: now });
+    }
+    return { updatedCount: targets.length, eventIds: targets.map((day) => day._id) };
+  },
+});
+
+/**
+ * Add a day at `startAt` (Unix milliseconds), returning its event id. Uses group
+ * templates and the first non-cancelled member's shared fields and visibility
+ * (falling back to the first member), clears inherited budget and costs, then
+ * recalculates templated crew cost and synchronizes invoice group membership.
+ * Requires Arbor internal context. Throws for a missing group or invoice, a
+ * recurring group, or an existing member on the same Pacific date; template
+ * application errors propagate.
+ */
+export const addDay = mutation({
+  args: {
+    id: v.id("eventSeries"),
+    startAt: v.number(),
+  },
+  returns: v.id("events"),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const group = await requireGroup(ctx, args.id);
+    if (!isMultiDayGroup(group)) {
+      throw new Error("Add occurrences to a recurring series from its rule instead.");
+    }
+    const invoice = group.invoiceId ? await ctx.db.get(group.invoiceId) : null;
+    if (!invoice) {
+      throw new Error("A booking's days share its invoice; link one before adding a day.");
+    }
+    const days = await listGroupDays(ctx, args.id);
+    // Adding a day creates an invoice-backed event: the caller needs edit
+    // access to the booking, shown by being able to edit one of its days.
+    const modelDay = days.find((day) => day.status !== "cancelled") ?? days[0];
+    if (!modelDay) throw new Error("This booking has no days to add to.");
+    await requireEventEditAccess(ctx, modelDay._id);
+    if (days.some((day) => pacificDateKey(day.startAt) === pacificDateKey(args.startAt))) {
+      throw new Error("This booking already has a day on that date.");
+    }
+    const now = Date.now();
+    const eventId = await materializeOccurrence(ctx, group, days.length, args.startAt, now);
+    // A new day looks like the booking's live days today (venue, host, people,
+    // visibility), not the group's snapshot from when it formed. Budget and
+    // costs are per day: the group's budget is the whole booking's. Its status
+    // follows the invoice, as on every linked day.
+    const model = modelDay;
+    const created = await ctx.db.get(eventId);
+    if (created) {
+      const next = withSharedDayFields(
+        { ...created, visibility: model?.visibility ?? created.visibility },
+        model ?? created,
+      );
+      delete next.budgetUsd;
+      delete next.bandsCostUsd;
+      delete next.externalRentalsCostUsd;
+      delete next.otherCostUsd;
+      delete next.crewCostUsd;
+      await ctx.db.replace(eventId, next);
+      if ((group.shiftTemplates?.length ?? 0) > 0) await syncEventCrewCostUsd(ctx, eventId, now);
+    }
+    await syncMultiDayGroupForInvoice(ctx, invoice._id, now);
+    return eventId;
   },
 });
 
@@ -655,22 +756,26 @@ export const addOccurrences = mutation({
     await requireArborInternalContext(ctx);
     const series = await ctx.db.get(args.id);
     if (!series) throw new Error("Event series not found.");
+    const intervalWeeks = series.intervalWeeks;
+    if (isMultiDayGroup(series) || intervalWeeks === undefined) {
+      throw new Error("Add a dated day to a multi-day booking instead.");
+    }
     const existing = await listOccurrencesForSeries(ctx, args.id);
     const lastIndex = existing.length > 0 ? (existing[existing.length - 1]!.occurrenceIndex ?? 0) : -1;
 
     let newStarts: number[] = [];
     if (args.additionalCount !== undefined) {
       newStarts = Array.from({ length: args.additionalCount }, (_, offset) =>
-        occurrenceStartAt(series.anchorStartAt, lastIndex + 1 + offset, series.intervalWeeks),
+        occurrenceStartAt(series.anchorStartAt, lastIndex + 1 + offset, intervalWeeks),
       );
     } else if (args.newSeriesEndAt !== undefined) {
       newStarts = computeOccurrenceStarts({
         anchorStartAt: occurrenceStartAt(
           series.anchorStartAt,
           lastIndex + 1,
-          series.intervalWeeks,
+          intervalWeeks,
         ),
-        intervalWeeks: series.intervalWeeks,
+        intervalWeeks,
         seriesEndAt: args.newSeriesEndAt,
       });
     } else {
@@ -708,6 +813,15 @@ export const cancelFuture = mutation({
     if (!series) throw new Error("Event series not found.");
     const now = Date.now();
     const occurrences = await listOccurrencesForSeries(ctx, args.id);
+    if (isMultiDayGroup(series)) {
+      // A booking's days are invoice-backed and led by different people: the
+      // caller must be able to edit every day they cancel (as applyDaySetup does).
+      for (const occurrence of occurrences) {
+        if ((occurrence.occurrenceIndex ?? 0) < args.fromOccurrenceIndex) continue;
+        if (occurrence.status === "cancelled") continue;
+        await requireEventEditAccess(ctx, occurrence._id);
+      }
+    }
     let cancelledCount = 0;
     for (const occurrence of occurrences) {
       if ((occurrence.occurrenceIndex ?? 0) < args.fromOccurrenceIndex) continue;
@@ -717,6 +831,9 @@ export const cancelFuture = mutation({
         updatedAt: now,
       });
       cancelledCount += 1;
+    }
+    if (isMultiDayGroup(series) && series.invoiceId) {
+      await syncMultiDayGroupForInvoice(ctx, series.invoiceId, now);
     }
     return { cancelledCount };
   },
@@ -736,17 +853,13 @@ export const reattachOccurrence = mutation({
     if (!series) throw new Error("Event series not found.");
 
     const now = Date.now();
-    const occurrenceIndex = event.occurrenceIndex ?? 0;
-    const startAt = occurrenceStartAt(
-      series.anchorStartAt,
-      occurrenceIndex,
-      series.intervalWeeks,
-    );
+    const startAt = groupDayStartAt(series, event);
     const patch = buildEventPatchFromSeriesTemplate(series, startAt);
     await ctx.db.patch(args.eventId, {
       ...patch,
       seriesDetached: false,
-      invoiceId: series.invoiceId,
+      // A multi-day day's invoice is what makes it a member; leave it be.
+      ...(isMultiDayGroup(series) ? {} : { invoiceId: series.invoiceId }),
       updatedAt: now,
     });
 
@@ -767,7 +880,8 @@ export const reattachOccurrence = mutation({
         now,
       );
       await syncEventCrewCostUsd(ctx, args.eventId, now);
-    } else {
+    } else if (!isMultiDayGroup(series)) {
+      // A multi-day day keeps its own crew cost; only a series has a template budget.
       await ctx.db.patch(args.eventId, {
         crewCostUsd: series.occurrenceBudgetCrewCostUsd,
         updatedAt: now,
@@ -856,7 +970,8 @@ export const updateSeriesCosts = mutation({
       updatedAt: now,
     });
 
-    if (args.propagateOccurrenceCosts ?? true) {
+    // A multi-day booking's days carry their own costs; its group budget is a total.
+    if ((args.propagateOccurrenceCosts ?? true) && !isMultiDayGroup(series)) {
       const updatedSeries = await ctx.db.get(args.id);
       if (!updatedSeries) throw new Error("Event series not found.");
       const occurrences = await listOccurrencesForSeries(ctx, args.id);

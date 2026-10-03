@@ -5,6 +5,7 @@ import {
   deleteEventInvoiceLinksForInvoice,
 } from "./eventInvoiceLinks";
 import { listEventsByInvoiceId } from "./invoiceEvents";
+import { dissolveMultiDayGroupsForInvoice, syncMultiDayGroupForInvoice } from "./eventGroups";
 
 const TAKE = 500;
 /**
@@ -66,6 +67,7 @@ export async function findRequestForInvoice(
 
 export async function deleteInvoiceRecord(ctx: MutationCtx, invoiceId: Id<"invoices">) {
   const drainRows = withCascadeBudget();
+  await dissolveMultiDayGroupsForInvoice(ctx, invoiceId);
   await deleteEventInvoiceLinksForInvoice(ctx, invoiceId);
 
   await drainRows(
@@ -109,8 +111,17 @@ export async function deleteInvoiceRecord(ctx: MutationCtx, invoiceId: Id<"invoi
   await ctx.db.delete(invoiceId);
 }
 
-export async function deleteEventRecord(ctx: MutationCtx, eventId: Id<"events">) {
+export async function deleteEventRecord(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  /**
+   * A cascade deleting a whole booking dissolves its group once up front
+   * (`dissolveMultiDayGroupsForInvoice`) rather than re-syncing per day.
+   */
+  options: { skipGroupSync?: boolean } = {},
+) {
   const drainRows = withCascadeBudget();
+  const invoiceId = (await ctx.db.get(eventId))?.invoiceId;
   await deleteEventInvoiceLinksForEvent(ctx, eventId);
 
   await drainRows(
@@ -329,6 +340,10 @@ export async function deleteEventRecord(ctx: MutationCtx, eventId: Id<"events">)
   );
 
   await ctx.db.delete(eventId);
+  // The booking's remaining days close ranks (or stop being a group).
+  if (invoiceId && !options.skipGroupSync && (await ctx.db.get(invoiceId))) {
+    await syncMultiDayGroupForInvoice(ctx, invoiceId, Date.now());
+  }
 }
 
 export async function unlinkInvoicePeers(ctx: MutationCtx, invoiceId: Id<"invoices">) {
@@ -341,6 +356,8 @@ export async function unlinkInvoicePeers(ctx: MutationCtx, invoiceId: Id<"invoic
     });
   }
 
+  // Without the invoice, its days are no longer one booking.
+  await dissolveMultiDayGroupsForInvoice(ctx, invoiceId);
   const events = await listEventsByInvoiceId(ctx, invoiceId);
   const now = Date.now();
   for (const event of events) {

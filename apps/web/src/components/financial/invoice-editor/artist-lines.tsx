@@ -53,7 +53,6 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
   if (rows.length === 0) return null;
 
   const days = artistDays(draft);
-  const defaultDayId = defaultArtistDayId(draft);
   const multiDay = days.length > 1;
   const dayOptions = days.map((day) => ({ value: day._id, label: day.label, keywords: day.label }));
   const dayLabelByEventId = new Map(days.map((day) => [day._id, day.label]));
@@ -110,7 +109,9 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
       <LineColumnHeads item="Artist" qty="Hours × people" rate="Rate / person / hr" />
       {rows.map((row, idx) => {
         const tbd = isTbdArtist(row);
-        const dayId = row.eventId ?? defaultDayId ?? "";
+        // An unscoped line applies to Day 1 on a multi-day booking (see
+        // `lib/invoiceArtistDays.ts`), so show it there, not on the selected day.
+        const dayId = row.eventId ?? days[0]?._id ?? "";
         return (
           <LineRow
             key={`artist-${idx}`}

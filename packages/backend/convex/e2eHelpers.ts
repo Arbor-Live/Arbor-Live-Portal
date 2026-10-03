@@ -21,6 +21,7 @@ import {
   usernameFromEmail,
 } from "./lib/username";
 import { deleteEventRecord, deleteInvoiceRecord } from "./lib/bookingChainDelete";
+import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
 import { listEventsLinkedToRequest } from "./lib/bookingDayLoad";
 import { inviteAcceptUrl } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
@@ -4368,6 +4369,124 @@ export const getOccurrenceScheduleBlocks = query({
 });
 
 /**
+ * Test-only: a two-day booking (one draft invoice, two upcoming day events),
+ * grouped the way a real booking is (`syncMultiDayGroupForInvoice`).
+ */
+export const seedMultiDayBooking = mutation({
+  args: { title: v.string() },
+  returns: v.object({
+    invoiceId: v.id("invoices"),
+    groupId: v.id("eventSeries"),
+    eventIds: v.array(v.id("events")),
+    startAts: v.array(v.number()),
+    groupPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const invoiceId = await ctx.db.insert("invoices", {
+      invoiceNumber: `ALINV-${makeInvoiceSuffix()}`,
+      status: "draft",
+      issueDate: new Date(now).toISOString().slice(0, 10),
+      managerUserId: "e2e-manager",
+      managerName: "E2E Admin",
+      managerEmail: "e2e-admin@arborlive.test",
+      clientGroupName: "E2E Multi-day Client",
+      clientEmail: "e2e-client@example.com",
+      equipmentPricingMode: "nonSubsidized",
+      crewRateMode: "normal",
+      discountType: "amount",
+      discountValue: 0,
+      discountAmountUsd: 0,
+      equipmentSubtotalUsd: 0,
+      externalRentalsSubtotalUsd: 0,
+      artistsSubtotalUsd: 0,
+      crewSubtotalUsd: 0,
+      feesSubtotalUsd: 0,
+      subtotalUsd: 0,
+      totalUsd: 0,
+      publicApprovalToken: makeToken(),
+      clientApprovalStatus: "pending",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const eventIds: Id<"events">[] = [];
+    const startAts: number[] = [];
+    for (const [index, daysAhead] of [20, 21].entries()) {
+      const window = futureEventWindow(daysAhead);
+      startAts.push(window.startAt);
+      eventIds.push(
+        await ctx.db.insert("events", {
+          title: `${args.title} — Day ${index + 1}`,
+          // Day 2 differs from Day 1 so tests can tell an edit stayed on one day.
+          status: index === 0 ? "tentative" : "ready",
+          notes: index === 0 ? undefined : "Day 2 notes",
+          visibility: "public",
+          publicToken: makeToken(),
+          invoiceId,
+          startAt: window.startAt,
+          endAt: window.endAt,
+          timezone: "America/Los_Angeles",
+          spansMultipleDays: false,
+          setupOnly: false,
+          strikeOnly: false,
+          requiresShowWindow: true,
+          venueName: "E2E Multi-day Venue",
+          eventType: "Crewed Event",
+          createdAt: now,
+          updatedAt: now,
+        }),
+      );
+    }
+    const groupId = await syncMultiDayGroupForInvoice(ctx, invoiceId, now);
+    if (!groupId) throw new Error("Expected a multi-day group.");
+    return {
+      invoiceId,
+      groupId,
+      eventIds,
+      startAts,
+      groupPath: `/dashboard/events/series/${groupId}`,
+    };
+  },
+});
+
+/** Test-only: the event fields group edits can touch. */
+export const getEventFields = query({
+  args: { eventId: v.id("events") },
+  returns: v.object({
+    title: v.string(),
+    status: v.string(),
+    notes: v.union(v.string(), v.null()),
+    teamsInterested: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+    return {
+      title: event.title,
+      status: event.status,
+      notes: event.notes ?? null,
+      teamsInterested: event.teamsInterested ?? [],
+    };
+  },
+});
+
+/** Test-only: an event's positions (label + template key). */
+export const getEventPositions = query({
+  args: { eventId: v.id("events") },
+  returns: v.array(v.object({ label: v.string(), templateKey: v.union(v.string(), v.null()) })),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const rows = await ctx.db
+      .query("eventArtistNeeds")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(100);
+    return rows.map((row) => ({ label: row.label ?? "", templateKey: row.templateKey ?? null }));
+  },
+});
+
+/**
  * Test-only: series shape behind an occurrence event (recurring create).
  */
 export const getEventSeriesStateByEventId = query({
@@ -4377,7 +4496,9 @@ export const getEventSeriesStateByEventId = query({
     v.object({
       seriesId: v.id("eventSeries"),
       title: v.string(),
-      intervalWeeks: v.number(),
+      kind: v.union(v.literal("recurring"), v.literal("multi_day")),
+      intervalWeeks: v.optional(v.number()),
+      updatedAt: v.number(),
       occurrenceCount: v.number(),
       occurrenceTitles: v.array(v.string()),
       occurrenceIds: v.array(v.id("events")),
@@ -4397,7 +4518,9 @@ export const getEventSeriesStateByEventId = query({
     return {
       seriesId: series._id,
       title: series.title,
+      kind: series.kind ?? "recurring",
       intervalWeeks: series.intervalWeeks,
+      updatedAt: series.updatedAt,
       occurrenceCount: occurrences.length,
       occurrenceTitles: occurrences.map((row) => row.title),
       occurrenceIds: occurrences.map((row) => row._id),

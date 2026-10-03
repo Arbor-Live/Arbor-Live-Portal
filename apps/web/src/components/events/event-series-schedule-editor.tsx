@@ -13,17 +13,19 @@ import { useConvexForm } from "@/hooks/use-convex-form";
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { RunOfShowEditor } from "@/components/events/workspace/run-of-show/run-of-show-editor";
 import {
-  SERIES_EDIT_SCOPE_LABELS,
-  type SeriesEditScope,
-} from "@/lib/event-series";
-import {
   buildSeriesQuickAddBlocks,
   templatesToTimelineDrafts,
   timelineDraftsToTemplates,
   type SeriesBlockTemplate,
 } from "@/lib/event-series-schedule";
 import type { RunOfShowAct } from "@/lib/run-of-show";
-import { formatOccurrencePreview } from "@/lib/event-series";
+import { GroupApplyScopeFields } from "@/components/events/group-apply-scope-fields";
+import {
+  formatOccurrencePreview,
+  groupDayLabel,
+  groupDayNoun,
+  type EventGroupKind,
+} from "@/lib/event-series";
 import { notify } from "@/lib/notify";
 import {
   seriesScheduleEditorSchema,
@@ -32,6 +34,7 @@ import {
 
 type SeriesScheduleEditorProps = {
   seriesId: Id<"eventSeries">;
+  kind?: EventGroupKind;
   anchorStartAt: number;
   anchorEndAt: number;
   eventType?: string;
@@ -39,6 +42,8 @@ type SeriesScheduleEditorProps = {
   blockTemplates?: SeriesBlockTemplate[];
   occurrences: Array<{ _id: Id<"events">; occurrenceIndex?: number; startAt: number }>;
   onMessage: (message: string) => void;
+  /** Reports unsaved edits (the group page marks the tab). */
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 function normalizeEventType(value: string | undefined) {
@@ -74,7 +79,9 @@ function blocksFromTemplates(
 }
 
 export function EventSeriesScheduleEditor({
+  onDirtyChange,
   seriesId,
+  kind = "recurring",
   anchorStartAt,
   anchorEndAt,
   eventType,
@@ -133,9 +140,9 @@ export function EventSeriesScheduleEditor({
     () =>
       occurrences.map((row) => ({
         value: row._id,
-        label: `#${(row.occurrenceIndex ?? 0) + 1} · ${formatOccurrencePreview(row.startAt)}`,
+        label: `${groupDayLabel(kind, row.occurrenceIndex)} · ${formatOccurrencePreview(row.startAt)}`,
       })),
-    [occurrences],
+    [kind, occurrences],
   );
 
   function withStableBlockRefs(nextBlocks: TimelineBlockDraft[]) {
@@ -160,13 +167,17 @@ export function EventSeriesScheduleEditor({
 
   const isDirty = form.formState.isDirty || blocksDirty;
 
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
   async function applyTemplate(values: SeriesScheduleEditorFormValues) {
     if (blocks.length === 0) {
       throw new Error("Add at least one schedule block to the series template.");
     }
     const parsedFromIndex = Number(values.fromOccurrenceIndex);
     if (!Number.isFinite(parsedFromIndex) || parsedFromIndex < 0) {
-      throw new Error("Enter a valid occurrence index.");
+      throw new Error(`Pick a ${groupDayNoun(kind)} to apply from.`);
     }
     const templates = timelineDraftsToTemplates(blocks, anchorStartAt);
     const result = await regenerateBlocks({
@@ -176,7 +187,7 @@ export function EventSeriesScheduleEditor({
       blockTemplates: templates,
     });
     onMessage(
-      `Saved template and updated schedule blocks on ${result.updatedCount} occurrence${result.updatedCount === 1 ? "" : "s"}. Crew shifts were not changed.`,
+      `Saved template and updated the Run of Show on ${result.updatedCount} ${groupDayNoun(kind, result.updatedCount !== 1)}. Crew shifts were not changed.`,
     );
     setBlocksDirty(false);
     form.reset(values);
@@ -187,7 +198,7 @@ export function EventSeriesScheduleEditor({
   async function handleImportFromOccurrence() {
     const importOccurrenceId = form.getValues("importOccurrenceId");
     if (!importOccurrenceId) {
-      notify.error("Select an occurrence to import from.");
+      notify.error(`Select a ${groupDayNoun(kind)} to import from.`);
       return;
     }
     await form.runMutation(async () => {
@@ -196,7 +207,7 @@ export function EventSeriesScheduleEditor({
         eventId: importOccurrenceId as Id<"events">,
       });
       onMessage(
-        `Imported ${result.templateCount} block${result.templateCount === 1 ? "" : "s"} into the series template.`,
+        `Imported ${result.templateCount} block${result.templateCount === 1 ? "" : "s"} into the ${kind === "multi_day" ? "booking" : "series"} template.`,
       );
     });
   }
@@ -215,7 +226,7 @@ export function EventSeriesScheduleEditor({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Series schedule template</CardTitle>
+          <CardTitle>{kind === "multi_day" ? "Booking Run of Show template" : "Series schedule template"}</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
@@ -230,24 +241,25 @@ export function EventSeriesScheduleEditor({
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Series schedule template</CardTitle>
+          <CardTitle>{kind === "multi_day" ? "Booking Run of Show template" : "Series schedule template"}</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Edit once, then apply to many occurrences. Per-event crew assignment stays separate on each event.
+            Edit once, then apply to many {groupDayNoun(kind, true)}. Acts&apos; soundchecks and sets stay
+            on each {groupDayNoun(kind)}.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <Form {...form}>
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-1">
-                <Label>Import blocks from occurrence</Label>
+                <Label>Import sections from {groupDayNoun(kind)}</Label>
                 <SearchableSelect
                   value={form.watch("importOccurrenceId")}
                   onChange={(value) =>
                     form.setValue("importOccurrenceId", value, { shouldDirty: true })
                   }
                   options={occurrenceOptions}
-                  placeholder="Select occurrence..."
-                  emptyLabel="Select occurrence"
+                  placeholder={`Select ${groupDayNoun(kind)}...`}
+                  emptyLabel={`Select ${groupDayNoun(kind)}`}
                 />
               </div>
               <div className="flex items-end">
@@ -297,35 +309,18 @@ export function EventSeriesScheduleEditor({
           />
 
           <Form {...form}>
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="space-y-1">
-                <Label>Apply to</Label>
-                <SearchableSelect
-                  value={form.watch("applyScope")}
-                  onChange={(value) =>
-                    form.setValue("applyScope", value as SeriesEditScope, { shouldDirty: true })
-                  }
-                  options={(Object.keys(SERIES_EDIT_SCOPE_LABELS) as SeriesEditScope[]).map((scope) => ({
-                    value: scope,
-                    label: SERIES_EDIT_SCOPE_LABELS[scope],
-                  }))}
-                  placeholder="Select scope..."
-                  emptyLabel="Select scope"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>From occurrence index (0-based)</Label>
-                <SearchableSelect
-                  value={form.watch("fromOccurrenceIndex")}
-                  onChange={(value) =>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-0 flex-1">
+                <GroupApplyScopeFields
+                  idPrefix="series-schedule"
+                  kind={kind}
+                  days={occurrences}
+                  scope={form.watch("applyScope")}
+                  dayIndex={form.watch("fromOccurrenceIndex")}
+                  onScopeChange={(value) => form.setValue("applyScope", value, { shouldDirty: true })}
+                  onDayIndexChange={(value) =>
                     form.setValue("fromOccurrenceIndex", value, { shouldDirty: true })
                   }
-                  options={occurrences.map((row) => ({
-                    value: String(row.occurrenceIndex ?? 0),
-                    label: `#${(row.occurrenceIndex ?? 0) + 1}`,
-                  }))}
-                  placeholder="Select index..."
-                  emptyLabel="Select index"
                 />
               </div>
               <div className="flex items-end">
@@ -340,7 +335,8 @@ export function EventSeriesScheduleEditor({
             </div>
           </Form>
           <p className="text-xs text-muted-foreground">
-            Applying replaces schedule blocks on selected occurrences. Existing crew shifts are kept but may reference removed blocks.
+            Applying replaces the sections on the selected {groupDayNoun(kind, true)}. Detached and
+            cancelled {groupDayNoun(kind, true)} are skipped.
           </p>
           {form.saveError ? (
             <p className="text-sm text-destructive">{form.saveError}</p>

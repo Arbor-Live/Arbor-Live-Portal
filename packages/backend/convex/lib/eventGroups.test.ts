@@ -1,0 +1,320 @@
+import { describe, expect, it } from "vitest";
+import type { Doc, Id } from "../_generated/dataModel";
+import { groupTitleFromDayTitles, planMultiDayMembership } from "./eventGroups";
+import { planDaySetup, planUnlinkedShiftCopy, selectDaysInScope } from "./eventGroupTemplates";
+import {
+  editedSharedDayFields,
+  shiftsToTemplates,
+  withSharedDayFields,
+} from "./eventSeriesGeneration";
+import {
+  artistLineAppliesToEvent,
+  artistLineDayScope,
+  sharedGroupId,
+} from "./invoiceArtistDays";
+
+const eventId = (value: string) => value as Id<"events">;
+const groupId = (value: string) => value as Id<"eventSeries">;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const NOW = 1_800_000_000_000;
+
+type TestDay = {
+  _id: Id<"events">;
+  startAt: number;
+  status: Doc<"events">["status"];
+  occurrenceIndex: number;
+  seriesDetached: boolean;
+  seriesId: Id<"eventSeries">;
+};
+
+function day(index: number, partial: Partial<TestDay> = {}): TestDay {
+  return {
+    _id: eventId(`day-${index}`),
+    startAt: NOW + index * DAY_MS,
+    status: "tentative",
+    occurrenceIndex: index,
+    seriesDetached: false,
+    seriesId: groupId("group"),
+    ...partial,
+  };
+}
+
+describe("selectDaysInScope", () => {
+  const days = [
+    day(0, { startAt: NOW - DAY_MS }),
+    day(1),
+    day(2, { seriesDetached: true }),
+    day(3, { status: "cancelled" }),
+    day(4),
+  ];
+  const ids = (rows: TestDay[]) => rows.map((row) => row._id);
+
+  it("all days skips detached and cancelled days", () => {
+    expect(ids(selectDaysInScope(days, "all", 0, NOW))).toEqual([
+      eventId("day-0"),
+      eventId("day-1"),
+      eventId("day-4"),
+    ]);
+  });
+
+  it("from this day on skips earlier and past days", () => {
+    expect(ids(selectDaysInScope(days, "future", 0, NOW))).toEqual([
+      eventId("day-1"),
+      eventId("day-4"),
+    ]);
+    expect(ids(selectDaysInScope(days, "future", 2, NOW))).toEqual([eventId("day-4")]);
+  });
+
+  it("this day only reaches exactly that day, and never an overridden one", () => {
+    expect(ids(selectDaysInScope(days, "this", 1, NOW))).toEqual([eventId("day-1")]);
+    expect(ids(selectDaysInScope(days, "this", 2, NOW))).toEqual([]);
+  });
+});
+
+describe("groupTitleFromDayTitles", () => {
+  it("uses the shared base of dated day titles", () => {
+    expect(
+      groupTitleFromDayTitles(["Harvest Fest — Fri, Oct 3", "Harvest Fest — Sat, Oct 4"]),
+    ).toBe("Harvest Fest");
+  });
+
+  it("falls back to Day 1's title when the days differ", () => {
+    expect(groupTitleFromDayTitles(["Load-in", "Harvest Fest — Sat, Oct 4"])).toBe("Load-in");
+    expect(groupTitleFromDayTitles(["Solo"])).toBe("Solo");
+  });
+});
+
+describe("planMultiDayMembership", () => {
+  const group = groupId("group");
+
+  it("adds new days attached, in calendar order", () => {
+    const plan = planMultiDayMembership(group, [{ _id: eventId("a") }, { _id: eventId("b") }], []);
+    expect(plan).toEqual({
+      assign: [
+        { eventId: eventId("a"), occurrenceIndex: 0, seriesDetached: false },
+        { eventId: eventId("b"), occurrenceIndex: 1, seriesDetached: false },
+      ],
+      release: [],
+    });
+  });
+
+  it("is a no-op when membership already matches", () => {
+    const days = [
+      { _id: eventId("a"), seriesId: group, occurrenceIndex: 0 },
+      { _id: eventId("b"), seriesId: group, occurrenceIndex: 1, seriesDetached: true },
+    ];
+    expect(planMultiDayMembership(group, days, days)).toEqual({ assign: [], release: [] });
+  });
+
+  it("reorders when a day moves, keeps overrides, and releases days that left", () => {
+    const members = [
+      { _id: eventId("a"), seriesId: group, occurrenceIndex: 0 },
+      { _id: eventId("b"), seriesId: group, occurrenceIndex: 1, seriesDetached: true },
+      { _id: eventId("gone"), seriesId: group, occurrenceIndex: 2 },
+    ];
+    const plan = planMultiDayMembership(group, [members[1]!, members[0]!], members);
+    expect(plan.release).toEqual([eventId("gone")]);
+    expect(plan.assign).toEqual([
+      { eventId: eventId("b"), occurrenceIndex: 0, seriesDetached: true },
+      { eventId: eventId("a"), occurrenceIndex: 1, seriesDetached: false },
+    ]);
+  });
+
+  it("moves a day over from another booking's group, attached", () => {
+    const plan = planMultiDayMembership(
+      group,
+      [{ _id: eventId("a"), seriesId: groupId("other"), occurrenceIndex: 0, seriesDetached: true }],
+      [],
+    );
+    expect(plan.assign).toEqual([
+      { eventId: eventId("a"), occurrenceIndex: 0, seriesDetached: false },
+    ]);
+  });
+});
+
+describe("artist line day scope", () => {
+  const days = [
+    { _id: eventId("d1"), seriesId: groupId("g") },
+    { _id: eventId("d2"), seriesId: groupId("g") },
+  ];
+
+  it("finds the group only when every day shares it", () => {
+    expect(sharedGroupId(days)).toBe(groupId("g"));
+    expect(sharedGroupId([...days, { seriesId: undefined }])).toBeNull();
+    expect(sharedGroupId([])).toBeNull();
+  });
+
+  it("an unscoped line applies to every occurrence of a recurring series", () => {
+    const scope = artistLineDayScope(days, "recurring");
+    expect(artistLineAppliesToEvent({ eventId: eventId("d2"), scope })).toBe(true);
+  });
+
+  it("an unscoped line on a multi-day booking stays on Day 1", () => {
+    const scope = artistLineDayScope(days, "multi_day");
+    expect(artistLineAppliesToEvent({ eventId: eventId("d1"), scope })).toBe(true);
+    expect(artistLineAppliesToEvent({ eventId: eventId("d2"), scope })).toBe(false);
+  });
+
+  it("a line tagged to a day applies to that day only", () => {
+    const scope = artistLineDayScope(days, "recurring");
+    expect(
+      artistLineAppliesToEvent({ lineEventId: eventId("d1"), eventId: eventId("d2"), scope }),
+    ).toBe(false);
+  });
+});
+
+describe("shiftsToTemplates for copying a day", () => {
+  const HOUR = 60 * 60 * 1000;
+  const start = 1_000_000_000;
+  const blockId = "block" as Id<"eventScheduleBlocks">;
+  const blocks = [{ _id: blockId, startsAt: start }];
+  const blockTemplates = [
+    { blockType: "setup" as const, label: "Setup", dayIndex: 0, offsetMs: 0, durationMs: 2 * HOUR },
+  ];
+  const staffed = {
+    role: "Audio",
+    scheduleBlockId: blockId,
+    userId: "user-1",
+    startsAt: start,
+    endsAt: start + 2 * HOUR,
+    hours: 3,
+    timesOverridden: true,
+  };
+
+  it("imports only open slots by default", () => {
+    expect(shiftsToTemplates([staffed], blocks, blockTemplates, start)).toEqual([]);
+  });
+
+  it("captures staffed shifts as open slots with their billed hours", () => {
+    const [template] = shiftsToTemplates([staffed], blocks, blockTemplates, start, {
+      copyingDay: true,
+    });
+    expect(template).toMatchObject({
+      role: "Audio",
+      blockTemplateIndex: 0,
+      offsetMs: 0,
+      durationMs: 2 * HOUR,
+      hours: 3,
+    });
+    expect(template).not.toHaveProperty("timesOverridden");
+    expect(template).not.toHaveProperty("userId");
+  });
+
+  it("never captures a trainee (an applicant shadowing one day)", () => {
+    const trainee = { ...staffed, userId: undefined, crewApplicationId: "application-1" };
+    expect(
+      shiftsToTemplates([trainee], blocks, blockTemplates, start, { copyingDay: true }),
+    ).toEqual([]);
+  });
+});
+
+describe("shared day fields on an 'all days' edit", () => {
+  it("only the fields the edit touched spread, with their linked names", () => {
+    expect(editedSharedDayFields({ venueId: null, title: "x", startAt: 1 })).toEqual([
+      "venueId",
+      "venueName",
+    ]);
+    expect(editedSharedDayFields({ dayOfLeadUserId: "" })).toEqual(["dayOfLeadUserId"]);
+    expect(editedSharedDayFields({ notes: "per day" })).toEqual([]);
+  });
+
+  it("copies edited fields, clears edited-away ones, and leaves the rest alone", () => {
+    const other = { venueName: "Old hall", dayOfLeadUserId: "lead-2", host: "Host B" };
+    const edited = { venueName: undefined, dayOfLeadUserId: "lead-1", host: "Host A" };
+    expect(withSharedDayFields(other, edited, ["venueName", "dayOfLeadUserId"])).toEqual({
+      dayOfLeadUserId: "lead-1",
+      host: "Host B",
+    });
+  });
+});
+
+describe("planDaySetup", () => {
+  const empty = {
+    wantSchedule: true,
+    wantPositions: true,
+    wantPullList: true,
+    captured: {},
+    hasUnlinkedShifts: false,
+    pullListRows: 0,
+  };
+
+  it("does nothing for a day with nothing set up", () => {
+    expect(planDaySetup(empty).nothingToApply).toBe(true);
+  });
+
+  it("unlinked shifts alone copy across without touching the section templates", () => {
+    const plan = planDaySetup({ ...empty, hasUnlinkedShifts: true });
+    expect(plan.parts.schedule).toBe(false);
+    expect(plan.parts.crew).toBe(false);
+    expect(plan.copyUnlinkedShifts).toBe(true);
+    expect(plan.nothingToApply).toBe(false);
+  });
+
+  it("a Run of Show turns the schedule and crew template parts on", () => {
+    const block = { blockType: "setup" as const, label: "Setup", dayIndex: 0, offsetMs: 0, durationMs: 1 };
+    const plan = planDaySetup({ ...empty, captured: { blockTemplates: [block] } });
+    expect(plan.parts).toEqual({ schedule: true, crew: true, positions: false });
+  });
+
+  it("respects what the user unticked", () => {
+    const plan = planDaySetup({
+      ...empty,
+      wantSchedule: false,
+      wantPullList: false,
+      hasUnlinkedShifts: true,
+      pullListRows: 3,
+    });
+    expect(plan.copyUnlinkedShifts).toBe(false);
+    expect(plan.copyPullList).toBe(false);
+    expect(plan.nothingToApply).toBe(true);
+  });
+});
+
+describe("planUnlinkedShiftCopy", () => {
+  const HOUR = 60 * 60 * 1000;
+  const shift = (id: string, partial: Record<string, unknown> = {}) => ({
+    _id: id as Id<"eventCrewShifts">,
+    role: "Load-in",
+    startsAt: 1_000 * HOUR,
+    endsAt: 1_000 * HOUR + 2 * HOUR,
+    scheduleBlockId: undefined,
+    userId: undefined,
+    crewApplicationId: undefined,
+    ...partial,
+  });
+  const DAY = 24 * HOUR;
+
+  it("copies an unsectioned shift one day later as an open slot", () => {
+    const plan = planUnlinkedShiftCopy([shift("s1")], [], DAY);
+    expect(plan.deleteIds).toEqual([]);
+    expect(plan.inserts.map((row) => [row.startsAt, row.endsAt])).toEqual([
+      [1_000 * HOUR + DAY, 1_000 * HOUR + DAY + 2 * HOUR],
+    ]);
+  });
+
+  it("is idempotent: the previous copy is replaced, not added to", () => {
+    const first = planUnlinkedShiftCopy([shift("s1")], [], DAY);
+    const copied = [shift("t1", { startsAt: first.inserts[0]!.startsAt, endsAt: first.inserts[0]!.endsAt })];
+    const again = planUnlinkedShiftCopy([shift("s1")], copied, DAY);
+    expect(again.deleteIds).toEqual(["t1"]);
+    expect(again.inserts).toHaveLength(1);
+  });
+
+  it("keeps staffed shifts and doesn't reopen a slot they fill", () => {
+    const filled = shift("t1", { userId: "user-1", startsAt: 1_000 * HOUR + DAY, endsAt: 1_000 * HOUR + DAY + 2 * HOUR });
+    const plan = planUnlinkedShiftCopy([shift("s1")], [filled], DAY);
+    expect(plan.deleteIds).toEqual([]);
+    expect(plan.inserts).toEqual([]);
+  });
+
+  it("leaves section slots and trainees alone on both days", () => {
+    const sectioned = shift("s2", { scheduleBlockId: "block-1" });
+    const trainee = shift("s3", { crewApplicationId: "application-1" });
+    const targetTrainee = shift("t2", { crewApplicationId: "application-2" });
+    const targetSectioned = shift("t3", { scheduleBlockId: "block-2" });
+    const plan = planUnlinkedShiftCopy([sectioned, trainee], [targetTrainee, targetSectioned], DAY);
+    expect(plan.deleteIds).toEqual([]);
+    expect(plan.inserts).toEqual([]);
+  });
+});

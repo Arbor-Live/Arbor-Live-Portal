@@ -2,10 +2,11 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { RepeatIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { CalendarDotsIcon, RepeatIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import type { Id } from "@/lib/convex-api";
 import { activeTabFromPathname, type EventEditorTabId } from "@/lib/event-editor-tabs";
-import { SERIES_EDIT_SCOPE_LABELS, type SeriesEditScope } from "@/lib/event-series";
+import { eventGroupKind, groupScopeLabels, type SeriesEditScope } from "@/lib/event-series";
+import { ApplyDaySetupDialog } from "@/components/events/apply-day-setup-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,7 +44,10 @@ const TAB_PANELS: Record<EventEditorTabId, () => React.ReactNode> = {
 const DIRTY_LABELS = { ...DRAFT_SECTION_LABELS, schedule: "Schedule" } as const;
 
 function SeriesEditScopeDialog() {
-  const { editScopeRequest } = useEventWorkspace();
+  const { editScopeRequest, seriesMeta } = useEventWorkspace();
+  const kind = eventGroupKind(seriesMeta);
+  const labels = groupScopeLabels(kind);
+  const multiDay = kind === "multi_day";
   return (
     <Dialog
       open={editScopeRequest !== null}
@@ -54,22 +58,43 @@ function SeriesEditScopeDialog() {
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <RepeatIcon className="size-4" />
-            Apply changes to series?
+            {multiDay ? (
+              <CalendarDotsIcon className="size-4" aria-hidden />
+            ) : (
+              <RepeatIcon className="size-4" aria-hidden />
+            )}
+            {multiDay ? "Apply changes to other days?" : "Apply changes to series?"}
           </DialogTitle>
           <DialogDescription>
-            This event is part of a recurring series. Crew scheduling is never updated in bulk.
+            {multiDay
+              ? "This day is part of a multi-day booking. Other days take the shared details (venue, type, host, people); their own title, times and costs stay."
+              : "This event is part of a recurring series. Crew scheduling is never updated in bulk."}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-2">
-          {(Object.keys(SERIES_EDIT_SCOPE_LABELS) as SeriesEditScope[]).map((scope) => (
+          {(["this", "future", "all"] as SeriesEditScope[]).map((scope) => (
             <Button key={scope} type="button" variant="outline" onClick={() => editScopeRequest?.(scope)}>
-              {SERIES_EDIT_SCOPE_LABELS[scope]}
+              {labels[scope]}
             </Button>
           ))}
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function WorkspaceApplySetupDialog() {
+  const { applySetupOpen, setApplySetupOpen, applySetupToOtherDays, seriesMeta } =
+    useEventWorkspace();
+  // Ungrouped linked days (booked before groups) are grouped on first apply.
+  const kind = seriesMeta ? eventGroupKind(seriesMeta) : "multi_day";
+  return (
+    <ApplyDaySetupDialog
+      open={applySetupOpen}
+      onOpenChange={setApplySetupOpen}
+      kind={kind}
+      onApply={applySetupToOtherDays}
+    />
   );
 }
 
@@ -149,6 +174,7 @@ function WorkspaceBody() {
       <Panel />
       <WorkspaceSaveBar />
       <SeriesEditScopeDialog />
+      <WorkspaceApplySetupDialog />
     </div>
   );
 }

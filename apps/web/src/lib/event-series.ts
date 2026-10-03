@@ -49,8 +49,46 @@ export function formatOccurrencePreview(value: number) {
 
 export type SeriesEditScope = "this" | "future" | "all";
 
+/**
+ * An event group (`eventSeries`): a recurring series, or a multi-day booking
+ * (days that share one invoice). Both apply edits with the same three scopes.
+ */
+export type EventGroupKind = "recurring" | "multi_day";
+
+export function eventGroupKind(group: { kind?: EventGroupKind } | null | undefined): EventGroupKind {
+  return group?.kind ?? "recurring";
+}
+
 export const SERIES_EDIT_SCOPE_LABELS: Record<SeriesEditScope, string> = {
   this: "This occurrence only",
   future: "This and all future occurrences",
   all: "Entire series",
+};
+
+const MULTI_DAY_SCOPE_LABELS: Record<SeriesEditScope, string> = {
+  this: "This day only",
+  future: "This day and later days",
+  all: "All days",
+};
+
+export function groupScopeLabels(kind: EventGroupKind): Record<SeriesEditScope, string> {
+  return kind === "multi_day" ? MULTI_DAY_SCOPE_LABELS : SERIES_EDIT_SCOPE_LABELS;
+}
+
+/** What one member is called: "occurrence" on a series, "day" on a booking. */
+export function groupDayNoun(kind: EventGroupKind, plural = false) {
+  if (kind === "multi_day") return plural ? "days" : "day";
+  return plural ? "occurrences" : "occurrence";
+}
+
+/** "Day 2" on a booking, "#2" on a series (from the 0-based index). */
+export function groupDayLabel(kind: EventGroupKind, occurrenceIndex: number | undefined) {
+  const number = (occurrenceIndex ?? 0) + 1;
+  return kind === "multi_day" ? `Day ${number}` : `#${number}`;
+}
+
+/** The group's name for its kind: "Recurring series" or "Multi-day booking". */
+export const EVENT_GROUP_KIND_LABELS: Record<EventGroupKind, string> = {
+  recurring: "Recurring series",
+  multi_day: "Multi-day booking",
 };

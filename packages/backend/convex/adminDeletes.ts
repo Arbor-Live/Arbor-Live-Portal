@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { requireAdmin, requireArborInternalContext } from "./lib/auth";
+import { dissolveMultiDayGroupsForInvoice } from "./lib/eventGroups";
 import {
   deleteEventRecord,
   deleteInvoiceRecord,
@@ -114,8 +115,11 @@ export const deleteRequestAdmin = mutation({
 
     if (args.cascade) {
       const linkedEvents = await listEventsLinkedToRequest(ctx, request);
+      if (request.linkedInvoiceId) {
+        await dissolveMultiDayGroupsForInvoice(ctx, request.linkedInvoiceId);
+      }
       for (const event of linkedEvents) {
-        await deleteEventRecord(ctx, event._id);
+        await deleteEventRecord(ctx, event._id, { skipGroupSync: true });
         deletedEvents += 1;
       }
       if (request.linkedInvoiceId) {
@@ -158,8 +162,9 @@ export const deleteInvoiceAdmin = mutation({
     let deletedEvents = 0;
 
     if (args.cascade) {
+      await dissolveMultiDayGroupsForInvoice(ctx, args.id);
       for (const event of events) {
-        await deleteEventRecord(ctx, event._id);
+        await deleteEventRecord(ctx, event._id, { skipGroupSync: true });
         deletedEvents += 1;
       }
       if (request) {

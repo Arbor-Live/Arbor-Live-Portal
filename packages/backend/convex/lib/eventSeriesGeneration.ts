@@ -8,8 +8,13 @@ import {
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { syncEventCrewCostUsd } from "./crewCost";
+import { isTraineeShift } from "./crewShiftKinds";
 import { detachInvoiceFromAdditionalLinks } from "./eventInvoiceLinks";
-import { syncEventStatusForLinkedInvoice, type EventStatus } from "./eventStatus";
+import {
+  normalizeEventStatus,
+  syncEventStatusForLinkedInvoice,
+  type EventStatus,
+} from "./eventStatus";
 import {
   hasPendingInquiry,
   MAX_INQUIRIES_CHECKED,
@@ -22,6 +27,9 @@ import {
 import { removePositionRow } from "./positionRows";
 import { isActBlock, syncNeedBlocks } from "./runOfShow";
 import type { ScheduleBlockType } from "./scheduleBlockTypes";
+import { isMultiDayGroup } from "./eventGroupKind";
+import { listGroupDays, selectDaysInScope, type GroupApplyScope } from "./eventGroupDays";
+import { formatPacificShortDate } from "./bookingDayLoad";
 
 export const EVENT_TIMEZONE = PORTAL_TIMEZONE;
 
@@ -39,6 +47,7 @@ export type EventSeriesShiftTemplate = {
   blockTemplateIndex: number;
   offsetMs: number;
   durationMs: number;
+  hours?: number;
   estimatedHourlyRateUsd?: number;
   notes?: string;
 };
@@ -84,19 +93,34 @@ export function blockIdsByTemplateIndex(
   return byIndex;
 }
 
+/**
+ * Capture shifts attached to matching block templates, ordered by start time,
+ * with millisecond offsets from occurrence start. Trainees are always skipped;
+ * assigned shifts are skipped unless `copyingDay` is enabled (see `options`).
+ * Returns no templates when block templates are absent or no shifts match.
+ */
 export function shiftsToTemplates(
   shifts: Array<{
     role: string;
     scheduleBlockId?: Id<"eventScheduleBlocks">;
     userId?: string;
+    crewApplicationId?: unknown;
     startsAt: number;
     endsAt: number;
+    hours?: number;
+    timesOverridden?: boolean;
     estimatedHourlyRateUsd?: number;
     notes?: string;
   }>,
   blocks: Array<{ _id: Id<"eventScheduleBlocks">; startsAt: number }>,
   blockTemplates: EventSeriesBlockTemplate[] | undefined,
   occurrenceStartAt: number,
+  /**
+   * Copying a day: also capture staffed shifts as open slots (the day's crew
+   * shape, never its people) and their billed hours. Imports take only open
+   * slots, sized by their times, like the crew editor.
+   */
+  options: { copyingDay?: boolean } = {},
 ): EventSeriesShiftTemplate[] {
   if (!blockTemplates || blockTemplates.length === 0) return [];
   const blockIdToIndex = new Map<Id<"eventScheduleBlocks">, number>();
@@ -106,7 +130,9 @@ export function shiftsToTemplates(
   }
 
   return shifts
-    .filter((shift) => !shift.userId?.trim())
+    // Trainees shadow one day; they're never part of the crew shape.
+    .filter((shift) => !isTraineeShift(shift))
+    .filter((shift) => options.copyingDay || !shift.userId?.trim())
     .slice()
     .sort((a, b) => a.startsAt - b.startsAt)
     .flatMap((shift) => {
@@ -119,6 +145,13 @@ export function shiftsToTemplates(
           blockTemplateIndex,
           offsetMs: shift.startsAt - occurrenceStartAt,
           durationMs: shift.endsAt - shift.startsAt,
+          hours:
+            options.copyingDay &&
+            shift.hours !== undefined &&
+            shift.hours > 0 &&
+            shift.hours !== hoursBetween(shift.startsAt, shift.endsAt)
+              ? shift.hours
+              : undefined,
           estimatedHourlyRateUsd: shift.estimatedHourlyRateUsd,
           notes: shift.notes,
         },
@@ -126,6 +159,14 @@ export function shiftsToTemplates(
     });
 }
 
+/**
+ * Add open crew slots at millisecond offsets from occurrence start, consuming
+ * one matching staffed shift per template (same trimmed role and times).
+ * Matching reads at most 500 shifts and 500 blocks. Existing open slots are
+ * not deduplicated. A positive template rate takes precedence over the default;
+ * Billed hours use the template override or the duration in hours, rounded to
+ * two decimals.
+ */
 export async function insertShiftsFromTemplates(
   ctx: MutationCtx,
   eventId: Id<"events">,
@@ -145,9 +186,25 @@ export async function insertShiftsFromTemplates(
   ).filter((block) => !isActBlock(block));
   const blockIdByIndex = blockIdsByTemplateIndex(blocks, blockTemplates, occurrenceStartAt);
 
+  // A slot an assigned shift already fills (same role and times) stays filled:
+  // re-applying never adds an open duplicate next to staffed crew.
+  const covered = (
+    await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+      .take(500)
+  ).filter((shift) => Boolean(shift.userId?.trim()));
   for (const template of shiftTemplates) {
     const startsAt = occurrenceStartAt + template.offsetMs;
     const endsAt = startsAt + template.durationMs;
+    const role = template.role.trim();
+    const fillIndex = covered.findIndex(
+      (shift) => shift.role.trim() === role && shift.startsAt === startsAt && shift.endsAt === endsAt,
+    );
+    if (fillIndex >= 0) {
+      covered.splice(fillIndex, 1);
+      continue;
+    }
     const scheduleBlockId = blockIdByIndex.get(template.blockTemplateIndex);
     const estimatedHourlyRateUsd =
       template.estimatedHourlyRateUsd !== undefined && template.estimatedHourlyRateUsd > 0
@@ -161,7 +218,7 @@ export async function insertShiftsFromTemplates(
       role: template.role.trim(),
       startsAt,
       endsAt,
-      hours: hoursBetween(startsAt, endsAt),
+      hours: template.hours ?? hoursBetween(startsAt, endsAt),
       estimatedHourlyRateUsd,
       postedToExpense: false,
       notes: template.notes?.trim() || undefined,
@@ -171,6 +228,11 @@ export async function insertShiftsFromTemplates(
   }
 }
 
+/**
+ * Delete open non-trainee slots among the first 500 shifts, then insert the
+ * template slots. Assigned crew and trainees remain; absent or empty templates
+ * still clear open slots. The caller must recalculate crew cost afterward.
+ */
 export async function replaceEmptyShiftsFromTemplates(
   ctx: MutationCtx,
   eventId: Id<"events">,
@@ -185,7 +247,9 @@ export async function replaceEmptyShiftsFromTemplates(
     .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
     .take(500);
   for (const shift of existingShifts) {
-    if (!shift.userId?.trim()) {
+    // Open staffing slots are the template's; a trainee (an applicant
+    // shadowing this day) isn't a slot and stays.
+    if (!shift.userId?.trim() && !isTraineeShift(shift)) {
       await ctx.db.delete(shift._id);
     }
   }
@@ -484,7 +548,7 @@ export async function materializeOccurrence(
 ): Promise<Id<"events">> {
   const endAt = occurrenceEndAt(startAt, series.anchorStartAt, series.anchorEndAt);
   const eventId = await ctx.db.insert("events", {
-    title: series.title,
+    title: isMultiDayGroup(series) ? multiDayTitle(series.title, startAt) : series.title,
     status: "tentative",
     visibility: "public",
     invoiceId: series.invoiceId,
@@ -547,10 +611,138 @@ export async function materializeOccurrence(
   return eventId;
 }
 
+/**
+ * Fields every day of a group shares. A multi-day booking's days keep their
+ * own title (dated), times and per-day costs, so only these propagate there.
+ */
+const SHARED_DAY_FIELDS = [
+  "venueId",
+  "venueName",
+  "eventType",
+  "teamsInterested",
+  "category",
+  "hostGroupId",
+  "host",
+  "additionalHostGroupIds",
+  "expectedTurnout",
+  "dayOfLeadUserId",
+  "eventManagerUserId",
+  "operationsLeadUserId",
+  "rentalFulfillmentMode",
+  "requiresShowWindow",
+] as const satisfies ReadonlyArray<keyof Doc<"events"> & keyof Doc<"eventSeries">>;
+
+export type SharedDayField = (typeof SHARED_DAY_FIELDS)[number];
+type SharedDayFields = Pick<Doc<"events">, SharedDayField>;
+
+/** The shared fields an event edit touched (args carry only what changed). */
+export function editedSharedDayFields(args: Partial<Record<string, unknown>>): SharedDayField[] {
+  const edited = new Set(SHARED_DAY_FIELDS.filter((field) => args[field] !== undefined));
+  // The venue and host names follow their links.
+  if (edited.has("venueId")) edited.add("venueName");
+  if (edited.has("hostGroupId")) edited.add("host");
+  return SHARED_DAY_FIELDS.filter((field) => edited.has(field));
+}
+
+function pickSharedDayFields(source: Partial<SharedDayFields>): Partial<SharedDayFields> {
+  const out: Partial<SharedDayFields> = {};
+  for (const field of SHARED_DAY_FIELDS) {
+    if (field in source) Object.assign(out, { [field]: source[field] });
+  }
+  return out;
+}
+
+export function buildSharedDayPatchFromGroup(group: Doc<"eventSeries">): Partial<Doc<"events">> {
+  return pickSharedDayFields(group);
+}
+
+/**
+ * Copy the shared fields from `source` onto `target`, dropping any the source
+ * doesn't have (for `replace`, so a cleared venue or lead clears everywhere).
+ */
+export function withSharedDayFields<T extends Partial<SharedDayFields>>(
+  target: T,
+  source: Partial<SharedDayFields>,
+  fields: readonly SharedDayField[] = SHARED_DAY_FIELDS,
+): T {
+  const next = { ...target };
+  for (const field of fields) {
+    const value = source[field];
+    if (value === undefined) delete next[field];
+    else Object.assign(next, { [field]: value });
+  }
+  return next;
+}
+
+/**
+ * Multi-day "all days / this day and later" edit: the shared fields this edit
+ * touched (`fields`) become the group's and reach the other days in scope, as
+ * the edited day now has them (so a clear clears). Everything else on those
+ * days — other shared fields, title, times, costs — stays; `overrides` carries
+ * status/visibility only when the edit set them.
+ */
+export async function propagateSharedDayFields(
+  ctx: MutationCtx,
+  groupId: Id<"eventSeries">,
+  sourceDay: Doc<"events">,
+  scope: SeriesEditScope,
+  now: number,
+  overrides: SeriesOverviewOverride,
+  fields: readonly SharedDayField[],
+): Promise<SeriesOverviewAffectedOccurrence[]> {
+  const group = await ctx.db.get(groupId);
+  if (!group) throw new Error("Event group not found.");
+  if (fields.length === 0 && overrides.status === undefined && overrides.visibility === undefined) {
+    return [];
+  }
+  await ctx.db.replace(groupId, {
+    ...withSharedDayFields(group, sourceDay, fields),
+    updatedAt: now,
+  });
+  const days = selectDaysInScope(
+    await listGroupDays(ctx, groupId),
+    scope,
+    sourceDay.occurrenceIndex ?? 0,
+    now,
+  ).filter((day) => day._id !== sourceDay._id);
+  const affected: SeriesOverviewAffectedOccurrence[] = [];
+  for (const day of days) {
+    const next = withSharedDayFields({ ...day, ...overrides }, sourceDay, fields);
+    await ctx.db.replace(day._id, { ...next, updatedAt: now });
+    affected.push({
+      id: day._id,
+      prevStatus: day.status,
+      nextStatus: normalizeEventStatus(next.status),
+      invoiceId: day.invoiceId,
+    });
+  }
+  return affected;
+}
+
+/** Where a group day starts: recurring days follow the rule; multi-day days are their own. */
+export function groupDayStartAt(
+  group: Doc<"eventSeries">,
+  day: Pick<Doc<"events">, "startAt" | "occurrenceIndex">,
+) {
+  if (isMultiDayGroup(group) || group.intervalWeeks === undefined) return day.startAt;
+  return occurrenceStartAt(group.anchorStartAt, day.occurrenceIndex ?? 0, group.intervalWeeks);
+}
+
+/** A multi-day booking's day title: "<group> — <short date>". */
+export function multiDayTitle(groupTitle: string, startAt: number) {
+  return `${groupTitle} — ${formatPacificShortDate(pacificDateKey(startAt))}`;
+}
+
+/**
+ * Build shared-field updates for a multi-day booking, preserving day-specific
+ * title, times, and costs. Recurring groups also supply those fields and derive
+ * the end time from their anchor window and `startAt` (Unix milliseconds).
+ */
 export function buildEventPatchFromSeriesTemplate(
   series: Doc<"eventSeries">,
   startAt: number,
 ): Partial<Doc<"events">> {
+  if (isMultiDayGroup(series)) return buildSharedDayPatchFromGroup(series);
   const endAt = occurrenceEndAt(startAt, series.anchorStartAt, series.anchorEndAt);
   return {
     title: series.title,
@@ -580,23 +772,7 @@ export function buildEventPatchFromSeriesTemplate(
   };
 }
 
-export type SeriesEditScope = "this" | "future" | "all";
-
-export function shouldApplySeriesUpdate(
-  event: Doc<"events">,
-  scope: SeriesEditScope,
-  referenceOccurrenceIndex: number,
-  now: number,
-) {
-  if (!event.seriesId || event.seriesDetached) return false;
-  if (event.status === "cancelled") return false;
-  if (scope === "this") return false;
-  if (scope === "all") return true;
-  const occurrenceIndex = event.occurrenceIndex ?? 0;
-  if (occurrenceIndex < referenceOccurrenceIndex) return false;
-  if (event.startAt < now) return false;
-  return true;
-}
+export type SeriesEditScope = GroupApplyScope;
 
 export async function propagateInvoiceIdToSeriesOccurrences(
   ctx: MutationCtx,
@@ -606,20 +782,14 @@ export async function propagateInvoiceIdToSeriesOccurrences(
   scope: SeriesEditScope,
   now: number,
 ) {
-  const occurrences = await ctx.db
-    .query("events")
-    .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", seriesId))
-    .take(200);
+  const occurrences = selectDaysInScope(
+    await listGroupDays(ctx, seriesId),
+    scope,
+    referenceOccurrenceIndex,
+    now,
+  );
 
-  for (const occurrence of occurrences.sort(
-    (a, b) => (a.occurrenceIndex ?? 0) - (b.occurrenceIndex ?? 0),
-  )) {
-    if (scope === "this") {
-      if (occurrence.occurrenceIndex !== referenceOccurrenceIndex) continue;
-    } else if (!shouldApplySeriesUpdate(occurrence, scope, referenceOccurrenceIndex, now)) {
-      continue;
-    }
-    if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
+  for (const occurrence of occurrences) {
 
     await ctx.db.patch(occurrence._id, { invoiceId, updatedAt: now });
     if (invoiceId) {
@@ -638,6 +808,8 @@ export type SeriesOverviewOverride = {
 export type SeriesOverviewAffectedOccurrence = {
   id: Id<"events">;
   prevStatus: string;
+  /** The day's own status after the edit, when it can differ from the edited day's. */
+  nextStatus?: EventStatus;
   invoiceId: Id<"invoices"> | undefined;
 };
 
@@ -649,29 +821,18 @@ export async function propagateOverviewToSeriesOccurrences(
   now: number,
   overrides?: SeriesOverviewOverride,
 ): Promise<SeriesOverviewAffectedOccurrence[]> {
-  const occurrences = await ctx.db
-    .query("events")
-    .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", series._id))
-    .take(200);
+  const occurrences = selectDaysInScope(
+    await listGroupDays(ctx, series._id),
+    scope,
+    referenceOccurrenceIndex,
+    now,
+  );
 
   const affected: SeriesOverviewAffectedOccurrence[] = [];
 
-  for (const occurrence of occurrences.sort(
-    (a, b) => (a.occurrenceIndex ?? 0) - (b.occurrenceIndex ?? 0),
-  )) {
-    if (scope === "this") {
-      if (occurrence.occurrenceIndex !== referenceOccurrenceIndex) continue;
-    } else if (!shouldApplySeriesUpdate(occurrence, scope, referenceOccurrenceIndex, now)) {
-      continue;
-    }
+  for (const occurrence of occurrences) {
 
-    const occurrenceIndex = occurrence.occurrenceIndex ?? 0;
-    const startAt = occurrenceStartAt(
-      series.anchorStartAt,
-      occurrenceIndex,
-      series.intervalWeeks,
-    );
-    const patch = buildEventPatchFromSeriesTemplate(series, startAt);
+    const patch = buildEventPatchFromSeriesTemplate(series, groupDayStartAt(series, occurrence));
     await ctx.db.patch(occurrence._id, { ...patch, ...overrides, updatedAt: now });
     affected.push({
       id: occurrence._id,

@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
-import { artistLineAppliesToEvent, isSingleSeriesBooking } from "./invoiceArtistDays";
+import { artistLineAppliesToEvent, resolveArtistLineDayScope } from "./invoiceArtistDays";
 import { buildPublicEventUrl, isPubliclyListableEvent } from "./publicEvents";
 
 export const ARTIST_NEED_TYPES = ["band", "dj", "no_preference"] as const;
@@ -134,8 +134,7 @@ export async function resolveEventArtistBooking(
       .query("events")
       .withIndex("by_invoiceId_and_startAt", (q) => q.eq("invoiceId", event.invoiceId!))
       .take(200);
-    const isSeriesBooking = isSingleSeriesBooking(linkedEvents);
-    const firstLinkedEventId = linkedEvents[0]?._id;
+    const dayScope = await resolveArtistLineDayScope(ctx, linkedEvents);
     const lines = await ctx.db
       .query("invoiceLineItems")
       .withIndex("by_invoiceId_and_section", (q) =>
@@ -152,8 +151,7 @@ export async function resolveEventArtistBooking(
         artistLineAppliesToEvent({
           lineEventId: line.eventId,
           eventId,
-          firstLinkedEventId,
-          isSeriesBooking,
+          scope: dayScope,
         })
       ) {
         invoiceArtistIds.push(line.organizationId);

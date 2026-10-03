@@ -27,7 +27,23 @@ import {
 import { copyDaySetupToTargets, listSiblingDayEvents } from "./lib/copyDaySetup";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
 import { deleteEventRecord } from "./lib/bookingChainDelete";
-import { propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, type SeriesEditScope, type SeriesOverviewAffectedOccurrence, type SeriesOverviewOverride } from "./lib/eventSeriesGeneration";
+import {
+  editedSharedDayFields,
+  propagateInvoiceIdToSeriesOccurrences,
+  propagateSharedDayFields,
+  propagateOverviewToSeriesOccurrences,
+  type SeriesEditScope,
+  type SeriesOverviewAffectedOccurrence,
+  type SeriesOverviewOverride,
+} from "./lib/eventSeriesGeneration";
+import { isMultiDayGroup } from "./lib/eventGroupKind";
+import {
+  dissolveMultiDayGroupsForInvoice,
+  findMultiDayGroupForInvoice,
+  syncMultiDayGroupForInvoice,
+  syncMultiDayGroupsForInvoices,
+} from "./lib/eventGroups";
+import { listGroupDays } from "./lib/eventGroupTemplates";
 import { resolveSeriesMetadataForInvoice } from "./lib/invoiceSeries";
 import { assertNoOpenMicOverlap } from "./lib/openMicAddon";
 import {
@@ -351,12 +367,16 @@ export const get = query({
                 .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", event.seriesId!))
                 .take(200);
               const costSummary = computeSeriesCostSummary(series, siblings);
+              const multiDay = isMultiDayGroup(series);
               return {
                 _id: series._id,
+                kind: multiDay ? ("multi_day" as const) : ("recurring" as const),
                 title: series.title,
                 status: series.status,
                 intervalWeeks: series.intervalWeeks,
-                totalOccurrences: series.occurrenceCount ?? siblings.length,
+                totalOccurrences: multiDay
+                  ? siblings.length
+                  : (series.occurrenceCount ?? siblings.length),
                 occurrenceIndex: event.occurrenceIndex,
                 seriesDetached: event.seriesDetached ?? false,
                 invoiceId: series.invoiceId,
@@ -446,7 +466,13 @@ export const listSiblingDays = query({
     await requireArborInternalContext(ctx);
     const event = await ctx.db.get(args.eventId);
     if (!event) return [];
-    const siblings = await listSiblingDayEvents(ctx, event);
+    const group = event.seriesId ? await ctx.db.get(event.seriesId) : null;
+    // A multi-day booking's days are its group; older ungrouped bookings fall
+    // back to the invoice/request siblings.
+    const siblings =
+      group && isMultiDayGroup(group)
+        ? await listGroupDays(ctx, group._id)
+        : await listSiblingDayEvents(ctx, event);
     return siblings.map((row, index) => ({
       _id: row._id,
       title: row.title,
@@ -594,6 +620,8 @@ export const create = mutation({
     });
     if (invoiceSplit.primary) {
       await syncEventStatusForLinkedInvoice(ctx, eventId, invoiceSplit.primary, initialStatus);
+      // Another day on a booking's invoice: it joins (or forms) the booking's group.
+      await syncMultiDayGroupForInvoice(ctx, invoiceSplit.primary, now);
     }
     if (args.additionalInvoiceIds !== undefined) {
       await replaceAdditionalInvoiceLinks(ctx, eventId, invoiceSplit.additional);
@@ -769,8 +797,38 @@ export const update = mutation({
     const clearOperationsLead =
       args.operationsLeadUserId === null || args.operationsLeadUserId === "";
 
-    if (hasSeries && existing.seriesId && scope !== "this") {
-      const series = await ctx.db.get(existing.seriesId);
+    const group = existing.seriesId ? await ctx.db.get(existing.seriesId) : null;
+    const multiDayGroup = group !== null && isMultiDayGroup(group);
+
+    const propagateToOtherDays = hasSeries && existing.seriesId && scope !== "this" && multiDayGroup;
+    if (propagateToOtherDays && existing.seriesId) {
+      // A multi-day booking's days keep their own title, times and costs: this
+      // day takes the whole edit now; its shared fields reach the other days
+      // below, once explicit clears have landed on it.
+      await ctx.db.patch(args.id, patch);
+      if (args.invoiceId !== undefined) {
+        if (scope === "all" && group) {
+          if (!nextInvoiceId) {
+            // No invoice, no booking: the days become plain events.
+            await dissolveMultiDayGroupsForInvoice(ctx, existing.invoiceId ?? group.invoiceId!);
+          } else if (!(await findMultiDayGroupForInvoice(ctx, nextInvoiceId))) {
+            // The whole booking moves: the group (and its templates) moves with
+            // it. Onto an invoice that already has a booking, the sync merges
+            // these days into that one instead.
+            await ctx.db.patch(existing.seriesId, { invoiceId: nextInvoiceId, updatedAt: now });
+          }
+        }
+        await propagateInvoiceIdToSeriesOccurrences(
+          ctx,
+          existing.seriesId,
+          nextInvoiceId,
+          existing.occurrenceIndex ?? 0,
+          scope,
+          now,
+        );
+      }
+    } else if (hasSeries && existing.seriesId && scope !== "this") {
+      const series = group;
       if (!series) throw new Error("Linked event series not found.");
       const referenceIndex = existing.occurrenceIndex ?? 0;
       const nextAnchorStartAt =
@@ -870,7 +928,9 @@ export const update = mutation({
     } else {
       await ctx.db.patch(args.id, {
         ...patch,
-        seriesDetached: hasSeries && scope === "this" ? true : existing.seriesDetached,
+        // Editing one day of a multi-day booking is normal, not an override.
+        seriesDetached:
+          hasSeries && scope === "this" && !multiDayGroup ? true : existing.seriesDetached,
       });
     }
 
@@ -885,12 +945,39 @@ export const update = mutation({
       }
     }
 
+    if (propagateToOtherDays && existing.seriesId) {
+      const editedDay = await ctx.db.get(args.id);
+      if (editedDay) {
+        // Only what this edit set: re-saving a venue must not reset every
+        // other day's status or visibility.
+        const overrides: SeriesOverviewOverride = {};
+        if (args.status !== undefined) overrides.status = nextStatus;
+        if (args.visibility !== undefined) overrides.visibility = patch.visibility;
+        const propagated = await propagateSharedDayFields(
+          ctx,
+          existing.seriesId,
+          editedDay,
+          scope,
+          now,
+          overrides,
+          editedSharedDayFields(args),
+        );
+        affectedOccurrences = [...affectedOccurrences, ...propagated];
+      }
+    }
+
     // Additional invoices stay on this occurrence. The primary still propagates
     // with the series scope above.
     if (nextAdditionalInvoiceIds !== undefined) {
       await replaceAdditionalInvoiceLinks(ctx, args.id, nextAdditionalInvoiceIds);
     } else if (args.invoiceId !== undefined && nextInvoiceId) {
       await detachInvoiceFromAdditionalLinks(ctx, args.id, nextInvoiceId);
+    }
+
+    // Moving a day between invoices (or its date) reshapes the bookings' groups.
+    // Cancelled days don't count toward a booking, so status reshapes it too.
+    if (args.invoiceId !== undefined || args.startAt !== undefined || prevStatus !== nextStatus) {
+      await syncMultiDayGroupsForInvoices(ctx, [existing.invoiceId, nextInvoiceId], now);
     }
 
     if (prevStatus !== nextStatus) {
@@ -904,11 +991,13 @@ export const update = mutation({
     for (const occ of affectedOccurrences) {
       if (seen.has(occ.id)) continue;
       seen.add(occ.id);
+      // Days a multi-day edit only touched keep their own status.
+      const occStatus = occ.nextStatus ?? nextStatus;
       if (occ.invoiceId) {
-        await syncEventStatusForLinkedInvoice(ctx, occ.id, occ.invoiceId, nextStatus);
+        await syncEventStatusForLinkedInvoice(ctx, occ.id, occ.invoiceId, occStatus);
       }
 
-      if (nextStatus === "cancelled" && normalizeEventStatus(occ.prevStatus) !== "cancelled") {
+      if (occStatus === "cancelled" && normalizeEventStatus(occ.prevStatus) !== "cancelled") {
         await scheduleEventCancelledEmails(ctx, occ.id, now);
       }
     }
@@ -956,6 +1045,10 @@ export const setStatus = mutation({
     }
     if (nextStatus === "cancelled" && !wasCancelled) {
       await scheduleEventCancelledEmails(ctx, args.id, now);
+    }
+    // Cancelled days don't count toward a multi-day booking.
+    if (prevStatus !== nextStatus && existing.invoiceId) {
+      await syncMultiDayGroupForInvoice(ctx, existing.invoiceId, now);
     }
   },
 });
@@ -1094,6 +1187,9 @@ export const duplicate = mutation({
         createdAt: now,
         updatedAt: now,
       });
+    }
+    if (existing.invoiceId) {
+      await syncMultiDayGroupForInvoice(ctx, existing.invoiceId, now);
     }
     return newId;
   },

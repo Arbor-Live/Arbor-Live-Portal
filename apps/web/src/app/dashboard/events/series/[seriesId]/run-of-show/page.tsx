@@ -6,9 +6,9 @@ export async function generateMetadata({
 }: {
   params: Promise<{ seriesId: string }>;
 }): Promise<Metadata> {
-  return eventGroupTabMetadata(params, "Days");
+  return eventGroupTabMetadata(params, "Run of Show template");
 }
 
-export default function EventGroupDaysPage() {
+export default function EventGroupRunOfShowPage() {
   return null;
 }

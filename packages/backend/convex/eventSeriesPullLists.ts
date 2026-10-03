@@ -3,11 +3,12 @@ import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { isMultiDayGroup } from "./lib/eventGroupKind";
 import {
   perOccurrencePullQuantity,
   resolveBillableOccurrenceCount,
 } from "./lib/invoiceSeries";
-import { shouldApplySeriesUpdate, type SeriesEditScope } from "./lib/eventSeriesGeneration";
+import { listGroupDays, selectDaysInScope, type GroupApplyScope as SeriesEditScope } from "./lib/eventGroupTemplates";
 
 async function listTemplateItems(ctx: QueryCtx | MutationCtx, seriesId: Id<"eventSeries">) {
   const rows = await ctx.db
@@ -15,14 +16,6 @@ async function listTemplateItems(ctx: QueryCtx | MutationCtx, seriesId: Id<"even
     .withIndex("by_seriesId", (q) => q.eq("seriesId", seriesId))
     .take(500);
   return rows.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
-}
-
-async function listOccurrencesForSeries(ctx: MutationCtx, seriesId: Id<"eventSeries">) {
-  const rows = await ctx.db
-    .query("events")
-    .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", seriesId))
-    .take(200);
-  return rows.sort((a, b) => (a.occurrenceIndex ?? 0) - (b.occurrenceIndex ?? 0));
 }
 
 export const scaffoldFromInvoice = mutation({
@@ -37,6 +30,10 @@ export const scaffoldFromInvoice = mutation({
     await requireArborInternalContext(ctx);
     const series = await ctx.db.get(args.seriesId);
     if (!series) throw new Error("Event series not found.");
+    if (isMultiDayGroup(series)) {
+      // A booking's equipment is per day; there's no per-occurrence split.
+      throw new Error("Pull list templates from the invoice are for recurring series.");
+    }
     if (!series.invoiceId) {
       throw new Error("Link an invoice to this series before scaffolding pull list templates.");
     }
@@ -196,18 +193,15 @@ async function regenerateFuturePullLists(
   const templates = await listTemplateItems(ctx, args.seriesId);
   if (templates.length === 0) return { updatedCount: 0 };
 
-  const occurrences = await listOccurrencesForSeries(ctx, args.seriesId);
+  const occurrences = selectDaysInScope(
+    await listGroupDays(ctx, args.seriesId),
+    args.scope,
+    args.fromOccurrenceIndex,
+    args.now,
+  );
   let updatedCount = 0;
 
   for (const occurrence of occurrences) {
-    if (args.scope === "this") {
-      if (occurrence.occurrenceIndex !== args.fromOccurrenceIndex) continue;
-    } else if (
-      !shouldApplySeriesUpdate(occurrence, args.scope, args.fromOccurrenceIndex, args.now)
-    ) {
-      continue;
-    }
-    if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
 
     const existing = await ctx.db
       .query("eventPullListItems")
