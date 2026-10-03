@@ -10,12 +10,22 @@ import {
   monthDateRange,
   parseDateInput,
 } from "@/lib/booking-day-load";
-import { PORTAL_TIMEZONE, pacificDateAndTimeToMs, pacificDateKey } from "@/lib/format";
+import {
+  PORTAL_TIMEZONE,
+  arborClosureForDate,
+  pacificDateAndTimeToMs,
+  pacificDateKey,
+} from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type DayLoadMap = Record<string, { count: number; level: "free" | "busy" | "unavailable" }>;
 
 const pacificDateKeyCache = new Map<number, string>();
+
+/** Arbor closures (winter/spring break, summer): still bookable, just marked. */
+function isArborClosedDay(date: Date) {
+  return arborClosureForDate(calendarPacificDateKey(date.getTime())) !== null;
+}
 
 function calendarPacificDateKey(ms: number): string {
   const cached = pacificDateKeyCache.get(ms);
@@ -100,9 +110,10 @@ export const BookingAvailabilityCalendar = memo(function BookingAvailabilityCale
             onSelectDate(calendarPacificDateKey(date.getTime()));
           }}
           disabled={{ before: minDate }}
-          modifiers={{ highlighted }}
+          modifiers={{ highlighted, closed: isArborClosedDay }}
           modifiersClassNames={{
             highlighted: "ring-1 ring-primary/50",
+            closed: "[&_button]:text-muted-foreground [&_button]:line-through",
           }}
           className="calendar-cell-lg w-full bg-transparent p-3"
           classNames={{
@@ -123,6 +134,9 @@ export const BookingAvailabilityCalendar = memo(function BookingAvailabilityCale
               {item.label}
             </span>
           ))}
+          <span className="booking-availability-legend-item text-muted-foreground line-through">
+            Closed
+          </span>
         </div>
       </div>
     </div>

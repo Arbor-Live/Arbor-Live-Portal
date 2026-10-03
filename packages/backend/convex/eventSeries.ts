@@ -1,4 +1,8 @@
-import { occurrenceStartAt, pacificDateKey } from "@arbor/format";
+import {
+  academicCalendarSkipFilter,
+  computeOccurrenceSlots,
+  pacificDateKey,
+} from "@arbor/format";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -11,7 +15,6 @@ import { RENTAL_EVENT_TYPES } from "./eventPullLists";
 import {
   applyPositionTemplates,
   buildEventPatchFromSeriesTemplate,
-  computeOccurrenceStarts,
   EVENT_TIMEZONE,
   groupDayStartAt,
   materializeOccurrence,
@@ -67,6 +70,7 @@ const eventTypeValue = v.union(
 );
 
 const rentalFulfillmentModeValue = v.union(v.literal("delivery"), v.literal("will_call"));
+const academicSkipModeValue = v.union(v.literal("breaks"), v.literal("breaks_and_finals"));
 
 const blockTemplateValue = v.object({
   blockType: scheduleBlockTypeValue,
@@ -194,6 +198,7 @@ export const create = mutation({
     intervalWeeks: v.number(),
     occurrenceCount: v.optional(v.number()),
     seriesEndAt: v.optional(v.number()),
+    academicSkipMode: v.optional(academicSkipModeValue),
     requiresShowWindow: v.optional(v.boolean()),
     venueId: v.optional(v.id("venues")),
     venueName: v.optional(v.string()),
@@ -229,11 +234,12 @@ export const create = mutation({
     await requireArborInternalContext(ctx);
     if (args.endAt <= args.startAt) throw new Error("Event end time must be after start time.");
     assertValidPositionTemplates(args.positionTemplates ?? []);
-    const occurrenceStarts = computeOccurrenceStarts({
+    const occurrenceSlots = computeOccurrenceSlots({
       anchorStartAt: args.startAt,
       intervalWeeks: args.intervalWeeks,
       occurrenceCount: args.occurrenceCount,
       seriesEndAt: args.seriesEndAt,
+      skip: academicCalendarSkipFilter(args.academicSkipMode),
     });
     const now = Date.now();
     const venueLink = await resolveVenueLink(ctx, args.venueId);
@@ -259,6 +265,7 @@ export const create = mutation({
       intervalWeeks: args.intervalWeeks,
       occurrenceCount: args.occurrenceCount,
       seriesEndAt: args.seriesEndAt,
+      academicSkipMode: args.academicSkipMode,
       timezone: EVENT_TIMEZONE,
       requiresShowWindow: args.requiresShowWindow ?? true,
       venueId: venueLink.venueId,
@@ -294,8 +301,8 @@ export const create = mutation({
     const series = await ctx.db.get(seriesId);
     if (!series) throw new Error("Failed to create event series.");
     const eventIds: Id<"events">[] = [];
-    for (let index = 0; index < occurrenceStarts.length; index += 1) {
-      const eventId = await materializeOccurrence(ctx, series, index, occurrenceStarts[index]!, now);
+    for (const slot of occurrenceSlots) {
+      const eventId = await materializeOccurrence(ctx, series, slot.occurrenceIndex, slot.startAt, now);
       eventIds.push(eventId);
     }
     const firstEventId = eventIds[0];
@@ -765,34 +772,26 @@ export const addOccurrences = mutation({
     const existing = await listOccurrencesForSeries(ctx, args.id);
     const lastIndex = existing.length > 0 ? (existing[existing.length - 1]!.occurrenceIndex ?? 0) : -1;
 
-    let newStarts: number[] = [];
-    if (args.additionalCount !== undefined) {
-      newStarts = Array.from({ length: args.additionalCount }, (_, offset) =>
-        occurrenceStartAt(series.anchorStartAt, lastIndex + 1 + offset, intervalWeeks),
-      );
-    } else if (args.newSeriesEndAt !== undefined) {
-      newStarts = computeOccurrenceStarts({
-        anchorStartAt: occurrenceStartAt(
-          series.anchorStartAt,
-          lastIndex + 1,
-          intervalWeeks,
-        ),
-        intervalWeeks,
-        seriesEndAt: args.newSeriesEndAt,
-      });
-    } else {
+    if (args.additionalCount === undefined && args.newSeriesEndAt === undefined) {
       throw new Error("Provide additionalCount or newSeriesEndAt.");
     }
+    const newSlots = computeOccurrenceSlots({
+      anchorStartAt: series.anchorStartAt,
+      intervalWeeks,
+      firstIndex: lastIndex + 1,
+      occurrenceCount: args.additionalCount,
+      seriesEndAt: args.additionalCount === undefined ? args.newSeriesEndAt : undefined,
+      skip: academicCalendarSkipFilter(series.academicSkipMode),
+    });
 
     const now = Date.now();
     const eventIds: Id<"events">[] = [];
-    for (let offset = 0; offset < newStarts.length; offset += 1) {
-      const occurrenceIndex = lastIndex + 1 + offset;
-      const eventId = await materializeOccurrence(ctx, series, occurrenceIndex, newStarts[offset]!, now);
+    for (const slot of newSlots) {
+      const eventId = await materializeOccurrence(ctx, series, slot.occurrenceIndex, slot.startAt, now);
       eventIds.push(eventId);
     }
 
-    const nextOccurrenceCount = (series.occurrenceCount ?? existing.length) + newStarts.length;
+    const nextOccurrenceCount = (series.occurrenceCount ?? existing.length) + newSlots.length;
     await ctx.db.patch(args.id, {
       occurrenceCount: series.occurrenceCount !== undefined ? nextOccurrenceCount : series.occurrenceCount,
       seriesEndAt: args.newSeriesEndAt ?? series.seriesEndAt,

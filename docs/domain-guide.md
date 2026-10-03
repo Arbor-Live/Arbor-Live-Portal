@@ -376,6 +376,27 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   access, and surfaces the show on the artist home dashboard. Optional
   `eventBandPayments` attach payout details to the same assignment.
 
+## Stanford academic calendar and closures
+
+`packages/format/src/academicCalendar.ts` (`@arbor/format`) holds Stanford's
+quarters for 2023-24 through 2033-34, from the Registrar's table. It also
+holds the no-class days: breaks, finals, MLK Day, Presidents' Day, Memorial
+Day, Independence Day, Democracy Day, and the day before spring finals.
+Update `YEARS` there when the Registrar publishes new dates.
+
+- **Arbor closures:** winter break, spring break, and all of summer (end of
+  spring finals through the day before autumn classes). Arbor is open at
+  Thanksgiving and on one-day holidays.
+- **Booking requests:** still accepted on closed days. The calendar strikes
+  those days through, and the form warns that we may not be able to crew the
+  event.
+- **Recurring series:** `eventSeries.academicSkipMode` (`breaks` or
+  `breaks_and_finals`) drops matching weeks when the series is created and in
+  `addOccurrences`. Skipped weeks don't count toward the occurrence count. They
+  leave gaps in `occurrenceIndex`, because the index stays the week slot that
+  `groupDayStartAt` relies on. The Days tab flags any occurrence that lands on
+  a closure or no-class day.
+
 ## Booking requests → events → quotes
 
 1. Anyone with a Stanford email submits the public booking wizard

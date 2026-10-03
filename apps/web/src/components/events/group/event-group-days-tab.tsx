@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { CalendarDotsIcon, PlusIcon } from "@phosphor-icons/react";
-import { toPacificDateTimeInput, pacificDateAndTimeToMs } from "@arbor/format";
+import {
+  academicDayNote,
+  pacificDateAndTimeToMs,
+  pacificDateKey,
+  toPacificDateTimeInput,
+} from "@arbor/format";
 import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -140,6 +145,8 @@ export function EventGroupDaysTab() {
             <RowList joined testId="event-group-day-list">
               {occurrences.map((row) => {
                 const status = normalizeEventStatus(row.status);
+                const calendarNote =
+                  status === "cancelled" ? null : academicDayNote(pacificDateKey(row.startAt));
                 const crew =
                   row.totalShifts === 0
                     ? "No crew slots"
@@ -166,6 +173,14 @@ export function EventGroupDaysTab() {
                           {multiDay ? `${row.title} · ${crew}` : crew}
                         </span>
                       </span>
+                      {calendarNote ? (
+                        <span
+                          className="rounded-md bg-status-amber-500/15 px-2 py-0.5 text-xs text-status-amber-700"
+                          data-testid="event-group-day-calendar-note"
+                        >
+                          {calendarNote.label}
+                        </span>
+                      ) : null}
                       {row.seriesDetached ? (
                         <span
                           className="rounded-md bg-status-amber-500/15 px-2 py-0.5 text-xs text-status-amber-700"
@@ -229,6 +244,12 @@ export function EventGroupDaysTab() {
                   Add
                 </Button>
               </div>
+              {series.academicSkipMode ? (
+                <p className="text-xs text-muted-foreground">
+                  Skips Arbor closures and Stanford breaks
+                  {series.academicSkipMode === "breaks_and_finals" ? ", holidays, and finals" : " and holidays"}.
+                </p>
+              ) : null}
             </div>
           )}
           <div className="space-y-2">

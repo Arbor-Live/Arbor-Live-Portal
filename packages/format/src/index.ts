@@ -1,3 +1,5 @@
+import { shouldSkipForAcademicCalendar, type AcademicSkipMode } from "./academicCalendar";
+
 export const PORTAL_TIMEZONE = "America/Los_Angeles";
 
 const usdFormatter = new Intl.NumberFormat("en-US", {
@@ -229,6 +231,68 @@ export function occurrenceStartAt(
   }
   if (occurrenceIndex === 0) return anchorStartAt;
   return addPacificWeeks(anchorStartAt, occurrenceIndex * intervalWeeks, timezone);
+}
+
+/** One generated slot of a recurring series. */
+export type OccurrenceSlot = {
+  /** Week slot from the anchor (`occurrenceStartAt`); skipped slots leave gaps. */
+  occurrenceIndex: number;
+  startAt: number;
+};
+
+/** Stop runaway loops when nearly every slot is skipped. */
+const MAX_OCCURRENCE_SLOTS_SCANNED = 520;
+
+/**
+ * Occurrence slots of a recurring series, from `firstIndex` on. Ends after
+ * `occurrenceCount` kept slots or at `seriesEndAt` (exactly one is required).
+ * `skip` drops a slot (e.g. a Stanford break) without counting it.
+ */
+export function computeOccurrenceSlots(args: {
+  anchorStartAt: number;
+  intervalWeeks: number;
+  occurrenceCount?: number;
+  seriesEndAt?: number;
+  firstIndex?: number;
+  skip?: (startAt: number) => boolean;
+}): OccurrenceSlot[] {
+  if (args.intervalWeeks < 1) {
+    throw new Error("Interval must be at least 1 week.");
+  }
+  if (args.occurrenceCount !== undefined && args.occurrenceCount < 1) {
+    throw new Error("Occurrence count must be at least 1.");
+  }
+  if (args.occurrenceCount === undefined && args.seriesEndAt === undefined) {
+    throw new Error("Provide either occurrence count or series end date.");
+  }
+  if (args.occurrenceCount !== undefined && args.seriesEndAt !== undefined) {
+    throw new Error("Provide either occurrence count or series end date, not both.");
+  }
+
+  const slots: OccurrenceSlot[] = [];
+  const firstIndex = args.firstIndex ?? 0;
+  for (let scanned = 0; scanned < MAX_OCCURRENCE_SLOTS_SCANNED; scanned += 1) {
+    if (args.occurrenceCount !== undefined && slots.length >= args.occurrenceCount) break;
+    const occurrenceIndex = firstIndex + scanned;
+    const startAt = occurrenceStartAt(args.anchorStartAt, occurrenceIndex, args.intervalWeeks);
+    if (args.seriesEndAt !== undefined && startAt > args.seriesEndAt) break;
+    if (args.skip?.(startAt)) continue;
+    slots.push({ occurrenceIndex, startAt });
+  }
+  if (slots.length === 0) {
+    throw new Error(
+      args.skip
+        ? "No occurrences remain after skipping no-class days."
+        : "No occurrences fall within the selected end date.",
+    );
+  }
+  return slots;
+}
+
+/** A `computeOccurrenceSlots` skip filter for a series' academic skip mode. */
+export function academicCalendarSkipFilter(mode: AcademicSkipMode | undefined) {
+  if (!mode) return undefined;
+  return (startAt: number) => shouldSkipForAcademicCalendar(pacificDateKey(startAt), mode) !== null;
 }
 
 /**
@@ -471,6 +535,8 @@ export {
   type BookingDeclineReasonCode,
   type EventCancelReasonCode,
 } from "./statusReasonCodes";
+
+export * from "./academicCalendar";
 
 export {
   BORROW_AGREEMENT_TERM_KEYS,

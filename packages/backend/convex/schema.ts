@@ -868,6 +868,12 @@ export default defineSchema({
     intervalWeeks: v.optional(v.number()),
     occurrenceCount: v.optional(v.number()),
     seriesEndAt: v.optional(v.number()),
+    /**
+     * Recurring groups only: leave out Arbor closures and Stanford no-class
+     * days (`@arbor/format` academic calendar). Skipped weeks leave gaps in
+     * `occurrenceIndex`. Unset = generate every week.
+     */
+    academicSkipMode: v.optional(v.union(v.literal("breaks"), v.literal("breaks_and_finals"))),
     timezone: v.string(),
     requiresShowWindow: v.boolean(),
     venueId: v.optional(v.id("venues")),
