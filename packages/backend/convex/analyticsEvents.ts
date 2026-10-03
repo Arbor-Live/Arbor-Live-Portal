@@ -13,6 +13,7 @@ import {
   requireAnalyticsAccess,
   SHIFTS_PER_EVENT_LIMIT,
 } from "./lib/analyticsQuery";
+import { loadBackupUserIds } from "./lib/crewBackups";
 import { isCrewedEventType } from "./lib/crewTeams";
 import {
   EVENT_PIPELINE_STATUSES,
@@ -176,7 +177,7 @@ export const getUpcomingEventsInsights = query({
           .query("eventCrewShifts")
           .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
           .take(SHIFTS_PER_EVENT_LIMIT);
-        const stats = computeShiftStats(shifts);
+        const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event._id));
         unconfirmedCrewed = !stats.isCrewConfirmed;
       }
 

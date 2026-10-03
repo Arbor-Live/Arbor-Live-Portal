@@ -23,8 +23,20 @@ export function staffingSlots<T extends ShiftLike>(shifts: T[]) {
   return shifts.filter((shift) => !isTraineeShift(shift));
 }
 
-export function countStaffing(shifts: ShiftLike[]) {
+/**
+ * Slot counts. `backup` is filled slots held by someone who answered "only if
+ * necessary": they count as filled, but the event still needs crew.
+ */
+export function countStaffing(shifts: ShiftLike[], backupUserIds?: ReadonlySet<string>) {
   const slots = staffingSlots(shifts);
-  const filled = slots.filter((shift) => !isOpenSlot(shift)).length;
-  return { slots: slots.length, filled, open: slots.length - filled };
+  const filledSlots = slots.filter((shift) => !isOpenSlot(shift));
+  const backup = backupUserIds
+    ? filledSlots.filter((shift) => backupUserIds.has(shift.userId?.trim() ?? "")).length
+    : 0;
+  return {
+    slots: slots.length,
+    filled: filledSlots.length,
+    open: slots.length - filledSlots.length,
+    backup,
+  };
 }

@@ -121,7 +121,7 @@ function SectionStaffingStrip({ row }: { row: BoardRow }) {
         const tone =
           section.slots === 0
             ? "border-border text-muted-foreground"
-            : section.filled < section.slots
+            : section.filled < section.slots || section.backup > 0
               ? "border-status-amber-500/40 bg-status-amber-500/10 text-status-amber-700"
               : "border-status-emerald-500/40 bg-status-emerald-500/10 text-status-emerald-700";
         return (
@@ -134,6 +134,7 @@ function SectionStaffingStrip({ row }: { row: BoardRow }) {
             <span className="max-w-32 truncate">{section.label}</span>
             <span className="tabular-nums">
               {section.slots === 0 ? "no slots" : `${section.filled}/${section.slots}`}
+              {section.backup > 0 ? ` · ${section.backup} backup` : null}
             </span>
           </span>
         );
@@ -299,6 +300,9 @@ export function CrewSchedulingDashboard() {
             <div className="border px-3 py-2">
               <p className="text-xs text-muted-foreground">Open slots</p>
               <p className="text-sm font-semibold tabular-nums">{kpis.unfilledShifts}</p>
+              {kpis.backupShifts > 0 ? (
+                <p className="text-xs text-muted-foreground">{kpis.backupShifts} more on backup</p>
+              ) : null}
             </div>
             <div className="border px-3 py-2">
               <p className="text-xs text-muted-foreground">Events needing crew</p>

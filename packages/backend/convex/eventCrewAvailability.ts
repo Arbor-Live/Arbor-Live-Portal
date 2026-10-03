@@ -31,6 +31,7 @@ import {
   responseScheduleChanged,
   sectionFingerprint,
 } from "./lib/crewAvailability";
+import { backupUserIdsFrom } from "./lib/crewBackups";
 import { computeShiftStats, isTraineeShift } from "./lib/crewShiftKinds";
 
 
@@ -92,6 +93,8 @@ const sectionStaffingValue = v.object({
   /** Staffing slots on the section (trainees excluded). */
   slots: v.number(),
   filled: v.number(),
+  /** Filled slots held by a backup ("only if necessary"). */
+  backup: v.number(),
 });
 
 type AuthUserRecord = AuthUser;
@@ -99,10 +102,12 @@ type AuthUserRecord = AuthUser;
 function sectionStaffing(
   blocks: Doc<"eventScheduleBlocks">[],
   shifts: Doc<"eventCrewShifts">[],
+  backupUserIds: ReadonlySet<string>,
 ) {
   return crewSections(blocks).map((block) => {
     const stats = computeShiftStats(
       shifts.filter((shift) => shift.scheduleBlockId === block._id),
+      backupUserIds,
     );
     return {
       _id: block._id,
@@ -112,6 +117,7 @@ function sectionStaffing(
       endsAt: block.endsAt,
       slots: stats.totalShifts,
       filled: stats.filledShifts,
+      backup: stats.backupShifts,
     };
   });
 }
@@ -267,6 +273,7 @@ export const listForAdminOverview = query({
       totalShifts: v.number(),
       filledShifts: v.number(),
       unfilledShifts: v.number(),
+      backupShifts: v.number(),
       isCrewConfirmed: v.boolean(),
       responseCounts: v.object({
         yes: v.number(),
@@ -335,7 +342,8 @@ export const listForAdminOverview = query({
 
     const rows = await Promise.all(
       bundles.map(async ({ event, blocks, shifts, responses, eligibleProfiles }) => {
-      const shiftStats = computeShiftStats(shifts);
+      const backupUserIds = backupUserIdsFrom(responses);
+      const shiftStats = computeShiftStats(shifts, backupUserIds);
       const responseCounts = aggregateResponses(responses);
       const eligibleCrew = eligibleProfiles.length;
       const respondedUserIds = new Set(responses.map((response) => response.userId));
@@ -373,7 +381,7 @@ export const listForAdminOverview = query({
           pending,
           eligibleCrew,
         },
-        sections: sectionStaffing(blocks, shifts),
+        sections: sectionStaffing(blocks, shifts, backupUserIds),
         traineeCount: shifts.filter(isTraineeShift).length,
         responders: buildResponsePeople(responses, blocks, userByKey, imageByUserId, {
           includePrivateStatuses: true,
@@ -590,6 +598,7 @@ export const getSummaryForEvent = query({
       totalShifts: v.number(),
       filledShifts: v.number(),
       unfilledShifts: v.number(),
+      backupShifts: v.number(),
       isCrewConfirmed: v.boolean(),
       responseCounts: v.object({
         yes: v.number(),
@@ -608,7 +617,7 @@ export const getSummaryForEvent = query({
     const bundle = await loadEventBundle(ctx, args.eventId);
     if (!bundle) return null;
 
-    const shiftStats = computeShiftStats(bundle.shifts);
+    const shiftStats = computeShiftStats(bundle.shifts, backupUserIdsFrom(bundle.responses));
     const responseCounts = aggregateResponses(bundle.responses);
 
     const assignedUserIds = new Set(

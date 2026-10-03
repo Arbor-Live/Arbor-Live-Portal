@@ -1372,7 +1372,8 @@ export default defineSchema({
   })
     .index("by_eventId", ["eventId"])
     .index("by_userId", ["userId"])
-    .index("by_eventId_and_userId", ["eventId", "userId"]),
+    .index("by_eventId_and_userId", ["eventId", "userId"])
+    .index("by_eventId_and_responseStatus", ["eventId", "responseStatus"]),
 
   /**
    * Event-level contacts that are not staff and not host-org billing people

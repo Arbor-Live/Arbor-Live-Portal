@@ -138,7 +138,17 @@ export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
     ({ shift }) =>
       !isTraineeShift(shift) && !sectionBlocks.some((block) => shiftBelongsToBlock(shift, block)),
   );
-  const staffing = countStaffing(shifts);
+  const backupUserIds = useMemo(
+    () =>
+      new Set(
+        responders
+          .filter((responder) => responder.responseStatus === "only_if_necessary")
+          .map((responder) => responder.userId),
+      ),
+    [responders],
+  );
+  const staffing = countStaffing(shifts, backupUserIds);
+  const stillLooking = staffing.open > 0 || staffing.backup > 0;
 
   const assignedUsers = useMemo(() => {
     const byId = new Map<string, string>();
@@ -196,12 +206,14 @@ export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
                 <span
                   className={cn(
                     "font-medium tabular-nums",
-                    staffing.open > 0 ? "text-status-amber-700" : "text-status-emerald-700",
+                    stillLooking ? "text-status-amber-700" : "text-status-emerald-700",
                   )}
                 >
                   {staffing.filled} of {staffing.slots} filled
                 </span>
-                {staffing.open > 0 ? ` · ${staffing.open} open` : " · fully staffed"}
+                {staffing.open > 0 ? ` · ${staffing.open} open` : null}
+                {staffing.backup > 0 ? ` · ${staffing.backup} on backup` : null}
+                {stillLooking ? null : " · fully staffed"}
               </>
             )}
             {trainees.length > 0
