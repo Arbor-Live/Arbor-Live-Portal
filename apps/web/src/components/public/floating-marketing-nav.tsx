@@ -3,7 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ListIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, ListIcon } from "@phosphor-icons/react";
+import { NavigationMenu } from "radix-ui";
 import { useLandingMotion } from "@/components/landing/landing-motion";
 import { Button } from "@/components/ui/button";
 import { DashboardNavLink, SignInNavLink } from "@/components/public/dashboard-nav-link";
@@ -14,7 +15,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { landingNavLinks } from "@/lib/landing-content";
+import { landingJoinLinks, landingNavLinks } from "@/lib/landing-content";
 import { cn } from "@/lib/utils";
 import { HappeningNowBar, useHappeningNowEvents } from "@/components/public/happening-now-banner";
 
@@ -101,19 +102,56 @@ export function FloatingMarketingNav() {
                 />
               </Link>
 
-              <nav className="hidden items-center gap-1 lg:flex">
-                {landingNavLinks.map((link) => (
-                  <Button key={link.label} asChild variant="ghost" size="sm">
-                    <Link
-                      href={link.href}
-                      target={link.external ? "_blank" : undefined}
-                      rel={link.external ? "noopener noreferrer" : undefined}
-                    >
-                      {link.label}
-                    </Link>
-                  </Button>
-                ))}
-              </nav>
+              <NavigationMenu.Root className="hidden lg:block" delayDuration={80}>
+                <NavigationMenu.List className="flex items-center gap-1">
+                  {landingNavLinks.map((link) => (
+                    <NavigationMenu.Item key={link.label}>
+                      <Button asChild variant="ghost" size="sm">
+                        <NavigationMenu.Link asChild>
+                          <Link
+                            href={link.href}
+                            target={link.external ? "_blank" : undefined}
+                            rel={link.external ? "noopener noreferrer" : undefined}
+                          >
+                            {link.label}
+                          </Link>
+                        </NavigationMenu.Link>
+                      </Button>
+                    </NavigationMenu.Item>
+                  ))}
+                  <NavigationMenu.Item className="relative">
+                    <Button asChild variant="ghost" size="sm" className="group">
+                      <NavigationMenu.Trigger>
+                        Join us
+                        <CaretDownIcon
+                          aria-hidden
+                          className="size-3 transition-transform duration-150 group-data-[state=open]:rotate-180"
+                        />
+                      </NavigationMenu.Trigger>
+                    </Button>
+                    {/* No Viewport: content renders in place, anchored under the trigger. */}
+                    <NavigationMenu.Content className="absolute top-full left-1/2 z-50 w-72 -translate-x-1/2 pt-3 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1">
+                      <ul className="flex flex-col gap-1 bg-popover p-2 text-popover-foreground shadow-md ring-1 ring-foreground/10">
+                        {landingJoinLinks.map((link) => (
+                          <li key={link.href}>
+                            <NavigationMenu.Link asChild>
+                              <Link
+                                href={link.href}
+                                className="block px-3 py-2.5 outline-hidden transition-colors hover:bg-muted focus-visible:bg-muted"
+                              >
+                                <span className="block text-sm font-medium">{link.label}</span>
+                                <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                                  {link.description}
+                                </span>
+                              </Link>
+                            </NavigationMenu.Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </NavigationMenu.Content>
+                  </NavigationMenu.Item>
+                </NavigationMenu.List>
+              </NavigationMenu.Root>
 
               <div className="flex items-center gap-2">
                 <SignInNavLink />
@@ -151,6 +189,24 @@ export function FloatingMarketingNav() {
                             onClick={() => setMobileOpen(false)}
                           >
                             {link.label}
+                          </Link>
+                        </Button>
+                      ))}
+                      <p className="mt-3 border-t px-3 pt-4 pb-1 text-xs font-medium text-muted-foreground">
+                        Join us
+                      </p>
+                      {landingJoinLinks.map((link) => (
+                        <Button
+                          key={link.href}
+                          asChild
+                          variant="ghost"
+                          className="h-auto flex-col items-start gap-0.5 py-2"
+                        >
+                          <Link href={link.href} onClick={() => setMobileOpen(false)}>
+                            <span>{link.label}</span>
+                            <span className="text-xs font-normal whitespace-normal text-muted-foreground">
+                              {link.description}
+                            </span>
                           </Link>
                         </Button>
                       ))}
