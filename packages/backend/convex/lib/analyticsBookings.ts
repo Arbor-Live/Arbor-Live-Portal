@@ -29,13 +29,20 @@ export function eventCostUsd(event: Doc<"events">): number {
   );
 }
 
-type InvoiceWithReach = { invoice: Doc<"invoices">; eventCount: number };
+type InvoiceWithReach = {
+  invoice: Doc<"invoices">;
+  /** Distinct non-cancelled events on the invoice (primary or extra link), at least 1. */
+  eventCount: number;
+  /** Distinct events on the invoice including cancelled ones, at least 1. */
+  totalEventCount: number;
+};
 
 /**
- * Loads invoices once per query, with how many live (non-cancelled) events
- * each covers. A multi-day booking or a series shares one invoice, so each
- * event takes `1 / eventCount` of it; summing per event then never counts a
- * shared invoice twice.
+ * Loads invoices once per query, with how many events each covers. A
+ * multi-day booking or a series shares one invoice, so each live event takes
+ * `1 / eventCount` of it; summing per event then never counts a shared
+ * invoice twice. Queries about cancelled events split by `totalEventCount`
+ * instead, so cancelled days never claim a live day's share.
  */
 export function createInvoiceLoader(ctx: QueryCtx) {
   const cache = new Map<Id<"invoices">, Promise<InvoiceWithReach | null>>();
@@ -55,10 +62,27 @@ export function createInvoiceLoader(ctx: QueryCtx) {
             .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
             .take(EVENTS_PER_INVOICE_LIMIT),
         ]);
-        const liveEvents = primaryEvents.filter(
-          (event) => normalizeEventStatus(event.status) !== "cancelled",
+        // One set of events, whether the invoice is their primary or an extra
+        // link (an event can be both); cancelled ones counted separately.
+        const statusById = new Map<string, string | undefined>(
+          primaryEvents.map((event) => [event._id, event.status]),
+        );
+        const extraEvents = await Promise.all(
+          extraLinks
+            .filter((link) => !statusById.has(link.eventId))
+            .map((link) => ctx.db.get(link.eventId)),
+        );
+        for (const event of extraEvents) {
+          if (event) statusById.set(event._id, event.status);
+        }
+        const live = [...statusById.values()].filter(
+          (status) => normalizeEventStatus(status) !== "cancelled",
         ).length;
-        return { invoice, eventCount: Math.max(1, liveEvents + extraLinks.length) };
+        return {
+          invoice,
+          eventCount: Math.max(1, live),
+          totalEventCount: Math.max(1, statusById.size),
+        };
       })();
       cache.set(invoiceId, pending);
     }

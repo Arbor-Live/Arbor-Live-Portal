@@ -19,7 +19,7 @@ import {
 } from "./lib/analyticsQuery";
 import { dayLoadLevel, toPacificDateKey } from "./lib/bookingDayLoad";
 import { normalizeEventStatus } from "./lib/eventStatus";
-import { collectPaymentRows } from "./paymentProof";
+import { collectOpenReceivableRows } from "./paymentProof";
 
 const REQUEST_STATUSES = [
   "submitted",
@@ -60,11 +60,8 @@ function pacificMonthBounds(nowMs: number = Date.now()) {
 }
 
 async function openArTotalUsd(ctx: Parameters<typeof requireAnalyticsAccess>[0]) {
-  const rows = await collectPaymentRows(ctx, Date.now());
-  const totalUsd = rows
-    .filter((row) => row.queue !== "payment_received")
-    .reduce((sum, row) => sum + row.totalUsd, 0);
-  return { totalUsd, truncated: false };
+  const { rows, truncated } = await collectOpenReceivableRows(ctx, Date.now());
+  return { totalUsd: rows.reduce((sum, row) => sum + row.totalUsd, 0), truncated };
 }
 
 export const getBookingFunnel = query({

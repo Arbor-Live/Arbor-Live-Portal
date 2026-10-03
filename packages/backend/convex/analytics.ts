@@ -16,7 +16,7 @@ import {
   requireAnalyticsAccess,
 } from "./lib/analyticsQuery";
 import { arborEarnedRevenueUsd, invoicePassThroughUsd } from "./lib/invoiceProfit";
-import { collectPaymentRows } from "./paymentProof";
+import { collectOpenReceivableRows } from "./paymentProof";
 
 /** Bounded scan caps — intentional; return `truncated` when hit. */
 const BAND_PAYMENT_SCAN_LIMIT = 1000;
@@ -278,9 +278,9 @@ function arAgingBucket(daysPastDue: number): (typeof AR_AGING_BUCKETS)[number] {
 }
 
 /**
- * Open receivables right now, from the same rows as the Payments tab (each
- * invoice once, shared multi-day and series invoices included). Aging is days
- * past the payment due date.
+ * Open receivables right now: every approved, unpaid invoice once (shared
+ * multi-day and series invoices included), however old its event. Rows and
+ * queues match the Payments tab's; aging is days past the payment due date.
  */
 export const getArSnapshot = query({
   args: {},
@@ -313,9 +313,7 @@ export const getArSnapshot = query({
   handler: async (ctx) => {
     await requireAnalyticsAccess(ctx);
     const now = Date.now();
-    const rows = (await collectPaymentRows(ctx, now)).filter(
-      (row) => row.queue !== "payment_received",
-    );
+    const { rows, truncated } = await collectOpenReceivableRows(ctx, now);
 
     const queues = {
       payment_pending: { count: 0, totalUsd: 0 },
@@ -353,8 +351,7 @@ export const getArSnapshot = query({
           daysPastDue: daysPastDue(row.dueAt, now),
           proofSubmitted: Boolean(row.submission),
         })),
-      // The Payments rows scan a bounded event window; nothing to flag here.
-      truncated: false,
+      truncated,
     };
   },
 });

@@ -288,12 +288,15 @@ export const getCancellations = query({
       for (const invoiceId of invoiceIds) {
         const loaded = await loadInvoice(invoiceId);
         if (!loaded || loaded.invoice.approvedAt == null) continue;
-        const { invoice, eventCount } = loaded;
+        // Split across every event on the invoice, cancelled or not, so a
+        // cancelled day never claims the share a live day books (and two
+        // cancelled days never both claim the whole invoice).
+        const { invoice, totalEventCount } = loaded;
         approvedValueUsd +=
           arborEarnedRevenueUsd(
             invoice.approvedTotalUsd ?? invoice.totalUsd,
             invoicePassThroughUsd(invoice.artistsSubtotalUsd, invoice.externalRentalsSubtotalUsd),
-          ) / eventCount;
+          ) / totalEventCount;
       }
       approvedValueLostUsd += approvedValueUsd;
       rows.push({

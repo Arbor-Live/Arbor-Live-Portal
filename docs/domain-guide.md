@@ -338,11 +338,16 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   them from Arbor margin (equipment / crew / fees). Matching `bandsCostUsd` /
   `externalRentalsCostUsd` are not double-counted; overruns still reduce profit.
 - Insights splits a shared invoice (multi-day booking, series, extra links)
-  evenly across the live events it covers (`lib/analyticsBookings.ts`), so
-  per-event margin, booked-ahead and cancellation totals never count one
-  invoice twice. Margin uses booked (finalized + approved) invoices only.
-  Insights AR reads the Payments tab's own rows (`collectPaymentRows`), so the
-  two always agree.
+  evenly across the distinct live events it covers (`lib/analyticsBookings.ts`),
+  so per-event margin and booked-ahead totals never count one invoice twice.
+  Cancelled value splits across every event on the invoice, cancelled ones
+  included, so a cancelled day never claims a live day's share. Margin uses
+  booked (finalized + approved) invoices only.
+- Insights receivables (`collectOpenReceivableRows`) are every approved,
+  unpaid invoice however old its event. They are classified the same way as
+  the Payments tab's rows (`collectPaymentRows`). The Payments tab only lists
+  events from the last 90 days (its reminder window), so Insights can show
+  older debt that the Payments tab doesn't.
 - **Event groups** (`eventSeries` table, `eventSeries.ts`): dated events that
   share setup and billing. `kind` is `recurring` (a series generated from a
   rule) or `multi_day` (a booking whose days share

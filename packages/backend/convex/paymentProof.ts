@@ -283,8 +283,8 @@ async function buildInvoicePaymentDetails(
  */
 /**
  * Every payable invoice once (primary, extra-linked, and approved invoices
- * with no event), with its payment queue. The Payments tab and Insights' AR
- * both read this, so their numbers agree.
+ * with no event) for events in the 90-day reminder window, with its payment
+ * queue: the Payments tab. Receivables of any age: `collectOpenReceivableRows`.
  */
 export async function collectPaymentRows(ctx: QueryCtx, now: number) {
   const windowStart = now - REMINDER_LOOKBACK_MS;
@@ -317,6 +317,31 @@ export async function collectPaymentRows(ctx: QueryCtx, now: number) {
     if (row) rows.push(row);
   }
   return rows;
+}
+
+/** Unpaid invoices scanned for receivables (drafts and estimates included). */
+const RECEIVABLES_SCAN_LIMIT = 2000;
+
+/**
+ * Every approved, unpaid invoice with its payment queue, however old its
+ * event: Insights' receivables. `collectPaymentRows` (the Payments tab) only
+ * looks back over the 90-day reminder window, so old debt would age out of
+ * it. Each row uses the invoice's earliest linked event, as the Payments tab
+ * does for the events it sees.
+ */
+export async function collectOpenReceivableRows(ctx: QueryCtx, now: number) {
+  const unpaid = await ctx.db
+    .query("invoices")
+    .withIndex("by_paymentReceivedAt", (q) => q.eq("paymentReceivedAt", undefined))
+    .take(RECEIVABLES_SCAN_LIMIT + 1);
+  const rows = [];
+  for (const invoice of unpaid.slice(0, RECEIVABLES_SCAN_LIMIT)) {
+    if (invoice.status === "void" || (invoice.clientApprovalStatus ?? "pending") !== "approved") continue;
+    const [event] = await listEventsLinkedToInvoice(ctx, invoice._id);
+    const row = await buildPaymentQueueRow(ctx, invoice, event ?? null, now);
+    if (row && row.queue !== "payment_received") rows.push(row);
+  }
+  return { rows, truncated: unpaid.length > RECEIVABLES_SCAN_LIMIT };
 }
 
 export const listByQueue = query({
