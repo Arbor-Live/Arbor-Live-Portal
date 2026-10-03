@@ -247,7 +247,7 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   either filled by an act or still needed:
   - **Artist Needed** (`eventArtistNeeds`) — one open **slot** per row, so "two
     bands and a DJ" is three slots: a `label` (e.g. "Headliner"), `artistType`
-    (`band` / `dj` / `no_preference`), freeform `genres`, and a staff-driven
+    (`band` / `dj` / `singer_songwriter` / `no_preference`), freeform `genres`, and a staff-driven
     `status` (`open` / `inquiring`). A slot is **booked** when an
     `eventBandParticipations` row points at it (`needId`) — never by a stored
     flag, and a slot holds exactly one act (`lib/eventArtistNeeds.ts`).

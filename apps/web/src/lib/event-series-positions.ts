@@ -34,12 +34,14 @@ export type SeriesPositionTemplateDraft = {
 export const POSITION_TYPE_OPTIONS = [
   { value: "band", label: "Live band" },
   { value: "dj", label: "DJ" },
+  { value: "singer_songwriter", label: "Singer-songwriter" },
   { value: "no_preference", label: "No preference" },
 ];
 
 export const POSITION_TYPE_LABELS: Record<ArtistNeedType, string> = {
   band: "Live band",
   dj: "DJ",
+  singer_songwriter: "Singer-songwriter",
   no_preference: "No preference",
 };
 

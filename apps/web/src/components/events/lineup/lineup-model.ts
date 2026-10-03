@@ -2,7 +2,7 @@ import type { useQuery } from "convex/react";
 import type { api } from "@/lib/convex-api";
 import type { PerformerRow } from "@/components/events/lineup/lineup-forms";
 
-export type ArtistNeedType = "band" | "dj" | "no_preference";
+export type ArtistNeedType = "band" | "dj" | "singer_songwriter" | "no_preference";
 export type ArtistNeedStatus = "open" | "inquiring";
 export type EffectiveArtistNeedStatus = ArtistNeedStatus | "booked";
 
@@ -27,6 +27,7 @@ export type BillRow = {
 export const TYPE_OPTIONS = [
   { value: "band", label: "Live band" },
   { value: "dj", label: "DJ" },
+  { value: "singer_songwriter", label: "Singer-songwriter" },
   { value: "no_preference", label: "No preference" },
 ];
 
@@ -38,6 +39,7 @@ export const SLOT_STATUS_OPTIONS = [
 export const TYPE_LABELS: Record<ArtistNeedType, string> = {
   band: "Live band",
   dj: "DJ",
+  singer_songwriter: "Singer-songwriter",
   no_preference: "No preference",
 };
 

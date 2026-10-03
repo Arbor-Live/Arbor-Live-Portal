@@ -38,11 +38,12 @@ import { notify } from "@/lib/notify";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { cn } from "@/lib/utils";
 
-type ArtistNeedType = "band" | "dj" | "no_preference";
+type ArtistNeedType = "band" | "dj" | "singer_songwriter" | "no_preference";
 
 const TYPE_LABELS: Record<ArtistNeedType, string> = {
   band: "Live band",
   dj: "DJ",
+  singer_songwriter: "Singer-songwriter",
   no_preference: "No preference",
 };
 
@@ -54,6 +55,7 @@ const TYPE_LABELS: Record<ArtistNeedType, string> = {
 const TYPE_FILTER_OPTIONS = [
   { value: "band", label: "Live band" },
   { value: "dj", label: "DJ" },
+  { value: "singer_songwriter", label: "Singer-songwriter" },
   { value: "no_preference", label: "No preference" },
 ];
 

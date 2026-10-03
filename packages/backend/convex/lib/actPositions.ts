@@ -43,7 +43,9 @@ export async function ensureActPosition(
         ? "dj"
         : profile?.organizationType === "band"
           ? "band"
-          : "no_preference",
+          : profile?.organizationType === "singer_songwriter"
+            ? "singer_songwriter"
+            : "no_preference",
     status: "open",
     createdAt: now,
     updatedAt: now,

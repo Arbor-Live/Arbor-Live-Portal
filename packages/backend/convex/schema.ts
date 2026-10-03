@@ -1476,7 +1476,12 @@ export default defineSchema({
     templateKey: v.optional(v.string()),
     /** Optional slot name, e.g. "Headliner", "Opener", "Late set". */
     label: v.optional(v.string()),
-    artistType: v.union(v.literal("band"), v.literal("dj"), v.literal("no_preference")),
+    artistType: v.union(
+      v.literal("band"),
+      v.literal("dj"),
+      v.literal("singer_songwriter"),
+      v.literal("no_preference"),
+    ),
     genres: v.optional(v.string()),
     status: v.union(v.literal("open"), v.literal("inquiring")),
     /**

@@ -20,6 +20,7 @@ import type { InvoiceDraft } from "./use-invoice-draft";
 const ARTIST_TYPE_LABELS: Record<InvoiceArtistPosition["artistType"], string> = {
   band: "Live band",
   dj: "DJ",
+  singer_songwriter: "Singer-songwriter",
   no_preference: "No preference",
 };
 

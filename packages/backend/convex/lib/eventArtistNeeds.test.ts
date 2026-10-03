@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Doc, Id } from "../_generated/dataModel";
-import { buildArtistOpportunityRow } from "./eventArtistNeeds";
+import { artistTypeMatchesNeed, buildArtistOpportunityRow } from "./eventArtistNeeds";
 import { latestWebsiteVisibleDesign } from "./marketingDesigns";
 
 const EVENT_ID = "ke1" as Id<"events">;
@@ -132,5 +132,13 @@ describe("buildArtistOpportunityRow", () => {
       alreadyInquired: true,
     });
     expect(row.alreadyInquired).toBe(true);
+  });
+});
+
+describe("artistTypeMatchesNeed", () => {
+  it("offers a singer-songwriter position only to singer-songwriters", () => {
+    expect(artistTypeMatchesNeed("singer_songwriter", "singer_songwriter")).toBe(true);
+    expect(artistTypeMatchesNeed("singer_songwriter", "band")).toBe(false);
+    expect(artistTypeMatchesNeed("singer_songwriter", "dj")).toBe(false);
   });
 });

@@ -125,7 +125,7 @@ export async function getEventArtists(
         name: outside || position.label?.trim() || "To be announced",
         role: "other",
         organizationType:
-          position.artistType === "band" || position.artistType === "dj" ? position.artistType : "other",
+          position.artistType === "no_preference" ? "other" : position.artistType,
         genres: [],
         links: [],
         setStartsAt: position.setStartsAt,
