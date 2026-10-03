@@ -209,18 +209,18 @@ describe("allocateEventPatch layout", () => {
   });
 
   it("collapses a stereo row to mono only when no legal pair is left", () => {
-    // 9 mono rows + 5 stereo rows on one box: the monos leave only isolated
-    // sockets (no legal pair), so a stereo row collapses and says so rather
-    // than being dropped.
+    // 15 mono rows + 2 stereo rows cannot seat one box even all mono, so
+    // nothing is broken to fit; the monos leave only an isolated socket, so a
+    // stereo row collapses there and says so rather than being dropped.
     const bands = [
       band("Overflow", "headliner", [
-        ...Array.from({ length: 9 }, (_, i) =>
+        ...Array.from({ length: 15 }, (_, i) =>
           input({ id: `m${i}`, channel: i + 1, source: `Mono ${i}`, sourceKey: "drum.kick" }),
         ),
-        ...Array.from({ length: 5 }, (_, i) =>
+        ...Array.from({ length: 2 }, (_, i) =>
           input({
             id: `p${i}`,
-            channel: 10 + i,
+            channel: 16 + i,
             source: `PB ${i}`,
             sourceKey: "pb",
             inputType: "playback",
@@ -581,6 +581,68 @@ describe("stereo pairs", () => {
       in: keysLeft.port,
     });
     expect(snap.ae_data.ch[String(keysLeft.strip)]?.mute).toBe(false);
+  });
+});
+
+describe("one snake with a stereo row broken to mono", () => {
+  // Fifteen inputs with stereo overheads and stereo keys: 17 sockets as asked,
+  // 16 once keys run mono.
+  function fullBill(keysStereo = true): ShowBandInput[] {
+    return [
+      band("Full", "headliner", [
+        input({ id: "k", channel: 1, source: "Kick", sourceKey: "drum.kick" }),
+        input({ id: "s", channel: 2, source: "Snare", sourceKey: "drum.snare.top" }),
+        input({ id: "t1", channel: 3, source: "Tom 1", sourceKey: "drum.tom.rack" }),
+        input({ id: "t2", channel: 4, source: "Tom 2", sourceKey: "drum.tom.floor" }),
+        input({ id: "oh", channel: 5, source: "Overheads", sourceKey: "drum.oh", stereo: true }),
+        input({ id: "p", channel: 7, source: "Aux percussion", sourceKey: "perc.aux" }),
+        input({ id: "b", channel: 8, source: "Bass", sourceKey: "bass", inputType: "di" }),
+        input({ id: "g2", channel: 9, source: "Guitar 2", sourceKey: "gtr", inputType: "di" }),
+        input({ id: "g1", channel: 10, source: "Guitar 1", sourceKey: "gtr", inputType: "di" }),
+        input({ id: "keys", channel: 11, source: "Keys", sourceKey: "keys", inputType: "di", stereo: keysStereo }),
+        input({ id: "v1", channel: 13, source: "Lead vocal", sourceKey: "vox.lead" }),
+        input({ id: "v2", channel: 14, source: "Wireless vocal", sourceKey: "vox.lead" }),
+        input({ id: "v3", channel: 15, source: "BV", sourceKey: "vox.bgv" }),
+        input({ id: "tp", channel: 16, source: "Trumpet", sourceKey: "wind.trumpet" }),
+        input({ id: "sx", channel: 17, source: "Alto sax", sourceKey: "wind.sax.alto" }),
+      ]),
+    ];
+  }
+
+  it("offers one snake by running keys mono, never the overheads", () => {
+    const allocation = allocateEventPatch(fullBill(), { secondSnake: false });
+    expect(allocation.fitsOneBox).toBe(true);
+    expect(allocation.monoToFit).toEqual(["Keys"]);
+    expect(usedPort(allocation.ports, "keys").stereo).toBe(false);
+    expect(usedPort(allocation.ports, "oh").stereo).toBe(true);
+    expect(allocation.ports.filter((p) => p.used)).toHaveLength(16);
+    expect(allocation.warnings.some((w) => w.includes("full"))).toBe(false);
+    expect(
+      allocation.warnings.some((w) => w.includes("Keys patched mono to fit one stage box")),
+    ).toBe(true);
+  });
+
+  it("keeps keys stereo when the second snake is on", () => {
+    const allocation = allocateEventPatch(fullBill(), { secondSnake: true });
+    expect(allocation.fitsOneBox).toBe(true);
+    expect(usedPort(allocation.ports, "keys").stereo).toBe(true);
+    expect(allocation.warnings.some((w) => w.includes("patched mono"))).toBe(false);
+  });
+
+  it("does not offer one snake when only the overheads could collapse", () => {
+    const bill = fullBill(false);
+    bill[0]!.inputs.push(
+      input({ id: "x", channel: 18, source: "Flute", sourceKey: "wind.flute" }),
+    );
+    const allocation = allocateEventPatch(bill, { secondSnake: false });
+    expect(allocation.fitsOneBox).toBe(false);
+    expect(usedPort(allocation.ports, "oh").stereo).toBe(true);
+  });
+
+  it("does not report Melody DCA members as past the USER1 layer", () => {
+    const allocation = allocateEventPatch(fullBill(), { secondSnake: false });
+    expect(allocation.melodyDca).not.toBeNull();
+    expect(allocation.warnings.some((w) => w.includes("past the USER1 layer"))).toBe(false);
   });
 });
 

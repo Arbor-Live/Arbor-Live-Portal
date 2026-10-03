@@ -16,11 +16,14 @@ export function SnakePlanControls({
   eventId,
   plan,
   fitsOneBox,
+  monoToFit = [],
 }: {
   eventId: Id<"events">;
   plan: PatchPlan;
   /** False when the bill cannot fit on one stage box. */
   fitsOneBox: boolean;
+  /** Stereo inputs one box breaks to mono to seat the bill. */
+  monoToFit?: string[];
 }) {
   const savePlan = useMutation(api.eventPatchPlan.set);
   const [saving, setSaving] = useState(false);
@@ -53,7 +56,9 @@ export function SnakePlanControls({
                 ? "This bill needs more than one stage box. Drop an input or use two snakes."
                 : plan.secondSnake
                   ? "Both stage boxes out — families pack box A, and anything that does not fit continues on box B."
-                  : "One stage box (AES50 A). Turn on the second snake to split the stage."}
+                  : monoToFit.length > 0
+                    ? `One stage box (AES50 A) — ${monoToFit.join(", ")} runs mono to fit. Turn on the second snake to keep it stereo.`
+                    : "One stage box (AES50 A). Turn on the second snake to split the stage."}
             </p>
           </div>
           <ToggleGroup

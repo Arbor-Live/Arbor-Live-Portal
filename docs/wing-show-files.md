@@ -86,9 +86,14 @@ Rules worth knowing:
 - **Every socket owns a channel.** Socket N patches strip N (box A 1–16, box B
   17–32); a stereo pair shares the odd socket's strip. There are no "strip-less"
   sockets or spare-strip workarounds.
-- **One snake is only offered when it fits.** If the bill cannot sit on a single
-  16-socket box, the one-snake control disappears and the crew is told to drop an
-  input or run the second snake. `EventPatchAllocation.fitsOneBox` carries this.
+- **One snake is only offered when it fits.** A bill that is one socket over
+  can still go on one box by running a stereo row mono — keys first, then the
+  latest stereo rows; the overheads never collapse. Choosing one snake then
+  patches those rows mono and names them (`EventPatchAllocation.monoToFit`);
+  the second snake keeps them stereo. If the bill cannot sit on a single
+  16-socket box even so, the one-snake control is disabled and the crew is told
+  to drop an input or run the second snake. `EventPatchAllocation.fitsOneBox`
+  carries this.
 
 ### Groups and desk pages
 
@@ -114,7 +119,9 @@ section, `USER1` holds two pages / 24 slots). Priority, highest first:
 5. **Fader 12 is reserved** for USB 1/2 walk-in music.
 
 Anything past USER1's 24 slots is still patched and named; it is listed in the
-warnings so it can go on the brief. The rig is a WING Compact, so the build
+warnings so it can go on the brief. Melodic channels folded under the Melody
+DCA are not overflow — the DCA is how they are ridden — so they are not warned
+about. The rig is a WING Compact, so the build
 writes the pages into `ce_data.layer.CMPCT[8]` (USER1) and the vocal FX returns
 into `CMPCT[9]` (USER2) — not the full WING's `L` surface — and it writes them
 into **every** scene, not just the night baseline, so recalling a band never

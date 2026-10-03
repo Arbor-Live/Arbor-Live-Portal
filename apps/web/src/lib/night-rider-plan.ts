@@ -29,6 +29,8 @@ export function nightRiderPlan(
   changeovers: PhysicalChangeover[];
   /** False when the bill only fits with the second stage box. */
   fitsOneBox: boolean;
+  /** Stereo inputs one box breaks to mono to seat the bill. */
+  monoToFit: string[];
 } {
   const showBands: ShowBandInput[] = rows
     .filter((row) => row.rider && row.rider.inputs.length > 0)
@@ -43,7 +45,7 @@ export function nightRiderPlan(
       backline: row.rider!.backline,
     }));
   if (showBands.length === 0) {
-    return { patchPlan: null, changeovers: [], fitsOneBox: true };
+    return { patchPlan: null, changeovers: [], fitsOneBox: true, monoToFit: [] };
   }
   const allocation = allocateEventPatch(showBands, plan);
   const patchPlan = buildPatchDiffPlan(allocation);
@@ -51,5 +53,6 @@ export function nightRiderPlan(
     patchPlan,
     changeovers: listPhysicalChangeovers(patchPlan),
     fitsOneBox: allocation.fitsOneBox,
+    monoToFit: allocation.monoToFit,
   };
 }
