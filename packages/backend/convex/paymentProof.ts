@@ -321,6 +321,12 @@ export async function collectPaymentRows(ctx: QueryCtx, now: number) {
 
 /** Unpaid invoices read for receivables (drafts and estimates included). */
 const RECEIVABLES_SCAN_LIMIT = 5000;
+/**
+ * Receivable rows built per query. Each costs a few index reads (linked
+ * events, payment proof), so this keeps the query well under Convex's
+ * 4,096 index-range limit; past it the result is marked truncated.
+ */
+const RECEIVABLE_ROWS_LIMIT = 500;
 
 /**
  * Every approved, unpaid invoice with its payment queue, however old its
@@ -328,7 +334,7 @@ const RECEIVABLES_SCAN_LIMIT = 5000;
  * looks back over the 90-day reminder window, so old debt would age out of
  * it. Each row uses the invoice's earliest linked event, as the Payments tab
  * does for the events it sees. Unpaid drafts and estimates share the index,
- * so it's read lazily, skipping them, up to the scan limit.
+ * so it's read lazily, skipping them, up to the scan and row limits.
  */
 export async function collectOpenReceivableRows(ctx: QueryCtx, now: number) {
   const rows = [];
@@ -337,7 +343,7 @@ export async function collectOpenReceivableRows(ctx: QueryCtx, now: number) {
   for await (const invoice of ctx.db
     .query("invoices")
     .withIndex("by_paymentReceivedAt", (q) => q.eq("paymentReceivedAt", undefined))) {
-    if (scanned >= RECEIVABLES_SCAN_LIMIT) {
+    if (scanned >= RECEIVABLES_SCAN_LIMIT || rows.length >= RECEIVABLE_ROWS_LIMIT) {
       truncated = true;
       break;
     }
