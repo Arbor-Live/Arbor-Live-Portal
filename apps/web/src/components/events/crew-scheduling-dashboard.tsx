@@ -239,8 +239,11 @@ export function CrewSchedulingDashboard() {
   // so back/forward and shared links always match what's shown.
   const fromParam = searchParams.get("from");
   const toParam = searchParams.get("to");
-  const startDate = isDateKey(fromParam) ? fromParam : defaults.startDate;
-  const endDate = isDateKey(toParam) ? toParam : defaults.endDate;
+  // Both ends or neither: one bad day falls back to the whole default range,
+  // not half of it (which could leave a range ending before it starts).
+  const fromUrl = isDateKey(fromParam) && isDateKey(toParam);
+  const startDate = fromUrl ? fromParam : defaults.startDate;
+  const endDate = fromUrl ? toParam : defaults.endDate;
 
   function setRange(nextStart: string, nextEnd: string) {
     const params = new URLSearchParams(searchParams.toString());
