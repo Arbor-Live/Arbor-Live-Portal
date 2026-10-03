@@ -1,6 +1,12 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatDate } from "@/lib/format";
 import type { Id } from "@/lib/convex-api";
 
@@ -27,26 +33,28 @@ export function LinkedEventDaySwitcher({
 
   return (
     <div className={className} data-testid="linked-event-day-switcher">
-      <div className="flex flex-wrap gap-2">
-        {days.map((day, index) => {
-          const dayNumber = day.dayNumber ?? index + 1;
-          const selected = day._id === selectedEventId;
-          return (
-            <Button
-              key={day._id}
-              type="button"
-              size="sm"
-              variant={selected ? "default" : "outline"}
-              data-testid={`linked-event-day-${dayNumber}`}
-              aria-pressed={selected}
-              onClick={() => onSelect(day._id)}
-            >
-              Day {dayNumber}
-              <span className="ml-1.5 font-normal opacity-80">{formatDate(day.startAt)}</span>
-            </Button>
-          );
-        })}
-      </div>
+      <Select
+        value={selectedEventId ?? ""}
+        onValueChange={(value) => onSelect(value as Id<"events">)}
+      >
+        <SelectTrigger className="h-8 w-[220px]" aria-label="Day" data-testid="linked-event-day-trigger">
+          <SelectValue placeholder="Select a day" />
+        </SelectTrigger>
+        <SelectContent>
+          {days.map((day, index) => {
+            const dayNumber = day.dayNumber ?? index + 1;
+            return (
+              <SelectItem
+                key={day._id}
+                value={day._id}
+                data-testid={`linked-event-day-${dayNumber}`}
+              >
+                Day {dayNumber} · {formatDate(day.startAt)}
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
     </div>
   );
 }
