@@ -614,6 +614,28 @@ export function PatchFaceplate({ patch }: { patch: EventBriefPatch }) {
         </View>
       ))}
 
+      {patch.outputs && patch.outputs.length > 0 ? (
+        <View style={styles.section} wrap={false}>
+          <Text style={styles.changeoverTitle}>Outputs</Text>
+          <View style={styles.tableHeader}>
+            <Text style={[styles.headerCell, { width: 52 }]}>OUT</Text>
+            <Text style={[styles.headerCell, { width: 152 }]}>FEED</Text>
+            <Text style={[styles.headerCell, { flexGrow: 1 }]}>MIX</Text>
+          </View>
+          {patch.outputs.map((output) => (
+            <View key={`${output.snake}.${output.outputLabel}`} style={styles.row} wrap={false}>
+              <Text style={[styles.cell, { width: 52, fontFamily: "Courier" }]}>
+                {patch.snakes.length > 1 ? `${output.snake} ${output.outputLabel}` : output.outputLabel}
+              </Text>
+              <Text style={[styles.cell, { width: 152 }]}>{output.feed}</Text>
+              <Text style={[styles.cell, { flexGrow: 1 }]}>
+                {output.mixes.join(" · ") || "—"}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
       {patch.spare.length > 0 ? (
         <Text style={styles.emptyNote}>
           Leave empty · {patch.spare.join(" · ")}

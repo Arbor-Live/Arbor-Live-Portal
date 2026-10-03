@@ -8,6 +8,7 @@ import type {
 } from "@arbor/rider-document";
 import type { DeskGroup, FxDca } from "./groups";
 import type { LayerPage } from "./layers";
+import type { MonitorBus } from "./monitors";
 
 /**
  * Which console family a show package is built for.
@@ -147,7 +148,12 @@ export type EventPatchAllocation = {
    * Empty when the bill fits one box as the riders asked.
    */
   monoToFit: string[];
+  /** Night monitor buses (wedges, side fills, IEMs) and their stage-box outputs. */
+  monitors: MonitorAssignment[];
 };
+
+/** A monitor bus and the AES50 A outputs it feeds (empty when none were left). */
+export type MonitorAssignment = MonitorBus & { outputs: number[] };
 
 export type StageBoxPort = {
   snake: SnakeId;
@@ -182,7 +188,23 @@ export type StageBoxDiagramModel = {
   /** AES50 labels ("A.8") left unpatched tonight. */
   spare: string[];
   snakes: SnakeId[];
+  /** Stage-box outputs that carry something tonight (mains, then monitors). */
+  outputs: StageBoxOutput[];
   warnings: string[];
+};
+
+/** One XLR output on a stage box and what it feeds. */
+export type StageBoxOutput = {
+  snake: SnakeId;
+  /** Box-relative output, 1–8 as printed on the SD16. */
+  output: number;
+  /** Output as read at the box, e.g. "3", or "1 (9)" down the chain. */
+  outputLabel: string;
+  /** What the desk sends there: "Main L", "Wedge L", "IEM 1 R" … */
+  feed: string;
+  kind: "main" | "wedge" | "side_fill" | "iem";
+  /** Each band's own name for this mix, in show order (empty for mains). */
+  mixes: Array<{ fileStem: string; bandName: string; label: string }>;
 };
 
 export type PatchDiffStep = {

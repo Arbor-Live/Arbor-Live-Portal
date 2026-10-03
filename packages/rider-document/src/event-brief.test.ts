@@ -171,6 +171,10 @@ describe("event brief PDF", () => {
             },
           ],
           spare: ["2–6", "8–9"],
+          outputs: [
+            { snake: "A", outputLabel: "1", feed: "Wedge L", mixes: ["Main: Vocals"] },
+            { snake: "A", outputLabel: "7", feed: "Main L", mixes: [] },
+          ],
           warnings: [],
         },
       }),

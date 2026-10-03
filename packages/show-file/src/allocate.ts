@@ -11,9 +11,17 @@ import {
   type DeskGroup,
 } from "./groups";
 import { buildLayerPages, melodyNeedsCompression } from "./layers";
-import { BOX_CAPACITY, SNAKE_SHORT_LABEL, stripFor } from "./slots";
+import { planMonitors, type MonitorBus } from "./monitors";
+import {
+  BOX_CAPACITY,
+  MAIN_OUTPUTS,
+  OUTPUTS_PER_BOX,
+  SNAKE_SHORT_LABEL,
+  stripFor,
+} from "./slots";
 import type {
   EventPatchAllocation,
+  MonitorAssignment,
   PatchPlan,
   PortAssignment,
   ShowBandInput,
@@ -168,12 +176,14 @@ export function allocateEventPatch(
   const melodyDca = compressMelody ? melodyDcaFor(reservedSlots) : null;
 
   if (melodyDca) {
-    // Retag the melodic channels into the Melody DCA, so its fader rides them.
+    // Add the Melody DCA to the melodic channels so its fader rides them all,
+    // keeping their own family DCA (Guitar, Brass & winds …) and mute groups —
+    // otherwise those DCAs are named on the desk but ride nothing.
     const melodyFamilies = new Set(MELODY_FAMILIES);
     for (const port of usedChannels) {
       const group = groupById.get(port.groupId);
       if (group && melodyFamilies.has(group.id)) {
-        port.tags = `#D${melodyDca.dca}`;
+        port.tags = [`#D${group.dca}`, `#D${melodyDca.dca}`, ...group.muteGroups.map((m) => `#M${m}`)].join(",");
       }
     }
   }
@@ -197,6 +207,10 @@ export function allocateEventPatch(
     );
   }
 
+  const monitorPlan = planMonitors(orderedBands);
+  warnings.push(...monitorPlan.warnings);
+  const monitors = monitorOutputs(monitorPlan.buses, snakes, warnings);
+
   return {
     ports,
     warnings,
@@ -208,7 +222,52 @@ export function allocateEventPatch(
     layers,
     fitsOneBox,
     monoToFit: (monoToFit ?? []).map((row) => row.name),
+    monitors,
   };
+}
+
+/**
+ * Stage-box outputs for the monitor buses. Box A's outputs 7/8 always carry the
+ * main L/R; monitors take the remaining outputs in bus order — one per wedge, an
+ * adjacent pair on the same box per IEM. Each SD16 has 8 outputs, so the second
+ * snake adds A.9–16.
+ */
+function monitorOutputs(
+  buses: MonitorBus[],
+  snakes: SnakeId[],
+  warnings: string[],
+): MonitorAssignment[] {
+  const free = new Set<number>();
+  for (let output = 1; output <= OUTPUTS_PER_BOX * snakes.length; output++) {
+    if (!(MAIN_OUTPUTS as readonly number[]).includes(output)) free.add(output);
+  }
+  const assigned: MonitorAssignment[] = [];
+  const unrouted: string[] = [];
+  for (const bus of buses) {
+    const width = bus.stereo ? 2 : 1;
+    const start = [...free]
+      .sort((a, b) => a - b)
+      .find((output) => {
+        const last = output + width - 1;
+        const sameBox =
+          Math.ceil(output / OUTPUTS_PER_BOX) === Math.ceil(last / OUTPUTS_PER_BOX);
+        return sameBox && Array.from({ length: width }, (_, i) => output + i).every((o) => free.has(o));
+      });
+    if (start === undefined) {
+      assigned.push({ ...bus, outputs: [] });
+      unrouted.push(bus.name);
+      continue;
+    }
+    const outputs = Array.from({ length: width }, (_, index) => start + index);
+    for (const output of outputs) free.delete(output);
+    assigned.push({ ...bus, outputs });
+  }
+  if (unrouted.length > 0) {
+    warnings.push(
+      `No stage-box output left for ${unrouted.join(", ")} — the bus is built but not patched out${snakes.length === 1 ? "; the second snake adds 8 outputs" : ""}.`,
+    );
+  }
+  return assigned;
 }
 
 /**

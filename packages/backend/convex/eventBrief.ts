@@ -212,6 +212,12 @@ export const getBriefSource = internalQuery({
           }))
           .filter((box) => box.ports.length > 0),
         spare: model.spare,
+        outputs: model.outputs.map((output) => ({
+          snake: output.snake,
+          outputLabel: output.outputLabel,
+          feed: output.feed,
+          mixes: output.mixes.map((mix) => `${mix.bandName}: ${mix.label}`),
+        })),
         warnings: model.warnings,
       };
     }

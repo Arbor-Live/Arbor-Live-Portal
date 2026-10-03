@@ -2,13 +2,17 @@ import {
   AES50_GROUP,
   BOX_CAPACITY,
   FAMILY_STYLE,
+  MAIN_OUTPUTS,
+  OUTPUTS_PER_BOX,
   TALKBACK_LOCAL_INPUT,
   TALKBACK_STRIP,
   USB_MUSIC_AUX,
   USB_MUSIC_SOURCE,
   aes50PortFor,
 } from "./slots";
+import { GROUP_STYLE, MELODY_DCA_STYLE, VOCAL_FX_DCA_STYLE } from "./groups";
 import { writeLayerPages } from "./layer-write";
+import { MONITOR_BUS_LIMIT } from "./monitors";
 import { planVocalFx } from "./fx-plan";
 import type { BlueprintEngine } from "./fx-allocate";
 import { processingForFamily } from "./processing";
@@ -101,9 +105,13 @@ function applyAllocation(
   // once the patch is in place.
   rebuildDcas(snap, allocation);
   clearStrayBusInserts(snap);
+  rebuildMonitorBuses(snap, allocation);
 
   for (const port of allocation.ports) {
-    const style = FAMILY_STYLE[port.family];
+    // Flex sockets carry anything (horns, percussion, tracks), so they wear
+    // their group's colour rather than one catch-all swatch.
+    const style =
+      port.family === "flex" ? GROUP_STYLE[port.groupId] : FAMILY_STYLE[port.family];
     const socket = socketFor(snap, port);
     if (socket) {
       if (port.used) {
@@ -151,6 +159,7 @@ function applyAllocation(
     // Per-family gate/HPF/dynamics/EQ: on where it helps, explicitly off where
     // it does not, so a channel never inherits a stale FX-return's processing.
     applyProcessing(strip, port.family);
+    applyMonitorSends(strip, allocation);
   }
 
   // Blank every strip the patch does not own: the right half of a stereo pair
@@ -262,8 +271,8 @@ function pinUsbMusic(snap: WingSnap): void {
  * The template's DCA names are blueprint leftovers (" Vox DCA", "Melody DCA",
  * "FX DCA"); a DCA is only justified when a group actually has channels on the
  * bill. Active groups are named in order and every other slot is blanked so a
- * stale name never rides a recall. Icons/colours stay on the template's base
- * DCA shape — the bill says nothing about them.
+ * stale name never rides a recall. Each DCA takes its group's colour and icon
+ * (`GROUP_STYLE`), so it matches the channels it rides.
  */
 function rebuildDcas(
   snap: WingSnap,
@@ -274,24 +283,36 @@ function rebuildDcas(
     | undefined;
   if (!dcas) return;
 
-  const byDca = new Map(
-    allocation.groups.map((group) => [String(group.dca), group.label]),
+  type DcaLook = { name: string; col: number; icon: number };
+  const byDca = new Map<string, DcaLook>(
+    allocation.groups.map((group) => [
+      String(group.dca),
+      { name: group.label, ...GROUP_STYLE[group.id] },
+    ]),
   );
   // Reserved DCAs (vocal FX, melody) are their own groups, so name them too.
-  if (allocation.fxDca) byDca.set(String(allocation.fxDca.dca), allocation.fxDca.name);
+  if (allocation.fxDca) {
+    byDca.set(String(allocation.fxDca.dca), {
+      name: allocation.fxDca.name,
+      ...VOCAL_FX_DCA_STYLE,
+    });
+  }
   if (allocation.melodyDca) {
-    byDca.set(String(allocation.melodyDca.dca), allocation.melodyDca.name);
+    byDca.set(String(allocation.melodyDca.dca), {
+      name: allocation.melodyDca.name,
+      ...MELODY_DCA_STYLE,
+    });
   }
   const base = dcas["1"];
   for (const slot of Object.keys(dcas)) {
-    const label = byDca.get(slot);
-    if (label === undefined) {
-      dcas[slot] = { ...dcas[slot], name: "" };
+    const look = byDca.get(slot);
+    if (look === undefined) {
+      dcas[slot] = { ...dcas[slot], name: "", icon: 0 };
       continue;
     }
     dcas[slot] = {
       ...(base ? structuredClone(base) : dcas[slot]),
-      name: label,
+      ...look,
     };
   }
 
@@ -304,6 +325,97 @@ function rebuildDcas(
       const entry = buses?.[String(bus)];
       if (entry) entry.tags = `#D${allocation.fxDca.dca}`;
     }
+  }
+}
+
+/**
+ * Monitor buses come from the bill, like the input patch: buses 1–12 are
+ * rebuilt from `allocation.monitors` (wedges by stage position, then IEMs),
+ * and every other one of those buses is blanked so the blueprint's "Stage L" /
+ * "Drum Mtr" never survive a night that does not use them. The stage-box
+ * outputs are rebuilt to match: main L/R always on A.7/8, and each monitor's
+ * feed on the outputs it was given (an IEM takes an adjacent pair). Buses 13+ (the reverb returns) are left
+ * as blueprint.
+ */
+function rebuildMonitorBuses(
+  snap: WingSnap,
+  allocation: EventPatchAllocation,
+): void {
+  const buses = snap.ae_data.bus as
+    | Record<string, Record<string, unknown>>
+    | undefined;
+  if (buses) {
+    const byBus = new Map(allocation.monitors.map((m) => [String(m.bus), m]));
+    for (let index = 1; index <= MONITOR_BUS_LIMIT; index++) {
+      const key = String(index);
+      const bus = buses[key];
+      if (!bus) continue;
+      const monitor = byBus.get(key);
+      if (!monitor) {
+        buses[key] = { ...bus, name: "", col: 1, icon: 0, tags: "" };
+        continue;
+      }
+      buses[key] = {
+        ...bus,
+        name: monitor.name,
+        col: monitor.col,
+        icon: monitor.icon,
+        // `busmono` stays as the blueprint has it (stereo), like the console
+        // saves: a wedge is fed from the bus's left leg.
+        mute: false,
+        fdr: 0,
+        tags: "",
+        // Monitors never feed the mains.
+        main: Object.fromEntries(
+          Object.entries((bus.main ?? {}) as Record<string, object>).map(
+            ([main, send]) => [main, { ...send, on: false }],
+          ),
+        ),
+      };
+    }
+  }
+
+  const outputs = (
+    snap.ae_data.io.out as Record<string, Record<string, { grp: string; in: number }>> | undefined
+  )?.[AES50_GROUP];
+  if (!outputs) return;
+  const feeds = new Map<number, { grp: string; in: number }>();
+  MAIN_OUTPUTS.forEach((output, index) =>
+    feeds.set(output, { grp: "MAIN", in: index + 1 }),
+  );
+  for (const monitor of allocation.monitors) {
+    monitor.outputs.forEach((output, index) => {
+      // Bus outputs are addressed by leg: bus n's left is 2n−1, its right 2n.
+      // A mono bus feeds its one output from the left leg.
+      feeds.set(output, { grp: "BUS", in: monitor.bus * 2 - 1 + index });
+    });
+  }
+  for (let output = 1; output <= OUTPUTS_PER_BOX * 2; output++) {
+    const key = String(output);
+    if (!outputs[key]) continue;
+    outputs[key] = { ...outputs[key], ...(feeds.get(output) ?? { grp: "OFF", in: 1 }) };
+  }
+}
+
+/**
+ * Every channel sends pre-fader to each monitor bus, starting at −∞ so the
+ * engineer builds each mix up from silence. Sends to the other buses up to 12
+ * are switched off, so the blueprint's unity sends to its old wedge buses never
+ * blast a fresh mix.
+ */
+function applyMonitorSends(
+  strip: Record<string, unknown>,
+  allocation: EventPatchAllocation,
+): void {
+  const sends = strip.send as Record<string, Record<string, unknown>> | undefined;
+  if (!sends) return;
+  const monitorBuses = new Set(allocation.monitors.map((m) => m.bus));
+  for (let bus = 1; bus <= MONITOR_BUS_LIMIT; bus++) {
+    const send = sends[String(bus)];
+    if (!send) continue;
+    sends[String(bus)] = monitorBuses.has(bus)
+      ? { ...send, on: true, lvl: -144, mode: "PRE" }
+      : { ...send, on: false, lvl: -144 };
   }
 }
 

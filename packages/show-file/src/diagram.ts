@@ -1,4 +1,6 @@
 import {
+  MAIN_OUTPUTS,
+  OUTPUTS_PER_BOX,
   SNAKE_LABEL,
   aes50Label,
   aes50PortFor,
@@ -9,7 +11,9 @@ import type {
   PatchDiffPlan,
   PatchDiffStep,
   PortAssignment,
+  SnakeId,
   StageBoxDiagramModel,
+  StageBoxOutput,
   StageBoxPort,
 } from "./types";
 
@@ -35,8 +39,53 @@ export function buildStageBoxDiagramModel(
     ports: used.map((port) => toStagePort(port)),
     spare: spareLabels(allocation),
     snakes: allocation.snakes,
+    outputs: stageBoxOutputs(allocation),
     warnings: allocation.warnings,
   };
+}
+
+/**
+ * Every stage-box output that carries something tonight, in output order:
+ * main L/R, then the monitor buses (an IEM's pair reads "L" / "R"). Numbered
+ * as printed on the box, with the desk's output in brackets down the chain.
+ */
+export function stageBoxOutputs(allocation: EventPatchAllocation): StageBoxOutput[] {
+  const outputs: StageBoxOutput[] = MAIN_OUTPUTS.map((output, index) =>
+    stageBoxOutput(output, index === 0 ? "Main L" : "Main R", "main", []),
+  );
+  for (const monitor of allocation.monitors) {
+    const mixes = allocation.bandOrder.flatMap((band) => {
+      const label = monitor.bandMixes[band.fileStem];
+      return label ? [{ fileStem: band.fileStem, bandName: band.bandName, label }] : [];
+    });
+    monitor.outputs.forEach((output, index) => {
+      const side = monitor.outputs.length > 1 ? (index === 0 ? " L" : " R") : "";
+      outputs.push(stageBoxOutput(output, `${monitor.name}${side}`, monitor.kind, mixes));
+    });
+  }
+  return outputs.sort((a, b) => outputNumber(a) - outputNumber(b));
+}
+
+function stageBoxOutput(
+  output: number,
+  feed: string,
+  kind: StageBoxOutput["kind"],
+  mixes: StageBoxOutput["mixes"],
+): StageBoxOutput {
+  const snake: SnakeId = output > OUTPUTS_PER_BOX ? "B" : "A";
+  const onBox = output - (snake === "B" ? OUTPUTS_PER_BOX : 0);
+  return {
+    snake,
+    output: onBox,
+    outputLabel: onBox === output ? String(output) : `${onBox} (${output})`,
+    feed,
+    kind,
+    mixes,
+  };
+}
+
+function outputNumber(output: StageBoxOutput): number {
+  return output.output + (output.snake === "B" ? OUTPUTS_PER_BOX : 0);
 }
 
 /**

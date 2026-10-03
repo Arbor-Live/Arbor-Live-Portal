@@ -122,6 +122,7 @@ export type {
   EventBriefInstruction,
   EventBriefMoment,
   EventBriefPatch,
+  EventBriefPatchOutput,
   EventBriefPatchPort,
   EventBriefPlot,
   EventBriefPullItem,
