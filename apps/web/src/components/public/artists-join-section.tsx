@@ -57,7 +57,12 @@ const BENEFITS: Benefit[] = [
   },
 ];
 
-export function ArtistsJoinSection() {
+/** The apply page reuses this section above its form, pointing the CTA at the form. */
+export function ArtistsJoinSection({
+  cta = { label: "Join the community", href: "/artists/apply" },
+}: {
+  cta?: { label: string; href: string };
+}) {
   return (
     <section className="relative overflow-hidden border-t bg-muted/35 py-16 sm:py-20">
       <div
@@ -78,7 +83,7 @@ export function ArtistsJoinSection() {
             </p>
           </div>
           <Button asChild size="lg" className="shrink-0 self-start sm:self-auto">
-            <Link href="/artists/apply">Join the community</Link>
+            <Link href={cta.href}>{cta.label}</Link>
           </Button>
         </Reveal>
 

@@ -181,6 +181,19 @@ export function LandingHero() {
                   </Button>
                 </motion.div>
               </motion.div>
+
+              <motion.p
+                className="mt-4 text-sm"
+                variants={heroItem}
+                transition={landingSpring}
+              >
+                <Link
+                  href={landingHero.artistCta.href}
+                  className="text-status-zinc-300 underline-offset-4 hover:text-white hover:underline"
+                >
+                  {landingHero.artistCta.label} →
+                </Link>
+              </motion.p>
             </div>
           </div>
         </motion.div>

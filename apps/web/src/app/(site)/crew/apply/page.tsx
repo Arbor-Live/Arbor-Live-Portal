@@ -1,4 +1,5 @@
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
+import { CrewJoinSection } from "@/components/public/crew-join-section";
 import { PublicPageHero } from "@/components/public/public-page-hero";
 import { CrewApplicationForm } from "@/components/public/crew-application-form";
 
@@ -14,7 +15,11 @@ export default function CrewApplyPage() {
         title="Join the crew"
         subtitle="Learn live production and work real shows."
       />
-      <section className="mx-auto max-w-2xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
+      <CrewJoinSection cta={{ label: "Start your application", href: "#apply" }} />
+      <section
+        id="apply"
+        className="mx-auto max-w-2xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8"
+      >
         <CrewApplicationForm />
       </section>
     </PublicMarketingLayout>

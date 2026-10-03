@@ -37,8 +37,9 @@ export const landingHero = {
   headlineEnd: "Happen",
   subheadline:
     "The only student-run live event production company at Stanford. We bring live music and production to every corner of campus.",
-  primaryCta: { label: "Book your event", href: "/request" },
-  secondaryCta: { label: "Explore equipment", href: "/packages" },
+  primaryCta: { label: "See upcoming events", href: "/events" },
+  secondaryCta: { label: "Join Arbor Live", href: "/crew/apply" },
+  artistCta: { label: "Musician? Apply to play with us", href: "/artists/apply" },
   /** H.264 plays in Chrome/Firefox; HEVC is smaller and used on Safari when supported. */
   backgroundVideoSrc: "/dnm-opti-h264.mp4",
   backgroundVideoSrcHevc: "/dnm-opti-265.mp4",
@@ -187,6 +188,24 @@ export const landingNavLinks: LandingLink[] = [
   { label: "Crew", href: "/crew" },
   { label: "Artists", href: "/artists" },
   { label: "Equipment", href: "/packages" },
+];
+
+export type LandingJoinLink = LandingLink & {
+  description: string;
+};
+
+/** "Join us" menu in the top nav — the two ways to get involved beyond booking. */
+export const landingJoinLinks: LandingJoinLink[] = [
+  {
+    label: "Join the crew",
+    href: "/crew/apply",
+    description: "Learn sound, lights, and production on real shows.",
+  },
+  {
+    label: "Play with Arbor",
+    href: "/artists/apply",
+    description: "Apply as a band or solo artist to play campus gigs.",
+  },
 ];
 
 export const landingFooterLinks: LandingLink[] = [
