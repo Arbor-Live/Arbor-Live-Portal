@@ -19,8 +19,7 @@ import {
 } from "./lib/analyticsQuery";
 import { dayLoadLevel, toPacificDateKey } from "./lib/bookingDayLoad";
 import { normalizeEventStatus } from "./lib/eventStatus";
-import { classifyPaymentQueue } from "./lib/invoicePaymentStatus";
-import { getActivePaymentProofSubmission } from "./lib/paymentProof";
+import { collectPaymentRows } from "./paymentProof";
 
 const REQUEST_STATUSES = [
   "submitted",
@@ -31,8 +30,6 @@ const REQUEST_STATUSES = [
 ] as const;
 type RequestStatus = (typeof REQUEST_STATUSES)[number];
 
-const AR_EVENT_LOOKBACK_MS = 90 * 24 * 60 * 60 * 1000;
-const AR_EVENT_SCAN_LIMIT = 500;
 
 const countBucketValidator = v.object({
   key: v.string(),
@@ -63,30 +60,11 @@ function pacificMonthBounds(nowMs: number = Date.now()) {
 }
 
 async function openArTotalUsd(ctx: Parameters<typeof requireAnalyticsAccess>[0]) {
-  const now = Date.now();
-  const windowStart = now - AR_EVENT_LOOKBACK_MS;
-  const candidates = await ctx.db
-    .query("events")
-    .withIndex("by_startAt", (q) => q.gte("startAt", windowStart))
-    .take(AR_EVENT_SCAN_LIMIT);
-
-  let totalUsd = 0;
-  for (const event of candidates) {
-    if (!event.invoiceId) continue;
-    const invoice = await ctx.db.get(event.invoiceId);
-    if (!invoice) continue;
-    const activeSubmission = await getActivePaymentProofSubmission(ctx, event._id);
-    const queue = classifyPaymentQueue({
-      invoice,
-      event,
-      activeSubmission,
-      nowMs: now,
-    });
-    if (queue === "payment_pending" || queue === "proof_no_receipt" || queue === "overdue") {
-      totalUsd += invoice.totalUsd;
-    }
-  }
-  return { totalUsd, truncated: candidates.length >= AR_EVENT_SCAN_LIMIT };
+  const rows = await collectPaymentRows(ctx, Date.now());
+  const totalUsd = rows
+    .filter((row) => row.queue !== "payment_received")
+    .reduce((sum, row) => sum + row.totalUsd, 0);
+  return { totalUsd, truncated: false };
 }
 
 export const getBookingFunnel = query({
@@ -114,6 +92,21 @@ export const getBookingFunnel = query({
       avgDays: v.union(v.number(), v.null()),
       medianDays: v.union(v.number(), v.null()),
     }),
+    /** Days from request to the event date: how far ahead clients book. */
+    bookingLeadDays: v.object({
+      sampleSize: v.number(),
+      medianDays: v.union(v.number(), v.null()),
+      under30Share: v.union(v.number(), v.null()),
+    }),
+    byCategory: v.array(
+      v.object({
+        key: v.string(),
+        total: v.number(),
+        converted: v.number(),
+        declined: v.number(),
+        conversionRate: v.union(v.number(), v.null()),
+      }),
+    ),
     truncated: v.boolean(),
   }),
   handler: async (ctx, args) => {
@@ -171,6 +164,22 @@ export const getBookingFunnel = query({
       toReview.push(msToDays(row.reviewedAt - row.submittedAt));
     }
 
+    const allRows = Object.values(byStatus).flat();
+    const leadDays = allRows
+      .filter((row) => row.eventStartAtMs != null && row.eventStartAtMs >= row.submittedAt)
+      .map((row) => msToDays(row.eventStartAtMs! - row.submittedAt));
+    const categories = new Map<string, { total: number; converted: number; declined: number }>();
+    for (const [status, rows] of Object.entries(byStatus) as Array<[RequestStatus, Doc<"eventRequests">[]]>) {
+      for (const row of rows) {
+        const key = row.eventCategory?.trim() || "Other";
+        const bucket = categories.get(key) ?? { total: 0, converted: 0, declined: 0 };
+        bucket.total += 1;
+        if (status === "converted") bucket.converted += 1;
+        if (status === "declined") bucket.declined += 1;
+        categories.set(key, bucket);
+      }
+    }
+
     return {
       submitted,
       actionRequired,
@@ -179,6 +188,23 @@ export const getBookingFunnel = query({
       declined,
       total,
       conversionRate,
+      bookingLeadDays: {
+        sampleSize: leadDays.length,
+        medianDays: median(leadDays),
+        under30Share:
+          leadDays.length > 0 ? leadDays.filter((days) => days < 30).length / leadDays.length : null,
+      },
+      byCategory: [...categories.entries()]
+        .map(([key, bucket]) => ({
+          key,
+          ...bucket,
+          conversionRate:
+            bucket.converted + bucket.declined > 0
+              ? bucket.converted / (bucket.converted + bucket.declined)
+              : null,
+        }))
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 8),
       timeToConvertedDays: {
         sampleSize: toConverted.length,
         avgDays: average(toConverted),

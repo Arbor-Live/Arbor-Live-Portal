@@ -8,7 +8,11 @@ import {
   requireAuth,
   type AuthUser,
 } from "./lib/auth";
-import { listCrewedEventsInRange } from "./lib/crewedEvents";
+import {
+  eligibleCrewProfilesForEvent,
+  getActiveCrewProfiles,
+  listCrewedEventsInRange,
+} from "./lib/crewedEvents";
 import {
   DEFAULT_AVAILABILITY_WEEKS,
   eventMatchesUserTeams,
@@ -149,29 +153,6 @@ function toUserSummary(
     email: user?.email ?? "",
     image: imageByUserId?.get(userId) ?? user?.image ?? undefined,
   };
-}
-
-async function getActiveCrewProfiles(ctx: QueryCtx) {
-  // Filter by `resolveUserStatus` (not the `by_status` index) so a profile
-  // written before the status backfill still counts as active.
-  const profiles = await loadAllAdminProfiles(ctx);
-  return profiles.filter((profile) => {
-    if (resolveUserStatus(profile) !== "active") return false;
-    if (!resolveParticipationFlags(profile).assignableAsCrew) return false;
-    return hasCrewSpecialty(resolveProfileMembership(profile).disciplines);
-  });
-}
-
-function eligibleCrewProfilesForEvent(
-  eventTeams: string[] | undefined,
-  profiles: Doc<"userAdminProfiles">[],
-) {
-  return profiles.filter((profile) =>
-    eventMatchesUserTeams(
-      eventTeams,
-      getDisciplinesForEventMatching(resolveProfileMembership(profile).disciplines),
-    ),
-  );
 }
 
 function aggregateResponses(responses: Doc<"eventCrewAvailabilityResponses">[]) {

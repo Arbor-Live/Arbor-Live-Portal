@@ -337,6 +337,12 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   the host for transparency, but Insights *earned revenue* and net profit exclude
   them from Arbor margin (equipment / crew / fees). Matching `bandsCostUsd` /
   `externalRentalsCostUsd` are not double-counted; overruns still reduce profit.
+- Insights splits a shared invoice (multi-day booking, series, extra links)
+  evenly across the live events it covers (`lib/analyticsBookings.ts`), so
+  per-event margin, booked-ahead and cancellation totals never count one
+  invoice twice. Margin uses booked (finalized + approved) invoices only.
+  Insights AR reads the Payments tab's own rows (`collectPaymentRows`), so the
+  two always agree.
 - **Event groups** (`eventSeries` table, `eventSeries.ts`): dated events that
   share setup and billing. `kind` is `recurring` (a series generated from a
   rule) or `multi_day` (a booking whose days share

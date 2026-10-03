@@ -1,404 +1,248 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { api } from "@/lib/convex-api";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  ClipboardTextIcon,
+  EnvelopeSimpleIcon,
+  FunnelSimpleIcon,
+  ReceiptIcon,
+  TrendUpIcon,
+  XIcon,
+} from "@phosphor-icons/react";
+import { api } from "@/lib/convex-api";
 import { CountBarChart } from "@/components/insights/count-bar-chart";
+import {
+  formatDays,
+  formatRate,
+  InsightCard,
+  InsightGrid,
+  plural,
+  StatRow,
+  StatTile,
+  TruncatedNotice,
+} from "@/components/insights/insights-ui";
+import { RowCell, RowList } from "@/components/list-page";
 
 type InsightsDemandPanelProps = {
   startMs: number;
   endMs: number;
 };
 
-function formatRate(value: number | null) {
-  if (value == null || !Number.isFinite(value)) return "—";
-  return `${(value * 100).toFixed(0)}%`;
-}
-
-function formatSigned(value: number | null) {
-  if (value == null || !Number.isFinite(value)) return "—";
-  return value > 0 ? `+${value.toFixed(0)}` : value.toFixed(0);
-}
-
-function formatDays(value: number | null) {
-  if (value == null || !Number.isFinite(value)) return "—";
-  return `${value.toFixed(1)} days`;
-}
-
-function shortMonthLabel(monthKey: string) {
-  const [year, month] = monthKey.split("-");
-  const labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const index = Number(month) - 1;
-  return `${labels[index] ?? month} ${year?.slice(2) ?? ""}`;
-}
-
+/** Booking requests and quotes: how many come in, how fast we answer, how many we win. */
 export function InsightsDemandPanel({ startMs, endMs }: InsightsDemandPanelProps) {
   const rangeArgs = { startMs, endMs };
   const funnel = useQuery(api.analyticsDemand.getBookingFunnel, rangeArgs);
-  const volume = useQuery(api.analyticsDemand.getEventsVolume, rangeArgs);
-  const calendar = useQuery(api.analyticsDemand.getCalendarLoad, rangeArgs);
   const quoteApproval = useQuery(api.analyticsDemand.getQuoteApprovalRates, rangeArgs);
   const declineReasons = useQuery(api.analyticsInstrumentation.getDeclineReasonBreakdown, rangeArgs);
-  const pipelineDwell = useQuery(api.analyticsInstrumentation.getEventPipelineDwell, rangeArgs);
   const quoteEngagement = useQuery(api.analyticsInstrumentation.getQuoteEngagement, rangeArgs);
-  const deliveryQuality = useQuery(api.analyticsInstrumentation.getDeliveryQuality, rangeArgs);
-  const upcoming = useQuery(api.analyticsEvents.getUpcomingEventsInsights, {});
-
-  const anyTruncated =
-    funnel?.truncated ||
-    volume?.truncated ||
-    calendar?.truncated ||
-    quoteApproval?.truncated ||
-    declineReasons?.truncated ||
-    pipelineDwell?.truncated ||
-    quoteEngagement?.truncated ||
-    deliveryQuality?.truncated ||
-    upcoming?.truncated;
 
   return (
-    <div className="space-y-4">
-      {anyTruncated ? (
-        <p className="text-xs text-muted-foreground">
-          Some series are truncated by scan limits — narrow the range for fuller totals.
-        </p>
-      ) : null}
+    <div className="space-y-4" data-testid="insights-demand-panel">
+      <TruncatedNotice
+        show={
+          funnel?.truncated ||
+          quoteApproval?.truncated ||
+          declineReasons?.truncated ||
+          quoteEngagement?.truncated
+        }
+      />
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <Card>
-          <CardHeader>
-            <CardTitle>Requests</CardTitle>
-            <CardDescription>Submitted in range</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {funnel === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <p className="text-2xl font-semibold tabular-nums">{funnel.total}</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Conversion</CardTitle>
-            <CardDescription>Converted / decided</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {funnel === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <p className="text-2xl font-semibold tabular-nums">
-                {formatRate(funnel.conversionRate)}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Events</CardTitle>
-            <CardDescription>Non-cancelled starts</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {volume === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <p className="text-2xl font-semibold tabular-nums">{volume.total}</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Upcoming (30d)</CardTitle>
-            <CardDescription>Starts in the next 30 days</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {upcoming === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <p className="text-2xl font-semibold tabular-nums">
-                {upcoming.horizons.d30.eventCount}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Quote approval</CardTitle>
-            <CardDescription>Finalized in range</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {quoteApproval === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <p className="text-2xl font-semibold tabular-nums">
-                {quoteApproval.totalFinalized === 0
-                  ? "—"
-                  : formatRate(quoteApproval.approved / quoteApproval.totalFinalized)}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <StatRow>
+        <StatTile
+          label="Requests"
+          loading={funnel === undefined}
+          value={funnel?.total.toLocaleString("en-US") ?? "0"}
+          detail="Booking requests submitted in range"
+        />
+        <StatTile
+          label="Conversion"
+          loading={funnel === undefined}
+          value={formatRate(funnel?.conversionRate)}
+          detail={funnel ? `${funnel.converted} booked of ${funnel.converted + funnel.declined} decided` : null}
+        />
+        <StatTile
+          label="Booking lead time"
+          loading={funnel === undefined}
+          value={formatDays(funnel?.bookingLeadDays.medianDays)}
+          detail={
+            funnel && funnel.bookingLeadDays.sampleSize > 0
+              ? `Median, request to event · ${formatRate(funnel.bookingLeadDays.under30Share)} under 30 days out`
+              : "Median, request to event"
+          }
+          testId="insights-stat-lead-time"
+        />
+        <StatTile
+          label="Quote approval"
+          loading={quoteApproval === undefined}
+          value={
+            !quoteApproval || quoteApproval.totalFinalized === 0
+              ? "—"
+              : formatRate(quoteApproval.approved / quoteApproval.totalFinalized)
+          }
+          detail={
+            quoteApproval
+              ? `Of finalized quotes created in range · ${quoteApproval.pending} still pending`
+              : null
+          }
+        />
+      </StatRow>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Booking funnel</CardTitle>
-            <CardDescription>Status of requests submitted in range</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {funnel === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <>
-                <CountBarChart
-                  data={[
-                    { key: "Submitted", count: funnel.submitted },
-                    { key: "Action required", count: funnel.actionRequired },
-                    { key: "Pending", count: funnel.pendingClient },
-                    { key: "Converted", count: funnel.converted },
-                    { key: "Declined", count: funnel.declined },
-                  ]}
-                />
-                <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
-                  <p>
-                    Submitted → review: median {formatDays(funnel.timeToReviewDays.medianDays)}{" "}
-                    (n={funnel.timeToReviewDays.sampleSize})
-                  </p>
-                  <p>
-                    Submitted → converted: median {formatDays(funnel.timeToConvertedDays.medianDays)}{" "}
-                    (n={funnel.timeToConvertedDays.sampleSize})
-                  </p>
-                  <p>
-                    Submitted → declined: median {formatDays(funnel.timeToDeclinedDays.medianDays)}{" "}
-                    (n={funnel.timeToDeclinedDays.sampleSize})
-                  </p>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Events over time</CardTitle>
-            <CardDescription>By start month</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {volume === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <CountBarChart
-                data={volume.byMonth.map((row) => ({
-                  key: shortMonthLabel(row.key),
-                  count: row.count,
-                }))}
-              />
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>By event type</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {volume === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <CountBarChart data={volume.byEventType} />
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>By venue</CardTitle>
-            <CardDescription>Top venues</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {volume === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <CountBarChart data={volume.byVenue} />
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>By host type</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {volume === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <CountBarChart data={volume.byHostType} />
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Calendar load</CardTitle>
-            <CardDescription>Free / busy / unavailable days (same thresholds as public booking)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {calendar === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <>
-                <CountBarChart
-                  data={[
-                    { key: "Free", count: calendar.freeDays },
-                    { key: "Busy", count: calendar.busyDays },
-                    { key: "Unavailable", count: calendar.unavailableDays },
-                  ]}
-                />
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {calendar.daysWithEvents} of {calendar.totalDays} days have events
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Quote approval mix</CardTitle>
-            <CardDescription>Finalized invoices created in range</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {quoteApproval === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
+      <InsightGrid>
+        <InsightCard
+          icon={FunnelSimpleIcon}
+          title="Booking funnel"
+          description="Where requests submitted in range are now."
+          loading={funnel === undefined}
+        >
+          {funnel ? (
+            <>
               <CountBarChart
                 data={[
-                  { key: "Pending", count: quoteApproval.pending },
-                  { key: "Approved", count: quoteApproval.approved },
-                  { key: "Changes", count: quoteApproval.changesRequested },
+                  { key: "Submitted", count: funnel.submitted },
+                  { key: "Action required", count: funnel.actionRequired },
+                  { key: "Pending", count: funnel.pendingClient },
+                  { key: "Converted", count: funnel.converted },
+                  { key: "Declined", count: funnel.declined },
                 ]}
+                valueLabel="Requests"
               />
-            )}
-          </CardContent>
-        </Card>
+              <RowList joined>
+                {[
+                  { key: "review", label: "Submitted → first review", stats: funnel.timeToReviewDays },
+                  { key: "converted", label: "Submitted → booked", stats: funnel.timeToConvertedDays },
+                  { key: "declined", label: "Submitted → declined", stats: funnel.timeToDeclinedDays },
+                ].map((row) => (
+                  <li key={row.key} className="flex items-center gap-3 px-3 py-2 text-sm">
+                    <span className="min-w-0 flex-1 truncate">{row.label}</span>
+                    <RowCell className="w-24 font-medium">{formatDays(row.stats.medianDays)}</RowCell>
+                    <RowCell className="w-14" muted>
+                      n={row.stats.sampleSize}
+                    </RowCell>
+                  </li>
+                ))}
+              </RowList>
+            </>
+          ) : null}
+        </InsightCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Decline reasons</CardTitle>
-            <CardDescription>Why submitted requests were declined</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {declineReasons === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : declineReasons.totalDeclined === 0 ? (
-              <p className="text-sm text-muted-foreground">No declined requests in range.</p>
-            ) : (
-              <CountBarChart data={declineReasons.byReason} />
-            )}
-          </CardContent>
-        </Card>
+        <InsightCard
+          icon={TrendUpIcon}
+          title="Conversion by category"
+          description="Which kinds of events we win. Conversion counts only decided requests (booked or declined)."
+          loading={funnel === undefined}
+          testId="insights-conversion-by-category"
+        >
+          {funnel && funnel.byCategory.length > 0 ? (
+            <RowList joined>
+              <li className="flex items-center gap-3 bg-muted/20 px-3 py-1.5 text-xs text-muted-foreground">
+                <span className="min-w-0 flex-1">Most requests first</span>
+                <RowCell className="w-20" muted>
+                  Requests
+                </RowCell>
+                <RowCell className="w-16" hideBelow="sm" muted>
+                  Booked
+                </RowCell>
+                <RowCell className="w-20" muted>
+                  Conversion
+                </RowCell>
+              </li>
+              {funnel.byCategory.map((row) => (
+                <li key={row.key} className="flex items-center gap-3 px-3 py-2 text-sm">
+                  <span className="min-w-0 flex-1 truncate">{row.key}</span>
+                  <RowCell className="w-20">{row.total}</RowCell>
+                  <RowCell className="w-16" hideBelow="sm" muted>
+                    {row.converted}
+                  </RowCell>
+                  <RowCell className="w-20 font-medium">{formatRate(row.conversionRate)}</RowCell>
+                </li>
+              ))}
+            </RowList>
+          ) : (
+            <p className="text-sm text-muted-foreground">No requests in this range.</p>
+          )}
+        </InsightCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Event pipeline dwell</CardTitle>
-            <CardDescription>Median days in each stage (instrumented transitions)</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {pipelineDwell === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : pipelineDwell.eventsWithTransitions === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No status transitions recorded yet for events in this range.
-              </p>
-            ) : (
-              <>
-                <CountBarChart
-                  data={pipelineDwell.stages.map((stage) => ({
-                    key: stage.stage,
-                    count: stage.medianDays ?? 0,
-                  }))}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Based on {pipelineDwell.eventsWithTransitions} events with transitions.
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        <InsightCard
+          icon={XIcon}
+          title="Decline reasons"
+          description="Why requests submitted in range were declined."
+          loading={declineReasons === undefined}
+        >
+          {declineReasons && declineReasons.totalDeclined > 0 ? (
+            <CountBarChart data={declineReasons.byReason} valueLabel="Requests" />
+          ) : (
+            <p className="text-sm text-muted-foreground">No declined requests in this range.</p>
+          )}
+        </InsightCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Quote engagement</CardTitle>
-            <CardDescription>Client portal opens for quotes sent in range</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            {quoteEngagement === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <>
-                <p>
-                  <span className="text-muted-foreground">On portal:</span>{" "}
-                  <span className="font-medium tabular-nums">{quoteEngagement.quotesOnPortal}</span>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Opened at least once:</span>{" "}
-                  <span className="font-medium tabular-nums">
-                    {formatRate(quoteEngagement.openRate)} ({quoteEngagement.quotesOpened})
-                  </span>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Total opens:</span>{" "}
-                  <span className="font-medium tabular-nums">{quoteEngagement.totalOpens}</span>
-                  {quoteEngagement.avgOpensPerQuote != null ? (
-                    <span className="text-muted-foreground">
-                      {" "}
-                      · avg {quoteEngagement.avgOpensPerQuote.toFixed(1)} per quote
-                    </span>
-                  ) : null}
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        <InsightCard
+          icon={ReceiptIcon}
+          title="Quote approval mix"
+          description="Finalized quotes created in range, by the client's answer."
+          loading={quoteApproval === undefined}
+        >
+          {quoteApproval ? (
+            <CountBarChart
+              data={[
+                { key: "Pending", count: quoteApproval.pending },
+                { key: "Approved", count: quoteApproval.approved },
+                { key: "Changes requested", count: quoteApproval.changesRequested },
+              ]}
+              valueLabel="Quotes"
+            />
+          ) : null}
+        </InsightCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Delivery quality</CardTitle>
-            <CardDescription>Actual vs expected turnout (events starting in range)</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            {deliveryQuality === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <>
-                <p>
-                  <span className="text-muted-foreground">With expected turnout:</span>{" "}
-                  <span className="font-medium tabular-nums">{deliveryQuality.eventsWithExpected}</span>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">With actual turnout recorded:</span>{" "}
-                  <span className="font-medium tabular-nums">{deliveryQuality.eventsWithActual}</span>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Median variance (actual − expected):</span>{" "}
-                  <span className="font-medium tabular-nums">
-                    {formatSigned(deliveryQuality.medianVariance)} guests
-                  </span>
-                  {deliveryQuality.eventsWithBoth > 0 ? (
-                    <span className="text-muted-foreground"> (n={deliveryQuality.eventsWithBoth})</span>
-                  ) : null}
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+        <InsightCard
+          icon={EnvelopeSimpleIcon}
+          title="Quote engagement"
+          description="Whether clients open the quotes we send them on the portal."
+          loading={quoteEngagement === undefined}
+        >
+          {quoteEngagement ? (
+            <RowList joined>
+              <li className="flex items-center gap-3 px-3 py-2 text-sm">
+                <span className="min-w-0 flex-1">Quotes on the portal</span>
+                <RowCell className="w-24 font-medium">{quoteEngagement.quotesOnPortal}</RowCell>
+              </li>
+              <li className="flex items-center gap-3 px-3 py-2 text-sm">
+                <span className="min-w-0 flex-1">Opened at least once</span>
+                <RowCell className="w-24 font-medium">
+                  {formatRate(quoteEngagement.openRate)} ({quoteEngagement.quotesOpened})
+                </RowCell>
+              </li>
+              <li className="flex items-center gap-3 px-3 py-2 text-sm">
+                <span className="min-w-0 flex-1">Opens per quote</span>
+                <RowCell className="w-24 font-medium">
+                  {quoteEngagement.avgOpensPerQuote != null ? quoteEngagement.avgOpensPerQuote.toFixed(1) : "—"}
+                </RowCell>
+              </li>
+            </RowList>
+          ) : null}
+        </InsightCard>
+
+        <InsightCard
+          icon={ClipboardTextIcon}
+          title="Open requests"
+          description="Requests from this range still waiting on someone."
+          loading={funnel === undefined}
+        >
+          {funnel ? (
+            <RowList joined>
+              <li className="flex items-center gap-3 px-3 py-2 text-sm">
+                <span className="min-w-0 flex-1">Waiting on Arbor</span>
+                <RowCell className="w-28 font-medium">
+                  {plural(funnel.submitted + funnel.actionRequired, "request")}
+                </RowCell>
+              </li>
+              <li className="flex items-center gap-3 px-3 py-2 text-sm">
+                <span className="min-w-0 flex-1">Waiting on the client</span>
+                <RowCell className="w-28 font-medium">{plural(funnel.pendingClient, "request")}</RowCell>
+              </li>
+            </RowList>
+          ) : null}
+        </InsightCard>
+      </InsightGrid>
     </div>
   );
 }

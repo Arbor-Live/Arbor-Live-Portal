@@ -322,6 +322,9 @@ labels (`TAB_ICONS` in `event-workspace-nav.tsx`, `MOMENT_ICONS` in
 | Needs attention (inline, with a count) | `WarningIcon` |
 | Error / blocking alert | `WarningCircleIcon` (in `Alert`s) |
 | Done / confirmed | `CheckIcon` |
+| Insights sections | Finances `CurrencyDollarIcon` · Demand `TrendUpIcon` · Events `CalendarDotsIcon` · Crew `UsersThreeIcon` · Ops `WrenchIcon` · Feedback / ratings `StarIcon` (`TAB_ICONS` in `insights/insights-tab-nav.tsx`) |
+| Trend / chart card ("This month", revenue by month) | `ChartLineIcon` |
+| Link to the page behind a stat tile | `ArrowRightIcon` (`size-3`, after the label) |
 | Magic / auto-build | `MagicWandIcon` (Build run of show); quick fill `LightningIcon` |
 | Signature / e-sign | `SignatureIcon` (awaiting signature, artist payouts) |
 | Version history (quote versions) | `ClockCounterClockwiseIcon` |

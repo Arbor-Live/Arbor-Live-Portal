@@ -1,39 +1,49 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { usePathname, useSearchParams } from "next/navigation";
+import {
+  CalendarDotsIcon,
+  CurrencyDollarIcon,
+  StarIcon,
+  TrendUpIcon,
+  UsersThreeIcon,
+  WrenchIcon,
+  type Icon,
+} from "@phosphor-icons/react";
+import { PageTabs } from "@/components/page-header";
+import {
+  activeInsightsTabFromPathname,
+  getInsightsTabPath,
+  INSIGHTS_TAB_LABELS,
+  INSIGHTS_TABS,
+  type InsightsTabId,
+} from "@/lib/insights-tabs";
 
-export type InsightsTabId = "finances" | "demand" | "events" | "crew" | "ops" | "feedback";
-
-const TABS: Array<{ id: InsightsTabId; label: string }> = [
-  { id: "finances", label: "Finances" },
-  { id: "demand", label: "Demand" },
-  { id: "events", label: "Events" },
-  { id: "crew", label: "Crew" },
-  { id: "ops", label: "Ops" },
-  { id: "feedback", label: "Feedback" },
-];
-
-type InsightsTabNavProps = {
-  value: InsightsTabId;
-  onChange: (tab: InsightsTabId) => void;
+const TAB_ICONS: Record<InsightsTabId, Icon> = {
+  finances: CurrencyDollarIcon,
+  demand: TrendUpIcon,
+  events: CalendarDotsIcon,
+  crew: UsersThreeIcon,
+  ops: WrenchIcon,
+  feedback: StarIcon,
 };
 
-export function InsightsTabNav({ value, onChange }: InsightsTabNavProps) {
+/** Route tabs; each keeps the current date range in its link. */
+export function InsightsTabNav() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const active = activeInsightsTabFromPathname(pathname);
+  const query = searchParams.toString();
+
   return (
-    <div className="flex flex-wrap gap-2">
-      {TABS.map((tab) => (
-        <Button
-          key={tab.id}
-          type="button"
-          size="sm"
-          variant={value === tab.id ? "default" : "outline"}
-          className={cn(value === tab.id ? undefined : "bg-background")}
-          onClick={() => onChange(tab.id)}
-        >
-          {tab.label}
-        </Button>
-      ))}
-    </div>
+    <PageTabs
+      label="Insights sections"
+      tabs={INSIGHTS_TABS.map((tab) => ({
+        href: `${getInsightsTabPath(tab)}${query ? `?${query}` : ""}`,
+        label: INSIGHTS_TAB_LABELS[tab],
+        icon: TAB_ICONS[tab],
+        active: tab === active,
+      }))}
+    />
   );
 }

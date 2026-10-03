@@ -8,7 +8,7 @@ export function AdminDashboard() {
     <CustomizableWidgetDashboard
       dashboardKey="adminHome"
       title="Home"
-      description="Your admin dashboard — upcoming work, staffing gaps, booking requests, and payouts."
+      description="Upcoming events and what they still need, plus booking requests, artist payouts, and repairs."
       widgets={ADMIN_HOME_WIDGETS}
     />
   );

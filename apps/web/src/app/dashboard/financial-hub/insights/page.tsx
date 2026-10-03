@@ -1,5 +1,4 @@
-import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
-import { InsightsPageClient } from "@/components/insights/insights-page-client";
+import { InsightsTabPanel } from "@/components/insights/insights-tab-panel";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,11 +6,5 @@ export const metadata: Metadata = {
 };
 
 export default function FinancialHubInsightsPage() {
-  return (
-    <ArborOnlyGuard>
-      <AdminOnlyGuard>
-        <InsightsPageClient />
-      </AdminOnlyGuard>
-    </ArborOnlyGuard>
-  );
+  return <InsightsTabPanel tab="finances" />;
 }

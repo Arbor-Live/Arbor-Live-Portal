@@ -4,16 +4,14 @@ import { useMemo, useState, type ComponentType } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { DotsSixVerticalIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
+import { EmptyState } from "@/components/list-page";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { SortableList } from "@/components/ui/sortable-list";
+import { Switch } from "@/components/ui/switch";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
 export type DashboardWidgetKey = "crewHome" | "adminHome";
@@ -50,17 +48,6 @@ function normalizePreference(
   return { widgetOrder, hiddenWidgetIds };
 }
 
-function reorderIds(ids: string[], draggedId: string, targetId: string) {
-  if (draggedId === targetId) return ids;
-  const next = [...ids];
-  const fromIndex = next.indexOf(draggedId);
-  const toIndex = next.indexOf(targetId);
-  if (fromIndex < 0 || toIndex < 0) return ids;
-  next.splice(fromIndex, 1);
-  next.splice(toIndex, 0, draggedId);
-  return next;
-}
-
 export function CustomizableWidgetDashboard({
   dashboardKey,
   title,
@@ -78,7 +65,6 @@ export function CustomizableWidgetDashboard({
   const savePreference = useMutation(api.dashboardPreferences.saveMyDashboardPreference);
   const resetPreference = useMutation(api.dashboardPreferences.resetMyDashboardPreference);
   const [isCustomizing, setIsCustomizing] = useState(false);
-  const [draggedWidgetId, setDraggedWidgetId] = useState<string | null>(null);
   const normalizedPreference = useMemo(
     () => normalizePreference(widgets, preference),
     [preference, widgets],
@@ -90,132 +76,118 @@ export function CustomizableWidgetDashboard({
     () => new Map(widgets.map((widget) => [widget.id, widget])),
     [widgets],
   );
-  const visibleWidgets = useMemo(
+  const orderedWidgets = useMemo(
     () =>
       widgetOrder
         .map((widgetId) => widgetsById.get(widgetId))
-        .filter((widget): widget is DashboardWidgetDefinition => widget !== undefined)
-        .filter((widget) => !hiddenWidgetIds.includes(widget.id)),
-    [hiddenWidgetIds, widgetOrder, widgetsById],
+        .filter((widget): widget is DashboardWidgetDefinition => widget !== undefined),
+    [widgetOrder, widgetsById],
   );
+  const visibleWidgets = orderedWidgets.filter((widget) => !hiddenWidgetIds.includes(widget.id));
 
   async function persist(nextOrder: string[], nextHidden: string[]) {
-    await savePreference({
-      dashboardKey,
-      widgetOrder: nextOrder,
-      hiddenWidgetIds: nextHidden,
-    });
+    try {
+      await savePreference({
+        dashboardKey,
+        widgetOrder: nextOrder,
+        hiddenWidgetIds: nextHidden,
+      });
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    }
   }
 
-  async function handleToggleWidget(widgetId: string, checked: boolean) {
-    const nextHidden = checked
+  async function handleToggleWidget(widgetId: string, shown: boolean) {
+    const nextHidden = shown
       ? hiddenWidgetIds.filter((id) => id !== widgetId)
       : unique([...hiddenWidgetIds, widgetId]);
     await persist(widgetOrder, nextHidden);
   }
 
   async function handleResetLayout() {
-    await resetPreference({ dashboardKey });
-    setIsCustomizing(false);
-  }
-
-  async function handleDrop(targetId: string) {
-    if (!draggedWidgetId) return;
-    const nextOrder = reorderIds(widgetOrder, draggedWidgetId, targetId);
-    setDraggedWidgetId(null);
-    await persist(nextOrder, hiddenWidgetIds);
+    try {
+      await resetPreference({ dashboardKey });
+      setIsCustomizing(false);
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    }
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-          <p className="text-sm text-muted-foreground">{description}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <SlidersHorizontalIcon className="size-4" />
-                Widgets
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Visible widgets</DropdownMenuLabel>
-              {widgets.map((widget) => (
-                <DropdownMenuCheckboxItem
-                  key={widget.id}
-                  checked={!hiddenWidgetIds.includes(widget.id)}
-                  onCheckedChange={(checked) =>
-                    void handleToggleWidget(widget.id, checked === true)
-                  }
-                >
-                  {widget.title}
-                </DropdownMenuCheckboxItem>
-              ))}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => void handleResetLayout()}>
-                Reset layout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button
-            variant={isCustomizing ? "default" : "outline"}
-            size="sm"
-            onClick={() => setIsCustomizing((current) => !current)}
-          >
-            {isCustomizing ? "Done" : "Customize"}
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-4 pb-24" data-testid={`${dashboardKey}-dashboard`}>
+      <PageHeader
+        title={title}
+        description={description}
+        actions={
+          isCustomizing ? (
+            <Button size="sm" onClick={() => setIsCustomizing(false)}>
+              Done
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => setIsCustomizing(true)}>
+              <SlidersHorizontalIcon />
+              Customize
+            </Button>
+          )
+        }
+        menu={
+          <DropdownMenuItem onSelect={() => void handleResetLayout()}>Reset layout</DropdownMenuItem>
+        }
+      />
 
       {isCustomizing ? (
-        <p className="text-xs text-muted-foreground">
-          Drag cards to reorder them. Use the Widgets menu to hide or restore cards.
-        </p>
-      ) : null}
-
-      {visibleWidgets.length === 0 ? (
-        <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
-          No widgets are visible. Use the Widgets menu to restore them.
+        <div className="space-y-2" data-testid="dashboard-customize">
+          <p className="text-sm text-muted-foreground">
+            Drag to reorder. Switch off what you don&apos;t need; changes save as you go.
+          </p>
+          <SortableList
+            items={orderedWidgets}
+            getId={(widget) => widget.id}
+            onReorder={(_, orderedIds) => void persist(orderedIds, hiddenWidgetIds)}
+            rowClassName="flex items-center gap-2 border bg-background py-1.5 pr-3 pl-1 text-sm"
+            rowTestId="dashboard-customize-row"
+            renderItem={(widget, _index, controls) => {
+              const shown = !hiddenWidgetIds.includes(widget.id);
+              const switchId = `${dashboardKey}-widget-${widget.id}`;
+              return (
+                <>
+                  <span
+                    {...controls.handleProps}
+                    className="flex size-8 cursor-grab touch-none items-center justify-center text-muted-foreground"
+                    aria-hidden
+                  >
+                    <DotsSixVerticalIcon className="size-4" />
+                  </span>
+                  <label htmlFor={switchId} className={cn("min-w-0 flex-1 truncate font-medium", !shown && "text-muted-foreground")}>
+                    {widget.title}
+                  </label>
+                  <Switch
+                    id={switchId}
+                    checked={shown}
+                    onCheckedChange={(checked) => void handleToggleWidget(widget.id, checked)}
+                    aria-label={`Show ${widget.title}`}
+                  />
+                </>
+              );
+            }}
+          />
         </div>
-      ) : (
-        <div
-          className={cn(
-            isCustomizing ? "grid gap-4 md:grid-cols-2" : "columns-1 gap-4 md:columns-2",
-          )}
+      ) : visibleWidgets.length === 0 ? (
+        <EmptyState
+          action={
+            <Button variant="outline" size="sm" onClick={() => setIsCustomizing(true)}>
+              Customize
+            </Button>
+          }
         >
+          Every widget is hidden. Customize the page to bring some back.
+        </EmptyState>
+      ) : (
+        <div className="columns-1 gap-4 md:columns-2">
           {visibleWidgets.map((widget) => {
             const Widget = widget.component;
             return (
-              <div
-                key={widget.id}
-                draggable={isCustomizing}
-                onDragStart={() => setDraggedWidgetId(widget.id)}
-                onDragEnd={() => setDraggedWidgetId(null)}
-                onDragOver={(event) => {
-                  if (!isCustomizing) return;
-                  event.preventDefault();
-                }}
-                onDrop={(event) => {
-                  if (!isCustomizing) return;
-                  event.preventDefault();
-                  void handleDrop(widget.id);
-                }}
-                className={cn(
-                  "transition-opacity",
-                  isCustomizing ? "" : "mb-4 break-inside-avoid",
-                  isCustomizing ? "cursor-grab" : "",
-                  draggedWidgetId === widget.id ? "opacity-50" : "",
-                )}
-              >
-                {isCustomizing ? (
-                  <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-                    <DotsSixVerticalIcon className="size-4" />
-                    <span>{widget.title}</span>
-                  </div>
-                ) : null}
+              <div key={widget.id} className="mb-4 break-inside-avoid">
                 <Widget />
               </div>
             );

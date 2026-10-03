@@ -281,7 +281,12 @@ async function buildInvoicePaymentDetails(
  * (with each invoice linked to them), then approved invoices with no event.
  * One pass, so the board and the per-queue lists read the same rows.
  */
-async function collectPaymentRows(ctx: QueryCtx, now: number) {
+/**
+ * Every payable invoice once (primary, extra-linked, and approved invoices
+ * with no event), with its payment queue. The Payments tab and Insights' AR
+ * both read this, so their numbers agree.
+ */
+export async function collectPaymentRows(ctx: QueryCtx, now: number) {
   const windowStart = now - REMINDER_LOOKBACK_MS;
   const candidates = await ctx.db
     .query("events")

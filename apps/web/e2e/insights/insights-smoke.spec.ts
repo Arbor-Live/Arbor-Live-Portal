@@ -10,43 +10,70 @@ test.describe("insights dashboard", () => {
     await page.goto("/dashboard/financial-hub/insights");
     const insights = page.getByTestId("insights-page");
     await expect(insights).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Insights").first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Insights", level: 1 })).toBeVisible();
+    const tabs = page.getByRole("navigation", { name: "Insights sections" });
 
     // Default Finances tab
     await expect(page.getByTestId("insights-finances-panel")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Recognized revenue").first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Booked ahead (90d)").first()).toBeVisible();
-    await expect(page.getByText("AR snapshot").first()).toBeVisible();
+    await expect(page.getByTestId("insights-stat-net-profit")).toBeVisible();
+    await expect(page.getByText("Margin by event type").first()).toBeVisible();
+    await expect(page.getByText("Receivables aging").first()).toBeVisible();
 
-    await insights.getByRole("button", { name: "Demand", exact: true }).click();
+    // Booked ahead links straight to the Events tab.
+    const bookedAhead = page.getByTestId("insights-stat-booked-ahead");
+    await expect(bookedAhead).toBeVisible();
+    await bookedAhead.getByRole("link", { name: "Upcoming events" }).click();
+    await page.waitForURL(/\/insights\/events/, { timeout: 30_000 });
+    await expect(page.getByTestId("insights-events-panel")).toBeVisible({ timeout: 30_000 });
+    await expect(tabs.getByRole("link", { name: "Events" })).toHaveAttribute("aria-current", "page");
+
+    // The date range lives in the URL and carries across tabs.
+    await page.getByTestId("insights-range").getByRole("radio", { name: "90 days" }).click();
+    await page.waitForURL(/range=90d/, { timeout: 30_000 });
+
+    await tabs.getByRole("link", { name: "Demand" }).click();
+    await page.waitForURL(/\/insights\/demand\?range=90d/, { timeout: 30_000 });
     await expect(page.getByTestId("insights-demand-panel")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Upcoming (30d)").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Booking funnel").first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Decline reasons").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("insights-stat-lead-time")).toBeVisible();
+    await expect(page.getByText("Conversion by category").first()).toBeVisible();
+    await expect(page.getByText("Decline reasons").first()).toBeVisible();
     await expect(page.getByText("Quote engagement").first()).toBeVisible();
-    await expect(page.getByText("Delivery quality").first()).toBeVisible();
-    await expect(page.getByText("Calendar load").first()).toBeVisible();
 
-    await insights.getByRole("button", { name: "Events", exact: true }).click();
+    await tabs.getByRole("link", { name: "Events" }).click();
+    await page.waitForURL(/\/insights\/events\?range=90d/, { timeout: 30_000 });
     await expect(page.getByTestId("insights-events-panel")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Next 7 days").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Next 30 days").first()).toBeVisible();
     await expect(page.getByText("Next 90 days").first()).toBeVisible();
-    await expect(page.getByText("Booked ahead").first()).toBeVisible();
-    await expect(page.getByText("Ops readiness").first()).toBeVisible();
-    await expect(page.getByText("Upcoming by status").first()).toBeVisible();
+    await expect(page.getByTestId("insights-events-readiness")).toBeVisible();
+    await expect(page.getByTestId("insights-cancellations")).toBeVisible();
+    await expect(page.getByText("Calendar load").first()).toBeVisible();
+    await expect(page.getByText("Turnout vs expected").first()).toBeVisible();
 
-    await insights.getByRole("button", { name: "Crew", exact: true }).click();
+    await tabs.getByRole("link", { name: "Crew" }).click();
     await expect(page.getByTestId("insights-crew-panel")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Fill rate").first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("OT / DT risk").first()).toBeVisible();
+    await expect(page.getByTestId("insights-busiest-crew")).toBeVisible();
+    await expect(page.getByText("Overtime risk").first()).toBeVisible();
 
-    await insights.getByRole("button", { name: "Ops", exact: true }).click();
+    await tabs.getByRole("link", { name: "Ops" }).click();
     await expect(page.getByTestId("insights-ops-panel")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Artist payouts").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("insights-stat-owed-artists")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Open damage").first()).toBeVisible();
-    await expect(page.getByText("Payout queue aging").first()).toBeVisible();
-    await expect(page.getByText("Fulfillment duration").first()).toBeVisible();
+    await expect(page.getByTestId("insights-payout-queue")).toBeVisible();
+    await expect(page.getByText("Rental fulfillment").first()).toBeVisible();
+  });
+
+  test("a custom range uses the date pickers, not native inputs", async ({ page }) => {
+    await page.goto("/dashboard/financial-hub/insights/demand?from=2026-01-01&to=2026-03-31");
+    const range = page.getByTestId("insights-range");
+    await expect(range).toBeVisible({ timeout: 30_000 });
+    await expect(range.getByRole("radio", { name: "Custom" })).toHaveAttribute("aria-checked", "true");
+    await expect(range.getByTestId("date-picker").first()).toHaveAttribute("data-value", "2026-01-01");
+    await expect(range.locator('input[type="date"]')).toHaveCount(0);
+    await expect(page.getByTestId("insights-demand-panel")).toBeVisible({ timeout: 30_000 });
   });
 
   test("Financial Hub shows live Revenue/Expenses cards and links to Insights", async ({
@@ -92,13 +119,13 @@ test.describe("insights dashboard", () => {
     const insights = page.getByTestId("insights-page");
     await expect(insights).toBeVisible({ timeout: 30_000 });
 
-    await insights.getByRole("button", { name: "Feedback", exact: true }).click();
+    await page.getByRole("navigation", { name: "Insights sections" }).getByRole("link", { name: "Feedback" }).click();
     await expect(page.getByTestId("insights-feedback-panel")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Responses").first()).toBeVisible({ timeout: 30_000 });
 
     // Summary cards render for the seeded response.
     await expect(page.getByText("Average rating").first()).toBeVisible();
-    await expect(page.getByText("Rating distribution").first()).toBeVisible();
+    await expect(page.getByText("Rated 4 or 5").first()).toBeVisible();
 
     // Full feedback is readable verbatim (unique per seed run).
     await expect(page.getByText(seeded.eventTitle).first()).toBeVisible({ timeout: 30_000 });
@@ -120,7 +147,7 @@ test.describe("insights dashboard", () => {
     const insights = page.getByTestId("insights-page");
     await expect(insights).toBeVisible({ timeout: 30_000 });
 
-    await insights.getByRole("button", { name: "Feedback", exact: true }).click();
+    await page.getByRole("navigation", { name: "Insights sections" }).getByRole("link", { name: "Feedback" }).click();
     await expect(page.getByTestId("insights-postmortem-panel")).toBeVisible({ timeout: 30_000 });
 
     // Summary cards render for the seeded response.
