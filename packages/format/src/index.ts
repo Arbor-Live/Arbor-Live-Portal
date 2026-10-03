@@ -286,6 +286,13 @@ export function computeOccurrenceSlots(args: {
         : "No occurrences fall within the selected end date.",
     );
   }
+  // Running out of scans before the count is met would quietly create fewer
+  // days than asked for (and report the full count).
+  if (args.occurrenceCount !== undefined && slots.length < args.occurrenceCount) {
+    throw new Error(
+      `Only ${slots.length} of ${args.occurrenceCount} occurrences fit before the series would run too long. Lower the count.`,
+    );
+  }
   return slots;
 }
 

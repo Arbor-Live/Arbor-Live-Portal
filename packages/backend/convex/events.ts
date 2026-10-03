@@ -1,7 +1,7 @@
 import { pacificDateKey } from "@arbor/format";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import { mutation, query, type QueryCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   findAuthUsersByIds,
   getUserId,
@@ -130,6 +130,31 @@ export const list = query({
   },
 });
 
+const SERIES_POSITION_PAGE = 200;
+/** A weekly series this long would run a decade; past it, positions fall back to the index. */
+const SERIES_POSITION_MAX_PAGES = 5;
+
+/**
+ * A series' occurrences in order, read in pages by `occurrenceIndex` so a
+ * long series (over 200 days) still gets a list position for every day.
+ */
+async function listSeriesOccurrencesForPositions(ctx: QueryCtx, seriesId: Id<"eventSeries">) {
+  const occurrences: Doc<"events">[] = [];
+  let afterIndex = -1;
+  for (let page = 0; page < SERIES_POSITION_MAX_PAGES; page += 1) {
+    const batch = await ctx.db
+      .query("events")
+      .withIndex("by_seriesId_and_occurrenceIndex", (q) =>
+        q.eq("seriesId", seriesId).gt("occurrenceIndex", afterIndex),
+      )
+      .take(SERIES_POSITION_PAGE);
+    occurrences.push(...batch);
+    if (batch.length < SERIES_POSITION_PAGE) break;
+    afterIndex = batch[batch.length - 1]!.occurrenceIndex ?? afterIndex;
+  }
+  return occurrences;
+}
+
 /** Recent events for calendar/board/upcoming — keep fan-out takes tight. */
 const DASHBOARD_EVENT_TAKE = 150;
 const DASHBOARD_BLOCK_TAKE = 40;
@@ -220,10 +245,7 @@ export const listForDashboard = query({
         let positionById: Map<string, number> | undefined;
         // Academic skips leave gaps in occurrenceIndex, so number by list position.
         if (totalOccurrences === undefined || series.academicSkipMode !== undefined) {
-          const occurrences = await ctx.db
-            .query("events")
-            .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", seriesId))
-            .take(200);
+          const occurrences = await listSeriesOccurrencesForPositions(ctx, seriesId);
           totalOccurrences ??= occurrences.length;
           if (series.academicSkipMode !== undefined) {
             positionById = new Map(occurrences.map((occurrence, index) => [occurrence._id, index + 1]));

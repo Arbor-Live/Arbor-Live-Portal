@@ -103,6 +103,19 @@ describe("Arbor closures", () => {
 describe("computeOccurrenceSlots", () => {
   const wednesdays = pacificDateAndTimeToMs("2026-10-07", "19:00")!;
 
+  it("refuses a count it can't meet instead of creating fewer", () => {
+    // Skipping every week leaves nothing; skipping all but one week a year
+    // runs out of scan before 50 are found.
+    expect(() =>
+      computeOccurrenceSlots({
+        anchorStartAt: wednesdays,
+        intervalWeeks: 1,
+        occurrenceCount: 50,
+        skip: (startAt) => (startAt - wednesdays) % (52 * 7 * 24 * 60 * 60 * 1000) !== 0,
+      }),
+    ).toThrow(/Only \d+ of 50 occurrences fit/);
+  });
+
   it("matches plain weekly generation without a skip filter", () => {
     const slots = computeOccurrenceSlots({ anchorStartAt: wednesdays, intervalWeeks: 1, occurrenceCount: 3 });
     expect(slots.map((slot) => slot.occurrenceIndex)).toEqual([0, 1, 2]);
