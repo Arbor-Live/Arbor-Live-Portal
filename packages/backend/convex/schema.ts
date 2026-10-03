@@ -854,12 +854,11 @@ export default defineSchema({
   /**
    * An event group: dated events that share setup and billing. `recurring`
    * (a weekly/biweekly series, generated from a rule) or `multi_day` (a booking
-   * with explicit days that share one invoice). Absent `kind` means recurring
-   * until the `backfillEventGroupKinds` migration runs. Events point here via
+   * with explicit days that share one invoice). Events point here via
    * `events.seriesId` + `occurrenceIndex` (the day's position in the group).
    */
   eventSeries: defineTable({
-    kind: v.optional(eventGroupKindValue),
+    kind: eventGroupKindValue,
     title: v.string(),
     status: v.union(v.literal("active"), v.literal("paused"), v.literal("ended")),
     /** Day 1's start/end: templates are relative to each day's start. */

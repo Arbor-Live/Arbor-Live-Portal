@@ -24,7 +24,7 @@ import {
   replaceAdditionalInvoiceLinks,
   splitPrimaryAndAdditional,
 } from "./lib/eventInvoiceLinks";
-import { copyDaySetupToTargets, listSiblingDayEvents } from "./lib/copyDaySetup";
+import { listSiblingDayEvents } from "./lib/siblingDays";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
 import { deleteEventRecord } from "./lib/bookingChainDelete";
 import {
@@ -481,45 +481,6 @@ export const listSiblingDays = query({
       endAt: row.endAt,
       dayNumber: index + 1,
     }));
-  },
-});
-
-/**
- * Copy crew slot hours (not people) and pull-list / checkout quantities from
- * one multi-day sibling onto other linked days.
- */
-export const copyDaySetup = mutation({
-  args: {
-    sourceEventId: v.id("events"),
-    targetEventIds: v.optional(v.array(v.id("events"))),
-    copySchedule: v.optional(v.boolean()),
-    copyPullList: v.optional(v.boolean()),
-  },
-  returns: v.object({
-    copiedToEventIds: v.array(v.id("events")),
-  }),
-  handler: async (ctx, args) => {
-    await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
-    await requireEventEditAccess(ctx, args.sourceEventId);
-    const source = await ctx.db.get(args.sourceEventId);
-    if (!source) throw new Error("Source event not found.");
-
-    const siblings = await listSiblingDayEvents(ctx, source);
-    const targetEventIds =
-      args.targetEventIds ??
-      siblings.filter((row) => row._id !== args.sourceEventId).map((row) => row._id);
-
-    for (const targetId of targetEventIds) {
-      await requireEventEditAccess(ctx, targetId);
-    }
-
-    return await copyDaySetupToTargets(ctx, {
-      sourceEventId: args.sourceEventId,
-      targetEventIds,
-      copySchedule: args.copySchedule !== false,
-      copyPullList: args.copyPullList !== false,
-    });
   },
 });
 

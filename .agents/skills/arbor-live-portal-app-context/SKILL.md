@@ -116,8 +116,7 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
   them. Extra invoices are per occurrence; a series still shares one primary.
 
 ## Event groups (series + multi-day bookings)
-- `eventSeries` rows are **event groups**: `kind: "recurring"` (series; absent
-  kind = recurring) or `"multi_day"` (days sharing one primary invoice). Days
+- `eventSeries` rows are **event groups**: `kind: "recurring"` (series) or `"multi_day"` (days sharing one primary invoice). Days
   point at the group via `events.seriesId` + `occurrenceIndex`.
 - Any path that adds/removes a day from an invoice must call
   `syncMultiDayGroupForInvoice` (`lib/eventGroups.ts`); membership and day order
