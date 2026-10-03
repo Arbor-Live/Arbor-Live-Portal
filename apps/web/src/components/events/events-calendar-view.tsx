@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } fr
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { normalizeEventStatus } from "@/lib/event-status";
+import { quarterWeek } from "@/lib/academic-periods";
 import { PORTAL_TIMEZONE } from "@/lib/format";
 
 type DashboardEvent = {
@@ -137,6 +138,26 @@ function CrewBadge({
   );
 }
 
+/**
+ * "Wk 3" (or "Finals", "Winter break") for a calendar row. With a named
+ * `timeZone`, FullCalendar hands over dates whose UTC fields are the Pacific
+ * wall-clock day, so the day key is the ISO date. Falls back to FullCalendar's
+ * own text outside the academic calendar.
+ */
+function quarterWeekLabel(date: Date | undefined, fallback: string) {
+  const week = date ? quarterWeek(date.toISOString().slice(0, 10)) : null;
+  if (!week) return fallback;
+  return (
+    <span
+      className="text-xs font-medium whitespace-nowrap"
+      title={week.kind === "week" ? `${week.quarter.label}, week ${week.week}` : `${week.quarter.label}: ${week.label}`}
+      data-testid="calendar-quarter-week"
+    >
+      {week.label}
+    </span>
+  );
+}
+
 export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
   const router = useRouter();
   const [view, setView] = useState<"timeGridWeek" | "dayGridMonth">("timeGridWeek");
@@ -242,6 +263,11 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
           nowIndicator
           dayMaxEvents
           firstDay={1}
+          // Rows are labeled with Stanford's week of the quarter (Wk 1–10,
+          // Finals, breaks) instead of ISO week numbers.
+          weekNumbers
+          weekNumberHeaderContent={(info) => quarterWeekLabel(info.date, info.text)}
+          inlineWeekNumberContent={(info) => quarterWeekLabel(info.date, info.text)}
           slotMinTime="06:00:00"
           slotMaxTime="24:00:00"
           slotDuration="00:30:00"

@@ -17,6 +17,7 @@ import {
   pacificEndOfDayMs,
   pacificStartOfDayMs,
 } from "@/lib/format";
+import { quarterWeek } from "@/lib/academic-periods";
 
 type DashboardEvent = {
   _id: string;
@@ -316,6 +317,12 @@ function packSpanLanes(
   return lanes;
 }
 
+/** "Autumn 2026 · Wk 3" from Stanford's calendar; the row position outside it. */
+function boardWeekLabel(mondayKey: string, weekIndex: number) {
+  const week = quarterWeek(mondayKey);
+  return week ? `${week.quarter.label} · ${week.label}` : `Week ${weekIndex + 1}`;
+}
+
 function formatWeekRangeLabel(weekDayKeys: string[]) {
   const startParts = dateKeyParts(weekDayKeys[0]);
   const endParts = dateKeyParts(weekDayKeys[DAYS_PER_WEEK - 1]);
@@ -471,8 +478,8 @@ export function EventsBoardView({ events }: { events: DashboardEvent[] }) {
         {weeks.map(({ weekDayKeys, spanLanes, byDay }, weekIndex) => (
           <div key={`week-${weekDayKeys[0]}`} className="overflow-x-auto rounded-md border bg-card">
             <div className="border-b bg-muted/30 px-3 py-1.5">
-              <p className="text-xs font-medium text-muted-foreground">
-                Week {weekIndex + 1}
+              <p className="text-xs font-medium text-muted-foreground" data-testid="board-week-label">
+                {boardWeekLabel(weekDayKeys[0]!, weekIndex)}
                 <span className="mx-1.5 text-muted-foreground/50">·</span>
                 {formatWeekRangeLabel(weekDayKeys)}
               </p>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
@@ -8,7 +9,8 @@ import { WarningIcon } from "@phosphor-icons/react";
 import { EventStateBadges } from "@/components/events/event-state-badges";
 import { TypeChip } from "@/components/events/workspace/run-of-show/run-of-show-styles";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { DatePickerField } from "@/components/ui/date-picker";
+import { AcademicPeriodPicks } from "@/components/academic-period-picks";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   ADMIN_CREW_SCHEDULING_DEFAULT_WEEKS,
@@ -18,6 +20,8 @@ import {
   formatEventDateTime,
   formatTimeWindow,
   getDefaultAdminSchedulingDateInputs,
+  parseLocalDateInput,
+  toLocalDateInput,
 } from "@/lib/crew-availability";
 import { formatDateTimeRange } from "@/lib/format";
 import type { ScheduleBlockType } from "@/lib/schedule-block-types";
@@ -214,18 +218,47 @@ function ResponsesList({ row }: { row: BoardRow }) {
   );
 }
 
+const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A real calendar day key (`2026-02-30` isn't one). */
+function isDateKey(value: string | null): value is string {
+  if (!value || !DATE_KEY.test(value)) return false;
+  const parsed = parseLocalDateInput(value);
+  return parsed !== null && toLocalDateInput(parsed) === value;
+}
+
 export function CrewSchedulingDashboard() {
-  const defaultDates = useMemo(() => getDefaultAdminSchedulingDateInputs(), []);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [defaults] = useState(() => getDefaultAdminSchedulingDateInputs());
   const [needsCrewOnly, setNeedsCrewOnly] = useState(true);
   const [showPendingCrew, setShowPendingCrew] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [startDate, setStartDate] = useState(defaultDates.startDate);
-  const [endDate, setEndDate] = useState(defaultDates.endDate);
+  // The range lives in `?from=YYYY-MM-DD&to=YYYY-MM-DD` (Insights links here),
+  // so back/forward and shared links always match what's shown.
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
+  // Both ends or neither: one bad day falls back to the whole default range,
+  // not half of it (which could leave a range ending before it starts).
+  const fromUrl = isDateKey(fromParam) && isDateKey(toParam);
+  const startDate = fromUrl ? fromParam : defaults.startDate;
+  const endDate = fromUrl ? toParam : defaults.endDate;
 
-  const range = useMemo(
-    () => adminSchedulingRangeFromDateInputs(startDate, endDate),
-    [startDate, endDate],
-  );
+  function setRange(nextStart: string, nextEnd: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("from", nextStart);
+    params.set("to", nextEnd);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+  const setStartDate = (next: string) => setRange(next, endDate);
+  const setEndDate = (next: string) => setRange(startDate, next);
+
+  // A range ending before it starts is invalid: say so and skip the queries.
+  const range = useMemo(() => {
+    const candidate = adminSchedulingRangeFromDateInputs(startDate, endDate);
+    return candidate && candidate.rangeEnd >= candidate.rangeStart ? candidate : null;
+  }, [startDate, endDate]);
 
   const rows = useQuery(
     api.eventCrewAvailability.listForAdminOverview,
@@ -247,8 +280,7 @@ export function CrewSchedulingDashboard() {
 
   function resetToDefaultRange() {
     const defaults = getDefaultAdminSchedulingDateInputs();
-    setStartDate(defaults.startDate);
-    setEndDate(defaults.endDate);
+    setRange(defaults.startDate, defaults.endDate);
   }
 
   function formatRate(value: number | null | undefined) {
@@ -260,28 +292,33 @@ export function CrewSchedulingDashboard() {
     <div className="space-y-3">
       <div className="space-y-2 border p-3">
         <p className="text-sm font-medium">Date range</p>
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">From</p>
-            <Input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-40"
-            />
-          </div>
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">To</p>
-            <Input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-40"
-            />
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <DatePickerField
+            id="crew-scheduling-from"
+            aria-label="From"
+            value={startDate}
+            onChange={(next) => next && setStartDate(next)}
+            placeholder="From"
+            className="w-48"
+          />
+          <span className="text-sm text-muted-foreground">to</span>
+          <DatePickerField
+            id="crew-scheduling-to"
+            aria-label="To"
+            value={endDate}
+            onChange={(next) => next && setEndDate(next)}
+            placeholder="To"
+            className="w-48"
+          />
           <Button type="button" variant="outline" size="sm" onClick={resetToDefaultRange}>
             Next {ADMIN_CREW_SCHEDULING_DEFAULT_WEEKS} weeks
           </Button>
+          <AcademicPeriodPicks
+            presets={["this-quarter", "next-quarter"]}
+            startDate={startDate}
+            endDate={endDate}
+            onSelect={(period) => setRange(period.startDate, period.endDate)}
+          />
         </div>
         {!range ? (
           <p className="text-xs text-destructive">Choose a valid start and end date.</p>

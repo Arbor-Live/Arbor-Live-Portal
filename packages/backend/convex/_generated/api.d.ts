@@ -130,6 +130,7 @@ import type * as lib_bookingRequestStatus from "../lib/bookingRequestStatus.js";
 import type * as lib_briefRunOfShow from "../lib/briefRunOfShow.js";
 import type * as lib_contactName from "../lib/contactName.js";
 import type * as lib_crewAvailability from "../lib/crewAvailability.js";
+import type * as lib_crewBackups from "../lib/crewBackups.js";
 import type * as lib_crewCompensation from "../lib/crewCompensation.js";
 import type * as lib_crewCost from "../lib/crewCost.js";
 import type * as lib_crewHourThresholds from "../lib/crewHourThresholds.js";
@@ -399,6 +400,7 @@ declare const fullApi: ApiFromModules<{
   "lib/briefRunOfShow": typeof lib_briefRunOfShow;
   "lib/contactName": typeof lib_contactName;
   "lib/crewAvailability": typeof lib_crewAvailability;
+  "lib/crewBackups": typeof lib_crewBackups;
   "lib/crewCompensation": typeof lib_crewCompensation;
   "lib/crewCost": typeof lib_crewCost;
   "lib/crewHourThresholds": typeof lib_crewHourThresholds;

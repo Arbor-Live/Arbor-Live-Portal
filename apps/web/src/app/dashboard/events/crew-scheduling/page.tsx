@@ -1,6 +1,8 @@
 import { CrewSchedulingDashboard } from "@/components/events/crew-scheduling-dashboard";
 import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
 import { PageHeader } from "@/components/page-header";
+import { Suspense } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -17,7 +19,10 @@ export default function CrewSchedulingPage() {
       />
       <ArborOnlyGuard>
         <AdminOnlyGuard>
-          <CrewSchedulingDashboard />
+          {/* The range lives in search params, which need a Suspense boundary. */}
+          <Suspense fallback={<Skeleton className="h-48 w-full" />}>
+            <CrewSchedulingDashboard />
+          </Suspense>
         </AdminOnlyGuard>
       </ArborOnlyGuard>
     </div>

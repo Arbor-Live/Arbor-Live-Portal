@@ -26,7 +26,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSheetParam } from "@/hooks/use-sheet-param";
 import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
-import { formatUsd } from "@/lib/format";
 import {
   INVOICE_GROUPS,
   invoiceLifecycle,
@@ -35,23 +34,48 @@ import {
   LIFECYCLE_OPTIONS,
 } from "@/lib/invoice-lifecycle";
 import { notify } from "@/lib/notify";
+import { academicPeriod } from "@/lib/academic-periods";
+import { addDaysToDateKey, formatUsd } from "@/lib/format";
+import { usePacificToday } from "@/hooks/use-pacific-today";
 
 type InvoiceRow = FunctionReturnType<typeof api.invoices.listEnriched>[number];
 
 const ISSUED_OPTIONS = [
   { value: "last_30", label: "In the last 30 days" },
   { value: "last_90", label: "In the last 90 days" },
-  { value: "this_year", label: "This year" },
-  { value: "older", label: "Before this year" },
+  { value: "this_quarter", label: "This quarter" },
+  { value: "last_quarter", label: "Last quarter" },
+  { value: "this_academic_year", label: "This academic year" },
+  { value: "last_academic_year", label: "Last academic year" },
+  { value: "this_year", label: "This calendar year" },
+  { value: "older", label: "Before this calendar year" },
 ];
 
-/** Every "Issued" bucket an issue date (YYYY-MM-DD) falls in. */
-function issuedBuckets(issueDate: string, todayMs: number): string[] {
-  const issuedMs = Date.parse(`${issueDate}T00:00:00`);
-  if (Number.isNaN(issuedMs)) return [];
-  const days = (todayMs - issuedMs) / 86_400_000;
-  const thisYear = new Date(todayMs).getFullYear() === new Date(issuedMs).getFullYear();
-  return [...(days <= 30 ? ["last_30"] : []), ...(days <= 90 ? ["last_90"] : []), thisYear ? "this_year" : "older"];
+/** The Stanford periods behind the "Issued" quarter and academic-year buckets. */
+function issuedPeriods(todayKey: string) {
+  return [
+    { value: "this_quarter", period: academicPeriod("this-quarter", todayKey) },
+    { value: "last_quarter", period: academicPeriod("last-quarter", todayKey) },
+    { value: "this_academic_year", period: academicPeriod("this-year", todayKey) },
+    { value: "last_academic_year", period: academicPeriod("last-year", todayKey) },
+  ];
+}
+
+/** Every "Issued" bucket an issue date (YYYY-MM-DD, Pacific) falls in. */
+function issuedBuckets(issueDate: string, todayKey: string, periods: ReturnType<typeof issuedPeriods>): string[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) return [];
+  // "Last 30 days" is 30 calendar days counting today.
+  const within = (days: number) => issueDate >= addDaysToDateKey(todayKey, -(days - 1)) && issueDate <= todayKey;
+  return [
+    ...(within(30) ? ["last_30"] : []),
+    ...(within(90) ? ["last_90"] : []),
+    ...periods
+      .filter(({ period }) => period && period.startDate <= issueDate && issueDate <= period.endDate)
+      .map(({ value }) => value),
+    // A future-dated invoice is neither this year nor "before this year".
+    ...(issueDate.slice(0, 4) === todayKey.slice(0, 4) ? ["this_year"] : []),
+    ...(issueDate.slice(0, 4) < todayKey.slice(0, 4) ? ["older"] : []),
+  ];
 }
 
 function statusText(invoice: InvoiceRow) {
@@ -80,7 +104,8 @@ export function InvoicesListClient() {
     stage: { operator: "is_not", values: ["paid", "void"] },
   });
   const [search, setSearch] = useState("");
-  const [todayMs] = useState(() => Date.now());
+  const todayKey = usePacificToday();
+  const periods = useMemo(() => issuedPeriods(todayKey), [todayKey]);
   const applied = activeFilters(filters);
   const stage = applied.stage;
   const listQueryArgs = useMemo(() => {
@@ -124,7 +149,7 @@ export function InvoicesListClient() {
       if (!matchesFilter(applied.stage, invoiceLifecycle(invoice))) return false;
       if (!matchesFilter(applied.client, invoice.clientGroupName ?? "")) return false;
       if (!matchesFilter(applied.manager, invoice.managerName)) return false;
-      if (!matchesFilter(applied.issued, issuedBuckets(invoice.issueDate, todayMs))) return false;
+      if (!matchesFilter(applied.issued, issuedBuckets(invoice.issueDate, todayKey, periods))) return false;
       if (!needle) return true;
       return [
         invoice.invoiceNumber,
@@ -135,7 +160,7 @@ export function InvoicesListClient() {
         invoice.linkedEventTitle,
       ].some((field) => field?.toLowerCase().includes(needle));
     });
-  }, [applied.client, applied.issued, applied.manager, applied.stage, rows, search, todayMs]);
+  }, [applied.client, applied.issued, applied.manager, applied.stage, periods, rows, search, todayKey]);
 
   // Newest first within each group.
   const groups = useMemo(

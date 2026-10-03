@@ -157,6 +157,8 @@ async function listSeriesOccurrencesForPositions(ctx: QueryCtx, seriesId: Id<"ev
 
 /** Recent events for calendar/board/upcoming — keep fan-out takes tight. */
 const DASHBOARD_EVENT_TAKE = 150;
+/** Events scanned in a date window before filters; only the 150 kept fan out. */
+const DASHBOARD_WINDOW_SCAN = 1000;
 const DASHBOARD_BLOCK_TAKE = 40;
 const DASHBOARD_SHIFT_TAKE = 200;
 const DASHBOARD_PULL_LIST_TAKE = 200;
@@ -168,16 +170,28 @@ export const listForDashboard = query({
     linkedInvoiceOnly: v.optional(v.boolean()),
     /** Cancelled events are hidden unless explicitly requested. */
     includeCancelled: v.optional(v.boolean()),
+    /**
+     * Only events starting in `[startMs, endMs]` (a quarter, say). Without a
+     * window the list is the most recently created events.
+     */
+    startMs: v.optional(v.number()),
+    endMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const filterStatus = args.status ? normalizeEventStatus(args.status) : undefined;
-    const baseRows = await ctx.db
-      .query("events")
-      .withIndex("by_createdAt")
-      .order("desc")
-      .take(DASHBOARD_EVENT_TAKE);
+    const { startMs, endMs } = args;
+    const windowed = startMs !== undefined && endMs !== undefined;
+    // A window (a quarter) is scanned whole and filtered before the cap, so
+    // the kept events are the period's first matching ones and `truncated`
+    // says when there were more. Without one: the most recently created.
+    const baseRows = windowed
+      ? await ctx.db
+          .query("events")
+          .withIndex("by_startAt", (q) => q.gte("startAt", startMs).lte("startAt", endMs))
+          .take(DASHBOARD_WINDOW_SCAN)
+      : await ctx.db.query("events").withIndex("by_createdAt").order("desc").take(DASHBOARD_EVENT_TAKE);
     const q = args.query?.trim().toLowerCase();
     const rows = baseRows
       .map((row) => ({ ...row, status: normalizeEventStatus(row.status) }))
@@ -196,7 +210,10 @@ export const listForDashboard = query({
         return haystack.includes(q);
       });
 
-    const sortedRows = rows.sort((a, b) => b.startAt - a.startAt);
+    const truncated = windowed && (rows.length > DASHBOARD_EVENT_TAKE || baseRows.length >= DASHBOARD_WINDOW_SCAN);
+    const sortedRows = rows
+      .slice(0, DASHBOARD_EVENT_TAKE)
+      .sort((a, b) => b.startAt - a.startAt);
 
     const perEventBlocks = await Promise.all(
       sortedRows.map((row) =>
@@ -274,7 +291,7 @@ export const listForDashboard = query({
     const userByKey = await findAuthUsersByIds(ctx, allUserIds);
     const imageByUserId = await buildUserProfileImageByUserId(ctx, allUserIds, userByKey);
 
-    return sortedRows.map((row, index) => {
+    const events = sortedRows.map((row, index) => {
       const blocks = perEventBlocks[index] ?? [];
       const shifts = perEventShifts[index] ?? [];
       const pullListItems = perEventPullList[index] ?? [];
@@ -327,6 +344,7 @@ export const listForDashboard = query({
         },
       };
     });
+    return { events, truncated };
   },
 });
 

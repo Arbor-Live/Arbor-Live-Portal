@@ -65,7 +65,8 @@ import {
 } from "@/lib/band-payout-stages";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { downloadBytes } from "@/lib/download-bytes";
-import { formatDate, formatUsd } from "@/lib/format";
+import { academicPeriod, periodMsRange } from "@/lib/academic-periods";
+import { formatDate, formatUsd, pacificDateKey } from "@/lib/format";
 import { notify } from "@/lib/notify";
 
 type SortKey = "waiting" | "event" | "amount" | "artist";
@@ -77,14 +78,30 @@ const SORT_LABELS: Record<SortKey, string> = {
   artist: "Artist",
 };
 
-type PaidRange = "30" | "90" | "365" | "all";
+type PaidRange = "30" | "90" | "this-quarter" | "last-quarter" | "this-year" | "365" | "all";
 
 const PAID_RANGE_LABELS: Record<PaidRange, string> = {
   "30": "30 days",
   "90": "90 days",
+  "this-quarter": "This quarter",
+  "last-quarter": "Last quarter",
+  "this-year": "This academic year",
   "365": "1 year",
   all: "All",
 };
+
+// Object keys that look like numbers sort first, so the display order is explicit.
+const PAID_RANGE_ORDER: PaidRange[] = ["30", "90", "this-quarter", "last-quarter", "this-year", "365", "all"];
+
+/** `listPaidPayouts` bounds for a range; Stanford periods are closed on both ends. */
+function paidRangeArgs(range: PaidRange, nowMs: number): { paidSince?: number; paidBefore?: number } | null {
+  if (range === "all") return {};
+  if (range === "30" || range === "90" || range === "365") return { paidSince: nowMs - Number(range) * DAY_MS };
+  const period = academicPeriod(range, pacificDateKey(nowMs));
+  if (!period) return null;
+  const { startMs, endMs } = periodMsRange(period);
+  return { paidSince: startMs, paidBefore: endMs };
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -140,8 +157,8 @@ export function FinancialHubBandPayoutsClient() {
   const [paidRange, setPaidRange] = useState<PaidRange>("30");
   // Fixed at mount so ages and the paid query's args stay stable across renders.
   const [nowMs] = useState(() => Date.now());
-  const paidSince = paidRange === "all" ? undefined : nowMs - Number(paidRange) * DAY_MS;
-  const paid = useQuery(api.bandPayments.listPaidPayouts, { paidSince });
+  const paidArgs = paidRangeArgs(paidRange, nowMs);
+  const paid = useQuery(api.bandPayments.listPaidPayouts, paidArgs ?? {});
   const counts = useQuery(api.bandPayments.getQueueCounts, {});
 
   const sendConfirmation = useMutation(api.bandPayments.sendConfirmationEmail);
@@ -431,9 +448,9 @@ export function FinancialHubBandPayoutsClient() {
               onValueChange={(value) => {
                 if (value) setPaidRange(value as PaidRange);
               }}
-              aria-label="Paid in the last"
+              aria-label="Paid in"
             >
-              {(Object.keys(PAID_RANGE_LABELS) as PaidRange[]).map((key) => (
+              {PAID_RANGE_ORDER.filter((key) => paidRangeArgs(key, nowMs)).map((key) => (
                 <ToggleGroupItem key={key} value={key}>
                   {PAID_RANGE_LABELS[key]}
                 </ToggleGroupItem>

@@ -9,6 +9,7 @@ import { getConvexErrorMessage } from "@/lib/convex-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AcademicPeriodPicks } from "@/components/academic-period-picks";
 import { DatePickerField } from "@/components/ui/date-picker";
 import {
   Sheet,
@@ -287,6 +288,15 @@ export function ImmichLibraryPicker({
 
               {mode === "date" ? (
                 <div className="space-y-3 rounded-md border p-3">
+                  <AcademicPeriodPicks
+                    presets={["this-quarter", "last-quarter", "this-year", "last-year"]}
+                    startDate={dateFrom}
+                    endDate={dateTo}
+                    onSelect={(period) => {
+                      setDateFrom(period.startDate);
+                      setDateTo(period.endDate);
+                    }}
+                  />
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label>From</Label>

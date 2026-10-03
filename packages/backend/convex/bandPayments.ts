@@ -844,7 +844,11 @@ const PAID_PAYOUTS_CAP = 200;
  * Capped; `truncated` tells the page older payouts in the range are left out.
  */
 export const listPaidPayouts = query({
-  args: { paidSince: v.optional(v.number()) },
+  args: {
+    paidSince: v.optional(v.number()),
+    /** Inclusive upper bound, for a closed period (last quarter). */
+    paidBefore: v.optional(v.number()),
+  },
   returns: v.object({
     rows: v.array(bandPaymentRowValidator),
     truncated: v.boolean(),
@@ -853,7 +857,10 @@ export const listPaidPayouts = query({
     await requireArborInternalContext(ctx);
     const paid = await ctx.db
       .query("eventBandPayments")
-      .withIndex("by_paidAt", (q) => q.gte("paidAt", args.paidSince ?? 0))
+      .withIndex("by_paidAt", (q) => {
+        const since = q.gte("paidAt", args.paidSince ?? 0);
+        return args.paidBefore === undefined ? since : since.lte("paidAt", args.paidBefore);
+      })
       .order("desc")
       .take(PAID_PAYOUTS_CAP + 1);
     const truncated = paid.length > PAID_PAYOUTS_CAP;

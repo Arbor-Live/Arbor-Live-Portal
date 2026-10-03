@@ -25,6 +25,14 @@ describe("Stanford presets", () => {
     });
   });
 
+  it("next quarter skips summer and runs its full span", () => {
+    expect(insightsPresetDateInputs("next-quarter", NOW)).toMatchObject({
+      startDate: "2027-01-04",
+      endDate: "2027-03-28",
+      periodLabel: "Winter 2027",
+    });
+  });
+
   it("academic years run autumn to the day before next autumn", () => {
     expect(insightsPresetDateInputs("this-year", NOW)).toMatchObject({
       startDate: "2026-09-22",
