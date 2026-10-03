@@ -71,6 +71,7 @@ import {
 } from "./lib/invoiceProfit";
 import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
 import { ensureActPosition, returnActTimesToPosition } from "./lib/actPositions";
+import { type AdoptablePosition, pickPositionForLine } from "./lib/artistLineSync";
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
 const crewRateModeValue = v.union(
@@ -524,42 +525,122 @@ function lineDocToInput(line: Doc<"invoiceLineItems">): LineInput {
 }
 
 
+/** Positions on a day that no artist line stands for yet, for unlinked lines to adopt. */
+async function listAdoptablePositions(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  invoiceId: Id<"invoices">,
+  claimed: ReadonlySet<Id<"eventArtistNeeds">>,
+): Promise<AdoptablePosition[]> {
+  const slots = await ctx.db
+    .query("eventArtistNeeds")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(100);
+  const out: AdoptablePosition[] = [];
+  for (const slot of slots) {
+    if (claimed.has(slot._id)) continue;
+    // Another invoice on this day (an extra invoice) may already bill it.
+    const heldElsewhere = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+      .take(10);
+    if (heldElsewhere.some((line) => line.invoiceId !== invoiceId)) continue;
+    const seated = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+      .first();
+    out.push({
+      needId: slot._id,
+      label: slot.label,
+      seatedOrganizationId: seated?.organizationId,
+      externalArtistName: slot.externalArtistName,
+      sortOrder: slot.sortOrder ?? slot.createdAt,
+    });
+  }
+  return out;
+}
+
 /**
  * Keep `eventArtistNeeds` in step with the invoice's artist lines: a line tied
  * to a day stands for a position there, and an assigned line books it.
+ *
+ * A line without a position first adopts one the day already has (its act's,
+ * one with its name, then the first empty one) and only opens a new position
+ * when the bill has none to spare — so a quote fills the event's bill instead
+ * of adding duplicates to it. A line whose position staff removed on the event
+ * (`positionRemoved`) adopts only an exact match and never opens a new one.
  */
 async function syncArtistSlotsForInvoice(
   ctx: MutationCtx,
   invoiceId: Id<"invoices">,
   now: number,
 ) {
-  const lines = await ctx.db
-    .query("invoiceLineItems")
-    .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
-    .take(500);
+  const lines = (
+    await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
+      .take(500)
+  ).filter((line) => line.section === "artist" && line.eventId);
 
   const claimed = new Set<Id<"eventArtistNeeds">>();
+  const slotIdByLine = new Map<Id<"invoiceLineItems">, Id<"eventArtistNeeds">>();
   for (const line of lines) {
-    if (line.section !== "artist" || !line.eventId) continue;
     const linked = line.needId ? await ctx.db.get(line.needId) : null;
     // A position stands for one line. A duplicate id is treated as unlinked, so
-    // the second line gets its own instead of shadowing the first.
-    let slot =
-      linked && linked.eventId === line.eventId && !claimed.has(linked._id) ? linked : null;
-    if (!slot) {
-      const needId = await ctx.db.insert("eventArtistNeeds", {
-        eventId: line.eventId,
+    // the second line finds its own instead of shadowing the first.
+    if (linked && linked.eventId === line.eventId && !claimed.has(linked._id)) {
+      claimed.add(linked._id);
+      slotIdByLine.set(line._id, linked._id);
+    }
+  }
+
+  const unlinked = lines.filter((line) => !slotIdByLine.has(line._id));
+  const candidatesByEvent = new Map<Id<"events">, AdoptablePosition[]>();
+  for (const line of unlinked) {
+    if (!candidatesByEvent.has(line.eventId!)) {
+      candidatesByEvent.set(
+        line.eventId!,
+        await listAdoptablePositions(ctx, line.eventId!, invoiceId, claimed),
+      );
+    }
+  }
+  // Exact matches across every line first, so a loose match can't take the
+  // position another line names.
+  for (const exact of [true, false]) {
+    for (const line of unlinked) {
+      if (slotIdByLine.has(line._id)) continue;
+      if (!exact && line.positionRemoved) continue;
+      const candidates = (candidatesByEvent.get(line.eventId!) ?? []).filter(
+        (slot) => !claimed.has(slot.needId),
+      );
+      const pick = pickPositionForLine(line, candidates, exact);
+      if (!pick) continue;
+      claimed.add(pick.needId);
+      slotIdByLine.set(line._id, pick.needId);
+    }
+  }
+
+  for (const line of lines) {
+    let slotId = slotIdByLine.get(line._id);
+    if (!slotId) {
+      if (line.positionRemoved) continue;
+      slotId = await ctx.db.insert("eventArtistNeeds", {
+        eventId: line.eventId!,
         label: trimOptional(line.label),
         artistType: "no_preference",
         status: "open",
         createdAt: now,
         updatedAt: now,
       });
-      await ctx.db.patch(line._id, { needId, updatedAt: now });
-      slot = await ctx.db.get(needId);
+      claimed.add(slotId);
     }
+    if (line.needId !== slotId || line.positionRemoved) {
+      const next: Doc<"invoiceLineItems"> = { ...line, needId: slotId, updatedAt: now };
+      delete next.positionRemoved;
+      await ctx.db.replace(line._id, next);
+    }
+    const slot = await ctx.db.get(slotId);
     if (!slot) continue;
-    claimed.add(slot._id);
     // An outside act already fills this position; the line still bills for its
     // own act, and saving an invoice must never fail on that disagreement.
     if (slot.externalArtistName?.trim()) continue;
@@ -590,7 +671,7 @@ async function syncArtistSlotsForInvoice(
       )
       .unique();
     await upsertEventBandParticipation(ctx, {
-      eventId: line.eventId,
+      eventId: line.eventId!,
       organizationId,
       role: current?.role ?? "headliner",
       needId: slot._id,
@@ -645,12 +726,18 @@ async function replaceLineItems(
   // order) instead of minting a new one and stranding the old.
   const previousLineByKey = new Map<
     string,
-    { needId: Id<"eventArtistNeeds">; label: string; organizationId?: string }
+    {
+      needId?: Id<"eventArtistNeeds">;
+      positionRemoved?: boolean;
+      label: string;
+      organizationId?: string;
+    }
   >();
   for (const row of existing) {
-    if (row.section === "artist" && row.needId && row.eventId) {
+    if (row.section === "artist" && row.eventId && (row.needId || row.positionRemoved)) {
       previousLineByKey.set(`${row.eventId}:${row.order}`, {
         needId: row.needId,
+        positionRemoved: row.positionRemoved,
         label: row.label,
         organizationId: row.organizationId,
       });
@@ -667,11 +754,21 @@ async function replaceLineItems(
       row.section === "artist" && row.eventId
         ? previousLineByKey.get(`${row.eventId}:${row.order}`)
         : undefined;
-    const reusedNeedId =
+    const sameLine =
       previous &&
       previous.label === row.label.trim() &&
-      previous.organizationId === trimOptional(row.organizationId)
-        ? previous.needId
+      previous.organizationId === trimOptional(row.organizationId);
+    // An editor opened before staff removed this line's position still posts
+    // its id; the removal stands rather than the save opening it again.
+    const postedNeedGone =
+      row.section === "artist" && row.needId ? !(await ctx.db.get(row.needId)) : false;
+    const needId =
+      row.section === "artist" && row.eventId && !postedNeedGone
+        ? (row.needId ?? (sameLine ? previous.needId : undefined))
+        : undefined;
+    const positionRemoved =
+      row.section === "artist" && row.eventId && !needId
+        ? postedNeedGone || (sameLine && previous.positionRemoved) || undefined
         : undefined;
     await ctx.db.insert("invoiceLineItems", {
       invoiceId,
@@ -694,10 +791,8 @@ async function replaceLineItems(
       eventId: row.section === "artist" ? row.eventId : undefined,
       // A position only means something next to an event; an unscoped artist row
       // must not keep one alive.
-      needId:
-        row.section === "artist" && row.eventId
-          ? (row.needId ?? reusedNeedId)
-          : undefined,
+      needId,
+      positionRemoved,
       // Artist and crew lines keep their people × hours split; `quantity` is still
       // the billed person-hours.
       memberCount:

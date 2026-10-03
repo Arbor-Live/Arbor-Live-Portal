@@ -818,6 +818,11 @@ export default defineSchema({
      */
     needId: v.optional(v.id("eventArtistNeeds")),
     /**
+     * Artist lines: staff removed this line's position from the event, so saving
+     * the invoice must not open it again. The line still bills.
+     */
+    positionRemoved: v.optional(v.boolean()),
+    /**
      * Artist and crew lines: people on the line. With `performanceHours` and
      * `rateUsd` (per person per hour), `quantity` is person-hours (people × hours).
      */

@@ -29,6 +29,7 @@ import { equipmentDivisionWarnings } from "@/lib/equipment-division-warnings";
 import { firstLinkedEventStartAtMs, invoiceDueDateFromFirstEvent } from "@/lib/invoice-due-date";
 import {
   artistLineKey,
+  adoptServerArtistChanges,
   artistRowFromLineItem,
   buildInvoiceLineItems,
   buildInvoicePayload,
@@ -36,6 +37,7 @@ import {
   emptyDraftLines,
   formatInvoiceDiscountInputValue,
   isTbdArtist,
+  serverArtistLinesByNeed,
   type CrewRow,
   type EquipmentRow,
   type InvoiceDraftFields,
@@ -94,6 +96,7 @@ export function useInvoiceDraft({
   const artistsBootstrappedFromEventRef = useRef(false);
   const artistsHydratedFromInvoiceRef = useRef(false);
   const baselineSignaturePendingRef = useRef(false);
+  const serverArtistLinesRef = useRef<ReturnType<typeof serverArtistLinesByNeed> | null>(null);
   const savedCrewSnapshotRef = useRef<CrewRow[]>([]);
   const crewRowsByEventRef = useRef<Map<string, InvoiceCrewRow[]>>(new Map());
   const crewBucketsHydratedInvoiceRef = useRef<string | null>(null);
@@ -668,6 +671,24 @@ export function useInvoiceDraft({
     [invoiceData?.lineItems],
   );
   const { artists } = lines;
+  const serverLineItems = invoiceData?.lineItems;
+  const serverArtistLines = useMemo(
+    () => (serverLineItems ? serverArtistLinesByNeed(serverLineItems) : null),
+    [serverLineItems],
+  );
+  useEffect(() => {
+    if (!invoiceFieldsHydrated || !serverArtistLines) return;
+    const before = serverArtistLinesRef.current;
+    if (before === serverArtistLines) return;
+    serverArtistLinesRef.current = serverArtistLines;
+    if (!before) return;
+    const next = adoptServerArtistChanges(artists, before, serverArtistLines);
+    if (!next) return;
+    // The server already has these values, so a clean draft stays clean.
+    if (!isDraftDirty) baselineSignaturePendingRef.current = true;
+    setSection("artists", next);
+  }, [artists, invoiceFieldsHydrated, isDraftDirty, serverArtistLines, setSection]);
+
   useEffect(() => {
     // Only a clean draft: then every row was in the save that produced these
     // ids, and a row the user added since can't take over a removed row's slot.

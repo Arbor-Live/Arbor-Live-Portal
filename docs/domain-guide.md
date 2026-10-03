@@ -302,7 +302,12 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     line: an internal act sets its `organizationId`, an outside act clears it
     and takes the line's label. Dropping the line drops the position, unless it
     is filled or carries inquiries. One way only — positions never create
-    lines.
+    lines. A line with no position first adopts one the day already has (its
+    act's, one with its name, then the first empty one) and only opens a new
+    one when none is free, so a quote fills the bill instead of duplicating it.
+    Removing a line's position on the event sets `positionRemoved`, and later
+    saves don't reopen it. An open quote editor picks up these lineup changes
+    on rows the user hasn't edited (`adoptServerArtistChanges`).
   Artists browse still-open slots from `/dashboard/opportunities` and
   `submitInquiry` (`eventArtistInquiries`), which flags the slot `inquiring`
   and emails Operations admins (`email/artistNeedInquiryEmails.ts`). Staff clear
