@@ -401,6 +401,10 @@ export const get = query({
                 .query("events")
                 .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", event.seriesId!))
                 .take(200);
+              // Past the first 200 days, page through for this day's position.
+              const positionSiblings = siblings.some((sibling) => sibling._id === event._id)
+                ? siblings
+                : await listSeriesOccurrencesForPositions(ctx, event.seriesId!);
               const costSummary = computeSeriesCostSummary(series, siblings);
               const multiDay = isMultiDayGroup(series);
               return {
@@ -416,7 +420,7 @@ export const get = query({
                 /** 0-based position among the group's days (indexes can skip weeks). */
                 occurrencePosition: Math.max(
                   0,
-                  siblings.findIndex((sibling) => sibling._id === event._id),
+                  positionSiblings.findIndex((sibling) => sibling._id === event._id),
                 ),
                 seriesDetached: event.seriesDetached ?? false,
                 invoiceId: series.invoiceId,
