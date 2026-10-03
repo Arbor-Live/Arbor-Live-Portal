@@ -1451,6 +1451,11 @@ export default defineSchema({
     setEndsAt: v.optional(v.number()),
     soundcheckStartsAt: v.optional(v.number()),
     soundcheckEndsAt: v.optional(v.number()),
+    /**
+     * The rider the act picked for this show. Unset means "my default rider";
+     * `loadEventRiders` falls back to it when this one is gone.
+     */
+    riderId: v.optional(v.id("bandRiders")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

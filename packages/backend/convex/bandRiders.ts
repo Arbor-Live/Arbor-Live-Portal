@@ -23,6 +23,7 @@ import {
   riderContentValue,
   riderStatusValue,
 } from "./lib/riderSchema";
+import { loadShowRiderCandidates, pickShowRider } from "./lib/showRider";
 
 const riderSummaryValidator = v.object({
   _id: v.id("bandRiders"),
@@ -62,6 +63,8 @@ export type EventRiderRow = {
   /** Band profile main contact, used when the rider has no contact of its own. */
   contact?: BandIdentityContact;
   role: "headliner" | "support" | "other";
+  /** The act picked this rider for the show, rather than it being their default. */
+  riderChosenForShow: boolean;
   rider:
     | null
     | ({ _id: Id<"bandRiders">; name: string; status: RiderDoc["status"]; updatedAt: number } & ReturnType<
@@ -406,21 +409,12 @@ export async function loadEventRiders(
 
   const rows: EventRiderRow[] = [];
   for (const participation of participations) {
-    const riders = await ctx.db
-      .query("bandRiders")
-      .withIndex("by_organizationId", (q) =>
-        q.eq("organizationId", participation.organizationId),
-      )
-      .take(50);
-    // Public surfaces show the default rider even if it is a draft. The brief
-    // only prints published content, so it takes the published default next,
-    // then the latest published rider.
-    const published = riders
-      .filter((rider) => rider.status === "published")
-      .sort((a, b) => b.updatedAt - a.updatedAt);
-    const chosen = options?.publishedOnly
-      ? (published.find((rider) => rider.isDefault) ?? published[0] ?? null)
-      : (riders.find((rider) => rider.isDefault) ?? published[0] ?? null);
+    const riders = await loadShowRiderCandidates(
+      ctx,
+      participation.organizationId,
+      participation.riderId,
+    );
+    const { rider: chosen, chosenForShow } = pickShowRider(riders, participation.riderId, options);
 
     const identity = await loadBandIdentity(ctx, participation.organizationId);
     rows.push({
@@ -428,6 +422,7 @@ export async function loadEventRiders(
       bandName: identity.name,
       contact: identity.contact,
       role: participation.role,
+      riderChosenForShow: chosenForShow,
       rider: chosen
         ? {
             _id: chosen._id,
@@ -462,6 +457,7 @@ export const listForEvent = query({
         }),
       ),
       role: v.union(v.literal("headliner"), v.literal("support"), v.literal("other")),
+      riderChosenForShow: v.boolean(),
       rider: v.union(
         v.null(),
         v.object({

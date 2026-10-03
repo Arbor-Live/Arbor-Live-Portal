@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useState } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { bandPaymentStatusTone } from "@/lib/band-payment-status";
@@ -18,6 +19,16 @@ import {
 } from "@/components/list-page";
 import { StatusPill } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 
 export const SHOW_ROLE_LABELS = {
   headliner: "Headliner",
@@ -51,6 +62,118 @@ export function ShowStatusPill({
     <StatusPill tone={bandPaymentStatusTone(show.payment?.status)}>
       {show.paymentChipLabel}
     </StatusPill>
+  );
+}
+
+const DEFAULT_RIDER_VALUE = "default";
+
+type ShowDetail = NonNullable<
+  ReturnType<typeof useQuery<typeof api.eventBands.getShowForActiveBand>>
+>;
+
+/** Which rider crew use for this show: the act's default, or one picked for it. */
+function ShowRiderSection({ show }: { show: ShowDetail }) {
+  const riders = useQuery(api.bandRiders.listForActiveBand, {});
+  const setShowRider = useMutation(api.eventBands.setShowRiderForActiveBand);
+  const [busy, setBusy] = useState(false);
+  const [nowMs] = useState(() => Date.now());
+  const ended = show.endAt < nowMs;
+
+  if (riders === undefined) {
+    return (
+      <SheetSection title="Rider">
+        <p className="text-sm text-muted-foreground">Loading riders…</p>
+      </SheetSection>
+    );
+  }
+
+  if (riders.length === 0) {
+    return (
+      <SheetSection title="Rider">
+        <p className="text-sm text-muted-foreground">
+          You don&apos;t have a technical rider yet. Crew prep your stage, inputs and monitors from
+          it.
+        </p>
+        <Button asChild size="sm" variant="outline">
+          <Link href="/dashboard/artists/riders">Create a rider</Link>
+        </Button>
+      </SheetSection>
+    );
+  }
+
+  const defaultRider = riders.find((rider) => rider.isDefault);
+  const value = show.rider?.chosenForShow ? show.rider._id : DEFAULT_RIDER_VALUE;
+  const locked = !show.canChooseRider || ended || show.cancelled;
+
+  async function onChange(next: string) {
+    if (next === value) return;
+    setBusy(true);
+    try {
+      await setShowRider({
+        eventId: show.eventId,
+        riderId: next === DEFAULT_RIDER_VALUE ? null : (next as Id<"bandRiders">),
+      });
+      notify.success("Rider updated for this show.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SheetSection title="Rider">
+      <div className="space-y-1.5">
+        <Label htmlFor="band-show-rider">Rider for this show</Label>
+        <Select value={value} onValueChange={(next) => void onChange(next)} disabled={locked || busy}>
+          <SelectTrigger id="band-show-rider" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={DEFAULT_RIDER_VALUE}>
+              {defaultRider ? `My default (${defaultRider.name})` : "My default (none set)"}
+            </SelectItem>
+            {/* The default is already the first option; listing it again reads as two choices. */}
+            {riders
+              .filter((rider) => !rider.isDefault || rider._id === value)
+              .map((rider) => (
+                <SelectItem key={rider._id} value={rider._id}>
+                  {rider.name}
+                  {rider.status === "draft" ? " · Draft" : ""}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {show.rider ? (
+        <p className="text-sm">
+          Crew will use{" "}
+          <Link
+            href={`/dashboard/artists/riders/${show.rider._id}`}
+            className="font-medium underline-offset-4 hover:underline"
+          >
+            {show.rider.name}
+          </Link>
+          .
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No default rider set, so crew have nothing to prep from. Pick one above or set a default.
+        </p>
+      )}
+      {show.rider?.status === "draft" ? (
+        <p className="text-sm text-status-amber-700 dark:text-status-amber-200">
+          This rider is still a draft. Publish it so it prints on the crew brief.
+        </p>
+      ) : null}
+      {!show.canChooseRider ? (
+        <p className="text-sm text-muted-foreground">
+          You can pick a rider once Arbor adds you to the lineup.
+        </p>
+      ) : ended ? (
+        <p className="text-sm text-muted-foreground">This show has ended.</p>
+      ) : null}
+    </SheetSection>
   );
 }
 
@@ -137,6 +260,8 @@ function ShowSheetBody({
           </p>
         )}
       </SheetSection>
+
+      <ShowRiderSection show={show} />
 
       <SheetSection title="Payout">
         {payment ? (
