@@ -12,6 +12,7 @@ import { DatePickerField } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
+import { RowCell, RowList } from "@/components/list-page";
 import { StatusPill } from "@/components/page-header";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { getConvexErrorMessage } from "@/lib/convex-error";
@@ -136,7 +137,7 @@ export function EventGroupDaysTab() {
               No {nouns} yet. {multiDay ? "Add a day below." : "Add occurrences below."}
             </div>
           ) : (
-            <ul className="border" data-testid="event-group-day-list">
+            <RowList joined testId="event-group-day-list">
               {occurrences.map((row) => {
                 const status = normalizeEventStatus(row.status);
                 const crew =
@@ -146,14 +147,10 @@ export function EventGroupDaysTab() {
                       ? "Fully staffed"
                       : `${row.assignedShifts}/${row.totalShifts} crew slots filled`;
                 return (
-                  <li
-                    key={row._id}
-                    className="flex items-center gap-2 border-b text-sm last:border-b-0"
-                    data-testid="event-group-day-row"
-                  >
+                  <li key={row._id} className="text-sm" data-testid="event-group-day-row">
                     <Link
                       href={`/dashboard/events/${row._id}`}
-                      className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left hover:bg-muted/30"
+                      className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left hover:bg-muted/30"
                     >
                       <span className="w-14 shrink-0 tabular-nums text-muted-foreground">
                         {groupDayLabel(kind, row.occurrenceIndex)}
@@ -175,19 +172,19 @@ export function EventGroupDaysTab() {
                           Detached
                         </span>
                       ) : null}
-                      <span className="hidden w-24 text-right tabular-nums md:block">
+                      <RowCell className="w-24" hideBelow="md">
                         {formatUsd(row.costSummary.totalUsd)}
-                      </span>
-                      <span className="w-28 text-right">
+                      </RowCell>
+                      <RowCell className="w-28">
                         <StatusPill tone={eventStatusBadgeTone(status)}>
                           {formatEventStatusLabel(status)}
                         </StatusPill>
-                      </span>
+                      </RowCell>
                     </Link>
                   </li>
                 );
               })}
-            </ul>
+            </RowList>
           )}
         </CardContent>
       </Card>
