@@ -15,7 +15,16 @@ import {
   type FilterState,
 } from "@/components/filter-bar";
 import { Button } from "@/components/ui/button";
+import {
+  ACADEMIC_PERIOD_LABELS,
+  academicPeriod,
+  periodMsRange,
+  type AcademicPeriodPreset,
+} from "@/lib/academic-periods";
 import { EVENT_STATUS_EDITOR_OPTIONS, type EventStatus } from "@/lib/event-status";
+import { pacificDateKey } from "@/lib/format";
+
+const WHEN_PRESETS: AcademicPeriodPreset[] = ["this-quarter", "last-quarter", "next-quarter", "this-year"];
 
 const INVOICE_OPTIONS = [
   { value: "linked", label: "Has a linked invoice" },
@@ -41,6 +50,21 @@ export function EventsMainPageClient() {
   });
   const [search, setSearch] = useState("");
   const applied = activeFilters(filters);
+  const [todayKey] = useState(() => pacificDateKey(Date.now()));
+  // "When" options are Stanford periods; ones outside the calendar are left out.
+  const whenPeriods = useMemo(
+    () =>
+      WHEN_PRESETS.flatMap((preset) => {
+        const period = academicPeriod(preset, todayKey);
+        return period ? [{ preset, ...period, ...periodMsRange(period) }] : [];
+      }),
+    [todayKey],
+  );
+  // One "is" period narrows on the server (by start date); anything else filters here.
+  const serverWindow =
+    applied.when?.operator === "is" && applied.when.values.length === 1
+      ? whenPeriods.find((period) => period.preset === applied.when!.values[0])
+      : undefined;
 
   const serverRows = useQuery(api.events.listForDashboard, {
     status:
@@ -51,6 +75,8 @@ export function EventsMainPageClient() {
     linkedInvoiceOnly:
       applied.invoice?.operator === "is" && applied.invoice.values[0] === "linked" ? true : undefined,
     includeCancelled: matchesFilter(applied.status, "cancelled") || undefined,
+    startMs: serverWindow?.startMs,
+    endMs: serverWindow?.endMs,
   });
 
   const filterDefinitions = useMemo<FilterDefinition[]>(() => {
@@ -59,12 +85,20 @@ export function EventsMainPageClient() {
         .sort((a, b) => a.localeCompare(b))
         .map((value) => ({ value, label: value }));
     return [
+      {
+        id: "when",
+        label: "When",
+        options: whenPeriods.map((period) => ({
+          value: period.preset,
+          label: `${ACADEMIC_PERIOD_LABELS[period.preset]} (${period.label})`,
+        })),
+      },
       { id: "status", label: "Status", options: EVENT_STATUS_EDITOR_OPTIONS },
       { id: "type", label: "Type", options: distinct((serverRows ?? []).map((row) => row.eventType)) },
       { id: "venue", label: "Venue", options: distinct((serverRows ?? []).map((row) => row.venueName)) },
       { id: "invoice", label: "Invoice", options: INVOICE_OPTIONS, single: true },
     ];
-  }, [serverRows]);
+  }, [serverRows, whenPeriods]);
 
   // The server narrows what it can; the rest of the chips apply here.
   const rows = useMemo(
@@ -74,9 +108,15 @@ export function EventsMainPageClient() {
           matchesFilter(applied.status, row.status) &&
           matchesFilter(applied.type, row.eventType ?? "") &&
           matchesFilter(applied.venue, row.venueName ?? "") &&
-          matchesFilter(applied.invoice, row.invoiceId ? "linked" : "none"),
+          matchesFilter(applied.invoice, row.invoiceId ? "linked" : "none") &&
+          matchesFilter(
+            applied.when,
+            whenPeriods
+              .filter((period) => row.startAt >= period.startMs && row.startAt <= period.endMs)
+              .map((period) => period.preset),
+          ),
       ),
-    [applied.invoice, applied.status, applied.type, applied.venue, serverRows],
+    [applied.invoice, applied.status, applied.type, applied.venue, applied.when, serverRows, whenPeriods],
   );
 
   return (

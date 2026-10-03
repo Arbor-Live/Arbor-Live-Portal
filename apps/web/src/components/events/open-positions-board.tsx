@@ -21,7 +21,8 @@ import { notify } from "@/lib/notify";
 import { assignableCrewSelectOptions } from "@/lib/user-select-description";
 import { TYPE_OPTIONS } from "@/components/events/lineup/lineup-model";
 import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
-import { formatDate, formatTime } from "@/lib/format";
+import { academicPeriod, periodMsRange } from "@/lib/academic-periods";
+import { formatDate, formatTime, pacificDateKey } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -30,9 +31,21 @@ const RANGES = {
   "14": { label: "2 weeks", days: 14 },
   "30": { label: "30 days", days: 30 },
   "90": { label: "90 days", days: 90 },
+  "this-quarter": { label: "This quarter", days: null },
+  "next-quarter": { label: "Next quarter", days: null },
   all: { label: "All upcoming", days: Number.POSITIVE_INFINITY },
 } as const;
 type RangeKey = keyof typeof RANGES;
+
+/** Shows starting in `[from, until]` for a range; quarters follow Stanford's calendar. */
+function rangeWindow(range: RangeKey, now: number): { from: number; until: number } | null {
+  const days = RANGES[range].days;
+  if (days !== null) return { from: Number.NEGATIVE_INFINITY, until: now + days * DAY_MS };
+  const period = academicPeriod(range as "this-quarter" | "next-quarter", pacificDateKey(now));
+  if (!period) return null;
+  const { startMs, endMs } = periodMsRange(period);
+  return { from: startMs, until: endMs };
+}
 
 const INQUIRY_OPTIONS = [
   { value: "some", label: "Has inquiries" },
@@ -137,10 +150,11 @@ export function OpenPositionsBoard() {
 
   const visible = useMemo(() => {
     if (!events) return [];
-    const until = now + RANGES[range].days * DAY_MS;
+    const window = rangeWindow(range, now);
+    if (!window) return [];
     const needles = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
     return events.flatMap((event) => {
-      if (event.startAt > until) return [];
+      if (event.startAt < window.from || event.startAt > window.until) return [];
       const lead = leadOverrides[event.eventId] ?? event.operationsLeadUserId ?? "";
       if (assignedToMe && lead !== viewerUserId) return [];
       if (!matchesFilter(filters.venue, event.venueName ?? "")) return [];
@@ -190,7 +204,7 @@ export function OpenPositionsBoard() {
           onValueChange={(value) => value && setRange(value as RangeKey)}
           aria-label="Date range"
         >
-          {(Object.keys(RANGES) as RangeKey[]).map((key) => (
+          {(Object.keys(RANGES) as RangeKey[]).filter((key) => rangeWindow(key, now)).map((key) => (
             <ToggleGroupItem key={key} value={key}>
               {RANGES[key].label}
             </ToggleGroupItem>

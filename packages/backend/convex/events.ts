@@ -168,16 +168,25 @@ export const listForDashboard = query({
     linkedInvoiceOnly: v.optional(v.boolean()),
     /** Cancelled events are hidden unless explicitly requested. */
     includeCancelled: v.optional(v.boolean()),
+    /**
+     * Only events starting in `[startMs, endMs]` (a quarter, say). Without a
+     * window the list is the most recently created events.
+     */
+    startMs: v.optional(v.number()),
+    endMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const filterStatus = args.status ? normalizeEventStatus(args.status) : undefined;
-    const baseRows = await ctx.db
-      .query("events")
-      .withIndex("by_createdAt")
-      .order("desc")
-      .take(DASHBOARD_EVENT_TAKE);
+    const { startMs, endMs } = args;
+    const baseRows =
+      startMs !== undefined && endMs !== undefined
+        ? await ctx.db
+            .query("events")
+            .withIndex("by_startAt", (q) => q.gte("startAt", startMs).lte("startAt", endMs))
+            .take(DASHBOARD_EVENT_TAKE)
+        : await ctx.db.query("events").withIndex("by_createdAt").order("desc").take(DASHBOARD_EVENT_TAKE);
     const q = args.query?.trim().toLowerCase();
     const rows = baseRows
       .map((row) => ({ ...row, status: normalizeEventStatus(row.status) }))

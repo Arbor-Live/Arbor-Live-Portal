@@ -280,6 +280,7 @@ the URL looks like cloud.
 | `quotes/public-post-mortem.spec.ts` | Day-of lead submits the public post-mortem form |
 | `insights/insights-smoke.spec.ts` | Insights route tabs, URL date range across tabs, custom range pickers, Feedback client responses + day-of-lead post-mortems |
 | `smoke/home-and-post-event.spec.ts` | Admin Home: one Customize control, merged upcoming-events widget; My post-event work header + empty state |
+| `smoke/academic-periods.spec.ts` | Crew scheduling "This quarter" pick kept in the URL; Stanford quarter weeks on the events board and calendar |
 
 ## Remaining gaps
 

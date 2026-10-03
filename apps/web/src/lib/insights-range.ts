@@ -5,17 +5,13 @@ import {
   toLocalDateInput,
 } from "@/lib/crew-availability";
 import { addPacificCalendarDays, pacificDateKey, pacificStartOfDayMs } from "@/lib/format";
-import {
-  academicYearPeriod,
-  lastQuarterPeriod,
-  thisQuarterPeriod,
-  type InsightsPeriod,
-} from "@/lib/insights-quarters";
+import { academicPeriod, type AcademicPeriodPreset } from "@/lib/academic-periods";
 
 /** Stanford calendar periods, then rolling windows ending today. */
 export const INSIGHTS_ACADEMIC_PRESETS = [
   { id: "this-quarter", label: "This quarter" },
   { id: "last-quarter", label: "Last quarter" },
+  { id: "next-quarter", label: "Next quarter" },
   { id: "this-year", label: "This academic year" },
   { id: "last-year", label: "Last academic year" },
 ] as const;
@@ -29,26 +25,15 @@ export const INSIGHTS_ROLLING_PRESETS = [
 export const INSIGHTS_RANGE_PRESETS = [...INSIGHTS_ACADEMIC_PRESETS, ...INSIGHTS_ROLLING_PRESETS] as const;
 
 export type InsightsRangePreset = (typeof INSIGHTS_RANGE_PRESETS)[number]["id"];
+
+function isAcademicPreset(preset: InsightsRangePreset): preset is InsightsRangePreset & AcademicPeriodPreset {
+  return INSIGHTS_ACADEMIC_PRESETS.some((option) => option.id === preset);
+}
 export const DEFAULT_INSIGHTS_RANGE: InsightsRangePreset = "this-quarter";
 
 /** Trailing 12 Pacific calendar months ending today. */
 export function trailingTwelveMonthDateInputs(nowMs: number = Date.now()) {
   return insightsPresetDateInputs("12m", nowMs);
-}
-
-function academicPeriod(preset: InsightsRangePreset, todayKey: string): InsightsPeriod | null {
-  switch (preset) {
-    case "this-quarter":
-      return thisQuarterPeriod(todayKey);
-    case "last-quarter":
-      return lastQuarterPeriod(todayKey);
-    case "this-year":
-      return academicYearPeriod(todayKey, 0);
-    case "last-year":
-      return academicYearPeriod(todayKey, -1);
-    default:
-      return null;
-  }
 }
 
 /**
@@ -62,7 +47,7 @@ export function insightsPresetDateInputs(
   nowMs: number = Date.now(),
 ): { startDate: string; endDate: string; periodLabel?: string } {
   const todayKey = pacificDateKey(nowMs);
-  const period = academicPeriod(preset, todayKey);
+  const period = isAcademicPreset(preset) ? academicPeriod(preset, todayKey) : null;
   if (period) return { startDate: period.startDate, endDate: period.endDate, periodLabel: period.label };
 
   const endDate = toLocalDateInput(endOfLocalDay(nowMs));

@@ -408,6 +408,22 @@ Update `YEARS` there when the Registrar publishes new dates.
   `groupDayStartAt` relies on. The UI numbers days by their position in the
   list (`groupDayLabel`, `occurrencePosition`), never by `occurrenceIndex`. The Days tab flags any occurrence that lands on
   a closure or no-class day.
+- **Dashboard date ranges:** `apps/web/src/lib/academic-periods.ts` turns the
+  calendar into periods: this, last and next quarter, and this and last
+  academic year. A quarter runs from its first day of classes to the day
+  before the next quarter, so the break after it counts toward it. "Last" and
+  "next" quarter skip summer, because Arbor is closed then.
+  - **Insights** defaults to this quarter.
+  - **Crew scheduling** offers this and next quarter (the range is in
+    `?from=&to=`), and the Immich photo browser offers quick picks. Both use
+    `AcademicPeriodPicks` (`components/academic-period-picks.tsx`).
+  - **Filters and range toggles:** the events list ("When"), invoices
+    ("Issued"), open positions, and paid artist payouts.
+- **Weeks of the quarter:** `quarterWeek(dateKey)` labels the week ("Wk 1" to
+  "Wk 10", "Finals", a break name) on the events calendar and board. Week 1 is
+  the week of the first day of classes. A week that is all break
+  (Thanksgiving) isn't numbered, and a week whose Monday falls in finals is
+  "Finals".
 
 ## Booking requests → events → quotes
 

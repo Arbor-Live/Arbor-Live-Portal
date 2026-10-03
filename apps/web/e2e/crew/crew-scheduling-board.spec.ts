@@ -31,15 +31,13 @@ test.describe("crew scheduling board", () => {
       userId: crew.userId,
     });
 
-    await page.goto("/dashboard/events/crew-scheduling");
+    // `seedCrewedEventWithSchedule` lands exactly 16 days out, past the default
+    // window. Bracket that single day (the range deep-links via ?from=&to=) so
+    // the board stays short even as seeded events pile up on the shared deployment.
+    await page.goto(`/dashboard/events/crew-scheduling?from=${toDateInput(15)}&to=${toDateInput(17)}`);
     await expect(page.getByText("Date range").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Waiting on answers")).toBeVisible({ timeout: 30_000 });
-
-    // `seedCrewedEventWithSchedule` lands exactly 16 days out, past the default
-    // 2-week window. Bracket that single day so the board stays short even as
-    // seeded events pile up on the shared deployment.
-    await page.locator('input[type="date"]').first().fill(toDateInput(15));
-    await page.locator('input[type="date"]').nth(1).fill(toDateInput(17));
+    await expect(page.getByTestId("date-picker").first()).toHaveAttribute("data-value", toDateInput(15));
 
     // Seeded events have sections but no slots yet — clear the filter to list
     // every crewed event in range.

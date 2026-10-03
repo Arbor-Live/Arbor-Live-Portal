@@ -10,7 +10,7 @@ import { ListRow } from "@/components/list-row";
 import type { Tone } from "@/components/page-header";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { usePacificToday } from "@/hooks/use-pacific-today";
-import { recentQuarters } from "@/lib/insights-quarters";
+import { recentQuarters } from "@/lib/academic-periods";
 import { pacificDateAndTimeToMs } from "@/lib/format";
 
 type Band = "below_minimum" | "meets_minimum" | "above_expected";
