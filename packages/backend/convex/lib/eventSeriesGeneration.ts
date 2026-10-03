@@ -10,7 +10,17 @@ import type { MutationCtx } from "../_generated/server";
 import { syncEventCrewCostUsd } from "./crewCost";
 import { detachInvoiceFromAdditionalLinks } from "./eventInvoiceLinks";
 import { syncEventStatusForLinkedInvoice, type EventStatus } from "./eventStatus";
-import { isActBlock } from "./runOfShow";
+import {
+  hasPendingInquiry,
+  MAX_INQUIRIES_CHECKED,
+  MAX_OCCURRENCE_ACTS,
+  MAX_OCCURRENCE_POSITIONS,
+  planPositionTemplateApplication,
+  positionWindowFromTemplate,
+  type EventSeriesPositionTemplate,
+} from "./eventSeriesPositions";
+import { removePositionRow } from "./positionRows";
+import { isActBlock, syncNeedBlocks } from "./runOfShow";
 import type { ScheduleBlockType } from "./scheduleBlockTypes";
 
 export const EVENT_TIMEZONE = PORTAL_TIMEZONE;
@@ -334,6 +344,137 @@ export async function replaceScheduleBlocksFromTemplates(
   await insertScheduleBlocksFromTemplates(ctx, eventId, occurrenceStartAt, templates, now);
 }
 
+/** An occurrence's positions, failing loudly past the cap rather than missing some. */
+export async function listOccurrencePositions(ctx: MutationCtx, eventId: Id<"events">) {
+  const slots = await ctx.db
+    .query("eventArtistNeeds")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(MAX_OCCURRENCE_POSITIONS + 1);
+  if (slots.length > MAX_OCCURRENCE_POSITIONS) {
+    throw new Error(
+      `An occurrence can have at most ${MAX_OCCURRENCE_POSITIONS} positions for templates to apply, got more.`,
+    );
+  }
+  return slots;
+}
+
+/**
+ * Positions a template apply must not move or remove: a platform act fills it,
+ * an outside act is named on it, it isn't open, an artist has a submitted
+ * inquiry on it (staff can set a position back to "open" while inquiries are
+ * pending), or an invoice artist line stands for it.
+ */
+async function lockedPositionIds(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  slots: readonly Doc<"eventArtistNeeds">[],
+) {
+  const participations = await ctx.db
+    .query("eventBandParticipations")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(MAX_OCCURRENCE_ACTS + 1);
+  if (participations.length > MAX_OCCURRENCE_ACTS) {
+    // Can't tell which positions are filled: refuse rather than risk changing one.
+    throw new Error(
+      `An occurrence can have at most ${MAX_OCCURRENCE_ACTS} acts for templates to apply, got more.`,
+    );
+  }
+  const locked = new Set(participations.flatMap((row) => (row.needId ? [row.needId] : [])));
+  for (const slot of slots) {
+    if (locked.has(slot._id)) continue;
+    if (slot.externalArtistName?.trim() || slot.status !== "open") {
+      locked.add(slot._id);
+      continue;
+    }
+    const [inquiries, invoiceLine] = await Promise.all([
+      ctx.db
+        .query("eventArtistInquiries")
+        .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+        .take(MAX_INQUIRIES_CHECKED + 1),
+      ctx.db
+        .query("invoiceLineItems")
+        .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+        .first(),
+    ]);
+    if (invoiceLine || hasPendingInquiry(inquiries)) {
+      locked.add(slot._id);
+    }
+  }
+  return locked;
+}
+
+/**
+ * Apply the series position templates to one occurrence: add missing open
+ * template positions, move/refresh the open ones, and drop open template
+ * positions whose template is gone. Locked positions (see `lockedPositionIds`)
+ * are never touched.
+ */
+export async function applyPositionTemplates(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  occurrenceStartAt: number,
+  templates: readonly EventSeriesPositionTemplate[],
+  now: number,
+): Promise<number> {
+  const slots = await listOccurrencePositions(ctx, eventId);
+  const lockedIds = await lockedPositionIds(ctx, eventId, slots);
+  const plan = planPositionTemplateApplication(
+    slots.map((slot) => ({
+      _id: slot._id,
+      templateKey: slot.templateKey,
+      label: slot.label,
+      locked: lockedIds.has(slot._id),
+    })),
+    templates,
+  );
+  const orderByKey = new Map(templates.map((template, index) => [template.templateKey, index]));
+
+  for (const needId of plan.removeIds) {
+    await removePositionRow(ctx, needId);
+  }
+  for (const { needId, templateKey } of plan.stampKeys) {
+    await ctx.db.patch(needId, { templateKey, updatedAt: now });
+  }
+
+  for (const action of plan.actions) {
+    const template = action.template;
+    const window = positionWindowFromTemplate(template, occurrenceStartAt);
+    const fields = {
+      templateKey: template.templateKey,
+      sortOrder: orderByKey.get(template.templateKey) ?? 0,
+      label: template.label.trim() || undefined,
+      artistType: template.artistType,
+      genres: template.genres?.trim() || undefined,
+      ...window,
+    };
+    if (action.kind === "insert") {
+      const needId = await ctx.db.insert("eventArtistNeeds", {
+        eventId,
+        status: "open",
+        ...fields,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await syncNeedBlocks(ctx, needId);
+      continue;
+    }
+    const existing = await ctx.db.get(action.needId);
+    if (!existing) continue;
+    // `replace` (not `patch`) so a template that dropped a set/soundcheck
+    // window actually clears the stored times.
+    const next: Doc<"eventArtistNeeds"> = { ...existing, ...fields, updatedAt: now };
+    delete next.setStartsAt;
+    delete next.setEndsAt;
+    delete next.soundcheckStartsAt;
+    delete next.soundcheckEndsAt;
+    Object.assign(next, window);
+    await ctx.db.replace(action.needId, next);
+    await syncNeedBlocks(ctx, action.needId);
+  }
+
+  return plan.actions.length + plan.removeIds.length + plan.stampKeys.length;
+}
+
 export async function materializeOccurrence(
   ctx: MutationCtx,
   series: Doc<"eventSeries">,
@@ -399,6 +540,7 @@ export async function materializeOccurrence(
   if (series.shiftTemplates && series.shiftTemplates.length > 0) {
     await syncEventCrewCostUsd(ctx, eventId, now);
   }
+  await applyPositionTemplates(ctx, eventId, startAt, series.positionTemplates ?? [], now);
   if (series.invoiceId) {
     await syncEventStatusForLinkedInvoice(ctx, eventId, series.invoiceId, "tentative");
   }

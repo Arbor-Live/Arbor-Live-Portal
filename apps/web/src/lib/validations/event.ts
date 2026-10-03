@@ -32,6 +32,14 @@ export const seriesShiftEditorSchema = z.object({
 
 export type SeriesShiftEditorFormValues = z.infer<typeof seriesShiftEditorSchema>;
 
+export const seriesPositionEditorSchema = z.object({
+  applyScope: seriesEditScopeSchema,
+  fromOccurrenceIndex: z.string(),
+  importOccurrenceId: z.string(),
+});
+
+export type SeriesPositionEditorFormValues = z.infer<typeof seriesPositionEditorSchema>;
+
 export const pullListItemFormSchema = z.object({
   clientKey: z.string(),
   quantityRequired: z.coerce.number().min(1, "Quantity must be at least 1"),

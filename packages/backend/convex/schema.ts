@@ -4,6 +4,7 @@ import { riderContentFields, riderStatusValue } from "./lib/riderSchema";
 import { artistOrganizationTypeValue } from "./lib/organizationType";
 import { scheduleBlockTypeValue } from "./lib/scheduleBlockTypes";
 import { userStatusValue } from "./lib/userStatus";
+import { eventSeriesPositionTemplateValue } from "./lib/eventSeriesPositions";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -907,6 +908,8 @@ export default defineSchema({
         }),
       ),
     ),
+    /** Shape of the bill applied to each occurrence (see `lib/eventSeriesPositions.ts`). */
+    positionTemplates: v.optional(v.array(eventSeriesPositionTemplateValue)),
     invoiceId: v.optional(v.id("invoices")),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1453,6 +1456,11 @@ export default defineSchema({
     eventId: v.id("events"),
     /** Bill order; staff drag cards to set it. */
     sortOrder: v.optional(v.number()),
+    /**
+     * Set when this position came from its series' template, so re-applying the
+     * template updates it instead of duplicating it (see `lib/eventSeriesPositions.ts`).
+     */
+    templateKey: v.optional(v.string()),
     /** Optional slot name, e.g. "Headliner", "Opener", "Late set". */
     label: v.optional(v.string()),
     artistType: v.union(v.literal("band"), v.literal("dj"), v.literal("no_preference")),

@@ -1,4 +1,4 @@
-import { occurrenceStartAt } from "@arbor/format";
+import { occurrenceStartAt, pacificDayIndexFromAnchor } from "@arbor/format";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -8,6 +8,8 @@ import { computeShiftStats as computeCrewShiftStats } from "./lib/crewShiftKinds
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { RENTAL_EVENT_TYPES } from "./eventPullLists";
 import {
+  applyPositionTemplates,
+  listOccurrencePositions,
   blocksToTemplates,
   buildEventPatchFromSeriesTemplate,
   computeOccurrenceStarts,
@@ -21,6 +23,11 @@ import {
   shouldApplySeriesUpdate,
   type SeriesEditScope,
 } from "./lib/eventSeriesGeneration";
+import {
+  assertValidPositionTemplates,
+  eventSeriesPositionTemplateValue,
+  positionTemplateFromSlot,
+} from "./lib/eventSeriesPositions";
 import { syncEventCrewCostUsd } from "./lib/crewCost";
 import {
   detachInvoiceFromAdditionalLinks,
@@ -197,6 +204,7 @@ export const create = mutation({
     notes: v.optional(v.string()),
     blockTemplates: v.optional(v.array(blockTemplateValue)),
     shiftTemplates: v.optional(v.array(shiftTemplateValue)),
+    positionTemplates: v.optional(v.array(eventSeriesPositionTemplateValue)),
     invoiceId: v.optional(v.id("invoices")),
     additionalInvoiceIds: v.optional(v.array(v.id("invoices"))),
   },
@@ -204,6 +212,7 @@ export const create = mutation({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     if (args.endAt <= args.startAt) throw new Error("Event end time must be after start time.");
+    assertValidPositionTemplates(args.positionTemplates ?? []);
     const occurrenceStarts = computeOccurrenceStarts({
       anchorStartAt: args.startAt,
       intervalWeeks: args.intervalWeeks,
@@ -259,6 +268,7 @@ export const create = mutation({
       notes: trimOptional(args.notes),
       blockTemplates: args.blockTemplates,
       shiftTemplates: args.shiftTemplates,
+      positionTemplates: args.positionTemplates,
       budgetCrewHourlyRateUsd: args.budgetCrewHourlyRateUsd,
       invoiceId: invoiceSplit.primary,
       createdAt: now,
@@ -523,6 +533,117 @@ export const importShiftsFromOccurrence = mutation({
   },
 });
 
+export const regenerateFuturePositions = mutation({
+  args: {
+    id: v.id("eventSeries"),
+    scope: seriesEditScopeValue,
+    fromOccurrenceIndex: v.number(),
+    positionTemplates: v.optional(v.array(eventSeriesPositionTemplateValue)),
+  },
+  returns: v.object({ updatedCount: v.number() }),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const series = await ctx.db.get(args.id);
+    if (!series) throw new Error("Event series not found.");
+    if (!Number.isInteger(args.fromOccurrenceIndex) || args.fromOccurrenceIndex < 0) {
+      throw new Error("Occurrence index must be a non-negative integer.");
+    }
+    const templates = args.positionTemplates ?? series.positionTemplates ?? [];
+    assertValidPositionTemplates(templates);
+    const now = Date.now();
+    if (args.positionTemplates !== undefined) {
+      await ctx.db.patch(args.id, { positionTemplates: args.positionTemplates, updatedAt: now });
+    }
+    const occurrences = await listOccurrencesForSeries(ctx, args.id);
+    const scope = args.scope as SeriesEditScope;
+    let updatedCount = 0;
+
+    for (const occurrence of occurrences) {
+      if (scope === "this") {
+        if (occurrence.occurrenceIndex !== args.fromOccurrenceIndex) continue;
+      } else if (!shouldApplySeriesUpdate(occurrence, scope, args.fromOccurrenceIndex, now)) {
+        continue;
+      }
+      if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
+      await applyPositionTemplates(ctx, occurrence._id, occurrence.startAt, templates, now);
+      updatedCount += 1;
+    }
+    return { updatedCount };
+  },
+});
+
+export const importPositionsFromOccurrence = mutation({
+  args: {
+    id: v.id("eventSeries"),
+    eventId: v.id("events"),
+  },
+  returns: v.object({ templateCount: v.number() }),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const series = await ctx.db.get(args.id);
+    if (!series) throw new Error("Event series not found.");
+    const event = await ctx.db.get(args.eventId);
+    if (!event || event.seriesId !== args.id) {
+      throw new Error("Event is not part of this series.");
+    }
+    const slots = await listOccurrencePositions(ctx, args.eventId);
+    if (slots.length === 0) {
+      throw new Error("Selected occurrence has no positions to import.");
+    }
+    // A booked act's set and soundcheck live on its participation row, not the
+    // position; import the times the bill actually shows.
+    const actByNeedId = new Map(
+      (
+        await ctx.db
+          .query("eventBandParticipations")
+          .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+          .take(200)
+      ).flatMap((row) => (row.needId ? [[row.needId, row] as const] : [])),
+    );
+    const now = Date.now();
+    const seenKeys = new Set<string>();
+    const templates = [];
+    for (const slot of slots
+      .slice()
+      .sort(
+        (a, b) =>
+          (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt) || a.createdAt - b.createdAt,
+      )) {
+      // A duplicated key (hand-copied row) becomes its own template.
+      const act = actByNeedId.get(slot._id);
+      const source = act
+        ? {
+            ...slot,
+            setStartsAt: act.setStartsAt ?? slot.setStartsAt,
+            setEndsAt: act.setEndsAt ?? slot.setEndsAt,
+            soundcheckStartsAt: act.soundcheckStartsAt ?? slot.soundcheckStartsAt,
+            soundcheckEndsAt: act.soundcheckEndsAt ?? slot.soundcheckEndsAt,
+          }
+        : slot;
+      const template = positionTemplateFromSlot(
+        source.templateKey && seenKeys.has(source.templateKey)
+          ? { ...source, templateKey: undefined }
+          : source,
+        event.startAt,
+        (timeMs) => pacificDayIndexFromAnchor(event.startAt, timeMs),
+      );
+      seenKeys.add(template.templateKey);
+      templates.push(template);
+      // Stamp the key on the source position so applying the template back to
+      // this occurrence updates it instead of adding a duplicate.
+      if (slot.templateKey !== template.templateKey) {
+        await ctx.db.patch(slot._id, { templateKey: template.templateKey, updatedAt: now });
+      }
+    }
+    // Same rules as create/regenerate; throwing rolls back the key stamps above.
+    assertValidPositionTemplates(templates);
+    await ctx.db.patch(args.id, { positionTemplates: templates, updatedAt: now });
+    return { templateCount: templates.length };
+  },
+});
+
 export const addOccurrences = mutation({
   args: {
     id: v.id("eventSeries"),
@@ -652,6 +773,8 @@ export const reattachOccurrence = mutation({
         updatedAt: now,
       });
     }
+
+    await applyPositionTemplates(ctx, args.eventId, startAt, series.positionTemplates ?? [], now);
 
     if (series.invoiceId) {
       const refreshed = await ctx.db.get(args.eventId);
