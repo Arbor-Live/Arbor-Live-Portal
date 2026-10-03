@@ -132,6 +132,7 @@ import type * as lib_contactName from "../lib/contactName.js";
 import type * as lib_crewAvailability from "../lib/crewAvailability.js";
 import type * as lib_crewCompensation from "../lib/crewCompensation.js";
 import type * as lib_crewCost from "../lib/crewCost.js";
+import type * as lib_crewHourThresholds from "../lib/crewHourThresholds.js";
 import type * as lib_crewShiftKinds from "../lib/crewShiftKinds.js";
 import type * as lib_crewTeams from "../lib/crewTeams.js";
 import type * as lib_crewTraineeIntro from "../lib/crewTraineeIntro.js";
@@ -400,6 +401,7 @@ declare const fullApi: ApiFromModules<{
   "lib/crewAvailability": typeof lib_crewAvailability;
   "lib/crewCompensation": typeof lib_crewCompensation;
   "lib/crewCost": typeof lib_crewCost;
+  "lib/crewHourThresholds": typeof lib_crewHourThresholds;
   "lib/crewShiftKinds": typeof lib_crewShiftKinds;
   "lib/crewTeams": typeof lib_crewTeams;
   "lib/crewTraineeIntro": typeof lib_crewTraineeIntro;

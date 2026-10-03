@@ -1,4 +1,4 @@
-import { pacificDateKey } from "@arbor/format";
+import { pacificDateKey, pacificStartOfDayMs } from "@arbor/format";
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import {
@@ -20,6 +20,17 @@ import {
 } from "./lib/analyticsQuery";
 import { findAuthUsersByIds } from "./lib/auth";
 import { loadBackupUserIds } from "./lib/crewBackups";
+import {
+  CREW_HOURS_BANDS,
+  CREW_QUARTER_EXPECTED_HOURS,
+  CREW_QUARTER_MINIMUM_HOURS,
+  crewHoursBand,
+} from "./lib/crewHourThresholds";
+import { buildTimecardPeriodSummaryForUser } from "./lib/userTimecards";
+import { isStaffMember, resolveProfileMembership } from "./lib/userVerticals";
+import { resolveParticipationFlags } from "./lib/userParticipation";
+import { resolveUserStatus } from "./lib/userStatus";
+import { loadAllAdminProfiles } from "./lib/userProfiles";
 import { isCrewedEventType } from "./lib/crewTeams";
 import { normalizeEventStatus } from "./lib/eventStatus";
 
@@ -376,6 +387,87 @@ export const getCrewSchedulingKpis = query({
       unconfirmedEvents,
       noSlotEvents,
       truncated,
+    };
+  },
+});
+
+const crewHoursBandValidator = v.union(...CREW_HOURS_BANDS.map((band) => v.literal(band)));
+
+/**
+ * Every active crew member's hours in one period (a quarter), sorted into
+ * Arbor's bands: under the minimum, meeting it, above expectations. Hours are
+ * the timecard's worked hours; in a period still underway, shifts already
+ * scheduled for the rest of it count toward the band ("on track for").
+ */
+export const getCrewHoursBands = query({
+  args: {
+    startMs: v.number(),
+    endMs: v.number(),
+    now: v.number(),
+  },
+  returns: v.object({
+    minimumHours: v.number(),
+    expectedHours: v.number(),
+    inProgress: v.boolean(),
+    crew: v.array(
+      v.object({
+        userId: v.string(),
+        name: v.string(),
+        workedHours: v.number(),
+        scheduledHours: v.number(),
+        totalHours: v.number(),
+        band: crewHoursBandValidator,
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    await requireAnalyticsAccess(ctx);
+    assertValidRange(args.startMs, args.endMs);
+
+    const profiles = (await loadAllAdminProfiles(ctx)).filter((profile) => {
+      // Active crew who owe timecards; inactive and alumni aren't held to the minimum.
+      if (resolveUserStatus(profile) !== "active") return false;
+      if (!resolveParticipationFlags(profile).includeInTimecards) return false;
+      return isStaffMember(resolveProfileMembership(profile));
+    });
+    const inProgress = args.now >= args.startMs && args.now < args.endMs;
+    // Split at the start of today so no day is cut in two (a day's hours
+    // follow per-day timecard rules); today and later count as scheduled.
+    const [year, month, day] = pacificDateKey(args.now).split("-").map(Number);
+    const splitAt = Math.min(Math.max(pacificStartOfDayMs(year!, month!, day!), args.startMs), args.endMs);
+    const window = (startMs: number, endMs: number) => ({ startMs, endMs, dueMs: endMs, label: "" });
+
+    const rows = await Promise.all(
+      profiles.map(async (profile) => {
+        const worked =
+          splitAt > args.startMs
+            ? await buildTimecardPeriodSummaryForUser(ctx, profile.userId, window(args.startMs, splitAt - 1), args.now)
+            : null;
+        const ahead =
+          splitAt < args.endMs
+            ? await buildTimecardPeriodSummaryForUser(ctx, profile.userId, window(splitAt, args.endMs), args.now)
+            : null;
+        const workedHours = roundHours(worked?.totalActualHours ?? 0);
+        const scheduledHours = roundHours(ahead?.totalActualHours ?? 0);
+        const totalHours = roundHours(workedHours + scheduledHours);
+        return { userId: profile.userId, workedHours, scheduledHours, totalHours, band: crewHoursBand(totalHours) };
+      }),
+    );
+    const userByKey = await findAuthUsersByIds(
+      ctx,
+      rows.map((row) => row.userId),
+    );
+
+    return {
+      minimumHours: CREW_QUARTER_MINIMUM_HOURS,
+      expectedHours: CREW_QUARTER_EXPECTED_HOURS,
+      inProgress,
+      crew: rows
+        .map((row) => {
+          const user = userByKey.get(row.userId);
+          return { ...row, name: user?.name || user?.email || "Unknown crew" };
+        })
+        .sort((a, b) => a.totalHours - b.totalHours || a.name.localeCompare(b.name)),
     };
   },
 });

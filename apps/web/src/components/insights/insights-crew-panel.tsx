@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import { ChartLineIcon, ClockIcon, UsersThreeIcon, WarningIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { CountBarChart } from "@/components/insights/count-bar-chart";
+import { CrewHoursBandsCard } from "@/components/insights/crew-hours-bands-card";
 import {
   formatDays,
   formatRate,
@@ -69,6 +70,8 @@ export function InsightsCrewPanel({ startMs, endMs }: InsightsCrewPanelProps) {
           }
         />
       </StatRow>
+
+      <CrewHoursBandsCard />
 
       <InsightGrid>
         <InsightCard

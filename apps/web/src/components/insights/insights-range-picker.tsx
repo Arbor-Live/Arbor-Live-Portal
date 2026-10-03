@@ -3,13 +3,18 @@
 import { DatePickerField } from "@/components/ui/date-picker";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
-  INSIGHTS_RANGE_PRESETS,
+  INSIGHTS_ACADEMIC_PRESETS,
+  INSIGHTS_ROLLING_PRESETS,
   insightsSelectionDateInputs,
   type InsightsRangePreset,
   type InsightsRangeSelection,
 } from "@/lib/insights-range";
 
-/** Presets as a toggle; "Custom" adds From / To pickers. */
+/**
+ * Stanford periods (this / last quarter, this / last academic year), rolling
+ * windows, and "Custom" with From / To pickers. Two toggle groups share one
+ * selection; the period's name and dates show beside them.
+ */
 export function InsightsRangePicker({
   value,
   onChange,
@@ -18,32 +23,46 @@ export function InsightsRangePicker({
   onChange: (next: InsightsRangeSelection) => void;
 }) {
   const dates = insightsSelectionDateInputs(value);
-  const toggleValue = value.kind === "custom" ? "custom" : value.preset;
+  const selected = value.kind === "custom" ? "custom" : value.preset;
+  const select = (next: string) => {
+    if (!next) return;
+    if (next === "custom") onChange({ kind: "custom", startDate: dates.startDate, endDate: dates.endDate });
+    else onChange({ kind: "preset", preset: next as InsightsRangePreset });
+  };
 
   return (
-    <div className="flex flex-wrap items-center gap-3" data-testid="insights-range">
-      <ToggleGroup
-        type="single"
-        size="sm"
-        variant="outline"
-        value={toggleValue}
-        aria-label="Date range"
-        onValueChange={(next) => {
-          if (!next) return;
-          if (next === "custom") {
-            onChange({ kind: "custom", ...dates });
-          } else {
-            onChange({ kind: "preset", preset: next as InsightsRangePreset });
-          }
-        }}
-      >
-        {INSIGHTS_RANGE_PRESETS.map((preset) => (
-          <ToggleGroupItem key={preset.id} value={preset.id}>
-            {preset.label}
-          </ToggleGroupItem>
-        ))}
-        <ToggleGroupItem value="custom">Custom</ToggleGroupItem>
-      </ToggleGroup>
+    <div className="space-y-2" data-testid="insights-range">
+      <div className="flex flex-wrap items-center gap-2">
+        <ToggleGroup
+          type="single"
+          size="sm"
+          variant="outline"
+          value={INSIGHTS_ACADEMIC_PRESETS.some((preset) => preset.id === selected) ? selected : ""}
+          aria-label="Stanford calendar period"
+          onValueChange={select}
+        >
+          {INSIGHTS_ACADEMIC_PRESETS.map((preset) => (
+            <ToggleGroupItem key={preset.id} value={preset.id}>
+              {preset.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+        <ToggleGroup
+          type="single"
+          size="sm"
+          variant="outline"
+          value={INSIGHTS_ACADEMIC_PRESETS.some((preset) => preset.id === selected) ? "" : selected}
+          aria-label="Rolling or custom range"
+          onValueChange={select}
+        >
+          {INSIGHTS_ROLLING_PRESETS.map((preset) => (
+            <ToggleGroupItem key={preset.id} value={preset.id}>
+              {preset.label}
+            </ToggleGroupItem>
+          ))}
+          <ToggleGroupItem value="custom">Custom</ToggleGroupItem>
+        </ToggleGroup>
+      </div>
       {value.kind === "custom" ? (
         <div className="flex flex-wrap items-center gap-2">
           <DatePickerField
@@ -65,9 +84,12 @@ export function InsightsRangePicker({
           />
         </div>
       ) : (
-        <span className="text-sm text-muted-foreground" data-testid="insights-range-dates">
+        <p className="text-sm text-muted-foreground" data-testid="insights-range-dates">
+          {"periodLabel" in dates && dates.periodLabel ? (
+            <span className="font-medium text-foreground">{dates.periodLabel} · </span>
+          ) : null}
           {formatRangeDates(dates.startDate, dates.endDate)}
-        </span>
+        </p>
       )}
     </div>
   );

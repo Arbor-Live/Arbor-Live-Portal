@@ -28,6 +28,11 @@ test.describe("insights dashboard", () => {
     await expect(page.getByTestId("insights-events-panel")).toBeVisible({ timeout: 30_000 });
     await expect(tabs.getByRole("link", { name: "Events" })).toHaveAttribute("aria-current", "page");
 
+    // Stanford's calendar drives the default range: this quarter, named.
+    const rangePicker = page.getByTestId("insights-range");
+    await expect(rangePicker.getByRole("radio", { name: "This quarter" })).toHaveAttribute("aria-checked", "true");
+    await expect(rangePicker.getByTestId("insights-range-dates")).toContainText(/(Autumn|Winter|Spring|Summer) \d{4}/);
+
     // The date range lives in the URL and carries across tabs.
     await page.getByTestId("insights-range").getByRole("radio", { name: "90 days" }).click();
     await page.waitForURL(/range=90d/, { timeout: 30_000 });
@@ -56,6 +61,13 @@ test.describe("insights dashboard", () => {
     await expect(page.getByTestId("insights-crew-panel")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Fill rate").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("insights-busiest-crew")).toBeVisible();
+    // Quarterly hours sorts every active crew member into one of three bands.
+    const bands = page.getByTestId("insights-crew-hours-bands");
+    await expect(bands).toBeVisible();
+    await expect(bands.getByTestId("crew-hours-bands-summary")).toContainText(/below minimum.*meets minimum.*above expectations/, {
+      timeout: 30_000,
+    });
+    await expect(bands.getByTestId("crew-hours-band-below_minimum")).toBeVisible();
     await expect(page.getByText("Overtime risk").first()).toBeVisible();
 
     await tabs.getByRole("link", { name: "Ops" }).click();
