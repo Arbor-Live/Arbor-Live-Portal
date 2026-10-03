@@ -41,14 +41,64 @@ export async function syncInvoiceLineForSlot(
   await ctx.db.replace(line._id, next);
 }
 
-/** Drop a removed position's claim on its line, and its inquiries with it. */
+/**
+ * Drop a removed position's claim on its line. The line remembers the removal
+ * (`positionRemoved`), so the next invoice save doesn't open the position again.
+ */
 export async function releaseSlotFromInvoice(ctx: MutationCtx, needId: Id<"eventArtistNeeds">) {
   const line = await ctx.db
     .query("invoiceLineItems")
     .withIndex("by_needId", (q) => q.eq("needId", needId))
     .first();
   if (!line) return;
-  const next: Doc<"invoiceLineItems"> = { ...line, updatedAt: Date.now() };
+  const next: Doc<"invoiceLineItems"> = { ...line, positionRemoved: true, updatedAt: Date.now() };
   delete next.needId;
   await ctx.db.replace(line._id, next);
+}
+
+/** A position on the line's day that no other line stands for yet. */
+export type AdoptablePosition = {
+  needId: Id<"eventArtistNeeds">;
+  label?: string;
+  /** The platform act seated on it, if any. */
+  seatedOrganizationId?: string;
+  /** An outside act named on it. */
+  externalArtistName?: string;
+  sortOrder: number;
+};
+
+function normalizeLabel(label: string | undefined) {
+  return label?.trim().toLowerCase() ?? "";
+}
+
+/**
+ * The existing position an unlinked artist line should stand for, so a line
+ * fills the bill the event already has rather than adding to it.
+ *
+ * `exact` matches only the same act, or the same name on a position no other
+ * act holds. Otherwise the first empty position on the bill is taken.
+ */
+export function pickPositionForLine(
+  line: { label: string; organizationId?: string },
+  candidates: readonly AdoptablePosition[],
+  exact: boolean,
+): AdoptablePosition | undefined {
+  const organizationId = line.organizationId?.trim() || undefined;
+  const ordered = [...candidates].sort((a, b) => a.sortOrder - b.sortOrder);
+  const empty = (slot: AdoptablePosition) =>
+    !slot.seatedOrganizationId && !slot.externalArtistName?.trim();
+  if (exact) {
+    if (organizationId) {
+      const seated = ordered.find((slot) => slot.seatedOrganizationId === organizationId);
+      if (seated) return seated;
+    }
+    const label = normalizeLabel(line.label);
+    if (!label) return undefined;
+    return ordered.find(
+      (slot) =>
+        (empty(slot) && normalizeLabel(slot.label) === label) ||
+        (!organizationId && normalizeLabel(slot.externalArtistName) === label),
+    );
+  }
+  return ordered.find(empty);
 }

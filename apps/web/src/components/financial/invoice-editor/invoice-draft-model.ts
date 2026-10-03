@@ -182,6 +182,50 @@ export function artistRowFromLineItem(row: {
   };
 }
 
+/** A saved artist line's act and name, by the position it stands for. */
+export type ServerArtistLines = ReadonlyMap<string, Pick<ArtistRow, "label" | "organizationId">>;
+
+export function serverArtistLinesByNeed(
+  lineItems: ReadonlyArray<Parameters<typeof artistRowFromLineItem>[0] & { section: string }>,
+): ServerArtistLines {
+  const out = new Map<string, Pick<ArtistRow, "label" | "organizationId">>();
+  for (const line of lineItems) {
+    if (line.section !== "artist" || !line.needId) continue;
+    const row = artistRowFromLineItem(line);
+    out.set(line.needId, { label: row.label, organizationId: row.organizationId });
+  }
+  return out;
+}
+
+/**
+ * Bring server-side changes to artist lines into an open draft. Filling or
+ * clearing a position on the event's Lineup rewrites its line, and removing
+ * the position unlinks it; a draft that kept the old values would undo that on
+ * its next save. Only rows still as the server last had them follow; a row the
+ * user edited keeps the edit. Returns null when nothing changed.
+ */
+export function adoptServerArtistChanges(
+  rows: readonly ArtistRow[],
+  before: ServerArtistLines,
+  after: ServerArtistLines,
+): ArtistRow[] | null {
+  let changed = false;
+  const next = rows.map((row) => {
+    if (!row.needId) return row;
+    const was = before.get(row.needId);
+    if (!was || row.label !== was.label || row.organizationId !== was.organizationId) return row;
+    const now = after.get(row.needId);
+    if (!now) {
+      changed = true;
+      return { ...row, needId: undefined };
+    }
+    if (now.label === was.label && now.organizationId === was.organizationId) return row;
+    changed = true;
+    return { ...row, label: now.label, organizationId: now.organizationId };
+  });
+  return changed ? next : null;
+}
+
 export function formatInvoiceDiscountInputValue(value: number, type: DiscountType) {
   if (type === "amount") return Number.isFinite(value) ? value.toFixed(2) : "0.00";
   return Number.isFinite(value) ? value.toString() : "0";

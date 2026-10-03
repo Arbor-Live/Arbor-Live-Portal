@@ -24,6 +24,7 @@ export default defineConfig({
       "apps/web/src/lib/**/*.test.ts",
       // Server-rendered component smoke tests (no DOM needed).
       "apps/web/src/components/**/*.smoke.test.tsx",
+      "apps/web/src/components/**/*-model.test.ts",
     ],
   },
 });
