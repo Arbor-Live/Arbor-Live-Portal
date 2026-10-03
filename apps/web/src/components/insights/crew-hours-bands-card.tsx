@@ -9,7 +9,9 @@ import { EmptyState, ListSummary, RowCell, RowGroup, RowText } from "@/component
 import { ListRow } from "@/components/list-row";
 import type { Tone } from "@/components/page-header";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { usePacificToday } from "@/hooks/use-pacific-today";
 import { recentQuarters } from "@/lib/insights-quarters";
+import { pacificDateAndTimeToMs } from "@/lib/format";
 
 type Band = "below_minimum" | "meets_minimum" | "above_expected";
 
@@ -20,7 +22,10 @@ const hours = (value: number) => `${value.toFixed(1)} h`;
  * it, above expectations. Picks its own quarter, separate from the page range.
  */
 export function CrewHoursBandsCard() {
-  const [now] = useState(() => Date.now());
+  // Noon of today (Pacific), refreshed when the day changes, so the
+  // worked/scheduled split and the quarter list move on without a remount.
+  const todayKey = usePacificToday();
+  const now = useMemo(() => pacificDateAndTimeToMs(todayKey, "12:00") ?? 0, [todayKey]);
   const quarters = useMemo(() => recentQuarters(now, 4), [now]);
   const [quarterId, setQuarterId] = useState(quarters[0]?.id ?? "");
   // Empty only before the calendar's first quarter (a wrong clock, say).

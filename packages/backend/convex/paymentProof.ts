@@ -319,29 +319,35 @@ export async function collectPaymentRows(ctx: QueryCtx, now: number) {
   return rows;
 }
 
-/** Unpaid invoices scanned for receivables (drafts and estimates included). */
-const RECEIVABLES_SCAN_LIMIT = 2000;
+/** Unpaid invoices read for receivables (drafts and estimates included). */
+const RECEIVABLES_SCAN_LIMIT = 5000;
 
 /**
  * Every approved, unpaid invoice with its payment queue, however old its
  * event: Insights' receivables. `collectPaymentRows` (the Payments tab) only
  * looks back over the 90-day reminder window, so old debt would age out of
  * it. Each row uses the invoice's earliest linked event, as the Payments tab
- * does for the events it sees.
+ * does for the events it sees. Unpaid drafts and estimates share the index,
+ * so it's read lazily, skipping them, up to the scan limit.
  */
 export async function collectOpenReceivableRows(ctx: QueryCtx, now: number) {
-  const unpaid = await ctx.db
-    .query("invoices")
-    .withIndex("by_paymentReceivedAt", (q) => q.eq("paymentReceivedAt", undefined))
-    .take(RECEIVABLES_SCAN_LIMIT + 1);
   const rows = [];
-  for (const invoice of unpaid.slice(0, RECEIVABLES_SCAN_LIMIT)) {
+  let scanned = 0;
+  let truncated = false;
+  for await (const invoice of ctx.db
+    .query("invoices")
+    .withIndex("by_paymentReceivedAt", (q) => q.eq("paymentReceivedAt", undefined))) {
+    if (scanned >= RECEIVABLES_SCAN_LIMIT) {
+      truncated = true;
+      break;
+    }
+    scanned += 1;
     if (invoice.status === "void" || (invoice.clientApprovalStatus ?? "pending") !== "approved") continue;
     const [event] = await listEventsLinkedToInvoice(ctx, invoice._id);
     const row = await buildPaymentQueueRow(ctx, invoice, event ?? null, now);
     if (row && row.queue !== "payment_received") rows.push(row);
   }
-  return { rows, truncated: unpaid.length > RECEIVABLES_SCAN_LIMIT };
+  return { rows, truncated };
 }
 
 export const listByQueue = query({

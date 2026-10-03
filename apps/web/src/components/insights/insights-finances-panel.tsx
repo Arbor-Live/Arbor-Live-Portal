@@ -72,7 +72,8 @@ export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelP
           revenueMix?.truncated ||
           quoteCycle?.truncated ||
           topClients?.truncated ||
-          upcoming?.truncated
+          upcoming?.truncated ||
+          ar?.truncated
         }
       />
 
