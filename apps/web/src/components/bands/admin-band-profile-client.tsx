@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { Controller } from "react-hook-form";
 import { useMutation, useQuery } from "convex/react";
+import { CurrencyDollarIcon, GlobeIcon, LockSimpleIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
 import { MarketingLinksEditor } from "@/components/marketing/marketing-links-editor";
@@ -11,6 +12,7 @@ import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { EmptyState } from "@/components/list-page";
 import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { useResolvedAssetUrl } from "@/components/files/stored-asset-image";
 import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
@@ -41,7 +43,6 @@ import {
   BandPublicArtistLinkCopy,
   BandPublicListingToggle,
 } from "@/components/bands/band-public-listing-controls";
-import { BandArborOnlyBadge, BandVisibilityBadge } from "@/components/bands/band-section-badge";
 
 function valuesFromOrg(org: {
   displayName: string;
@@ -172,11 +173,7 @@ export function AdminBandProfileClient() {
 
   if (!organizationId) {
     return (
-      <Card>
-        <CardContent className="py-8 text-sm text-muted-foreground">
-          Select an artist above to edit their profile.
-        </CardContent>
-      </Card>
+      <EmptyState>Pick an artist in the header to edit their profile.</EmptyState>
     );
   }
 
@@ -193,22 +190,24 @@ export function AdminBandProfileClient() {
 
   return (
     <div className="space-y-4 pb-20">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="min-w-0 space-y-4">
           <Form {...form}>
             <form className="space-y-4">
               <Card>
-                <CardHeader className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <CardTitle>Profile</CardTitle>
-                      <BandVisibilityBadge listed={Boolean(watched.publicListing)} />
-                    </div>
-                    <BandPublicListingToggle control={form.control} />
+                <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
+                  <div className="space-y-1.5">
+                    <CardTitle className="flex items-center gap-2">
+                      <GlobeIcon className="size-4 text-muted-foreground" aria-hidden />
+                      Profile
+                    </CardTitle>
+                    <CardDescription>
+                      {watched.publicListing
+                        ? "What fans see on your public artist page and in event listings."
+                        : "Arbor staff see this when booking. Switch to Public to list it on the site."}
+                    </CardDescription>
                   </div>
-                  <CardDescription>
-                    Editing {org.displayName || org.name} without joining the organization.
-                  </CardDescription>
+                  <BandPublicListingToggle control={form.control} />
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <TextFormField name="displayName" label="Display name" />
@@ -250,10 +249,13 @@ export function AdminBandProfileClient() {
 
               <Card>
                 <CardHeader>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <CardTitle>Booking & contact</CardTitle>
-                    <BandArborOnlyBadge />
-                  </div>
+                  <CardTitle className="flex items-center gap-2">
+                    <LockSimpleIcon className="size-4 text-muted-foreground" aria-hidden />
+                    Booking & contact
+                  </CardTitle>
+                  <CardDescription>
+                    Only Arbor staff see this. The booking contact is who we call about shows.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <BandArborPrivateFields />
@@ -262,11 +264,13 @@ export function AdminBandProfileClient() {
 
               <Card>
                 <CardHeader>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <CardTitle>Payment payee</CardTitle>
-                    <BandArborOnlyBadge />
-                  </div>
-                  <CardDescription>Artists can also edit this on their Payments tab.</CardDescription>
+                  <CardTitle className="flex items-center gap-2">
+                    <CurrencyDollarIcon className="size-4 text-muted-foreground" aria-hidden />
+                    Payment payee
+                  </CardTitle>
+                  <CardDescription>
+                    Only Arbor staff see this. Artists can also edit it on their Payments tab.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="grid gap-2 md:grid-cols-2">

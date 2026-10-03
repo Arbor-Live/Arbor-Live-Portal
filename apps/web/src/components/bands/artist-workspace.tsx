@@ -10,6 +10,7 @@ import {
   GridFourIcon,
   SignatureIcon,
   UserCircleIcon,
+  UsersThreeIcon,
   WarningIcon,
   type Icon,
 } from "@phosphor-icons/react";
@@ -34,6 +35,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const TAB_ICONS: Record<ArtistWorkspaceTabId, Icon> = {
   profile: UserCircleIcon,
+  team: UsersThreeIcon,
   riders: GridFourIcon,
   payments: SignatureIcon,
 };

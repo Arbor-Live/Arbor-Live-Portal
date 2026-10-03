@@ -1,14 +1,16 @@
 /**
  * Tabs of the act workspace (`/dashboard/artists/*`): the artist's own
  * profile, technical riders and payments. Admins managing an artist get the
- * tabs that work without membership (profile and riders).
+ * tabs that work without membership (profile and riders); the team is the
+ * artist's own, and admins manage members from Users → Organizations.
  */
-export const ARTIST_WORKSPACE_TABS = ["profile", "riders", "payments"] as const;
+export const ARTIST_WORKSPACE_TABS = ["profile", "team", "riders", "payments"] as const;
 
 export type ArtistWorkspaceTabId = (typeof ARTIST_WORKSPACE_TABS)[number];
 
 export const ARTIST_WORKSPACE_TAB_LABELS: Record<ArtistWorkspaceTabId, string> = {
   profile: "Profile",
+  team: "Team",
   riders: "Technical riders",
   payments: "Payments",
 };

@@ -137,6 +137,7 @@ const marketingSubItems: NavSubItem[] = [
 
 const bandsSubItems: NavSubItem[] = [
   { title: "Profile", url: "/dashboard/artists" },
+  { title: "Team", url: "/dashboard/artists/team" },
   { title: "Technical riders", url: "/dashboard/artists/riders" },
   { title: "Payments", url: "/dashboard/artists/payments" },
   { title: "Organizations", url: "/dashboard/users/organizations", adminOnly: true },
@@ -398,7 +399,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                 !(
                   !isBandContext &&
                   item.url === "/dashboard/artists" &&
-                  subItem.url === "/dashboard/artists/payments"
+                  (subItem.url === "/dashboard/artists/payments" ||
+                    subItem.url === "/dashboard/artists/team")
                 ),
             )
             const activeSubItemUrl = (subItems ?? [])
