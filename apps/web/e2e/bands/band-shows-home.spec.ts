@@ -48,13 +48,42 @@ test.describe("band shows home", () => {
     await expect(page.getByRole("heading", { name: "Your shows" })).toBeVisible({
       timeout: 30_000,
     });
-    const card = page.locator("div.rounded-lg.border").filter({ hasText: seeded.eventTitle }).first();
-    await expect(card).toBeVisible({ timeout: 20_000 });
-    await expect(card.getByText("No payout yet")).toBeVisible();
-    await expect(card.getByText("Headliner")).toBeVisible();
+    const row = page.getByTestId("band-show-row").filter({ hasText: seeded.eventTitle }).first();
+    await expect(row).toBeVisible({ timeout: 20_000 });
+    await expect(row.getByText("No payout yet")).toBeVisible();
+    await expect(row.getByText(/Headliner/)).toBeVisible();
   });
 
-  test("payee can e-sign from a recent show card", async ({ page }) => {
+  test("a show opens its detail panel, and ?show= deep-links to it", async ({ page }) => {
+    const band = ensurePayee();
+    const now = Date.now();
+    const showStartsAt = now + 2 * 60 * 60 * 1000;
+    const seeded = runConvex("e2eHelpers:seedUpcomingBandShow", {
+      organizationId: band.organizationId,
+      eventTitle: `E2E Show Sheet ${now}`,
+      setStartsAt: showStartsAt + 60 * 60 * 1000,
+      setEndsAt: showStartsAt + 90 * 60 * 1000,
+    }) as { eventId: string; eventTitle: string };
+
+    await page.goto("/dashboard");
+    const row = page.getByTestId("band-show-row").filter({ hasText: seeded.eventTitle }).first();
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await row.getByText(seeded.eventTitle, { exact: true }).click();
+
+    const sheet = page.getByTestId("band-show-sheet");
+    await expect(sheet.getByText(seeded.eventTitle).first()).toBeVisible({ timeout: 20_000 });
+    await expect(sheet.getByText("Your times")).toBeVisible();
+    await expect(sheet.getByText("E2E Stage").first()).toBeVisible();
+    await expect(sheet.getByText("No payout yet").first()).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`[?&]show=${seeded.eventId}`));
+
+    await page.goto(`/dashboard?show=${seeded.eventId}`);
+    await expect(
+      page.getByTestId("band-show-sheet").getByText(seeded.eventTitle).first(),
+    ).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("payee can e-sign from the Needs you group", async ({ page }) => {
     const band = ensurePayee();
     const seeded = runConvex("e2eHelpers:seedBandPaymentForEsign", {
       organizationId: band.organizationId,
@@ -69,10 +98,14 @@ test.describe("band shows home", () => {
     await expect(page.getByRole("heading", { name: "Your shows" })).toBeVisible({
       timeout: 30_000,
     });
-    const card = page.locator("div.rounded-lg.border").filter({ hasText: seeded.eventTitle }).first();
-    await expect(card).toBeVisible({ timeout: 20_000 });
-    await expect(card.getByText("Needs signature")).toBeVisible();
-    await card.getByRole("button", { name: "E-sign payout" }).click();
+    const row = page
+      .getByTestId("band-shows-needs-you")
+      .getByTestId("band-show-row")
+      .filter({ hasText: seeded.eventTitle })
+      .first();
+    await expect(row).toBeVisible({ timeout: 20_000 });
+    await expect(row.getByText("Needs signature")).toBeVisible();
+    await row.getByRole("button", { name: "E-sign", exact: true }).click();
 
     await expect(page.getByText("E-sign payment").first()).toBeVisible();
     await page.locator('input[type="checkbox"]').check();
@@ -129,12 +162,12 @@ test.describe("staff band assignment on event", () => {
     await expect(bandPage.getByRole("heading", { name: "Your shows" })).toBeVisible({
       timeout: 30_000,
     });
-    const card = bandPage
-      .locator("div.rounded-lg.border")
+    const row = bandPage
+      .getByTestId("band-show-row")
       .filter({ hasText: seeded.eventTitle })
       .first();
-    await expect(card).toBeVisible({ timeout: 20_000 });
-    await expect(card.getByText("No payout yet")).toBeVisible();
+    await expect(row).toBeVisible({ timeout: 20_000 });
+    await expect(row.getByText("No payout yet")).toBeVisible();
     await bandContext.close();
   });
 
