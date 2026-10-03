@@ -308,7 +308,13 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     as open rows to **Price it** or remove from the event. Positions another
     invoice prices are left out. **Add line → Artist** opens a new position
     (`opensPosition`). A line with no performer booked shows on the quote, PDF
-    and public quote as an estimate (`ARTIST_ESTIMATE_NOTE`). A line with no position first adopts one the day already has (its
+    and public quote as an estimate (`ARTIST_ESTIMATE_NOTE`).
+  - **Payout from the price** — when an act fills a position a quote line
+    prices (or the line is priced after the booking), the act gets a payout
+    priced like the line (`bandPayments.seedFromInvoiceLineInternal`,
+    `payoutPricingFromLine`). Only when the act has no payout on the event yet,
+    so a payout staff set or removed is never overwritten. Unfilled positions
+    have no payout record (no `ALBPAY-`); the line's price is the plan. A line with no position first adopts one the day already has (its
     act's, one with its name, then the first empty one) and only opens a new
     one when none is free, so a quote fills the bill instead of duplicating it.
     Removing a line's position on the event sets `positionRemoved`, and later
