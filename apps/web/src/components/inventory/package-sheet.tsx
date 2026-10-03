@@ -19,6 +19,7 @@ import { useConvexForm } from "@/hooks/use-convex-form";
 import { api } from "@/lib/convex-api";
 import { notify } from "@/lib/notify";
 import { inventoryPackageSchema, type InventoryPackageFormValues } from "@/lib/validations/inventory";
+import { HERO_LANDSCAPE_ASPECT_RATIO } from "@/lib/image-processing";
 import { formatCurrency } from "./constants";
 import {
   buildPackagePayload,
@@ -313,6 +314,8 @@ function PackageSheetBody({
             onUrlChange={(url) => setField("publicHeroImageUrl", url)}
             onClear={() => setField("publicHeroImageUrl", "")}
             helperText="Upload an image or paste an https URL."
+            cropAspect={HERO_LANDSCAPE_ASPECT_RATIO}
+            cropTitle="Crop hero image"
           />
           <TextFormField name="publicSlug" label="Optional public slug" placeholder="e.g. basic-foh-package" />
         </SheetSection>

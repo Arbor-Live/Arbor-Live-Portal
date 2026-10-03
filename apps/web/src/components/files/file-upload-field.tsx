@@ -236,6 +236,8 @@ type FileUploadFieldProps = {
   urlPlaceholder?: string;
   helperText?: string;
   className?: string;
+  cropAspect?: number;
+  cropTitle?: string;
 };
 
 export function FileUploadField(props: FileUploadFieldProps) {
@@ -364,6 +366,9 @@ export function BandHeroUploadField({
       accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
       helperText={helperText}
       urlPlaceholder="https://… or upload a file"
+      previewFrameClassName="relative aspect-(--aspect-poster) w-full max-w-xs rounded-xl"
+      cropAspect={POSTER_ASPECT_RATIO}
+      cropTitle="Crop artist image"
       {...rest}
     />
   );
