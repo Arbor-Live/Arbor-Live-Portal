@@ -71,7 +71,11 @@ import {
 } from "./lib/invoiceProfit";
 import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
 import { ensureActPosition, returnActTimesToPosition } from "./lib/actPositions";
-import { type AdoptablePosition, pickPositionForLine } from "./lib/artistLineSync";
+import {
+  type AdoptablePosition,
+  pickPositionForLine,
+  scheduleSeedPayoutFromLine,
+} from "./lib/artistLineSync";
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
 const crewRateModeValue = v.union(
@@ -671,7 +675,11 @@ async function syncArtistSlotsForInvoice(
       }
       continue;
     }
-    if (seated?.organizationId === organizationId) continue;
+    if (seated?.organizationId === organizationId) {
+      // Priced after the act was booked: the payout can start from this price.
+      await scheduleSeedPayoutFromLine(ctx, slot._id);
+      continue;
+    }
     const current = await ctx.db
       .query("eventBandParticipations")
       .withIndex("by_eventId_and_organizationId", (q) =>

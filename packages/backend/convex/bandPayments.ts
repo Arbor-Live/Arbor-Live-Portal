@@ -30,6 +30,7 @@ import {
   isBandPayeeComplete,
   isOrganizationBandOnboardingComplete,
   payeeFieldsFromProfile,
+  payoutPricingFromLine,
   queueStatusForEndedEvent,
   resolvePayeeSnapshot,
   shouldPromoteBandPaymentToQueue,
@@ -748,6 +749,48 @@ export const upsertForEventInternal = internalMutation({
       ...args,
       pricingMode: args.pricingMode as BandPaymentPricingMode,
     });
+  },
+});
+
+/**
+ * An act filling a priced position gets its payout from that price: the quote
+ * line's people × hours × rate (or its amount when there is no split). Only
+ * when the act has no payout on the event yet — never over one staff set or
+ * removed ("cancelled"). Scheduled by `scheduleSeedPayoutFromLine`.
+ */
+export const seedFromInvoiceLineInternal = internalMutation({
+  args: { needId: v.id("eventArtistNeeds") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const slot = await ctx.db.get(args.needId);
+    if (!slot) return null;
+    const [line, act] = await Promise.all([
+      ctx.db
+        .query("invoiceLineItems")
+        .withIndex("by_needId", (q) => q.eq("needId", args.needId))
+        .first(),
+      ctx.db
+        .query("eventBandParticipations")
+        .withIndex("by_needId", (q) => q.eq("needId", args.needId))
+        .first(),
+    ]);
+    if (!line || !act || line.amountUsd <= 0) return null;
+    const invoice = await ctx.db.get(line.invoiceId);
+    if (!invoice || invoice.status === "void") return null;
+    const existing = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", slot.eventId).eq("organizationId", act.organizationId),
+      )
+      .first();
+    if (existing) return null;
+    await upsertEventBandPayment(ctx, {
+      eventId: slot.eventId,
+      organizationId: act.organizationId,
+      role: act.role,
+      ...payoutPricingFromLine(line),
+    });
+    return null;
   },
 });
 
