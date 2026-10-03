@@ -6,7 +6,6 @@ import { computeShiftStats } from "./lib/crewShiftKinds";
 import { DEFAULT_AVAILABILITY_WEEKS, isCrewedEventType } from "./lib/crewTeams";
 import { loadBackupUserIds } from "./lib/crewBackups";
 import { eligibleCrewProfilesForEvent, getActiveCrewProfiles } from "./lib/crewedEvents";
-import { listAdditionalInvoiceIds } from "./lib/eventInvoiceLinks";
 import { normalizeEventStatus } from "./lib/eventStatus";
 
 const openRequestStatusValue = v.union(
@@ -20,9 +19,8 @@ const WINDOW_SCAN_LIMIT = 200;
 /**
  * Home's one list of upcoming events, each with the flags that need someone:
  * open crew slots or slots held by a backup (and how many eligible crew
- * haven't replied), no quote, no
- * day-of lead. Every event needing crew in the crewing window is
- * kept, then the soonest others fill up to `limit`.
+ * haven't replied), no day-of lead. Every event needing crew in the
+ * crewing window is kept, then the soonest others fill up to `limit`.
  */
 export const listUpcomingAdminEvents = query({
   args: {
@@ -50,7 +48,6 @@ export const listUpcomingAdminEvents = query({
         backupShifts: v.number(),
         needsCrew: v.boolean(),
         awaitingReplies: v.number(),
-        missingInvoice: v.boolean(),
         missingLead: v.boolean(),
       }),
     ),
@@ -103,9 +100,6 @@ export const listUpcomingAdminEvents = query({
             (profile) => !responded.has(profile.userId),
           ).length;
         }
-        const additionalInvoiceIds = event.invoiceId
-          ? []
-          : await listAdditionalInvoiceIds(ctx, event._id);
         return {
           _id: event._id,
           title: event.title,
@@ -125,7 +119,6 @@ export const listUpcomingAdminEvents = query({
           backupShifts: stats.backupShifts,
           needsCrew,
           awaitingReplies,
-          missingInvoice: !event.invoiceId && additionalInvoiceIds.length === 0,
           missingLead: !event.dayOfLeadUserId,
           inWindow,
         };

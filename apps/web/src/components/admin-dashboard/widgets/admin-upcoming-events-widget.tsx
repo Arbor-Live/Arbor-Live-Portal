@@ -65,7 +65,6 @@ export function AdminUpcomingEventsWidget() {
                 Waiting on {event.awaitingReplies}
               </RowFlag>
             ) : null,
-            event.missingInvoice ? <RowFlag key="quote">No quote</RowFlag> : null,
             event.missingLead ? <RowFlag key="lead">No day-of lead</RowFlag> : null,
           ].filter(Boolean);
           return (
