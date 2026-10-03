@@ -52,10 +52,13 @@ export function AdminUpcomingEventsWidget() {
         {events.map((event) => {
           const status = normalizeEventStatus(event.status);
           const flags = [
-            event.needsCrew ? (
+            event.needsCrew && (event.totalShifts === 0 || event.unfilledShifts > 0) ? (
               <RowFlag key="crew">
                 {event.totalShifts === 0 ? "No crew slots" : plural(event.unfilledShifts, "open slot")}
               </RowFlag>
+            ) : null,
+            event.needsCrew && event.backupShifts > 0 ? (
+              <RowFlag key="backup">{event.backupShifts} on backup</RowFlag>
             ) : null,
             event.needsCrew && event.awaitingReplies > 0 ? (
               <RowFlag key="replies" tone="neutral">

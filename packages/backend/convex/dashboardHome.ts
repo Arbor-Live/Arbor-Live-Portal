@@ -3,6 +3,7 @@ import { query } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { computeShiftStats } from "./lib/crewShiftKinds";
 import { DEFAULT_AVAILABILITY_WEEKS, isCrewedEventType } from "./lib/crewTeams";
+import { loadBackupUserIds } from "./lib/crewBackups";
 import { eligibleCrewProfilesForEvent, getActiveCrewProfiles } from "./lib/crewedEvents";
 import { listAdditionalInvoiceIds } from "./lib/eventInvoiceLinks";
 import { normalizeEventStatus } from "./lib/eventStatus";
@@ -16,7 +17,8 @@ const UPCOMING_SCAN_LIMIT = 60;
 
 /**
  * Home's one list of upcoming events, each with the flags that need someone:
- * open crew slots (and how many eligible crew haven't replied), no quote, no
+ * open crew slots or slots held by a backup (and how many eligible crew
+ * haven't replied), no quote, no
  * day-of lead. Every event needing crew in the crewing window is
  * kept, then the soonest others fill up to `limit`.
  */
@@ -42,6 +44,8 @@ export const listUpcomingAdminEvents = query({
         assignedCrewCount: v.number(),
         totalShifts: v.number(),
         unfilledShifts: v.number(),
+        /** Filled slots held by a backup ("only if necessary"). */
+        backupShifts: v.number(),
         needsCrew: v.boolean(),
         awaitingReplies: v.number(),
         missingInvoice: v.boolean(),
@@ -74,7 +78,9 @@ export const listUpcomingAdminEvents = query({
           .query("eventCrewShifts")
           .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
           .take(200);
-        const stats = computeShiftStats(shifts);
+        // A slot held by a backup ("only if necessary") still needs coverage.
+        const backupUserIds = crewed && inWindow ? await loadBackupUserIds(ctx, event._id) : undefined;
+        const stats = computeShiftStats(shifts, backupUserIds);
         const needsCrew = crewed && inWindow && !stats.isCrewConfirmed;
         let awaitingReplies = 0;
         if (needsCrew) {
@@ -106,6 +112,7 @@ export const listUpcomingAdminEvents = query({
           ).size,
           totalShifts: stats.totalShifts,
           unfilledShifts: stats.unfilledShifts,
+          backupShifts: stats.backupShifts,
           needsCrew,
           awaitingReplies,
           missingInvoice: !event.invoiceId && additionalInvoiceIds.length === 0,
