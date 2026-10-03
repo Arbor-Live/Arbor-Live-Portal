@@ -81,7 +81,22 @@ export function allocateEventPatch(
   }
 
   const snakes: SnakeId[] = plan.secondSnake ? ["A", "B"] : ["A"];
-  const rows = nightRows(orderedBands, byBand);
+  const nightRowList = nightRows(orderedBands, byBand);
+
+  // One box is on offer when the bill seats on it, breaking stereo rows to mono
+  // if that is what it takes (never the overheads). With one snake chosen, those
+  // rows patch mono; a second snake keeps every pair the riders asked for.
+  const monoToFit = monoRowsToFitOneBox(nightRowList);
+  const fitsOneBox = monoToFit !== null;
+  const breakToMono = !plan.secondSnake && monoToFit ? monoToFit : [];
+  const rows = nightRowList.map((row) =>
+    breakToMono.includes(row) ? { ...row, stereo: false } : row,
+  );
+  if (breakToMono.length > 0) {
+    warnings.push(
+      `${breakToMono.map((row) => row.name).join(", ")} patched mono to fit one stage box — turn on the second snake to keep it stereo.`,
+    );
+  }
 
   // Place the night rows across the chosen boxes, in order; box A fills first,
   // then the next box picks up where it left off.
@@ -118,8 +133,6 @@ export function allocateEventPatch(
     );
   }
 
-  // The bill only ever gets offered "one snake" when one box can seat it all.
-  const fitsOneBox = fitsOnOneBox(rows);
   if (!fitsOneBox && !plan.secondSnake) {
     warnings.push(
       "This bill needs more than one stage box — drop an input or turn on the second snake.",
@@ -167,6 +180,7 @@ export function allocateEventPatch(
 
   // Desk pages: vocals exploded, drums collapsed, melodic groups while they fit
   // (else one Melody DCA), tracks/utility separate, USB music pinned to fader 12.
+  // Melodic channels folded under the Melody DCA are by design, not overflow.
   const { pages: layers, overflow } = buildLayerPages({
     groups,
     fxDca,
@@ -193,6 +207,7 @@ export function allocateEventPatch(
     melodyDca,
     layers,
     fitsOneBox,
+    monoToFit: (monoToFit ?? []).map((row) => row.name),
   };
 }
 
@@ -359,10 +374,32 @@ class BoxPlacer {
   }
 }
 
-/** Whether every night row seats on a single 16-socket box. */
-function fitsOnOneBox(rows: NightRow[]): boolean {
+/**
+ * The stereo rows one 16-socket box has to break to mono to seat the whole
+ * bill — empty when it fits as asked, null when it cannot fit at all. Keys
+ * break first, then the latest stereo rows in packing order; the overheads
+ * never do.
+ */
+function monoRowsToFitOneBox(rows: NightRow[]): NightRow[] | null {
+  const candidates = rows
+    .filter((row) => row.stereo && row.family !== "oh")
+    .reverse()
+    .sort((a, b) => Number(b.family === "keys") - Number(a.family === "keys"));
+  for (let count = 0; count <= candidates.length; count++) {
+    const mono = candidates.slice(0, count);
+    if (seatsOnOneBox(rows, new Set(mono))) return mono;
+  }
+  return null;
+}
+
+/** Whether every row seats on one box, each remaining stereo row on a real pair. */
+function seatsOnOneBox(rows: NightRow[], mono: Set<NightRow>): boolean {
   const box = new BoxPlacer("A");
-  return rows.every((row) => Boolean(box.place(row)));
+  return rows.every((row) => {
+    const stereo = row.stereo && !mono.has(row);
+    const placed = box.place(stereo === row.stereo ? row : { ...row, stereo });
+    return Boolean(placed) && placed!.stereo === stereo;
+  });
 }
 
 /**

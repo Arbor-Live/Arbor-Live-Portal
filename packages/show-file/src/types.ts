@@ -142,6 +142,11 @@ export type EventPatchAllocation = {
    * must either drop an input or run two snakes — one snake is not an option.
    */
   fitsOneBox: boolean;
+  /**
+   * Stereo rows one box breaks to mono to seat the bill (never the overheads).
+   * Empty when the bill fits one box as the riders asked.
+   */
+  monoToFit: string[];
 };
 
 export type StageBoxPort = {

@@ -104,6 +104,8 @@ export function melodyNeedsCompression(args: {
  *  5. Reserved: USB 1/2 music on fader 12 of the first page.
  *
  * Anything past the USER bank is returned as overflow (still patched and named).
+ * Melodic channels folded under the Melody DCA are not overflow — the DCA is
+ * how they are reached.
  */
 export function buildLayerPages(args: {
   groups: DeskGroup[];
@@ -130,9 +132,6 @@ export function buildLayerPages(args: {
     }));
 
   const queue: Array<{ name: string; slots: LayerSlot[] }> = [];
-  // Channels deliberately left off the custom page so it stays one screen (the
-  // melodic frontline when it is compressed into a Melody DCA).
-  const spilled: LayerSlot[] = [];
 
   // 1) Vocals: DCA + the Vox FX DCA + every vocal, paged as needed (top
   //    priority). A lone vocal needs no channel DCA, but the FX DCA still sits
@@ -187,8 +186,7 @@ export function buildLayerPages(args: {
       ],
     });
     // The melodic channels are not given faders here — they are still patched
-    // and named on the desk, just not on the compact custom page.
-    spilled.push(...channelSlots(melodyMembers));
+    // and named on the desk, and ridden from the Melody DCA.
   } else {
     for (const group of melodyGroups) {
       const members = channelsIn(group.id);
@@ -223,7 +221,7 @@ export function buildLayerPages(args: {
     }
     placed.push(cursor < flat.length ? flat[cursor++] : undefined);
   }
-  const overflow = [...flat.slice(cursor), ...spilled];
+  const overflow = flat.slice(cursor);
 
   // A page is a fixed 12-fader window; each slot carries its fader number so the
   // USB strip stays pinned to fader 12 rather than sliding up.
