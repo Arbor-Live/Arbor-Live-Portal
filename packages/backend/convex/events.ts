@@ -590,6 +590,15 @@ export const create = mutation({
   },
 });
 
+/** Update args that only describe this day and never detach it from its series. */
+const PER_DAY_UPDATE_KEYS = new Set<string>([
+  "id",
+  "editScope",
+  "notes",
+  "openMicEnabled",
+  "openMicNotes",
+]);
+
 export const update = mutation({
   args: {
     id: v.id("events"),
@@ -886,11 +895,18 @@ export const update = mutation({
         });
       }
     } else {
+      // Notes and Open Mic are per-day, so editing only those isn't an override.
+      const editsTemplateFields = Object.entries(args).some(
+        ([key, value]) =>
+          value !== undefined && !PER_DAY_UPDATE_KEYS.has(key),
+      );
       await ctx.db.patch(args.id, {
         ...patch,
         // Editing one day of a multi-day booking is normal, not an override.
         seriesDetached:
-          hasSeries && scope === "this" && !multiDayGroup ? true : existing.seriesDetached,
+          hasSeries && scope === "this" && !multiDayGroup && editsTemplateFields
+            ? true
+            : existing.seriesDetached,
       });
     }
 
