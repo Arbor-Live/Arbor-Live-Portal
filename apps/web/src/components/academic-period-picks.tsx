@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { usePacificToday } from "@/hooks/use-pacific-today";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   ACADEMIC_PERIOD_LABELS,
@@ -8,7 +9,6 @@ import {
   type AcademicPeriod,
   type AcademicPeriodPreset,
 } from "@/lib/academic-periods";
-import { pacificDateKey } from "@/lib/format";
 
 const DEFAULT_PRESETS: AcademicPeriodPreset[] = ["this-quarter", "last-quarter", "next-quarter", "this-year"];
 
@@ -33,7 +33,7 @@ export function AcademicPeriodPicks({
   label?: string;
   className?: string;
 }) {
-  const [todayKey] = useState(() => pacificDateKey(Date.now()));
+  const todayKey = usePacificToday();
   const options = useMemo(() => {
     return presets
       .map((preset) => {

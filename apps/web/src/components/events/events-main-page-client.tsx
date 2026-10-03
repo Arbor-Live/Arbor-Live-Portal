@@ -22,7 +22,7 @@ import {
   type AcademicPeriodPreset,
 } from "@/lib/academic-periods";
 import { EVENT_STATUS_EDITOR_OPTIONS, type EventStatus } from "@/lib/event-status";
-import { pacificDateKey } from "@/lib/format";
+import { usePacificToday } from "@/hooks/use-pacific-today";
 
 const WHEN_PRESETS: AcademicPeriodPreset[] = ["this-quarter", "last-quarter", "next-quarter", "this-year"];
 
@@ -50,7 +50,7 @@ export function EventsMainPageClient() {
   });
   const [search, setSearch] = useState("");
   const applied = activeFilters(filters);
-  const [todayKey] = useState(() => pacificDateKey(Date.now()));
+  const todayKey = usePacificToday();
   // "When" options are Stanford periods; ones outside the calendar are left out.
   const whenPeriods = useMemo(
     () =>
@@ -60,13 +60,10 @@ export function EventsMainPageClient() {
       }),
     [todayKey],
   );
-  // One "is" period narrows on the server (by start date); anything else filters here.
-  const serverWindow =
-    applied.when?.operator === "is" && applied.when.values.length === 1
-      ? whenPeriods.find((period) => period.preset === applied.when!.values[0])
-      : undefined;
+  // "When" is one period (no "is not"), so it always narrows on the server by start date.
+  const serverWindow = whenPeriods.find((period) => period.preset === applied.when?.values[0]);
 
-  const serverRows = useQuery(api.events.listForDashboard, {
+  const result = useQuery(api.events.listForDashboard, {
     status:
       applied.status?.operator === "is" && applied.status.values.length === 1
         ? (applied.status.values[0] as EventStatus)
@@ -78,6 +75,7 @@ export function EventsMainPageClient() {
     startMs: serverWindow?.startMs,
     endMs: serverWindow?.endMs,
   });
+  const serverRows = result?.events;
 
   const filterDefinitions = useMemo<FilterDefinition[]>(() => {
     const distinct = (values: (string | undefined)[]) =>
@@ -92,6 +90,8 @@ export function EventsMainPageClient() {
           value: period.preset,
           label: `${ACADEMIC_PERIOD_LABELS[period.preset]} (${period.label})`,
         })),
+        single: true,
+        negatable: false,
       },
       { id: "status", label: "Status", options: EVENT_STATUS_EDITOR_OPTIONS },
       { id: "type", label: "Type", options: distinct((serverRows ?? []).map((row) => row.eventType)) },
@@ -147,6 +147,11 @@ export function EventsMainPageClient() {
       </FilterBar>
 
       {!rows ? <p className="text-sm text-muted-foreground">Loading events...</p> : null}
+      {result?.truncated && serverWindow ? (
+        <p className="text-sm text-muted-foreground" data-testid="events-window-truncated">
+          Showing the first {rows?.length ?? 0} events of {serverWindow.label}. Search or add a filter to see the rest.
+        </p>
+      ) : null}
       {rows && view === "calendar" ? <EventsCalendarView events={rows} /> : null}
       {rows && view === "board" ? <EventsBoardView events={rows} /> : null}
       {rows && view === "upcoming" ? <EventsUpcomingView events={rows} /> : null}

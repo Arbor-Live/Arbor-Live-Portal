@@ -35,7 +35,8 @@ import {
 } from "@/lib/invoice-lifecycle";
 import { notify } from "@/lib/notify";
 import { academicPeriod } from "@/lib/academic-periods";
-import { addDaysToDateKey, formatUsd, pacificDateKey } from "@/lib/format";
+import { addDaysToDateKey, formatUsd } from "@/lib/format";
+import { usePacificToday } from "@/hooks/use-pacific-today";
 
 type InvoiceRow = FunctionReturnType<typeof api.invoices.listEnriched>[number];
 
@@ -63,7 +64,8 @@ function issuedPeriods(todayKey: string) {
 /** Every "Issued" bucket an issue date (YYYY-MM-DD, Pacific) falls in. */
 function issuedBuckets(issueDate: string, todayKey: string, periods: ReturnType<typeof issuedPeriods>): string[] {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) return [];
-  const within = (days: number) => issueDate >= addDaysToDateKey(todayKey, -days) && issueDate <= todayKey;
+  // "Last 30 days" is 30 calendar days counting today.
+  const within = (days: number) => issueDate >= addDaysToDateKey(todayKey, -(days - 1)) && issueDate <= todayKey;
   return [
     ...(within(30) ? ["last_30"] : []),
     ...(within(90) ? ["last_90"] : []),
@@ -100,7 +102,7 @@ export function InvoicesListClient() {
     stage: { operator: "is_not", values: ["paid", "void"] },
   });
   const [search, setSearch] = useState("");
-  const [todayKey] = useState(() => pacificDateKey(Date.now()));
+  const todayKey = usePacificToday();
   const periods = useMemo(() => issuedPeriods(todayKey), [todayKey]);
   const applied = activeFilters(filters);
   const stage = applied.stage;
