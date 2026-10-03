@@ -336,7 +336,7 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   `externalRentalsCostUsd` are not double-counted; overruns still reduce profit.
 - **Event groups** (`eventSeries` table, `eventSeries.ts`): dated events that
   share setup and billing. `kind` is `recurring` (a series generated from a
-  rule; absent `kind` means recurring) or `multi_day` (a booking whose days share
+  rule) or `multi_day` (a booking whose days share
   one primary invoice). Days point at their group with `events.seriesId` +
   `occurrenceIndex` (calendar order); `seriesDetached` marks a day overridden
   from the templates. A multi-day group mirrors its invoice's days
@@ -362,7 +362,7 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   day's positions and takes a booked act's times. Templates are validated
   server-side (max 50; a length needs a start). "Apply this day's setup" (`eventSeries.applyDaySetup`) makes
   one day's setup the template and applies it to the other days (the pull list
-  copies straight across); it replaces the old copy-day-setup.
+  copies straight across).
 - Editing a day with a scope: on a series, "this occurrence only" detaches it;
   on a multi-day booking, other days take only the shared details (venue, type,
   host, people) and keep their own title, times and costs.

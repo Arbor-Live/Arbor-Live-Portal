@@ -9,9 +9,8 @@ export const eventGroupKindValue = v.union(v.literal("recurring"), v.literal("mu
 
 export type EventGroupKind = "recurring" | "multi_day";
 
-/** Treat groups without a kind as recurring, for records predating group kinds. */
 export function eventGroupKind(group: Pick<Doc<"eventSeries">, "kind">): EventGroupKind {
-  return group.kind ?? "recurring";
+  return group.kind;
 }
 
 export function isRecurringGroup(group: Pick<Doc<"eventSeries">, "kind">) {

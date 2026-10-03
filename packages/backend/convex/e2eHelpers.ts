@@ -4518,7 +4518,7 @@ export const getEventSeriesStateByEventId = query({
     return {
       seriesId: series._id,
       title: series.title,
-      kind: series.kind ?? "recurring",
+      kind: series.kind,
       intervalWeeks: series.intervalWeeks,
       updatedAt: series.updatedAt,
       occurrenceCount: occurrences.length,
