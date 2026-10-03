@@ -92,7 +92,6 @@ export function BandMediaClient() {
               onChange={(value) => setSelectedEventId(value === "band" ? "" : value)}
               options={albumOptions}
               placeholder="Artist album"
-              emptyLabel="No matching shows"
             />
           </div>
         </PageHeader>
