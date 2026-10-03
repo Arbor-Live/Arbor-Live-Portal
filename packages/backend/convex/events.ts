@@ -458,7 +458,7 @@ export const getByInvoiceId = query({
   },
 });
 
-/** Sibling day-events for multi-day booking quotes (same invoice / request). */
+/** Days for the day picker: the event's group, else events sharing its invoice / request. */
 export const listSiblingDays = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
@@ -467,12 +467,11 @@ export const listSiblingDays = query({
     const event = await ctx.db.get(args.eventId);
     if (!event) return [];
     const group = event.seriesId ? await ctx.db.get(event.seriesId) : null;
-    // A multi-day booking's days are its group; older ungrouped bookings fall
-    // back to the invoice/request siblings.
-    const siblings =
-      group && isMultiDayGroup(group)
-        ? await listGroupDays(ctx, group._id)
-        : await listSiblingDayEvents(ctx, event);
+    // A group's days (multi-day booking or recurring series) are its members;
+    // ungrouped events fall back to the invoice/request siblings.
+    const siblings = group
+      ? await listGroupDays(ctx, group._id)
+      : await listSiblingDayEvents(ctx, event);
     return siblings.map((row, index) => ({
       _id: row._id,
       title: row.title,
