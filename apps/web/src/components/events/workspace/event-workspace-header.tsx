@@ -165,13 +165,13 @@ export function EventWorkspaceHeader() {
               {multiDayGroup ? (
                 <>
                   <CalendarDotsIcon className="size-3.5" />
-                  Part of {seriesMeta.title} · Day {(seriesMeta.occurrenceIndex ?? 0) + 1} of{" "}
+                  Part of {seriesMeta.title} · Day {seriesMeta.occurrencePosition + 1} of{" "}
                   {seriesMeta.totalOccurrences}
                 </>
               ) : (
                 <>
                   <RepeatIcon className="size-3.5" />
-                  Recurring · occurrence {(seriesMeta.occurrenceIndex ?? 0) + 1} of{" "}
+                  Recurring · occurrence {seriesMeta.occurrencePosition + 1} of{" "}
                   {seriesMeta.totalOccurrences}
                 </>
               )}

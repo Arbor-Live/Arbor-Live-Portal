@@ -100,9 +100,13 @@ export function groupDayNoun(kind: EventGroupKind, plural = false) {
   return plural ? "occurrences" : "occurrence";
 }
 
-/** "Day 2" on a booking, "#2" on a series (from the 0-based index). */
-export function groupDayLabel(kind: EventGroupKind, occurrenceIndex: number | undefined) {
-  const number = (occurrenceIndex ?? 0) + 1;
+/**
+ * "Day 2" on a booking, "#2" on a series, from the 0-based position in the
+ * group's ordered day list — not `occurrenceIndex`, which skips weeks when a
+ * series leaves out Stanford breaks.
+ */
+export function groupDayLabel(kind: EventGroupKind, position: number) {
+  const number = position + 1;
   return kind === "multi_day" ? `Day ${number}` : `#${number}`;
 }
 

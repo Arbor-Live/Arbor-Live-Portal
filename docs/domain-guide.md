@@ -394,7 +394,8 @@ Update `YEARS` there when the Registrar publishes new dates.
   `breaks_and_finals`) drops matching weeks when the series is created and in
   `addOccurrences`. Skipped weeks don't count toward the occurrence count. They
   leave gaps in `occurrenceIndex`, because the index stays the week slot that
-  `groupDayStartAt` relies on. The Days tab flags any occurrence that lands on
+  `groupDayStartAt` relies on. The UI numbers days by their position in the
+  list (`groupDayLabel`, `occurrencePosition`), never by `occurrenceIndex`. The Days tab flags any occurrence that lands on
   a closure or no-class day.
 
 ## Booking requests → events → quotes

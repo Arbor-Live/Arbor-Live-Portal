@@ -203,7 +203,13 @@ export const listForDashboard = query({
     );
     const seriesById = new Map<
       string,
-      { title: string; occurrenceCount?: number; totalOccurrences: number }
+      {
+        title: string;
+        occurrenceCount?: number;
+        totalOccurrences: number;
+        /** 1-based list position by event id; only when skipped weeks leave index gaps. */
+        positionById?: Map<string, number>;
+      }
     >();
     await Promise.all(
       seriesIds.map(async (seriesId) => {
@@ -211,17 +217,23 @@ export const listForDashboard = query({
         if (!series) return;
         // Prefer denormalized occurrenceCount — avoid scanning siblings when set.
         let totalOccurrences = series.occurrenceCount;
-        if (totalOccurrences === undefined) {
+        let positionById: Map<string, number> | undefined;
+        // Academic skips leave gaps in occurrenceIndex, so number by list position.
+        if (totalOccurrences === undefined || series.academicSkipMode !== undefined) {
           const occurrences = await ctx.db
             .query("events")
             .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", seriesId))
             .take(200);
-          totalOccurrences = occurrences.length;
+          totalOccurrences ??= occurrences.length;
+          if (series.academicSkipMode !== undefined) {
+            positionById = new Map(occurrences.map((occurrence, index) => [occurrence._id, index + 1]));
+          }
         }
         seriesById.set(seriesId, {
           title: series.title,
           occurrenceCount: series.occurrenceCount,
           totalOccurrences,
+          positionById,
         });
       }),
     );
@@ -273,7 +285,8 @@ export const listForDashboard = query({
         }));
       const seriesInfo = row.seriesId ? seriesById.get(row.seriesId) : undefined;
       const occurrenceNumber =
-        row.occurrenceIndex !== undefined ? row.occurrenceIndex + 1 : undefined;
+        seriesInfo?.positionById?.get(row._id) ??
+        (row.occurrenceIndex !== undefined ? row.occurrenceIndex + 1 : undefined);
       return {
         ...row,
         seriesTitle: seriesInfo?.title,
@@ -378,6 +391,11 @@ export const get = query({
                   ? siblings.length
                   : (series.occurrenceCount ?? siblings.length),
                 occurrenceIndex: event.occurrenceIndex,
+                /** 0-based position among the group's days (indexes can skip weeks). */
+                occurrencePosition: Math.max(
+                  0,
+                  siblings.findIndex((sibling) => sibling._id === event._id),
+                ),
                 seriesDetached: event.seriesDetached ?? false,
                 invoiceId: series.invoiceId,
                 budgetUsd: series.budgetUsd,

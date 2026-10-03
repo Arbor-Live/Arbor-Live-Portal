@@ -104,7 +104,7 @@ export function EventGroupDaysTab() {
       return;
     }
     const shouldCancel = await confirm({
-      title: `Cancel ${groupDayLabel(kind, fromIndex)} and every later ${noun}?`,
+      title: `Cancel ${groupDayLabel(kind, occurrences.indexOf(from))} and every later ${noun}?`,
       description: `Each ${noun} from ${formatDate(from.startAt)} on is marked cancelled. Earlier ${nouns} are not changed.`,
       confirmLabel: `Cancel ${nouns}`,
       destructive: true,
@@ -143,7 +143,7 @@ export function EventGroupDaysTab() {
             </div>
           ) : (
             <RowList joined testId="event-group-day-list">
-              {occurrences.map((row) => {
+              {occurrences.map((row, position) => {
                 const status = normalizeEventStatus(row.status);
                 const calendarNote =
                   status === "cancelled" ? null : academicDayNote(pacificDateKey(row.startAt));
@@ -162,7 +162,7 @@ export function EventGroupDaysTab() {
                       className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left hover:bg-muted/30"
                     >
                       <span className="w-14 shrink-0 tabular-nums text-muted-foreground">
-                        {groupDayLabel(kind, row.occurrenceIndex)}
+                        {groupDayLabel(kind, position)}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block text-2xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -259,9 +259,9 @@ export function EventGroupDaysTab() {
                 <SearchableSelect
                   value={cancelFromIndex}
                   onChange={setCancelFromIndex}
-                  options={occurrences.map((row) => ({
+                  options={occurrences.map((row, position) => ({
                     value: String(row.occurrenceIndex ?? 0),
-                    label: `${groupDayLabel(kind, row.occurrenceIndex)} · ${formatOccurrencePreview(row.startAt)}`,
+                    label: `${groupDayLabel(kind, position)} · ${formatOccurrencePreview(row.startAt)}`,
                   }))}
                   placeholder={`Select ${noun}...`}
                   emptyLabel={`Select ${noun}`}

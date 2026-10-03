@@ -118,9 +118,9 @@ export function EventSeriesPositionEditor({
 
   const occurrenceOptions = useMemo(
     () =>
-      occurrences.map((row) => ({
+      occurrences.map((row, position) => ({
         value: row._id,
-        label: `${groupDayLabel(kind, row.occurrenceIndex)} · ${formatOccurrencePreview(row.startAt)}`,
+        label: `${groupDayLabel(kind, position)} · ${formatOccurrencePreview(row.startAt)}`,
       })),
     [kind, occurrences],
   );
