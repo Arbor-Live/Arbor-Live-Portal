@@ -171,7 +171,7 @@ const FLAG_TONE = {
   neutral: "bg-muted text-muted-foreground",
 } as const;
 
-/** A small inline flag on a row ("3 open slots", "No quote"): amber needs someone. */
+/** A small inline flag on a row ("3 open slots", "No day-of lead"): amber needs someone. */
 export function RowFlag({
   children,
   tone = "amber",

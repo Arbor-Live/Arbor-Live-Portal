@@ -449,6 +449,8 @@ export function FinancialHubBandPayoutsClient() {
                 if (value) setPaidRange(value as PaidRange);
               }}
               aria-label="Paid in"
+              // Seven ranges don't fit beside the title on a phone: own row there.
+              className="order-last basis-full lg:order-none lg:basis-auto"
             >
               {PAID_RANGE_ORDER.filter((key) => paidRangeArgs(key, nowMs)).map((key) => (
                 <ToggleGroupItem key={key} value={key}>
