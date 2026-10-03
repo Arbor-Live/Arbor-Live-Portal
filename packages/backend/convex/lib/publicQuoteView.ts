@@ -4,7 +4,12 @@ import { syncBookingRequestStatusFromInvoice } from "./bookingRequestStatus";
 import { syncLinkedEventStatusFromInvoice } from "./eventStatus";
 import { listEventsLinkedToInvoice } from "./invoiceEvents";
 import { getEventArtists } from "./eventArtists";
-import { toDocumentLineItem, recomputeInvoiceTotalsFromDocumentLines } from "./invoiceDocumentBuild";
+import {
+  ARTIST_ESTIMATE_NOTE,
+  listPendingArtistLineIds,
+  recomputeInvoiceTotalsFromDocumentLines,
+  toDocumentLineItem,
+} from "./invoiceDocumentBuild";
 import { resolveBillableOccurrenceCount } from "./invoiceSeries";
 import { loadPaymentProofState, normalizeFinanceContactEmail } from "./paymentProof";
 import { recordInvoiceStatusTransition } from "./statusTransitions";
@@ -90,10 +95,12 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
     discountType: invoice.discountType,
     discountValue: invoice.discountValue,
   });
+  const pendingArtistLineIds = await listPendingArtistLineIds(ctx, lineItems);
   const displayLineItems = lineItems.map((row, index) => {
     const doc = documentLineItems[index]!;
     return {
       ...row,
+      detailNote: pendingArtistLineIds.has(row._id) ? ARTIST_ESTIMATE_NOTE : undefined,
       label: doc.label,
       quantity: doc.quantity,
       quantityDetail: doc.quantityDetail,

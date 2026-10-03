@@ -710,7 +710,7 @@ export function useInvoiceDraft({
       if (index < 0) return row;
       const [need] = free.splice(index, 1);
       adopted = true;
-      return { ...row, needId: need!.needId };
+      return { ...row, needId: need!.needId, opensPosition: undefined };
     });
     if (!adopted) return;
     // The id came from the save that made the draft clean, so it stays clean.

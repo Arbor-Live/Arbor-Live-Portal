@@ -1,9 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { MicrophoneStageIcon } from "@phosphor-icons/react";
-import { api } from "@/lib/convex-api";
+import { api, type Id } from "@/lib/convex-api";
+import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import { ArtistSelect, ARTIST_TBD_VALUE, artistSelectOptions } from "@/components/bands/artist-select";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { Input } from "@/components/ui/input";
@@ -11,10 +15,21 @@ import {
   ARTIST_TBD_LABEL,
   artistPersonHours,
   isTbdArtist,
+  layoutArtistBill,
   type ArtistRow,
+  type BillPosition,
   type InvoiceArtistPosition,
 } from "./invoice-draft-model";
-import { AmountCell, LineColumnHeads, LineGroup, LineRow, patchRow, plural, removeRow } from "./line-items-layout";
+import {
+  AmountCell,
+  LineColumnHeads,
+  LineGroup,
+  LineRow,
+  StaticCell,
+  patchRow,
+  plural,
+  removeRow,
+} from "./line-items-layout";
 import type { InvoiceDraft } from "./use-invoice-draft";
 
 const ARTIST_TYPE_LABELS: Record<InvoiceArtistPosition["artistType"], string> = {
@@ -37,13 +52,18 @@ export function defaultArtistDayId(draft: InvoiceDraft) {
 }
 
 /**
- * Artist lines. Each saved line opens or keeps a bill position on its day
- * (the lineup), so the positions the event already has are listed above.
- * Billed as hours × people × rate per person per hour.
+ * Artist lines, laid out as the event's bill: one row per position on each
+ * day, in bill order. A position this quote prices is an editable line; an
+ * open one (no line yet) can be priced or removed from the event. Lines no
+ * position backs yet (new, or on a series) follow. A line with no performer
+ * booked prices an estimate.
  */
 export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
-  const { lines, setSection, bandsForArtists: bands, linkedEvent, linkedSeries, linkedDayEvents } = draft;
+  const { lines, setSection, bandsForArtists: bands, linkedEvent, linkedSeries, linkedDayEvents, activeInvoiceId } =
+    draft;
   const rows = lines.artists;
+  const { confirm } = useAppDialog();
+  const removeFromBill = useMutation(api.eventArtistNeeds.removeFromBill);
   const artistNeedStatuses = useQuery(
     api.eventArtistNeeds.listNeedStatusForEvents,
     linkedEvent && !linkedSeries && linkedDayEvents.length > 0
@@ -51,20 +71,29 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
       : "skip",
   );
   const bandOptions = useMemo(() => artistSelectOptions(bands, { includeTbd: true }), [bands]);
-  if (rows.length === 0) return null;
 
   const days = artistDays(draft);
   const multiDay = days.length > 1;
   const dayOptions = days.map((day) => ({ value: day._id, label: day.label, keywords: day.label }));
   const dayLabelByEventId = new Map(days.map((day) => [day._id, day.label]));
-  const positions = (artistNeedStatuses ?? []).map((row) => ({
-    eventId: row.eventId as string,
-    needId: row.needId as string,
-    label: row.label,
-    artistType: row.artistType,
-    status: row.status,
-    genres: row.genres,
-  }));
+  const billItems = layoutArtistBill(
+    rows,
+    (artistNeedStatuses ?? []).map((row) => ({
+      eventId: row.eventId as string,
+      needId: row.needId as string,
+      label: row.label,
+      artistType: row.artistType,
+      status: row.status,
+      genres: row.genres,
+      actOrganizationId: row.actOrganizationId,
+      actName: row.actName,
+      invoiceIds: row.invoiceIds as string[],
+    })),
+    activeInvoiceId,
+  );
+  if (billItems.length === 0) return null;
+
+  const openCount = billItems.length - rows.length;
   const setRows = (updater: (rows: ArtistRow[]) => ArtistRow[]) => setSection("artists", updater);
 
   function onBandChange(idx: number, organizationId: string) {
@@ -86,29 +115,74 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
     );
   }
 
+  function priceOpenPosition(position: BillPosition) {
+    const band = position.actOrganizationId
+      ? bands?.find((entry) => entry.organizationId === position.actOrganizationId)
+      : undefined;
+    setRows((prev) => [
+      ...prev,
+      {
+        organizationId: position.actOrganizationId ?? ARTIST_TBD_VALUE,
+        label: position.actName || position.label.trim() || ARTIST_TBD_LABEL,
+        hours: "1",
+        people: band && band.memberCount > 0 ? band.memberCount.toString() : "1",
+        rateUsd: band && band.performerHourlyRateUsd > 0 ? band.performerHourlyRateUsd.toString() : "0",
+        eventId: position.eventId,
+        needId: position.needId,
+      },
+    ]);
+  }
+
+  async function removeOpenPosition(position: BillPosition) {
+    const name = positionName(position);
+    const ok = await confirm({
+      title: `Remove ${name} from the event?`,
+      description: position.actName
+        ? `${position.actName} comes off the bill with the position.`
+        : "The position comes off the event's Lineup.",
+      destructive: true,
+      confirmLabel: "Remove",
+    });
+    if (!ok) return;
+    try {
+      await removeFromBill({
+        eventId: position.eventId as Id<"events">,
+        needId: position.needId as Id<"eventArtistNeeds">,
+        organizationId: position.actOrganizationId,
+      });
+      notify.success(`${name} removed from the event.`);
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    }
+  }
+
   return (
     <LineGroup
       icon={MicrophoneStageIcon}
       title="Artists"
-      detail={plural(rows.length, "line")}
+      detail={[plural(rows.length, "line"), openCount > 0 ? `${openCount} not priced` : null]
+        .filter(Boolean)
+        .join(" · ")}
       subtotalUsd={draft.draftTotals.artistsSubtotalUsd}
       subtotalTestId="invoice-total-artists"
       testId="invoice-group-artists"
     >
-      {positions.length > 0 ? (
-        <ul className="space-y-0.5 px-3 py-2 text-xs text-muted-foreground" data-testid="invoice-artist-positions">
-          {positions.map((position) => {
-            const day = dayLabelByEventId.get(position.eventId);
-            const name = position.label.trim() || ARTIST_TYPE_LABELS[position.artistType];
-            const detail = [name, ARTIST_TYPE_LABELS[position.artistType], position.genres, position.status]
-              .filter(Boolean)
-              .join(" · ");
-            return <li key={position.needId}>{day && multiDay ? `${day} — ${detail}` : detail}</li>;
-          })}
-        </ul>
-      ) : null}
       <LineColumnHeads item="Artist" qty="Hours × people" rate="Rate / person / hr" />
-      {rows.map((row, idx) => {
+      {billItems.map((item) => {
+        if (item.kind === "open") {
+          const { position } = item;
+          return (
+            <OpenPositionRow
+              key={`open-${position.needId}`}
+              position={position}
+              dayLabel={multiDay ? dayLabelByEventId.get(position.eventId) : undefined}
+              onPrice={() => priceOpenPosition(position)}
+              onRemove={() => void removeOpenPosition(position)}
+            />
+          );
+        }
+        const { idx } = item;
+        const row = rows[idx]!;
         const tbd = isTbdArtist(row);
         // An unscoped line applies to Day 1 on a multi-day booking (see
         // `lib/invoiceArtistDays.ts`), so show it there, not on the selected day.
@@ -117,7 +191,7 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
           <LineRow
             key={`artist-${idx}`}
             testId={`invoice-row-artist-${idx}`}
-            removeLabel={`Remove ${tbd ? "artist" : row.label}`}
+            removeLabel={`Remove ${tbd ? "artist" : row.label} from the quote`}
             onRemove={() => setRows((prev) => removeRow(prev, idx))}
             context={multiDay ? (dayLabelByEventId.get(dayId) ?? "Pick a day") : undefined}
             detailsLabel="artist day"
@@ -158,6 +232,11 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
               ) : (
                 <Input aria-label="Line label" value={row.label} readOnly className="bg-muted/40" />
               )}
+              {tbd ? (
+                <p className="text-xs text-muted-foreground @md/lines:col-span-2">
+                  Estimate until a performer is booked.
+                </p>
+              ) : null}
             </div>
             <div className="flex items-center gap-1">
               <Input
@@ -195,5 +274,52 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
         );
       })}
     </LineGroup>
+  );
+}
+
+function positionName(position: BillPosition) {
+  return position.actName || position.label.trim() || ARTIST_TYPE_LABELS[position.artistType];
+}
+
+/** A position on the bill this quote doesn't price yet. */
+function OpenPositionRow({
+  position,
+  dayLabel,
+  onPrice,
+  onRemove,
+}: {
+  position: BillPosition;
+  dayLabel?: string;
+  onPrice: () => void;
+  onRemove: () => void;
+}) {
+  const role = position.label.trim();
+  const detail = [
+    position.actName && role ? role : null,
+    ARTIST_TYPE_LABELS[position.artistType],
+    position.genres,
+    position.actName ? "booked" : position.status,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <LineRow
+      testId={`invoice-open-position-${position.needId}`}
+      removeLabel={`Remove ${positionName(position)} from the event`}
+      onRemove={onRemove}
+      context={dayLabel}
+    >
+      <div className="min-w-0 pt-1.5">
+        <p className="truncate font-medium">{positionName(position)}</p>
+        <p className="truncate text-xs text-muted-foreground">{detail}</p>
+      </div>
+      <StaticCell>Not on this quote</StaticCell>
+      <div>
+        <Button type="button" size="sm" variant="outline" onClick={onPrice}>
+          Price it
+        </Button>
+      </div>
+      <StaticCell>—</StaticCell>
+    </LineRow>
   );
 }

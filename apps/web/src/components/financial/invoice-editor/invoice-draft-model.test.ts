@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ARTIST_TBD_VALUE } from "@/components/bands/artist-select";
-import { adoptServerArtistChanges, type ArtistRow, type ServerArtistLines } from "./invoice-draft-model";
+import {
+  adoptServerArtistChanges,
+  layoutArtistBill,
+  type ArtistRow,
+  type ServerArtistLines,
+} from "./invoice-draft-model";
 
 function row(partial: Partial<ArtistRow>): ArtistRow {
   return { organizationId: ARTIST_TBD_VALUE, label: "TBD artist", hours: "1", people: "1", rateUsd: "0", ...partial };
@@ -27,5 +32,42 @@ describe("adoptServerArtistChanges", () => {
 
   it("returns null when nothing changed", () => {
     expect(adoptServerArtistChanges([row({ needId: "n1" }), row({})], tbd, tbd)).toBeNull();
+  });
+});
+
+describe("layoutArtistBill", () => {
+  function position(needId: string, invoiceIds: string[] = []) {
+    return {
+      eventId: "e1",
+      needId,
+      label: needId,
+      artistType: "band" as const,
+      status: "open" as const,
+      genres: "",
+      invoiceIds,
+    };
+  }
+
+  it("lays lines and open positions out in bill order, then unplaced lines", () => {
+    const items = layoutArtistBill(
+      [{ needId: "support" }, {}],
+      [position("headliner"), position("support", ["inv"])],
+      "inv",
+    );
+    expect(items.map((item) => (item.kind === "line" ? `line:${item.idx}` : `open:${item.position.needId}`))).toEqual([
+      "open:headliner",
+      "line:0",
+      "line:1",
+    ]);
+  });
+
+  it("leaves out positions another invoice prices", () => {
+    expect(layoutArtistBill([], [position("headliner", ["other"])], "inv")).toEqual([]);
+  });
+
+  it("shows a position this quote stopped pricing as open again", () => {
+    expect(layoutArtistBill([], [position("headliner", ["inv"])], "inv")).toEqual([
+      { kind: "open", position: expect.objectContaining({ needId: "headliner" }) },
+    ]);
   });
 });

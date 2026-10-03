@@ -1,5 +1,5 @@
 import { normalizeCrewLineLabel } from "./normalizeCrewLineLabel";
-import type { Doc } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { InvoiceDocumentData } from "@arbor/invoice-document/types";
 import {
   billingQuantityForEquipmentLine,
@@ -142,6 +142,27 @@ export function recomputeInvoiceTotalsFromDocumentLines(
   };
 }
 
+/** Shown under an artist line no performer is booked for yet. */
+export const ARTIST_ESTIMATE_NOTE = "Estimate — final once a performer is booked";
+
+/**
+ * Artist lines no performer is booked for yet: no act on the line, and no
+ * outside act named on its position. Their price is an estimate.
+ */
+export async function listPendingArtistLineIds(
+  ctx: QueryCtx | MutationCtx,
+  lineItems: readonly Doc<"invoiceLineItems">[],
+): Promise<Set<Id<"invoiceLineItems">>> {
+  const out = new Set<Id<"invoiceLineItems">>();
+  for (const row of lineItems) {
+    if (row.section !== "artist" || row.organizationId?.trim()) continue;
+    const slot = row.needId ? await ctx.db.get(row.needId) : null;
+    if (slot?.externalArtistName?.trim()) continue;
+    out.add(row._id);
+  }
+  return out;
+}
+
 export async function buildInvoiceDocumentData(
   ctx: QueryCtx | MutationCtx,
   invoice: Doc<"invoices">,
@@ -163,13 +184,15 @@ export async function buildInvoiceDocumentData(
     }),
   );
 
-  const documentLineItems = lineItems.map((row) =>
-    toDocumentLineItem(
+  const pendingArtistLineIds = await listPendingArtistLineIds(ctx, lineItems);
+  const documentLineItems = lineItems.map((row) => {
+    const doc = toDocumentLineItem(
       row,
       billableOccurrenceCount,
       row.excludedTypeIds?.map((id) => excludedLabelById.get(id) ?? String(id)),
-    ),
-  );
+    );
+    return pendingArtistLineIds.has(row._id) ? { ...doc, detailNote: ARTIST_ESTIMATE_NOTE } : doc;
+  });
   const totals = recomputeInvoiceTotalsFromDocumentLines(documentLineItems, {
     discountType: invoice.discountType,
     discountValue: invoice.discountValue,

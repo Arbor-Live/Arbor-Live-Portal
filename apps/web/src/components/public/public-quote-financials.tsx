@@ -8,7 +8,7 @@ function QuoteSection({
   rows,
 }: {
   title: string;
-  rows: Array<{ _id: string; label: string; quantity: number; quantityDetail?: string; rateUsd: number; amountUsd: number; notes?: string }>;
+  rows: Array<{ _id: string; label: string; quantity: number; quantityDetail?: string; rateUsd: number; amountUsd: number; notes?: string; detailNote?: string }>;
 }) {
   if (!rows.length) return null;
   return (
@@ -26,6 +26,7 @@ function QuoteSection({
                 {line.quantityDetail ? ` (${line.quantityDetail})` : ""} x {formatUsd(line.rateUsd)} = {formatUsd(line.amountUsd)}
               </span>
             </div>
+            {line.detailNote ? <p className="mt-1 text-xs text-muted-foreground">{line.detailNote}</p> : null}
             {line.notes ? <p className="mt-1 text-xs text-muted-foreground">{line.notes}</p> : null}
           </div>
         ))}
@@ -44,7 +45,7 @@ export function PublicQuoteFinancials({
   final?: boolean;
   /** Payment opened before the final invoice (a deposit): don't tell them to wait. */
   paymentOpen?: boolean;
-  lineItems: Array<{ _id: string; section: string; label: string; quantity: number; quantityDetail?: string; rateUsd: number; amountUsd: number; notes?: string }>;
+  lineItems: Array<{ _id: string; section: string; label: string; quantity: number; quantityDetail?: string; rateUsd: number; amountUsd: number; notes?: string; detailNote?: string }>;
   totals: {
     equipmentSubtotalUsd: number;
     externalRentalsSubtotalUsd: number;

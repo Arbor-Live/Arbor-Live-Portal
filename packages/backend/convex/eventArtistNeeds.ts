@@ -153,6 +153,10 @@ export const getForEvent = query({
 });
 
 /** Open slot counts per event, for annotating invoice artist rows. */
+/**
+ * The bill on each day, in bill order, for the quote editor: every position
+ * with the act filling it and the invoices whose artist lines price it.
+ */
 export const listNeedStatusForEvents = query({
   args: { eventIds: v.array(v.id("events")) },
   handler: async (ctx, args) => {
@@ -164,13 +168,27 @@ export const listNeedStatusForEvents = query({
       artistType: ArtistNeedType;
       status: EffectiveArtistNeedStatus;
       genres: string;
+      /** The platform act seated on it. */
+      actOrganizationId?: string;
+      /** The seated act's name, or the outside act named on it. */
+      actName?: string;
+      /** Filled by an act that isn't on the platform. */
+      external: boolean;
+      /** Invoices with an artist line standing for this position. */
+      invoiceIds: Id<"invoices">[];
     }> = [];
     for (const eventId of args.eventIds.slice(0, MAX_NEED_CANDIDATES)) {
       const slots = await loadSlotsForEvent(ctx, eventId);
       if (slots.length === 0) continue;
-      const { filledSlotIds } = await resolveEventArtistBooking(ctx, eventId);
+      const { filledSlotIds, lineup } = await resolveEventArtistBooking(ctx, eventId);
       for (const slot of slots) {
         const booked = slotIsBooked(slot, filledSlotIds);
+        const act = lineup.find((entry) => entry.needId === slot._id);
+        const external = slot.externalArtistName?.trim() || undefined;
+        const lines = await ctx.db
+          .query("invoiceLineItems")
+          .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+          .take(10);
         out.push({
           eventId,
           needId: slot._id,
@@ -178,6 +196,10 @@ export const listNeedStatusForEvents = query({
           artistType: slot.artistType,
           status: effectiveArtistNeedStatus(slot.status, booked),
           genres: slot.genres ?? "",
+          actOrganizationId: act?.organizationId,
+          actName: act ? await nameFor(ctx, act.organizationId) : external,
+          external: Boolean(external),
+          invoiceIds: [...new Set(lines.map((line) => line.invoiceId))],
         });
       }
     }
