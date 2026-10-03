@@ -590,6 +590,25 @@ export const create = mutation({
   },
 });
 
+/**
+ * Update args that only describe this day and never detach it from its series.
+ * Notes aside, none of these are restored by a reset to the template.
+ */
+const PER_DAY_UPDATE_KEYS = new Set<string>([
+  "id",
+  "editScope",
+  "status",
+  "visibility",
+  "additionalInvoiceIds",
+  "actualTurnout",
+  "crewCostUsd",
+  "otPremium",
+  "crewCostBufferPercent",
+  "notes",
+  "openMicEnabled",
+  "openMicNotes",
+]);
+
 export const update = mutation({
   args: {
     id: v.id("events"),
@@ -886,11 +905,18 @@ export const update = mutation({
         });
       }
     } else {
+      // Editing only per-day fields isn't an override of the template.
+      const editsTemplateFields = Object.entries(args).some(
+        ([key, value]) =>
+          value !== undefined && !PER_DAY_UPDATE_KEYS.has(key),
+      );
       await ctx.db.patch(args.id, {
         ...patch,
         // Editing one day of a multi-day booking is normal, not an override.
         seriesDetached:
-          hasSeries && scope === "this" && !multiDayGroup ? true : existing.seriesDetached,
+          hasSeries && scope === "this" && !multiDayGroup && editsTemplateFields
+            ? true
+            : existing.seriesDetached,
       });
     }
 
