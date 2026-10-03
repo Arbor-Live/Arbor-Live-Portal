@@ -4,18 +4,20 @@ import type { QueryCtx } from "../_generated/server";
 import { artistLineAppliesToEvent, resolveArtistLineDayScope } from "./invoiceArtistDays";
 import { buildPublicEventUrl, isPubliclyListableEvent } from "./publicEvents";
 
-export const ARTIST_NEED_TYPES = ["band", "dj", "no_preference"] as const;
+export const ARTIST_NEED_TYPES = ["band", "dj", "singer_songwriter", "no_preference"] as const;
 export type ArtistNeedType = (typeof ARTIST_NEED_TYPES)[number];
 
 export const artistNeedTypeValue = v.union(
   v.literal("band"),
   v.literal("dj"),
+  v.literal("singer_songwriter"),
   v.literal("no_preference"),
 );
 
 export const ARTIST_NEED_TYPE_LABELS: Record<ArtistNeedType, string> = {
   band: "Live band",
   dj: "DJ",
+  singer_songwriter: "Singer-songwriter",
   no_preference: "No preference",
 };
 
@@ -59,6 +61,7 @@ export function artistTypeMatchesNeed(
   if (needType === "no_preference") return true;
   if (needType === "band") return artistType === "band" || artistType === "singer_songwriter";
   if (needType === "dj") return artistType === "dj";
+  if (needType === "singer_songwriter") return artistType === "singer_songwriter";
   return false;
 }
 

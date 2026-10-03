@@ -16,7 +16,12 @@ export const eventSeriesPositionTemplateValue = v.object({
   /** Stable id so re-applying updates a position instead of duplicating it. */
   templateKey: v.string(),
   label: v.string(),
-  artistType: v.union(v.literal("band"), v.literal("dj"), v.literal("no_preference")),
+  artistType: v.union(
+    v.literal("band"),
+    v.literal("dj"),
+    v.literal("singer_songwriter"),
+    v.literal("no_preference"),
+  ),
   genres: v.optional(v.string()),
   /** Day the slot is on, relative to each occurrence's start. */
   dayIndex: v.number(),
@@ -247,6 +252,7 @@ export function planPositionTemplateApplication(
 const UNNAMED_POSITION_LABELS: Record<ArtistNeedType, string> = {
   band: "Live band",
   dj: "DJ",
+  singer_songwriter: "Singer-songwriter",
   no_preference: "Open position",
 };
 
