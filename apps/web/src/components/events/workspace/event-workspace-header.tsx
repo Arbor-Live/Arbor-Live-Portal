@@ -12,6 +12,7 @@ import {
   InfoIcon,
   LockSimpleIcon,
   MapPinIcon,
+  ReceiptIcon,
   RepeatIcon,
   TrashIcon,
   UserCircleIcon,
@@ -72,6 +73,7 @@ export function EventWorkspaceHeader() {
     readOnly,
     isAdmin,
     seriesMeta,
+    linkedInvoice,
     userSelectOptions,
   } = workspace;
   const [venueOpen, setVenueOpen] = useState(false);
@@ -178,6 +180,16 @@ export function EventWorkspaceHeader() {
               <span className="underline underline-offset-2">
                 {multiDayGroup ? "View booking" : "View series"}
               </span>
+            </Link>
+          ) : null}
+          {isAdmin && linkedInvoice ? (
+            <Link
+              href={`/dashboard/financial-hub/invoices/${linkedInvoice._id}`}
+              className="inline-flex h-7 items-center gap-1.5 border px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+              data-testid="event-invoice-link"
+            >
+              <ReceiptIcon className="size-3.5" aria-hidden />
+              Invoice {linkedInvoice.invoiceNumber}
             </Link>
           ) : null}
         </>
