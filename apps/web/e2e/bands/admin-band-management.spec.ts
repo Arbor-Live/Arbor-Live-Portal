@@ -37,7 +37,7 @@ test.describe("admin band profile management", () => {
     const bio = `E2E admin bio ${Date.now()}`;
 
     await page.goto("/dashboard/artists");
-    await expect(page.getByText("Manage an artist").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("admin-band-picker")).toBeVisible({ timeout: 30_000 });
     await pickAdminBand(page, e2eEnv.bandOrgName);
 
     const profileCard = page
@@ -55,7 +55,7 @@ test.describe("admin band profile management", () => {
     await expect(formSaveBar(page).getByText("Saved")).toBeVisible({ timeout: 20_000 });
 
     await page.reload();
-    await expect(page.getByText("Manage an artist").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("admin-band-picker")).toBeVisible({ timeout: 30_000 });
     // sessionStorage keeps the selected band across reloads.
     await expect(page.getByTestId("admin-band-picker").getByTestId("searchable-select-trigger")).toContainText(
       e2eEnv.bandOrgName,
@@ -74,7 +74,7 @@ test.describe("admin band rider management", () => {
     const riderName = `E2E Admin Rider ${Date.now()}`;
 
     await page.goto("/dashboard/artists/riders");
-    await expect(page.getByText("Manage an artist").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("admin-band-picker")).toBeVisible({ timeout: 30_000 });
     await pickAdminBand(page, e2eEnv.bandOrgName);
 
     await page.getByRole("button", { name: "New rider" }).click();
@@ -106,7 +106,7 @@ test.describe("band self-service riders", () => {
     const riderName = `E2E Band Rider ${Date.now()}`;
 
     await page.goto("/dashboard/artists/riders");
-    await expect(page.getByText("Manage an artist")).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByTestId("admin-band-picker")).toHaveCount(0, { timeout: 30_000 });
     await expect(page.getByText("Artist Organization Only")).toHaveCount(0);
 
     const createButton = page

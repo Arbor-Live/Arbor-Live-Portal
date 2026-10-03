@@ -137,7 +137,7 @@ const marketingSubItems: NavSubItem[] = [
 
 const bandsSubItems: NavSubItem[] = [
   { title: "Profile", url: "/dashboard/artists" },
-  { title: "Technical rider", url: "/dashboard/artists/riders" },
+  { title: "Technical riders", url: "/dashboard/artists/riders" },
   { title: "Payments", url: "/dashboard/artists/payments" },
   { title: "Organizations", url: "/dashboard/users/organizations", adminOnly: true },
   { title: "Artist applications", url: "/dashboard/users/artist-applications", adminOnly: true },
@@ -290,7 +290,12 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     isAdminHomeContext,
   }
   const unconfirmedEventCount = unconfirmedCrewCount ?? 0
-  const scopedNavItems = navItems.filter((item) => canAccessNavItem(item, navAccess))
+  const scopedNavItems = navItems
+    .filter((item) => canAccessNavItem(item, navAccess))
+    // An artist sees its own act there, not the admin's list of artists.
+    .map((item) =>
+      isBandContext && item.url === "/dashboard/artists" ? { ...item, title: "Your act" } : item,
+    )
 
   function pendingChipCountForUrl(url: string): number {
     switch (url) {

@@ -66,7 +66,7 @@ test.describe("admin reaches shared band routes", () => {
       });
       await expect(page.getByText("Admin access required")).toHaveCount(0);
       await expect(page.getByText("Something went wrong")).toHaveCount(0);
-      await expect(page.getByText("Manage an artist").first()).toBeVisible({
+      await expect(page.getByTestId("admin-band-picker")).toBeVisible({
         timeout: 30_000,
       });
     });
