@@ -182,6 +182,9 @@ export function BandPaymentHistorySection() {
                       title={payment.eventTitle}
                       detail={
                         <>
+                          <span className="sm:hidden">
+                            {formatUsd(payment.totalUsd)} · {payment.statusLabel} ·{" "}
+                          </span>
                           <span className="font-mono">{payment.confirmationToken}</span>
                           {payment.status === "awaiting_confirmation" && !payment.canSign
                             ? ` · Waiting on ${payment.designatedPayeeName || "your designated payee"}`
