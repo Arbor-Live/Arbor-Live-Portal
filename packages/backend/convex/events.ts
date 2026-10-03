@@ -1,7 +1,7 @@
 import { pacificDateKey } from "@arbor/format";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import { mutation, query, type QueryCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   findAuthUsersByIds,
   getUserId,
@@ -130,6 +130,31 @@ export const list = query({
   },
 });
 
+const SERIES_POSITION_PAGE = 200;
+/** A weekly series this long would run a decade; past it, positions fall back to the index. */
+const SERIES_POSITION_MAX_PAGES = 5;
+
+/**
+ * A series' occurrences in order, read in pages by `occurrenceIndex` so a
+ * long series (over 200 days) still gets a list position for every day.
+ */
+async function listSeriesOccurrencesForPositions(ctx: QueryCtx, seriesId: Id<"eventSeries">) {
+  const occurrences: Doc<"events">[] = [];
+  let afterIndex = -1;
+  for (let page = 0; page < SERIES_POSITION_MAX_PAGES; page += 1) {
+    const batch = await ctx.db
+      .query("events")
+      .withIndex("by_seriesId_and_occurrenceIndex", (q) =>
+        q.eq("seriesId", seriesId).gt("occurrenceIndex", afterIndex),
+      )
+      .take(SERIES_POSITION_PAGE);
+    occurrences.push(...batch);
+    if (batch.length < SERIES_POSITION_PAGE) break;
+    afterIndex = batch[batch.length - 1]!.occurrenceIndex ?? afterIndex;
+  }
+  return occurrences;
+}
+
 /** Recent events for calendar/board/upcoming — keep fan-out takes tight. */
 const DASHBOARD_EVENT_TAKE = 150;
 const DASHBOARD_BLOCK_TAKE = 40;
@@ -203,7 +228,13 @@ export const listForDashboard = query({
     );
     const seriesById = new Map<
       string,
-      { title: string; occurrenceCount?: number; totalOccurrences: number }
+      {
+        title: string;
+        occurrenceCount?: number;
+        totalOccurrences: number;
+        /** 1-based list position by event id; only when skipped weeks leave index gaps. */
+        positionById?: Map<string, number>;
+      }
     >();
     await Promise.all(
       seriesIds.map(async (seriesId) => {
@@ -211,17 +242,20 @@ export const listForDashboard = query({
         if (!series) return;
         // Prefer denormalized occurrenceCount — avoid scanning siblings when set.
         let totalOccurrences = series.occurrenceCount;
-        if (totalOccurrences === undefined) {
-          const occurrences = await ctx.db
-            .query("events")
-            .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", seriesId))
-            .take(200);
-          totalOccurrences = occurrences.length;
+        let positionById: Map<string, number> | undefined;
+        // Academic skips leave gaps in occurrenceIndex, so number by list position.
+        if (totalOccurrences === undefined || series.academicSkipMode !== undefined) {
+          const occurrences = await listSeriesOccurrencesForPositions(ctx, seriesId);
+          totalOccurrences ??= occurrences.length;
+          if (series.academicSkipMode !== undefined) {
+            positionById = new Map(occurrences.map((occurrence, index) => [occurrence._id, index + 1]));
+          }
         }
         seriesById.set(seriesId, {
           title: series.title,
           occurrenceCount: series.occurrenceCount,
           totalOccurrences,
+          positionById,
         });
       }),
     );
@@ -273,7 +307,8 @@ export const listForDashboard = query({
         }));
       const seriesInfo = row.seriesId ? seriesById.get(row.seriesId) : undefined;
       const occurrenceNumber =
-        row.occurrenceIndex !== undefined ? row.occurrenceIndex + 1 : undefined;
+        seriesInfo?.positionById?.get(row._id) ??
+        (row.occurrenceIndex !== undefined ? row.occurrenceIndex + 1 : undefined);
       return {
         ...row,
         seriesTitle: seriesInfo?.title,
@@ -366,6 +401,10 @@ export const get = query({
                 .query("events")
                 .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", event.seriesId!))
                 .take(200);
+              // Past the first 200 days, page through for this day's position.
+              const positionSiblings = siblings.some((sibling) => sibling._id === event._id)
+                ? siblings
+                : await listSeriesOccurrencesForPositions(ctx, event.seriesId!);
               const costSummary = computeSeriesCostSummary(series, siblings);
               const multiDay = isMultiDayGroup(series);
               return {
@@ -378,6 +417,11 @@ export const get = query({
                   ? siblings.length
                   : (series.occurrenceCount ?? siblings.length),
                 occurrenceIndex: event.occurrenceIndex,
+                /** 0-based position among the group's days (indexes can skip weeks). */
+                occurrencePosition: Math.max(
+                  0,
+                  positionSiblings.findIndex((sibling) => sibling._id === event._id),
+                ),
                 seriesDetached: event.seriesDetached ?? false,
                 invoiceId: series.invoiceId,
                 budgetUsd: series.budgetUsd,

@@ -31,11 +31,15 @@ import { assignableCrewSelectOptions } from "@/lib/user-select-description";
 import { EVENT_VISIBILITY_OPTIONS, type EventVisibility } from "@/lib/event-visibility";
 import { localDateTimeInputToMs } from "@/lib/crew-availability";
 import {
-  computeOccurrenceStarts,
+  ACADEMIC_SKIP_OPTIONS,
+  buildOccurrencePreview,
   formatOccurrencePreview,
+  quarterClassesEndFor,
+  type OccurrencePreviewRow,
   type RecurrenceEndMode,
 } from "@/lib/event-series";
-import { pacificEndOfDayMs } from "@/lib/format";
+import { pacificEndOfDayMs, type AcademicSkipMode } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import {
@@ -75,6 +79,7 @@ export function EventCreateForm() {
   const [recurrenceEndMode, setRecurrenceEndMode] = useState<RecurrenceEndMode>("count");
   const [occurrenceCount, setOccurrenceCount] = useState("10");
   const [seriesEndAt, setSeriesEndAt] = useState("");
+  const [academicSkip, setAcademicSkip] = useState<AcademicSkipMode | "none">("breaks");
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -107,30 +112,43 @@ export function EventCreateForm() {
     [account, managerList, viewerUserId],
   );
 
+  const academicSkipMode = academicSkip === "none" ? undefined : academicSkip;
   const recurrencePreview = useMemo(() => {
-    if (!isRecurring || !draft.startAt) return { starts: [] as number[], error: null as string | null };
+    const empty = [] as OccurrencePreviewRow[];
+    if (!isRecurring || !draft.startAt) return { rows: empty, keptCount: 0, error: null as string | null };
     try {
       const anchorStartAt = localDateTimeInputToMs(draft.startAt);
-      if (anchorStartAt == null) return { starts: [] as number[], error: "Invalid start time." };
+      if (anchorStartAt == null) return { rows: empty, keptCount: 0, error: "Invalid start time." };
       const parsedInterval = Number(intervalWeeks);
       if (!Number.isFinite(parsedInterval) || parsedInterval < 1) {
-        return { starts: [] as number[], error: "Interval must be at least 1 week." };
+        return { rows: empty, keptCount: 0, error: "Interval must be at least 1 week." };
       }
-      const starts = computeOccurrenceStarts({
+      const rows = buildOccurrencePreview({
         anchorStartAt,
         intervalWeeks: parsedInterval,
         occurrenceCount: recurrenceEndMode === "count" ? Number(occurrenceCount || "0") : undefined,
         seriesEndAt:
           recurrenceEndMode === "date" && seriesEndAt ? seriesEndDateToMs(seriesEndAt) : undefined,
+        academicSkipMode,
       });
-      return { starts, error: null };
+      return { rows, keptCount: rows.filter((row) => !row.skipped).length, error: null };
     } catch (error) {
       return {
-        starts: [] as number[],
+        rows: empty,
+        keptCount: 0,
         error: error instanceof Error ? error.message : "Invalid recurrence settings.",
       };
     }
-  }, [isRecurring, draft.startAt, intervalWeeks, recurrenceEndMode, occurrenceCount, seriesEndAt]);
+  }, [
+    isRecurring,
+    draft.startAt,
+    intervalWeeks,
+    recurrenceEndMode,
+    occurrenceCount,
+    seriesEndAt,
+    academicSkipMode,
+  ]);
+  const quarterEnd = draft.startAt ? quarterClassesEndFor(draft.startAt.slice(0, 10)) : null;
 
   const showFulfillment = RENTAL_EVENT_TYPES.includes(draft.eventType);
   const createLabel = isRecurring ? "Create Series" : "Create Event";
@@ -143,7 +161,7 @@ export function EventCreateForm() {
       notify.error("Title, start, and end are required.");
       return;
     }
-    if (isRecurring && (recurrencePreview.error || recurrencePreview.starts.length === 0)) {
+    if (isRecurring && (recurrencePreview.error || recurrencePreview.keptCount === 0)) {
       notify.error(
         recurrencePreview.error ?? "Add valid recurrence settings to preview at least one occurrence.",
       );
@@ -168,6 +186,7 @@ export function EventCreateForm() {
           occurrenceCount: recurrenceEndMode === "count" ? Number(occurrenceCount || "0") : undefined,
           seriesEndAt:
             recurrenceEndMode === "date" && seriesEndAt ? seriesEndDateToMs(seriesEndAt) : undefined,
+          academicSkipMode,
         });
         router.replace(`/dashboard/events/${result.firstEventId}`);
         return;
@@ -317,19 +336,60 @@ export function EventCreateForm() {
                       value={seriesEndAt}
                       onChange={(event) => setSeriesEndAt(event.target.value)}
                     />
+                    {quarterEnd ? (
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="h-auto px-0"
+                        onClick={() => setSeriesEndAt(quarterEnd.lastClassDate)}
+                      >
+                        End with {quarterEnd.quarter.label} classes
+                      </Button>
+                    ) : null}
                   </Field>
                 )}
+                <Field
+                  label="Stanford calendar"
+                  className="md:col-span-3"
+                  hint="Arbor is closed winter break, spring break, and summer. Skipped weeks don't count toward the occurrence count."
+                >
+                  <SearchableSelect
+                    value={academicSkip}
+                    onChange={(value) => setAcademicSkip(value as AcademicSkipMode | "none")}
+                    options={ACADEMIC_SKIP_OPTIONS}
+                    placeholder="Academic calendar..."
+                  />
+                </Field>
                 <div className="space-y-2 md:col-span-3">
                   <p className="text-sm font-medium">
-                    Preview ({recurrencePreview.starts.length} occurrences)
+                    Preview ({recurrencePreview.keptCount} occurrences)
                   </p>
                   {recurrencePreview.error ? (
                     <p className="text-sm text-status-rose-700">{recurrencePreview.error}</p>
                   ) : (
                     <ul className="max-h-40 divide-y overflow-y-auto border text-sm">
-                      {recurrencePreview.starts.map((occurrenceStart, index) => (
-                        <li key={occurrenceStart} className="px-3 py-2">
-                          {index + 1}. {formatOccurrencePreview(occurrenceStart)}
+                      {recurrencePreview.rows.map((row) => (
+                        <li
+                          key={row.occurrenceIndex}
+                          className={cn(
+                            "flex items-center justify-between gap-2 px-3 py-2",
+                            row.skipped && "text-muted-foreground",
+                          )}
+                        >
+                          <span className={cn(row.skipped && "line-through")}>
+                            {formatOccurrencePreview(row.startAt)}
+                          </span>
+                          {row.note ? (
+                            <span
+                              className={cn(
+                                "text-xs",
+                                row.skipped ? "text-muted-foreground" : "text-status-amber-700",
+                              )}
+                            >
+                              {row.skipped ? `Skipped · ${row.note.label}` : row.note.label}
+                            </span>
+                          ) : null}
                         </li>
                       ))}
                     </ul>

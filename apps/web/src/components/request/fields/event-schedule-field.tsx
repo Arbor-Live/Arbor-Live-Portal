@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { TimeInput } from "@/components/ui/date-time-picker";
 import { api } from "@/lib/convex-api";
 import {
+  arborClosureWarning,
   formatSelectedDateLabel,
   monthDateRange,
   parseDateInput,
@@ -187,6 +188,11 @@ export function EventScheduleField() {
     [activeIndex, showSlots],
   );
 
+  const closureWarning = useMemo(
+    () => arborClosureWarning(showSlots.map((slot) => slot.date.trim())),
+    [showSlots],
+  );
+
   const handleActivateSlot = useCallback((index: number) => {
     setActiveSlotIndex(index);
   }, []);
@@ -252,6 +258,15 @@ export function EventScheduleField() {
       {activeDayLevel === "unavailable" && activeSlot.date ? (
         <p className="rounded-md border border-status-amber-500/30 bg-status-amber-500/10 px-3 py-2 text-sm text-status-amber-950 dark:text-status-amber-100">
           {UNAVAILABLE_DAY_WARNING}
+        </p>
+      ) : null}
+
+      {closureWarning ? (
+        <p
+          className="rounded-md border border-status-amber-500/30 bg-status-amber-500/10 px-3 py-2 text-sm text-status-amber-950 dark:text-status-amber-100"
+          data-testid="booking-closure-warning"
+        >
+          {closureWarning}
         </p>
       ) : null}
 

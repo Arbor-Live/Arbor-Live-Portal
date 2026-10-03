@@ -1,46 +1,65 @@
-import { addPacificWeeks, occurrenceStartAt } from "@arbor/format";
+import {
+  academicCalendarSkipFilter,
+  academicDayNote,
+  addDaysToDateKey,
+  computeOccurrenceSlots,
+  occurrenceStartAt,
+  pacificDateKey,
+  stanfordQuarterInSession,
+  type AcademicDayNote,
+  type AcademicSkipMode,
+  type OccurrenceSlot,
+} from "@arbor/format";
 import { formatDateTime } from "@/lib/format";
 
 export type RecurrenceEndMode = "count" | "date";
 
-export function computeOccurrenceStarts(args: {
+export const ACADEMIC_SKIP_OPTIONS: Array<{ value: AcademicSkipMode | "none"; label: string }> = [
+  { value: "breaks", label: "Skip closures, breaks & holidays" },
+  { value: "breaks_and_finals", label: "Also skip finals" },
+  { value: "none", label: "Don't skip (flag only)" },
+];
+
+export type OccurrencePreviewRow = OccurrenceSlot & {
+  note: AcademicDayNote | null;
+  skipped: boolean;
+};
+
+/**
+ * Preview rows for a new series: kept occurrences plus the weeks skipped
+ * between them, each tagged with its academic-calendar note.
+ */
+export function buildOccurrencePreview(args: {
   anchorStartAt: number;
   intervalWeeks: number;
   occurrenceCount?: number;
   seriesEndAt?: number;
-}): number[] {
-  if (args.intervalWeeks < 1) {
-    throw new Error("Interval must be at least 1 week.");
+  academicSkipMode?: AcademicSkipMode;
+}): OccurrencePreviewRow[] {
+  const kept = computeOccurrenceSlots({
+    ...args,
+    skip: academicCalendarSkipFilter(args.academicSkipMode),
+  });
+  const keptIndexes = new Set(kept.map((slot) => slot.occurrenceIndex));
+  const lastIndex = kept[kept.length - 1]!.occurrenceIndex;
+  const rows: OccurrencePreviewRow[] = [];
+  for (let occurrenceIndex = 0; occurrenceIndex <= lastIndex; occurrenceIndex += 1) {
+    const startAt = occurrenceStartAt(args.anchorStartAt, occurrenceIndex, args.intervalWeeks);
+    rows.push({
+      occurrenceIndex,
+      startAt,
+      note: academicDayNote(pacificDateKey(startAt)),
+      skipped: !keptIndexes.has(occurrenceIndex),
+    });
   }
-  if (args.occurrenceCount !== undefined && args.occurrenceCount < 1) {
-    throw new Error("Occurrence count must be at least 1.");
-  }
-  if (args.occurrenceCount === undefined && args.seriesEndAt === undefined) {
-    throw new Error("Provide either occurrence count or series end date.");
-  }
-  if (args.occurrenceCount !== undefined && args.seriesEndAt !== undefined) {
-    throw new Error("Provide either occurrence count or series end date, not both.");
-  }
+  return rows;
+}
 
-  const starts: number[] = [];
-
-  if (args.occurrenceCount !== undefined) {
-    for (let index = 0; index < args.occurrenceCount; index += 1) {
-      starts.push(occurrenceStartAt(args.anchorStartAt, index, args.intervalWeeks));
-    }
-    return starts;
-  }
-
-  const endBound = args.seriesEndAt!;
-  let current = args.anchorStartAt;
-  while (current <= endBound) {
-    starts.push(current);
-    current = addPacificWeeks(current, args.intervalWeeks);
-  }
-  if (starts.length === 0) {
-    throw new Error("No occurrences fall within the selected end date.");
-  }
-  return starts;
+/** Last day of classes of the quarter in session on `dateKey`, for "end with the quarter". */
+export function quarterClassesEndFor(dateKey: string) {
+  const quarter = stanfordQuarterInSession(dateKey);
+  if (!quarter) return null;
+  return { quarter, lastClassDate: addDaysToDateKey(quarter.finalsStartDate, -1) };
 }
 
 export function formatOccurrencePreview(value: number) {
@@ -81,9 +100,13 @@ export function groupDayNoun(kind: EventGroupKind, plural = false) {
   return plural ? "occurrences" : "occurrence";
 }
 
-/** "Day 2" on a booking, "#2" on a series (from the 0-based index). */
-export function groupDayLabel(kind: EventGroupKind, occurrenceIndex: number | undefined) {
-  const number = (occurrenceIndex ?? 0) + 1;
+/**
+ * "Day 2" on a booking, "#2" on a series, from the 0-based position in the
+ * group's ordered day list — not `occurrenceIndex`, which skips weeks when a
+ * series leaves out Stanford breaks.
+ */
+export function groupDayLabel(kind: EventGroupKind, position: number) {
+  const number = position + 1;
   return kind === "multi_day" ? `Day ${number}` : `#${number}`;
 }
 

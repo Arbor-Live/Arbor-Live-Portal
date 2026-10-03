@@ -83,9 +83,9 @@ export function GroupApplyScopeFields({
           <SearchableSelect
             value={dayIndex}
             onChange={onDayIndexChange}
-            options={days.map((row) => ({
+            options={days.map((row, position) => ({
               value: String(row.occurrenceIndex ?? 0),
-              label: `${groupDayLabel(kind, row.occurrenceIndex)} · ${formatOccurrencePreview(row.startAt)}`,
+              label: `${groupDayLabel(kind, position)} · ${formatOccurrencePreview(row.startAt)}`,
             }))}
             placeholder={`Select ${noun}...`}
             emptyLabel={`Select ${noun}`}

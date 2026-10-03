@@ -1,4 +1,11 @@
-import { formatDate, pacificDateAndTimeToMs, pacificDateKey } from "@/lib/format";
+import {
+  arborClosureForDate,
+  formatDate,
+  formatDateKeyRange,
+  pacificDateAndTimeToMs,
+  pacificDateKey,
+  type ArborClosure,
+} from "@/lib/format";
 
 export type BookingDayLoadLevel = "free" | "busy" | "unavailable";
 
@@ -55,3 +62,20 @@ export function formatSelectedDateLabel(dateKey: string) {
 
 export const UNAVAILABLE_DAY_WARNING =
   "This day already has several events scheduled. We may have limited availability — submit anyway and our team will follow up.";
+
+/**
+ * Requests are still accepted during Arbor closures (winter break, spring
+ * break, summer), but the requester should expect we may not crew them.
+ */
+export function arborClosureWarning(dateKeys: string[]) {
+  const closures = new Map<string, ArborClosure>();
+  for (const dateKey of dateKeys) {
+    const closure = dateKey ? arborClosureForDate(dateKey) : null;
+    if (closure) closures.set(closure.startDate, closure);
+  }
+  if (closures.size === 0) return null;
+  const periods = [...closures.values()]
+    .map((closure) => `${closure.label} (${formatDateKeyRange(closure.startDate, closure.endDate)})`)
+    .join(", ");
+  return `Arbor Live is closed for ${periods}. You can still submit this request, but we may not be able to crew your event.`;
+}
