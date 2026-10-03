@@ -167,7 +167,12 @@ function ArtistsSectionTable({ rows }: { rows: InvoiceLineItem[] }) {
               key={row.id}
               style={index < rows.length - 1 ? tableRowStyle : tableLastRowStyle}
             >
-              <td style={tdStyle}>{row.label}</td>
+              <td style={tdStyle}>
+                {row.label}
+                {row.detailNote ? (
+                  <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 2 }}>{row.detailNote}</div>
+                ) : null}
+              </td>
               <td style={tdRightStyle}>
                 {row.performanceHours !== undefined && row.performanceHours > 0
                   ? row.performanceHours

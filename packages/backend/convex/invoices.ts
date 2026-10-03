@@ -118,6 +118,8 @@ const lineItemInput = v.object({
   memberCount: v.optional(v.number()),
   performanceHours: v.optional(v.number()),
   crewSource: v.optional(v.literal("manual")),
+  /** Artist lines: a line added as a new act opens its own position (no adoption). */
+  opensPosition: v.optional(v.boolean()),
 });
 
 type LineInput = {
@@ -148,6 +150,8 @@ type LineInput = {
   performanceHours?: number;
   /** Crew lines: hand-added hours on a linked quote (vs. generated from the schedule). */
   crewSource?: "manual";
+  /** Artist lines: added as a new act, so it opens its own position (not stored). */
+  opensPosition?: boolean;
 };
 
 function trimOptional(raw: string | undefined) {
@@ -569,11 +573,13 @@ async function listAdoptablePositions(
  * when the bill has none to spare — so a quote fills the event's bill instead
  * of adding duplicates to it. A line whose position staff removed on the event
  * (`positionRemoved`) adopts only an exact match and never opens a new one.
+ * Lines in `opensPosition` were added as new acts and always open their own.
  */
 async function syncArtistSlotsForInvoice(
   ctx: MutationCtx,
   invoiceId: Id<"invoices">,
   now: number,
+  opensPosition: ReadonlySet<Id<"invoiceLineItems">> = new Set(),
 ) {
   const lines = (
     await ctx.db
@@ -594,7 +600,9 @@ async function syncArtistSlotsForInvoice(
     }
   }
 
-  const unlinked = lines.filter((line) => !slotIdByLine.has(line._id));
+  const unlinked = lines.filter(
+    (line) => !slotIdByLine.has(line._id) && !opensPosition.has(line._id),
+  );
   const candidatesByEvent = new Map<Id<"events">, AdoptablePosition[]>();
   for (const line of unlinked) {
     if (!candidatesByEvent.has(line.eventId!)) {
@@ -747,6 +755,7 @@ async function replaceLineItems(
     await ctx.db.delete(row._id);
   }
   const now = Date.now();
+  const opensPosition = new Set<Id<"invoiceLineItems">>();
   for (const row of rows.sort((a, b) => a.order - b.order)) {
     // Only reuse the previous position when this slot is the same act, so a row
     // shifting into another's order cannot adopt its position and inquiries.
@@ -770,7 +779,7 @@ async function replaceLineItems(
       row.section === "artist" && row.eventId && !needId
         ? postedNeedGone || (sameLine && previous.positionRemoved) || undefined
         : undefined;
-    await ctx.db.insert("invoiceLineItems", {
+    const lineId = await ctx.db.insert("invoiceLineItems", {
       invoiceId,
       section: row.section,
       order: row.order,
@@ -811,13 +820,19 @@ async function replaceLineItems(
       createdAt: now,
       updatedAt: now,
     });
+    if (row.section === "artist" && row.opensPosition && !needId) opensPosition.add(lineId);
   }
 
-  await syncArtistSlotsForInvoice(ctx, invoiceId, now);
+  await syncArtistSlotsForInvoice(ctx, invoiceId, now, opensPosition);
 
-  // A line the editor dropped — or moved to another day — takes the position it
-  // opened with it, unless that position carries inquiries of its own or the act
-  // is still billed on that day by a surviving line.
+  // A line the editor dropped leaves its position on the bill: the quote only
+  // stops pricing it (staff remove positions from the event explicitly). A line
+  // moved to another day takes the position it opened with it, unless that
+  // position carries inquiries of its own or the act is still billed on that
+  // day by a surviving line.
+  const movedNeedIds = new Set(
+    rows.flatMap((row) => (row.section === "artist" && row.needId ? [row.needId] : [])),
+  );
   const surviving = await ctx.db
     .query("invoiceLineItems")
     .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
@@ -839,7 +854,7 @@ async function replaceLineItems(
     }
   }
   for (const needId of previousNeedIds) {
-    if (kept.has(needId)) continue;
+    if (kept.has(needId) || !movedNeedIds.has(needId)) continue;
     const slot = await ctx.db.get(needId);
     if (!slot) continue;
     // Filled by an outside act — the line is gone, the booking is not.

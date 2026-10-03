@@ -311,7 +311,12 @@ function ArtistsSectionTable({ rows }: { rows: InvoiceLineItem[] }) {
               : styles.tableRow
           }
         >
-          <Text style={[styles.td, { flex: itemFlex }]}>{row.label}</Text>
+          <View style={[styles.td, { flex: itemFlex }]}>
+            <Text>{row.label}</Text>
+            {row.detailNote ? (
+              <Text style={{ fontSize: 7, color: "#64748b", marginTop: 2 }}>{row.detailNote}</Text>
+            ) : null}
+          </View>
           <Text style={[styles.td, { flex: hoursFlex, textAlign: "right" }]}>
             {row.performanceHours !== undefined && row.performanceHours > 0
               ? row.performanceHours

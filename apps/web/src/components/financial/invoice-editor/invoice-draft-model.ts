@@ -36,6 +36,8 @@ export type ArtistRow = {
   eventId?: string;
   /** The bill position this line stands for, echoed back on save. */
   needId?: string;
+  /** Added as a new act: saving opens its own position rather than taking an open one. */
+  opensPosition?: boolean;
 };
 export type CrewRow = InvoiceCrewRow;
 export type FeeRow = { feeDefinitionId: string; label: string; quantity: string; rateUsd: string };
@@ -47,6 +49,44 @@ export type InvoiceArtistPosition = {
   status: "open" | "inquiring" | "booked";
   genres: string;
 };
+
+/** A position on a linked day's bill, as the quote editor lays it out. */
+export type BillPosition = InvoiceArtistPosition & {
+  eventId: string;
+  actOrganizationId?: string;
+  actName?: string;
+};
+
+export type ArtistBillItem = { kind: "line"; idx: number } | { kind: "open"; position: BillPosition };
+
+/**
+ * The Artists section as the bill: each position in bill order, as this
+ * quote's line for it or as an open (unpriced) position; then lines no listed
+ * position backs (new, moved, or on a series). Positions another invoice
+ * prices belong to that invoice and are left out.
+ */
+export function layoutArtistBill(
+  rows: readonly Pick<ArtistRow, "needId">[],
+  positions: ReadonlyArray<BillPosition & { invoiceIds: readonly string[] }>,
+  invoiceId: string | undefined,
+): ArtistBillItem[] {
+  const rowIndexByNeedId = new Map(rows.flatMap((row, idx) => (row.needId ? [[row.needId, idx] as const] : [])));
+  const items: ArtistBillItem[] = [];
+  const placed = new Set<number>();
+  for (const { invoiceIds, ...position } of positions) {
+    const idx = rowIndexByNeedId.get(position.needId);
+    if (idx !== undefined) {
+      placed.add(idx);
+      items.push({ kind: "line", idx });
+    } else if (invoiceIds.every((id) => id === invoiceId)) {
+      items.push({ kind: "open", position });
+    }
+  }
+  rows.forEach((_, idx) => {
+    if (!placed.has(idx)) items.push({ kind: "line", idx });
+  });
+  return items;
+}
 
 export type CrewRateMode = "normal" | "lead" | "custom";
 export type DiscountType = "amount" | "percent";
@@ -129,6 +169,7 @@ export function emptyDraftLines(): InvoiceDraftLines {
 
 export const ARTIST_TBD_LABEL = ARTIST_TBD_OPTION.label;
 
+/** A new act on the quote: it gets a position of its own on the bill. */
 export function emptyArtistRow(eventId?: string): ArtistRow {
   return {
     organizationId: ARTIST_TBD_VALUE,
@@ -137,6 +178,7 @@ export function emptyArtistRow(eventId?: string): ArtistRow {
     people: "1",
     rateUsd: "0",
     eventId,
+    opensPosition: true,
   };
 }
 
@@ -307,6 +349,7 @@ export type InvoiceLineItemInput = {
   memberCount?: number;
   performanceHours?: number;
   crewSource?: "manual";
+  opensPosition?: boolean;
 };
 
 export type LineItemContext = {
@@ -379,6 +422,7 @@ export function buildInvoiceLineItems(lines: InvoiceDraftLines, ctx: LineItemCon
       organizationId: isTbdArtist(row) ? undefined : row.organizationId,
       eventId: (row.eventId as Id<"events"> | undefined) ?? ctx.singleDayEventId,
       needId: row.needId as Id<"eventArtistNeeds"> | undefined,
+      opensPosition: !row.needId && row.opensPosition ? true : undefined,
       memberCount: people > 0 ? people : undefined,
       performanceHours: hours > 0 ? hours : undefined,
     });

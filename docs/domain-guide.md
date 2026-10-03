@@ -300,9 +300,15 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   - **Invoice link** — an artist line tied to a day opens the position it
     stands for (`invoiceLineItems.needId`), and filling that position fills the
     line: an internal act sets its `organizationId`, an outside act clears it
-    and takes the line's label. Dropping the line drops the position, unless it
-    is filled or carries inquiries. One way only — positions never create
-    lines. A line with no position first adopts one the day already has (its
+    and takes the line's label. Dropping the line leaves the position on the
+    bill (the quote stops pricing it); moving a line to another day takes its
+    position along. One way only — positions never create lines.
+  - **Quote Artists section = the bill** — the editor lists each linked day's
+    positions in bill order (`layoutArtistBill`): priced ones as lines, the rest
+    as open rows to **Price it** or remove from the event. Positions another
+    invoice prices are left out. **Add line → Artist** opens a new position
+    (`opensPosition`). A line with no performer booked shows on the quote, PDF
+    and public quote as an estimate (`ARTIST_ESTIMATE_NOTE`). A line with no position first adopts one the day already has (its
     act's, one with its name, then the first empty one) and only opens a new
     one when none is free, so a quote fills the bill instead of duplicating it.
     Removing a line's position on the event sets `positionRemoved`, and later
