@@ -1,4 +1,4 @@
-import { pacificDateKey } from "@arbor/format";
+import { pacificDateKey, pacificStartOfDayMs } from "@arbor/format";
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import {
@@ -14,10 +14,23 @@ import {
   computeShiftStats,
   CREWED_EVENT_SCAN_LIMIT,
   isShiftFilled,
+  loadEventsInRange,
   requireAnalyticsAccess,
   SHIFTS_PER_EVENT_LIMIT,
 } from "./lib/analyticsQuery";
+import { findAuthUsersByIds } from "./lib/auth";
 import { loadBackupUserIds } from "./lib/crewBackups";
+import {
+  CREW_HOURS_BANDS,
+  CREW_QUARTER_EXPECTED_HOURS,
+  CREW_QUARTER_MINIMUM_HOURS,
+  crewHoursBand,
+} from "./lib/crewHourThresholds";
+import { buildTimecardPeriodSummaryForUser } from "./lib/userTimecards";
+import { isStaffMember, resolveProfileMembership } from "./lib/userVerticals";
+import { resolveParticipationFlags } from "./lib/userParticipation";
+import { resolveUserStatus } from "./lib/userStatus";
+import { loadAllAdminProfiles } from "./lib/userProfiles";
 import { isCrewedEventType } from "./lib/crewTeams";
 import { normalizeEventStatus } from "./lib/eventStatus";
 
@@ -31,6 +44,8 @@ function getIsoWeekKey(dayKey: string) {
   return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 }
 
+const TOP_CREW_LIMIT = 8;
+
 function roundHours(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -40,15 +55,17 @@ async function loadCrewedEventsInRange(
   startMs: number,
   endMs: number,
 ) {
-  const rows = await ctx.db
-    .query("events")
-    .withIndex("by_startAt", (q) => q.gte("startAt", startMs).lte("startAt", endMs))
-    .take(CREWED_EVENT_SCAN_LIMIT);
-  const events = rows.filter(
+  // Filter before capping: a cap on all events would cut a long range off at
+  // its oldest months once rentals and services-only events fill the scan.
+  const { events: rows, truncated: scanTruncated } = await loadEventsInRange(ctx, startMs, endMs);
+  const crewed = rows.filter(
     (event) =>
       normalizeEventStatus(event.status) !== "cancelled" && isCrewedEventType(event.eventType),
   );
-  return { events, truncated: rows.length >= CREWED_EVENT_SCAN_LIMIT };
+  return {
+    events: crewed.slice(0, CREWED_EVENT_SCAN_LIMIT),
+    truncated: scanTruncated || crewed.length > CREWED_EVENT_SCAN_LIMIT,
+  };
 }
 
 export const getCrewFillRate = query({
@@ -136,6 +153,17 @@ export const getCrewHoursAndOt = query({
     otRiskUsers: v.number(),
     dtRiskUsers: v.number(),
     usersWithHours: v.number(),
+    /** Share of all hours worked by the five busiest crew: bench depth. */
+    topFiveShare: v.union(v.number(), v.null()),
+    topCrew: v.array(
+      v.object({
+        userId: v.string(),
+        name: v.string(),
+        hours: v.number(),
+        shifts: v.number(),
+        events: v.number(),
+      }),
+    ),
     truncated: v.boolean(),
   }),
   handler: async (ctx, args) => {
@@ -147,6 +175,7 @@ export const getCrewHoursAndOt = query({
     const hoursByUserDay = new Map<string, Map<string, number>>();
     const hoursByUserWeek = new Map<string, Map<string, number>>();
     const users = new Set<string>();
+    const perUser = new Map<string, { hours: number; shifts: number; events: Set<string> }>();
 
     for (const event of events) {
       const shifts = await ctx.db
@@ -162,6 +191,11 @@ export const getCrewHoursAndOt = query({
         const weekKey = getIsoWeekKey(dayKey);
 
         hoursByWeek.set(weekKey, roundHours((hoursByWeek.get(weekKey) ?? 0) + shift.hours));
+        const totals = perUser.get(userId) ?? { hours: 0, shifts: 0, events: new Set<string>() };
+        totals.hours += shift.hours;
+        totals.shifts += 1;
+        totals.events.add(event._id);
+        perUser.set(userId, totals);
 
         const dayMap = hoursByUserDay.get(userId) ?? new Map<string, number>();
         dayMap.set(dayKey, roundHours((dayMap.get(dayKey) ?? 0) + shift.hours));
@@ -195,12 +229,29 @@ export const getCrewHoursAndOt = query({
       .map(([weekKey, hours]) => ({ weekKey, hours }))
       .sort((a, b) => a.weekKey.localeCompare(b.weekKey));
 
+    const totalHours = roundHours([...hoursByWeek.values()].reduce((sum, h) => sum + h, 0));
+    const ranked = [...perUser.entries()].sort((a, b) => b[1].hours - a[1].hours);
+    const topIds = ranked.slice(0, TOP_CREW_LIMIT).map(([userId]) => userId);
+    const userByKey = await findAuthUsersByIds(ctx, topIds);
+    const topFiveHours = ranked.slice(0, 5).reduce((sum, [, totals]) => sum + totals.hours, 0);
+
     return {
-      totalHours: roundHours([...hoursByWeek.values()].reduce((sum, h) => sum + h, 0)),
+      totalHours,
       byWeek,
       otRiskUsers,
       dtRiskUsers,
       usersWithHours: users.size,
+      topFiveShare: totalHours > 0 ? topFiveHours / totalHours : null,
+      topCrew: ranked.slice(0, TOP_CREW_LIMIT).map(([userId, totals]) => {
+        const user = userByKey.get(userId);
+        return {
+          userId,
+          name: user?.name || user?.email || "Unknown crew",
+          hours: roundHours(totals.hours),
+          shifts: totals.shifts,
+          events: totals.events.size,
+        };
+      }),
       truncated,
     };
   },
@@ -269,9 +320,9 @@ export const getCrewAttentionAging = query({
       const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event._id));
       if (stats.isCrewConfirmed) continue;
       unconfirmedEvents += 1;
-      const days = msToDays(event.startAt - now);
-      daysUntilStart.push(days);
+      // Lead time only means something for events still ahead.
       if (event.startAt < now) overdueUnconfirmed += 1;
+      else daysUntilStart.push(msToDays(event.startAt - now));
     }
 
     return {
@@ -336,6 +387,87 @@ export const getCrewSchedulingKpis = query({
       unconfirmedEvents,
       noSlotEvents,
       truncated,
+    };
+  },
+});
+
+const crewHoursBandValidator = v.union(...CREW_HOURS_BANDS.map((band) => v.literal(band)));
+
+/**
+ * Every active crew member's hours in one period (a quarter), sorted into
+ * Arbor's bands: under the minimum, meeting it, above expectations. Hours are
+ * the timecard's worked hours; in a period still underway, shifts already
+ * scheduled for the rest of it count toward the band ("on track for").
+ */
+export const getCrewHoursBands = query({
+  args: {
+    startMs: v.number(),
+    endMs: v.number(),
+    now: v.number(),
+  },
+  returns: v.object({
+    minimumHours: v.number(),
+    expectedHours: v.number(),
+    inProgress: v.boolean(),
+    crew: v.array(
+      v.object({
+        userId: v.string(),
+        name: v.string(),
+        workedHours: v.number(),
+        scheduledHours: v.number(),
+        totalHours: v.number(),
+        band: crewHoursBandValidator,
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    await requireAnalyticsAccess(ctx);
+    assertValidRange(args.startMs, args.endMs);
+
+    const profiles = (await loadAllAdminProfiles(ctx)).filter((profile) => {
+      // Active crew who owe timecards; inactive and alumni aren't held to the minimum.
+      if (resolveUserStatus(profile) !== "active") return false;
+      if (!resolveParticipationFlags(profile).includeInTimecards) return false;
+      return isStaffMember(resolveProfileMembership(profile));
+    });
+    const inProgress = args.now >= args.startMs && args.now < args.endMs;
+    // Split at the start of today so no day is cut in two (a day's hours
+    // follow per-day timecard rules); today and later count as scheduled.
+    const [year, month, day] = pacificDateKey(args.now).split("-").map(Number);
+    const splitAt = Math.min(Math.max(pacificStartOfDayMs(year!, month!, day!), args.startMs), args.endMs);
+    const window = (startMs: number, endMs: number) => ({ startMs, endMs, dueMs: endMs, label: "" });
+
+    const rows = await Promise.all(
+      profiles.map(async (profile) => {
+        const worked =
+          splitAt > args.startMs
+            ? await buildTimecardPeriodSummaryForUser(ctx, profile.userId, window(args.startMs, splitAt - 1), args.now)
+            : null;
+        const ahead =
+          splitAt < args.endMs
+            ? await buildTimecardPeriodSummaryForUser(ctx, profile.userId, window(splitAt, args.endMs), args.now)
+            : null;
+        const workedHours = roundHours(worked?.totalActualHours ?? 0);
+        const scheduledHours = roundHours(ahead?.totalActualHours ?? 0);
+        const totalHours = roundHours(workedHours + scheduledHours);
+        return { userId: profile.userId, workedHours, scheduledHours, totalHours, band: crewHoursBand(totalHours) };
+      }),
+    );
+    const userByKey = await findAuthUsersByIds(
+      ctx,
+      rows.map((row) => row.userId),
+    );
+
+    return {
+      minimumHours: CREW_QUARTER_MINIMUM_HOURS,
+      expectedHours: CREW_QUARTER_EXPECTED_HOURS,
+      inProgress,
+      crew: rows
+        .map((row) => {
+          const user = userByKey.get(row.userId);
+          return { ...row, name: user?.name || user?.email || "Unknown crew" };
+        })
+        .sort((a, b) => a.totalHours - b.totalHours || a.name.localeCompare(b.name)),
     };
   },
 });

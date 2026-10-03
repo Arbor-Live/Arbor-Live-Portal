@@ -20,11 +20,11 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/convex-api";
 import { formatDate } from "@/lib/format";
+import { PERIOD_STATUS } from "@/components/timecards/timecard-period-list";
 
 type TimecardOverviewRow = FunctionReturnType<
   typeof api.timecards.listCrewTimecardOverview
 >["rows"][number];
-type PeriodStatus = "open" | "due" | "past_due";
 
 const FILTERS: FilterDefinition[] = [
   {
@@ -46,12 +46,6 @@ const FILTERS: FilterDefinition[] = [
     ],
   },
 ];
-
-const PERIOD_STATUS: Record<PeriodStatus, { label: string; tone: Tone }> = {
-  open: { label: "Open", tone: "emerald" },
-  due: { label: "Due", tone: "amber" },
-  past_due: { label: "Past due", tone: "rose" },
-};
 
 const PERIODS = ["Current", "Previous", "2 periods ago"];
 

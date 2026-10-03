@@ -165,6 +165,29 @@ export function RowText({
   );
 }
 
+const FLAG_TONE = {
+  amber: "bg-status-amber-500/15 text-status-amber-800 dark:text-status-amber-200",
+  rose: "bg-status-rose-500/15 text-status-rose-800 dark:text-status-rose-200",
+  neutral: "bg-muted text-muted-foreground",
+} as const;
+
+/** A small inline flag on a row ("3 open slots", "No quote"): amber needs someone. */
+export function RowFlag({
+  children,
+  tone = "amber",
+  className,
+}: {
+  children: React.ReactNode;
+  tone?: keyof typeof FLAG_TONE;
+  className?: string;
+}) {
+  return (
+    <span className={cn("shrink-0 rounded-md px-2 py-0.5 text-xs whitespace-nowrap", FLAG_TONE[tone], className)}>
+      {children}
+    </span>
+  );
+}
+
 const HIDE_BELOW = {
   sm: "hidden sm:block",
   md: "hidden md:block",

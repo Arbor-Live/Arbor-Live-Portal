@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useQuery } from "convex/react";
 import { WarningCircleIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { DashboardWidget, WidgetRows } from "@/components/dashboard/dashboard-widget";
+import { RowFlag, RowText } from "@/components/list-page";
+import { ListRow } from "@/components/list-row";
 import { formatDateTime } from "@/lib/format";
 
 export function DamageReportsWidget() {
@@ -21,49 +20,32 @@ export function DamageReportsWidget() {
     .slice(0, 5);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <WarningCircleIcon className="size-4" />
-          Damage & repair
-        </CardTitle>
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/dashboard/inventory/damage">Queue</Link>
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {loading ? (
-          <Skeleton className="h-16 w-full" />
-        ) : openCount + inProgressCount === 0 ? (
-          <p className="text-sm text-muted-foreground">No open damage reports.</p>
-        ) : (
-          <>
-            <p className="text-xs text-muted-foreground">
-              {openCount} open · {inProgressCount} in progress
-            </p>
-            {preview.map((report) => (
-              <Link
-                key={report._id}
-                href={`/dashboard/inventory/damage?report=${report._id}`}
-                className="block rounded-md border px-3 py-2 text-sm hover:bg-muted/50"
-              >
-                <p className="font-medium">
-                  {report.assetId ?? "No ID"}
-                  {report.typeName ? ` · ${report.typeName}` : ""}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Severity {report.severity}/5 ·{" "}
-                  <span className="capitalize">{report.operability.replace("_", " ")}</span> ·{" "}
-                  <span className="capitalize">{report.status.replace("_", " ")}</span>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {report.eventTitle ?? "Event unknown"} · {formatDateTime(report.reportedAt)}
-                </p>
-              </Link>
-            ))}
-          </>
-        )}
-      </CardContent>
-    </Card>
+    <DashboardWidget
+      icon={WarningCircleIcon}
+      title="Damage & repair"
+      link={{ href: "/dashboard/inventory/damage", label: "Queue" }}
+      testId="home-damage-reports"
+      summary={loading || openCount + inProgressCount === 0 ? null : `${openCount} open · ${inProgressCount} in progress · newest first`}
+    >
+      <WidgetRows loading={loading} empty={preview.length === 0 ? "No open damage reports." : null}>
+        {preview.map((report) => (
+          <ListRow key={report._id} href={`/dashboard/inventory/damage?report=${report._id}`}>
+            <div className="min-w-0 flex-1 space-y-1">
+              <RowText
+                eyebrow={formatDateTime(report.reportedAt)}
+                title={`${report.assetId ?? "No ID"}${report.typeName ? ` · ${report.typeName}` : ""}`}
+                detail={report.eventTitle ?? "Event unknown"}
+              />
+              <div className="flex flex-wrap gap-1">
+                {report.operability === "needs_repair" ? (
+                  <RowFlag tone={report.severity >= 4 ? "rose" : "amber"}>Needs repair</RowFlag>
+                ) : null}
+                <RowFlag tone="neutral">Severity {report.severity}/5</RowFlag>
+              </div>
+            </div>
+          </ListRow>
+        ))}
+      </WidgetRows>
+    </DashboardWidget>
   );
 }

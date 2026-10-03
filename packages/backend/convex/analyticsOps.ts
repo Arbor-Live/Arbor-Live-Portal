@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import {
   average,
@@ -18,10 +18,13 @@ import {
 
 const BAND_PAYMENT_SCAN_LIMIT = 1000;
 const DAMAGE_SCAN_LIMIT = 500;
+const DAMAGE_TYPE_LIMIT = 6;
 const FULFILLMENT_PER_EVENT_LIMIT = 10;
 const UNITS_PER_FULFILLMENT_LIMIT = 200;
 
+/** Every payout still owed, in workflow order; drafts are shows not yet played. */
 const PENDING_BAND_STATUSES = [
+  "draft",
   "pending_onboarding",
   "pending_payee",
   "pending_email",
@@ -214,6 +217,8 @@ export const getDamageInsights = query({
     resolvedInRange: v.number(),
     reportedInRange: v.number(),
     severityMix: v.array(countBucketValidator),
+    /** Equipment types with the most reports opened in range. */
+    byType: v.array(countBucketValidator),
     openAgingDays: v.object({
       sampleSize: v.number(),
       avgDays: v.union(v.number(), v.null()),
@@ -263,6 +268,19 @@ export const getDamageInsights = query({
       severityMix.set(key, (severityMix.get(key) ?? 0) + 1);
     }
 
+    const typeCounts = new Map<string, number>();
+    for (const row of reportedInRangeRows) {
+      const key = row.typeId ?? "untyped";
+      typeCounts.set(key, (typeCounts.get(key) ?? 0) + 1);
+    }
+    const topTypes = [...typeCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, DAMAGE_TYPE_LIMIT);
+    const byType = await Promise.all(
+      topTypes.map(async ([key, count]) => {
+        const type = key === "untyped" ? null : await ctx.db.get(key as Id<"inventoryTypes">);
+        return { key: type?.name ?? "No type", count };
+      }),
+    );
+
     const openAging: number[] = [];
     for (const row of [...openRows, ...inProgressRows]) {
       openAging.push(msToDays(now - row.reportedAt));
@@ -282,6 +300,7 @@ export const getDamageInsights = query({
       severityMix: [...severityMix.entries()]
         .map(([key, count]) => ({ key: `Sev ${key}`, count }))
         .sort((a, b) => a.key.localeCompare(b.key)),
+      byType,
       openAgingDays: {
         sampleSize: openAging.length,
         avgDays: average(openAging),

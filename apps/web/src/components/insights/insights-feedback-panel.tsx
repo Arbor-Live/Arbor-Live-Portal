@@ -10,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CountBarChart } from "@/components/insights/count-bar-chart";
+import { formatRate, highRatingShare, ratingBreakdown, StatRow, StatTile } from "@/components/insights/insights-ui";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -52,48 +52,26 @@ export function InsightsFeedbackPanel({ startMs, endMs }: InsightsFeedbackPanelP
         </p>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Responses</CardTitle>
-            <CardDescription>Submitted in range</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {data === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <p className="text-2xl font-semibold tabular-nums">{data.total}</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Average rating</CardTitle>
-            <CardDescription>Out of 5</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {data === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <p className="text-2xl font-semibold tabular-nums">
-                {formatAverageRating(data.averageRating)}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Rating distribution</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <CountBarChart data={data.ratingDistribution} valueLabel="Responses" />
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <StatRow className="lg:grid-cols-3">
+        <StatTile
+          label="Responses"
+          loading={data === undefined}
+          value={data?.total ?? 0}
+          detail="Submitted in range"
+        />
+        <StatTile
+          label="Average rating"
+          loading={data === undefined}
+          value={formatAverageRating(data?.averageRating ?? null)}
+          detail="Out of 5"
+        />
+        <StatTile
+          label="Rated 4 or 5"
+          loading={data === undefined}
+          value={formatRate(highRatingShare(data?.ratingDistribution ?? []))}
+          detail={data ? ratingBreakdown(data.ratingDistribution) : null}
+        />
+      </StatRow>
 
       <Card>
         <CardHeader>
@@ -109,7 +87,7 @@ export function InsightsFeedbackPanel({ startMs, endMs }: InsightsFeedbackPanelP
             data.entries.map((entry) => (
               <div
                 key={entry.id}
-                className="space-y-1 rounded-md border p-3 text-sm"
+                className="space-y-1 border p-3 text-sm"
               >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <RatingStars rating={entry.rating} />

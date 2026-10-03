@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TimecardPeriodSummary } from "@/components/timecards/timecard-period-summary";
 import { TimecardPeriodList } from "@/components/timecards/timecard-period-list";
 
 export function TimecardsClient() {
@@ -11,18 +13,19 @@ export function TimecardsClient() {
   const timecards = useQuery(api.timecards.getMyTimecards, { now });
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Timecards</h1>
-        <p className="text-sm text-muted-foreground">
-          Read-only summary from your scheduled shifts, grouped by pay period.
-        </p>
-      </div>
+    <div className="space-y-4 pb-24" data-testid="my-timecards-page">
+      <PageHeader
+        title="My timecards"
+        description="Your hours from scheduled shifts, by pay period. Hours to input are a guide for Stanford: log real work, including prep, without exact clock times."
+      />
 
       {timecards === undefined ? (
         <Skeleton className="h-48 w-full" />
       ) : (
-        <TimecardPeriodList periods={timecards} />
+        <>
+          <TimecardPeriodSummary periods={timecards} />
+          <TimecardPeriodList periods={timecards} />
+        </>
       )}
     </div>
   );

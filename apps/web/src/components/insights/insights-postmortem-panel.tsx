@@ -10,7 +10,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CountBarChart } from "@/components/insights/count-bar-chart";
+import { formatRate, highRatingShare, ratingBreakdown, StatRow, StatTile } from "@/components/insights/insights-ui";
+import { RowCell, RowList, RowText } from "@/components/list-page";
+import { ListRow } from "@/components/list-row";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -52,73 +54,50 @@ export function InsightsPostMortemPanel({ startMs, endMs }: InsightsPostMortemPa
         </p>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Responses</CardTitle>
-            <CardDescription>Submitted in range</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {data === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <p className="text-2xl font-semibold tabular-nums">{data.total}</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Average rating</CardTitle>
-            <CardDescription>Out of 5</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {data === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <p className="text-2xl font-semibold tabular-nums">
-                {formatAverageRating(data.averageRating)}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Rating distribution</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <CountBarChart data={data.ratingDistribution} valueLabel="Responses" />
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <StatRow className="lg:grid-cols-3">
+        <StatTile
+          label="Responses"
+          loading={data === undefined}
+          value={data?.total ?? 0}
+          detail="Submitted in range"
+        />
+        <StatTile
+          label="Average rating"
+          loading={data === undefined}
+          value={formatAverageRating(data?.averageRating ?? null)}
+          detail="Out of 5"
+        />
+        <StatTile
+          label="Rated 4 or 5"
+          loading={data === undefined}
+          value={formatRate(highRatingShare(data?.ratingDistribution ?? []))}
+          detail={data ? ratingBreakdown(data.ratingDistribution) : null}
+        />
+      </StatRow>
 
       <Card>
         <CardHeader>
           <CardTitle>By event</CardTitle>
-          <CardDescription>Average crew rating per event</CardDescription>
+          <CardDescription>Average review rating per event, from crew and leads.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent>
           {data === undefined ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : data.eventRatings.length === 0 ? (
             <p className="text-sm text-muted-foreground">No event reviews in this range.</p>
           ) : (
-            data.eventRatings.map((row) => (
-              <div
-                key={row.eventId}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
-              >
-                <span className="font-medium">{row.eventTitle ?? "Untitled event"}</span>
-                <span className="flex items-center gap-2 text-muted-foreground">
+            <RowList joined>
+              {data.eventRatings.map((row) => (
+                <ListRow key={row.eventId} href={`/dashboard/events/${row.eventId}`}>
+                  <RowText
+                    title={row.eventTitle ?? "Untitled event"}
+                    detail={`${row.count} response${row.count === 1 ? "" : "s"}`}
+                  />
                   <RatingStars rating={Math.round(row.average)} />
-                  <span className="tabular-nums">{row.average.toFixed(1)}</span>
-                  <span>· {row.count} response{row.count === 1 ? "" : "s"}</span>
-                </span>
-              </div>
-            ))
+                  <RowCell className="w-10">{row.average.toFixed(1)}</RowCell>
+                </ListRow>
+              ))}
+            </RowList>
           )}
         </CardContent>
       </Card>
@@ -135,7 +114,7 @@ export function InsightsPostMortemPanel({ startMs, endMs }: InsightsPostMortemPa
             <p className="text-sm text-muted-foreground">No post-mortems in this range.</p>
           ) : (
             data.entries.map((entry) => (
-              <div key={entry.id} className="space-y-2 rounded-md border p-3 text-sm">
+              <div key={entry.id} className="space-y-2 border p-3 text-sm">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <RatingStars rating={entry.rating} />
                   <span className="font-medium">{entry.eventTitle ?? "Untitled event"}</span>

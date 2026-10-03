@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useQuery } from "convex/react";
 import { ClipboardTextIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { DashboardWidget, WidgetRows } from "@/components/dashboard/dashboard-widget";
+import { RowFlag, RowText } from "@/components/list-page";
+import { ListRow } from "@/components/list-row";
 import { formatDateTime } from "@/lib/format";
 
 export function AdminBookingRequestsWidget() {
@@ -15,47 +14,27 @@ export function AdminBookingRequestsWidget() {
   });
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <ClipboardTextIcon className="size-4" />
-          Booking requests
-        </CardTitle>
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/dashboard/financial-hub/requests">Open queue</Link>
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {requests === undefined ? (
-          <Skeleton className="h-16 w-full" />
-        ) : requests.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No open booking requests right now.</p>
-        ) : (
-          requests.map((request) => (
-            <Link
-              key={request._id}
-              href={`/dashboard/financial-hub/requests/${request._id}`}
-              className="block rounded-md border px-3 py-2 text-sm hover:bg-muted/50"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-medium">
-                  {request.eventName?.trim() || request.organization?.trim() || request.requestNumber}
-                </p>
-                <span className="text-3xs uppercase tracking-wide text-muted-foreground">
-                  {request.status === "action_required" ? "Action required" : "Submitted"}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {request.requestNumber}
-                {request.venueName ? ` · ${request.venueName}` : ""}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Submitted {formatDateTime(request.submittedAt)}
-              </p>
-            </Link>
-          ))
-        )}
-      </CardContent>
-    </Card>
+    <DashboardWidget
+      icon={ClipboardTextIcon}
+      title="Booking requests"
+      link={{ href: "/dashboard/financial-hub/requests", label: "Open queue" }}
+      testId="home-booking-requests"
+    >
+      <WidgetRows
+        loading={requests === undefined}
+        empty={requests?.length === 0 ? "No open booking requests right now." : null}
+      >
+        {requests?.map((request) => (
+          <ListRow key={request._id} href={`/dashboard/financial-hub/requests/${request._id}`}>
+            <RowText
+              eyebrow={`Submitted ${formatDateTime(request.submittedAt)}`}
+              title={request.eventName?.trim() || request.organization?.trim() || request.requestNumber}
+              detail={[request.requestNumber, request.venueName].filter(Boolean).join(" · ")}
+            />
+            {request.status === "action_required" ? <RowFlag>Action required</RowFlag> : null}
+          </ListRow>
+        ))}
+      </WidgetRows>
+    </DashboardWidget>
   );
 }

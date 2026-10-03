@@ -31,17 +31,17 @@ test.describe("crew timecard view", () => {
     expect(seeded.hours).toBeGreaterThan(0);
 
     await page.goto("/dashboard/timecards/mine");
-    await expect(page.getByRole("heading", { name: "Timecards" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "My timecards", level: 1 })).toBeVisible({
       timeout: 30_000,
     });
 
-    // The seeded shift lands in the current period, which is listed first.
-    const period = page.locator('[data-slot="card"]').first();
-    await expect(period.getByText(/[1-9]\d* days worked/)).toBeVisible({ timeout: 30_000 });
-
-    // Event titles only render once the period is expanded.
-    await period.getByRole("button", { name: "Show day-by-day details" }).click();
-    await expect(page.getByText(seeded.title).first()).toBeVisible({ timeout: 30_000 });
+    // The seeded shift lands in the current period, which is listed first,
+    // as a row in that period's group.
+    const period = page.getByTestId("timecard-period").first();
+    await expect(period.getByText(/[1-9]\d* days? worked/)).toBeVisible({ timeout: 30_000 });
+    await expect(
+      period.getByTestId("timecard-shift-row").filter({ hasText: seeded.title }),
+    ).toBeVisible({ timeout: 30_000 });
   });
 });
 
@@ -67,5 +67,27 @@ test.describe("admin timecards overview", () => {
     await expect(row).toBeVisible({ timeout: 30_000 });
     await expect(row).toContainText(e2eEnv.crewName);
     await expect(row).not.toContainText(/\b0 days/);
+  });
+
+  test("admin opens a crew member's timecard, grouped by pay period", async ({ page }) => {
+    const crew = runConvex("e2eHelpers:ensureCrewUser", {
+      email: e2eEnv.crewEmail,
+      password: e2eEnv.crewPassword,
+      name: e2eEnv.crewName,
+    }) as { userId: string };
+    const seeded = runConvex("e2eHelpers:seedTimecardShift", {
+      userId: crew.userId,
+      title: `E2E Timecard Detail ${Date.now()}`,
+    }) as SeededShift;
+
+    await page.goto(`/dashboard/users/timecards/${crew.userId}`);
+    await expect(page.getByTestId("timecard-detail-page")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("link", { name: "Crew timecards" }).first()).toBeVisible();
+    await expect(page.getByTestId("timecard-periods-summary")).toContainText("pay period");
+    await expect(
+      page.getByTestId("timecard-period").first().getByTestId("timecard-shift-row").filter({
+        hasText: seeded.title,
+      }),
+    ).toBeVisible({ timeout: 30_000 });
   });
 });

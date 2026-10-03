@@ -281,7 +281,12 @@ async function buildInvoicePaymentDetails(
  * (with each invoice linked to them), then approved invoices with no event.
  * One pass, so the board and the per-queue lists read the same rows.
  */
-async function collectPaymentRows(ctx: QueryCtx, now: number) {
+/**
+ * Every payable invoice once (primary, extra-linked, and approved invoices
+ * with no event) for events in the 90-day reminder window, with its payment
+ * queue: the Payments tab. Receivables of any age: `collectOpenReceivableRows`.
+ */
+export async function collectPaymentRows(ctx: QueryCtx, now: number) {
   const windowStart = now - REMINDER_LOOKBACK_MS;
   const candidates = await ctx.db
     .query("events")
@@ -312,6 +317,43 @@ async function collectPaymentRows(ctx: QueryCtx, now: number) {
     if (row) rows.push(row);
   }
   return rows;
+}
+
+/** Unpaid invoices read for receivables (drafts and estimates included). */
+const RECEIVABLES_SCAN_LIMIT = 5000;
+/**
+ * Receivable rows built per query. Each costs a few index reads (linked
+ * events, payment proof), so this keeps the query well under Convex's
+ * 4,096 index-range limit; past it the result is marked truncated.
+ */
+const RECEIVABLE_ROWS_LIMIT = 500;
+
+/**
+ * Every approved, unpaid invoice with its payment queue, however old its
+ * event: Insights' receivables. `collectPaymentRows` (the Payments tab) only
+ * looks back over the 90-day reminder window, so old debt would age out of
+ * it. Each row uses the invoice's earliest linked event, as the Payments tab
+ * does for the events it sees. Unpaid drafts and estimates share the index,
+ * so it's read lazily, skipping them, up to the scan and row limits.
+ */
+export async function collectOpenReceivableRows(ctx: QueryCtx, now: number) {
+  const rows = [];
+  let scanned = 0;
+  let truncated = false;
+  for await (const invoice of ctx.db
+    .query("invoices")
+    .withIndex("by_paymentReceivedAt", (q) => q.eq("paymentReceivedAt", undefined))) {
+    if (scanned >= RECEIVABLES_SCAN_LIMIT || rows.length >= RECEIVABLE_ROWS_LIMIT) {
+      truncated = true;
+      break;
+    }
+    scanned += 1;
+    if (invoice.status === "void" || (invoice.clientApprovalStatus ?? "pending") !== "approved") continue;
+    const [event] = await listEventsLinkedToInvoice(ctx, invoice._id);
+    const row = await buildPaymentQueueRow(ctx, invoice, event ?? null, now);
+    if (row && row.queue !== "payment_received") rows.push(row);
+  }
+  return { rows, truncated };
 }
 
 export const listByQueue = query({

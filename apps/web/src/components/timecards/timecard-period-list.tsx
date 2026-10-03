@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TimecardDetail } from "@/components/timecards/timecard-detail";
+import { RowCell, RowGroup, RowText } from "@/components/list-page";
+import { ListRow } from "@/components/list-row";
+import { StatusPill, type Tone } from "@/components/page-header";
 import { formatDate } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
-type TimecardPeriod = {
+type PeriodStatus = "open" | "due" | "past_due";
+
+export type TimecardPeriod = {
   label: string;
   dueMs: number;
   daysWorked: number;
-  status: "open" | "due" | "past_due";
+  status: PeriodStatus;
   days: Array<{
     dateMs: number;
     events: Array<{
@@ -24,76 +25,78 @@ type TimecardPeriod = {
   }>;
 };
 
-function statusBadgeClass(status: "open" | "due" | "past_due") {
-  switch (status) {
-    case "open":
-      return "bg-status-emerald-500/10 text-status-emerald-700";
-    case "due":
-      return "bg-status-amber-500/10 text-status-amber-700";
-    case "past_due":
-      return "bg-status-red-500/10 text-status-red-700";
-  }
+export const PERIOD_STATUS: Record<PeriodStatus, { label: string; tone: Tone }> = {
+  open: { label: "Open", tone: "emerald" },
+  due: { label: "Due", tone: "amber" },
+  past_due: { label: "Past due", tone: "rose" },
+};
+
+const hours = (value: number) => `${value.toFixed(2)} h`;
+
+export function periodTotals(period: TimecardPeriod) {
+  return period.days.reduce(
+    (sum, day) => ({ input: sum.input + day.totalInput, actual: sum.actual + day.totalActual }),
+    { input: 0, actual: 0 },
+  );
 }
 
-function statusLabel(status: "open" | "due" | "past_due") {
-  switch (status) {
-    case "open":
-      return "Open";
-    case "due":
-      return "Due";
-    case "past_due":
-      return "Past due";
-  }
-}
-
+/**
+ * Pay periods, newest first, each a group of shift rows (one per event per
+ * day). Shared by My timecards and the admin's view of one crew member.
+ */
 export function TimecardPeriodList({ periods }: { periods: TimecardPeriod[] }) {
-  const [expandedLabel, setExpandedLabel] = useState<string | null>(null);
-
-  if (!periods.length) {
-    return <p className="text-sm text-muted-foreground">No shifts recorded in recent pay periods.</p>;
-  }
-
   return (
-    <>
+    <div className="space-y-4" data-testid="timecard-periods">
       {periods.map((period) => {
-        const isExpanded = expandedLabel === period.label;
+        const totals = periodTotals(period);
+        const status = PERIOD_STATUS[period.status];
         return (
-          <Card key={period.label}>
-            <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
-              <div className="space-y-1">
-                <CardTitle className="text-base">{period.label}</CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  Due {formatDate(period.dueMs)} · {period.daysWorked} days worked
-                </p>
-              </div>
-              {period.daysWorked > 0 ? (
-                <span
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-xs font-medium",
-                    statusBadgeClass(period.status),
-                  )}
-                >
-                  {statusLabel(period.status)}
+          <RowGroup
+            key={period.label}
+            testId="timecard-period"
+            className="border"
+            title={
+              <>
+                {period.label}
+                {period.daysWorked > 0 ? (
+                  <StatusPill tone={status.tone} className="h-5">
+                    {status.label}
+                  </StatusPill>
+                ) : null}
+              </>
+            }
+            description={`Due ${formatDate(period.dueMs)} · ${period.daysWorked} day${period.daysWorked === 1 ? "" : "s"} worked`}
+            aside={
+              period.daysWorked > 0 ? (
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  <span className="font-medium text-foreground">{hours(totals.input)}</span> to input ·{" "}
+                  {hours(totals.actual)} worked
                 </span>
-              ) : (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                  No days
-                </span>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <button
-                type="button"
-                className="text-sm text-primary hover:underline"
-                onClick={() => setExpandedLabel(isExpanded ? null : period.label)}
-              >
-                {isExpanded ? "Hide details" : "Show day-by-day details"}
-              </button>
-              {isExpanded ? <TimecardDetail days={period.days} /> : null}
-            </CardContent>
-          </Card>
+              ) : null
+            }
+          >
+            {period.days.length === 0 ? (
+              <li className="px-3 py-3 text-sm text-muted-foreground">No shifts in this pay period.</li>
+            ) : (
+              period.days.flatMap((day) =>
+                day.events.map((event) => (
+                  <ListRow
+                    key={`${day.dateMs}-${event.eventId}`}
+                    data-testid="timecard-shift-row"
+                    href={`/dashboard/events/${event.eventId}`}
+                  >
+                    <RowText eyebrow={formatDate(day.dateMs)} title={event.title} />
+                    <RowCell className="w-28">{hours(event.inputHours)} to input</RowCell>
+                    <RowCell className="w-28" hideBelow="sm" muted>
+                      {hours(event.actualHours)} worked
+                    </RowCell>
+                  </ListRow>
+                )),
+              )
+            )}
+          </RowGroup>
         );
       })}
-    </>
+    </div>
   );
 }

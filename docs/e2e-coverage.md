@@ -278,7 +278,8 @@ the URL looks like cloud.
 | `inventory/csv-import.spec.ts` | CSV import: types + assets from fixture files (Batch 12) |
 | `users/band-org-profile.spec.ts` | Band org profile admin edit + pollConvex assert (Batch 12) |
 | `quotes/public-post-mortem.spec.ts` | Day-of lead submits the public post-mortem form |
-| `insights/insights-smoke.spec.ts` | Insights tabs + Feedback client responses + day-of-lead post-mortems |
+| `insights/insights-smoke.spec.ts` | Insights route tabs, URL date range across tabs, custom range pickers, Feedback client responses + day-of-lead post-mortems |
+| `smoke/home-and-post-event.spec.ts` | Admin Home: one Customize control, merged upcoming-events widget; My post-event work header + empty state |
 
 ## Remaining gaps
 

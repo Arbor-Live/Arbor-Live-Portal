@@ -16,14 +16,10 @@ import {
   requireAnalyticsAccess,
 } from "./lib/analyticsQuery";
 import { arborEarnedRevenueUsd, invoicePassThroughUsd } from "./lib/invoiceProfit";
-import { classifyPaymentQueue } from "./lib/invoicePaymentStatus";
-import { getActivePaymentProofSubmission } from "./lib/paymentProof";
+import { collectOpenReceivableRows } from "./paymentProof";
 
 /** Bounded scan caps — intentional; return `truncated` when hit. */
 const BAND_PAYMENT_SCAN_LIMIT = 1000;
-/** Match paymentProof.listByQueue lookback so AR aligns with Payments queues. */
-const AR_EVENT_LOOKBACK_MS = 90 * 24 * 60 * 60 * 1000;
-const AR_EVENT_SCAN_LIMIT = 500;
 const TOP_CLIENTS_DEFAULT = 10;
 
 const rangeArgs = analyticsRangeArgs;
@@ -263,58 +259,99 @@ export const getRevenueMix = query({
   },
 });
 
+const arBucketValidator = v.object({ count: v.number(), totalUsd: v.number() });
+const AR_AGING_BUCKETS = ["not_due", "1_30", "31_60", "61_90", "90_plus"] as const;
+const AR_OLDEST_LIMIT = 5;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Whole days since the due date; due later today is not yet past due. */
+function daysPastDue(dueAt: number, now: number) {
+  return Math.floor((now - dueAt) / DAY_MS);
+}
+
+function arAgingBucket(daysPastDue: number): (typeof AR_AGING_BUCKETS)[number] {
+  if (daysPastDue <= 0) return "not_due";
+  if (daysPastDue <= 30) return "1_30";
+  if (daysPastDue <= 60) return "31_60";
+  if (daysPastDue <= 90) return "61_90";
+  return "90_plus";
+}
+
+/**
+ * Open receivables right now: every approved, unpaid invoice once (shared
+ * multi-day and series invoices included), however old its event. Rows and
+ * queues match the Payments tab's; aging is days past the payment due date.
+ */
 export const getArSnapshot = query({
   args: {},
   returns: v.object({
-    paymentPending: v.object({ count: v.number(), totalUsd: v.number() }),
-    proofNoReceipt: v.object({ count: v.number(), totalUsd: v.number() }),
-    overdue: v.object({ count: v.number(), totalUsd: v.number() }),
+    openTotalUsd: v.number(),
+    openCount: v.number(),
+    paymentPending: arBucketValidator,
+    proofNoReceipt: arBucketValidator,
+    overdue: arBucketValidator,
+    aging: v.array(
+      v.object({
+        bucket: v.union(...AR_AGING_BUCKETS.map((bucket) => v.literal(bucket))),
+        count: v.number(),
+        totalUsd: v.number(),
+      }),
+    ),
+    oldest: v.array(
+      v.object({
+        invoiceId: v.id("invoices"),
+        invoiceNumber: v.string(),
+        title: v.string(),
+        totalUsd: v.number(),
+        dueAt: v.number(),
+        daysPastDue: v.number(),
+        proofSubmitted: v.boolean(),
+      }),
+    ),
     truncated: v.boolean(),
   }),
   handler: async (ctx) => {
     await requireAnalyticsAccess(ctx);
     const now = Date.now();
-    const windowStart = now - AR_EVENT_LOOKBACK_MS;
+    const { rows, truncated } = await collectOpenReceivableRows(ctx, now);
 
-    const candidates = await ctx.db
-      .query("events")
-      .withIndex("by_startAt", (q) => q.gte("startAt", windowStart))
-      .take(AR_EVENT_SCAN_LIMIT);
-
-    const buckets = {
+    const queues = {
       payment_pending: { count: 0, totalUsd: 0 },
       proof_no_receipt: { count: 0, totalUsd: 0 },
       overdue: { count: 0, totalUsd: 0 },
     };
-
-    for (const event of candidates) {
-      if (!event.invoiceId) continue;
-      const invoice = await ctx.db.get(event.invoiceId);
-      if (!invoice) continue;
-      const activeSubmission = await getActivePaymentProofSubmission(ctx, event._id);
-      const queue = classifyPaymentQueue({
-        invoice,
-        event,
-        activeSubmission,
-        nowMs: now,
-      });
-      if (queue === "payment_pending") {
-        buckets.payment_pending.count += 1;
-        buckets.payment_pending.totalUsd += invoice.totalUsd;
-      } else if (queue === "proof_no_receipt") {
-        buckets.proof_no_receipt.count += 1;
-        buckets.proof_no_receipt.totalUsd += invoice.totalUsd;
-      } else if (queue === "overdue") {
-        buckets.overdue.count += 1;
-        buckets.overdue.totalUsd += invoice.totalUsd;
-      }
+    const aging = new Map(AR_AGING_BUCKETS.map((bucket) => [bucket, { count: 0, totalUsd: 0 }]));
+    for (const row of rows) {
+      if (row.queue === "payment_received") continue;
+      const queue = queues[row.queue];
+      queue.count += 1;
+      queue.totalUsd += row.totalUsd;
+      const bucket = aging.get(arAgingBucket(daysPastDue(row.dueAt, now)))!;
+      bucket.count += 1;
+      bucket.totalUsd += row.totalUsd;
     }
 
     return {
-      paymentPending: buckets.payment_pending,
-      proofNoReceipt: buckets.proof_no_receipt,
-      overdue: buckets.overdue,
-      truncated: candidates.length >= AR_EVENT_SCAN_LIMIT,
+      openTotalUsd: rows.reduce((sum, row) => sum + row.totalUsd, 0),
+      openCount: rows.length,
+      paymentPending: queues.payment_pending,
+      proofNoReceipt: queues.proof_no_receipt,
+      overdue: queues.overdue,
+      aging: AR_AGING_BUCKETS.map((bucket) => ({ bucket, ...aging.get(bucket)! })),
+      oldest: rows
+        .filter((row) => daysPastDue(row.dueAt, now) > 0)
+        .sort((a, b) => a.dueAt - b.dueAt)
+        .slice(0, AR_OLDEST_LIMIT)
+        .map((row) => ({
+          invoiceId: row.invoiceId,
+          invoiceNumber: row.invoiceNumber,
+          title: row.eventTitle,
+          totalUsd: row.totalUsd,
+          dueAt: row.dueAt,
+          daysPastDue: daysPastDue(row.dueAt, now),
+          proofSubmitted: Boolean(row.submission),
+        })),
+      truncated,
     };
   },
 });

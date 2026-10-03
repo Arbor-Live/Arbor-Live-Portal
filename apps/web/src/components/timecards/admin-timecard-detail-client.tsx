@@ -1,11 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "convex/react";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
-import { Button } from "@/components/ui/button";
+import { MetaItem, PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TimecardPeriodSummary } from "@/components/timecards/timecard-period-summary";
 import { TimecardPeriodList } from "@/components/timecards/timecard-period-list";
 
 export function AdminTimecardDetailClient({ userId }: { userId: string }) {
@@ -17,17 +18,23 @@ export function AdminTimecardDetailClient({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{detail.name}</h1>
-          <p className="text-sm text-muted-foreground">{detail.email}</p>
-        </div>
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/dashboard/timecards">Back to overview</Link>
-        </Button>
-      </div>
+    <div className="space-y-4 pb-24" data-testid="timecard-detail-page">
+      <PageHeader
+        back={{ href: "/dashboard/timecards", label: "Crew timecards" }}
+        title={detail.name}
+        description="Hours from scheduled shifts over the last three pay periods. Hours to input are what goes into Stanford's payroll."
+        meta={
+          detail.email ? (
+            <MetaItem icon={EnvelopeSimpleIcon}>
+              <a href={`mailto:${detail.email}`} className="hover:underline">
+                {detail.email}
+              </a>
+            </MetaItem>
+          ) : null
+        }
+      />
 
+      <TimecardPeriodSummary periods={detail.periods} />
       <TimecardPeriodList periods={detail.periods} />
     </div>
   );

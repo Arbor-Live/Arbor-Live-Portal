@@ -27,11 +27,15 @@ export function DatePickerField({
   onChange,
   placeholder,
   className,
+  id,
+  "aria-label": ariaLabel,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  id?: string;
+  "aria-label"?: string;
 }) {
   const [open, setOpen] = useState(false);
   const selected = useMemo(() => instantFromDateKey(value), [value]);
@@ -43,6 +47,8 @@ export function DatePickerField({
         <Button
           type="button"
           variant="outline"
+          id={id}
+          aria-label={ariaLabel ? `${ariaLabel}: ${label || placeholder || "Pick a date"}` : undefined}
           data-empty={!value}
           data-testid="date-picker"
           data-value={value}

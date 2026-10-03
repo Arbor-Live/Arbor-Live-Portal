@@ -6,10 +6,10 @@ import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Sparkline } from "@/components/insights/sparkline";
 import { formatUsd } from "@/lib/format";
-import { getDefaultInsightsDateInputs, insightsRangeFromDateInputs } from "@/lib/insights-range";
+import { insightsRangeFromDateInputs, trailingTwelveMonthDateInputs } from "@/lib/insights-range";
 
 function useDefaultInsightsRange() {
-  const defaults = getDefaultInsightsDateInputs();
+  const defaults = trailingTwelveMonthDateInputs();
   return insightsRangeFromDateInputs(defaults.startDate, defaults.endDate);
 }
 

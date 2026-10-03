@@ -5,7 +5,8 @@ import { requireAdmin, requireArborInternalContext } from "./auth";
 export const EVENT_SCAN_LIMIT = 1000;
 export const INVOICE_SCAN_LIMIT = 2000;
 export const REQUEST_SCAN_LIMIT = 500;
-export const CREWED_EVENT_SCAN_LIMIT = 150;
+/** Crewed events per crew query, after filtering (each reads its shifts). */
+export const CREWED_EVENT_SCAN_LIMIT = 400;
 export const SHIFTS_PER_EVENT_LIMIT = 200;
 
 export const analyticsRangeArgs = {
