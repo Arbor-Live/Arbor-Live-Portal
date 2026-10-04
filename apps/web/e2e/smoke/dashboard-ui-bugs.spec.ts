@@ -11,12 +11,14 @@ test.describe("dashboard UI fixes", () => {
       timeout: 30_000,
     });
 
-    // "My Timecards" (/dashboard/timecards/mine) wins over "Crew timecards"
-    // (/dashboard/timecards); the parent must not also read active.
+    // "My timecards" (/dashboard/timecards/mine, under My work) wins over
+    // "Crew timecards" (/dashboard/timecards, under Ops Center), even across
+    // sections, and Home doesn't read active on every page.
     const mine = page.locator('a[href="/dashboard/timecards/mine"]').first();
     await expect(mine).toHaveAttribute("data-active", "true", { timeout: 30_000 });
-    const crew = page.locator('a[href="/dashboard/timecards"]').first();
-    await expect(crew).toHaveAttribute("data-active", "false");
+    // Ops Center stays collapsed here, so only check nothing else is highlighted.
+    await expect(page.locator('a[href="/dashboard/timecards"][data-active="true"]')).toHaveCount(0);
+    await expect(page.locator('a[href="/dashboard"][data-active="true"]')).toHaveCount(0);
   });
 
   test("crew scheduling counts slots-less events as needing crew", async ({ page }) => {
