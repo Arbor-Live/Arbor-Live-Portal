@@ -108,13 +108,12 @@ describe("buildRunOfShow", () => {
       [setup],
       {
         playOrder: [
-          { act: larks, setMinutes: 45 },
-          { act: owls, setMinutes: 60 },
+          { act: larks, setMinutes: 45, soundcheckMinutes: 30 },
+          { act: owls, setMinutes: 60, soundcheckMinutes: 30 },
         ],
         doorsAt: at("18:00"),
         firstSetAt: at("18:30"),
         changeoverMinutes: 15,
-        soundcheckMinutes: 30,
         soundcheckOrder: "reverse",
         eventStartAt: at("15:00"),
       },
@@ -137,6 +136,30 @@ describe("buildRunOfShow", () => {
     });
   });
 
+  it("gives each act its own soundcheck length and skips acts with none", () => {
+    const oldCheck = block("soundcheck", "17:00", "17:30", { participationId: "larks", actOwned: true });
+    const built = buildRunOfShow(
+      [oldCheck],
+      {
+        playOrder: [
+          { act: larks, setMinutes: 45, soundcheckMinutes: 0 },
+          { act: owls, setMinutes: 60, soundcheckMinutes: 10 },
+          { act: tba, setMinutes: 30, soundcheckMinutes: 30 },
+        ],
+        doorsAt: at("18:00"),
+        firstSetAt: at("18:30"),
+        changeoverMinutes: 0,
+        soundcheckOrder: "reverse",
+        eventStartAt: at("17:00"),
+      },
+      () => "new",
+    );
+    const checks = built
+      .filter((b) => b.blockType === "soundcheck")
+      .map((b) => `${b.startsAt.slice(11)}-${b.endsAt.slice(11)} ${b.label}`);
+    expect(checks).toEqual(["17:20-17:50 TBA soundcheck", "17:50-18:00 Night Owls soundcheck"]);
+  });
+
   it("reuses an act's existing block ids and drops old doors and changeovers", () => {
     const show = block("show", "18:00", "23:00");
     const oldSet = block("set", "21:00", "22:00", { participationId: "owls", actOwned: true });
@@ -144,11 +167,10 @@ describe("buildRunOfShow", () => {
     const built = buildRunOfShow(
       [show, oldSet, oldDoors],
       {
-        playOrder: [{ act: owls, setMinutes: 60 }],
+        playOrder: [{ act: owls, setMinutes: 60, soundcheckMinutes: 30 }],
         doorsAt: at("19:00"),
         firstSetAt: at("19:30"),
         changeoverMinutes: 15,
-        soundcheckMinutes: 30,
         soundcheckOrder: "reverse",
         eventStartAt: at("18:00"),
       },

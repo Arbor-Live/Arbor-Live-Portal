@@ -189,8 +189,10 @@ export function CrewAvailabilityResponseForm({
   }
 
   function choose(value: string) {
-    if (!value) return;
-    const next = value as CrewAvailabilityResponseStatus;
+    // Tapping the selected answer comes through as "" — treat it as re-confirming
+    // that answer (e.g. after the schedule changed) instead of ignoring it.
+    const next = (value || status) as CrewAvailabilityResponseStatus | null;
+    if (!next) return;
     setStatus(next);
     setError(null);
     // "Some of it" needs details first; everything else saves on tap.
