@@ -36,7 +36,7 @@ test.describe("artist directory", () => {
       eventTitle: `E2E Directory Show ${stamp}`,
     }) as { eventTitle: string };
 
-    await page.goto("/dashboard/events/artists");
+    await page.goto("/dashboard/artists/directory");
     await expect(page.getByTestId("artist-directory")).toBeVisible({ timeout: 30_000 });
 
     // Typed the way a phone shows it, stored as bare digits.

@@ -67,7 +67,7 @@ canonical description of the domain itself.
   Contacts card; it feeds the event brief, the public quote contacts, and the
   event Contacts inherited rows. Per-rider day-of contact is still printed on the
   rider itself and used where no event/band context exists.
-- **Artist directory** (`/dashboard/events/artists`, every Arbor staff member,
+- **Artist directory** (`/dashboard/artists/directory`, every Arbor staff member,
   not only admins): each active artist, listed publicly or not, with its
   booking contact (same precedence as above), portal members with their profile
   phone, the payee, names listed on the profile, and the next and last show

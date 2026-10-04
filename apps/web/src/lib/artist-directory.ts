@@ -1,5 +1,5 @@
 /**
- * Search for the staff artist directory (`/dashboard/events/artists`). Staff
+ * Search for the staff artist directory (`/dashboard/artists/directory`). Staff
  * often start from a name or number in a band group chat, so a query matches
  * the act and every person on it, and phone numbers match on digits alone
  * ("650-555-0101", "(650) 555 0101" and "+16505550101" are the same number).
