@@ -317,6 +317,7 @@ labels (`TAB_ICONS` in `event-workspace-nav.tsx`, `MOMENT_ICONS` in
 | Opens elsewhere / new tab | `ArrowSquareOutIcon` (`size-3`, after the label) |
 | Copy | `CopyIcon` |
 | Email / invite | `EnvelopeSimpleIcon` |
+| Phone number | `PhoneIcon` (`size-3.5`, before a `tel:` link) |
 | Filter (the FilterBar button) | `FunnelSimpleIcon` |
 | Search | `MagnifyingGlassIcon` (inside the input: `pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground`, input gets `pl-9`) |
 | Needs attention (inline, with a count) | `WarningIcon` |

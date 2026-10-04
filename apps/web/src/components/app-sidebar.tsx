@@ -114,6 +114,7 @@ const eventsSubItems: NavSubItem[] = [
   { title: "Venues", url: "/dashboard/events/venues", adminOnly: true },
   { title: "Open Mic", url: "/dashboard/events/open-mic" },
   { title: "Open Positions", url: "/dashboard/events/positions" },
+  { title: "Artist directory", url: "/dashboard/events/artists" },
   { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", adminOnly: true },
   { title: "My Availability", url: "/dashboard/events/my-availability" },
   { title: "My Post-event work", url: "/dashboard/events/post-event" },
@@ -141,6 +142,7 @@ const bandsSubItems: NavSubItem[] = [
   { title: "Team", url: "/dashboard/artists/team" },
   { title: "Technical riders", url: "/dashboard/artists/riders" },
   { title: "Payments", url: "/dashboard/artists/payments" },
+  { title: "Directory", url: "/dashboard/events/artists", adminOnly: true },
   { title: "Organizations", url: "/dashboard/users/organizations", adminOnly: true },
   { title: "Artist applications", url: "/dashboard/users/artist-applications", adminOnly: true },
 ]

@@ -42,7 +42,11 @@ import {
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import { marketingDesignLinkValue, normalizeMarketingLinks } from "./lib/marketingLinks";
 import { buildArtistLinks } from "./lib/publicArtistProfile";
-import { artistOrganizationTypeValue, isArtistOrganizationType } from "./lib/organizationType";
+import {
+  artistOrganizationTypeValue,
+  isArtistOrganizationType,
+  type ArtistOrganizationType,
+} from "./lib/organizationType";
 import {
   collectKeysFromOrganizationProfile,
   releaseReplacedR2Reference,
@@ -771,6 +775,183 @@ export const listBandsForInvoiceLines = query({
         memberCount,
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+const artistDirectoryPersonValue = v.object({
+  userId: v.string(),
+  name: v.string(),
+  email: v.string(),
+  phone: v.string(),
+  bandRole: v.string(),
+  isOrgAdmin: v.boolean(),
+});
+
+const artistDirectoryShowValue = v.object({
+  eventId: v.id("events"),
+  title: v.string(),
+  startAt: v.number(),
+});
+
+/**
+ * The act's booking contact with the same precedence as event contacts
+ * (`lib/eventContacts.ts` `buildBandContacts`): the profile's name and
+ * email/phone win, and the default rider's day-of contact fills the gaps.
+ */
+function resolveArtistBookingContact(
+  profile: Pick<Doc<"organizationProfiles">, "mainContactName" | "mainContactEmail" | "mainContactPhone"> | undefined,
+  rider: Pick<Doc<"bandRiders">, "contactName" | "contactEmail" | "contactPhone"> | null,
+) {
+  const profileName = profile?.mainContactName?.trim() ?? "";
+  const profileEmail = profile?.mainContactEmail?.trim() ?? "";
+  const profilePhone = profile?.mainContactPhone?.trim() ?? "";
+  const profileReach = Boolean(profileEmail || profilePhone);
+  const name = profileName || rider?.contactName?.trim() || "";
+  const email = profileReach ? profileEmail : (rider?.contactEmail?.trim() ?? "");
+  const phone = profileReach ? profilePhone : (rider?.contactPhone?.trim() ?? "");
+  const source: "profile" | "rider" | "none" =
+    profileName || profileReach ? "profile" : name || email || phone ? "rider" : "none";
+  return { name, email, phone, source };
+}
+
+/**
+ * Every active artist with the people to reach: the main contact, portal
+ * members (with their profile phone), the payee and listed band members.
+ * Listed or not, so staff can match a group chat to an act. Arbor staff only.
+ */
+export const listArtistDirectory = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      organizationId: v.string(),
+      name: v.string(),
+      organizationType: artistOrganizationTypeValue,
+      oneLiner: v.string(),
+      genres: v.array(v.string()),
+      publicListing: v.boolean(),
+      publicSlug: v.string(),
+      mainContactName: v.string(),
+      mainContactEmail: v.string(),
+      mainContactPhone: v.string(),
+      /** "rider" when the profile has no booking contact and the default rider's day-of contact stands in. */
+      mainContactSource: v.union(v.literal("profile"), v.literal("rider"), v.literal("none")),
+      payeeName: v.string(),
+      payeeEmail: v.string(),
+      members: v.array(artistDirectoryPersonValue),
+      bandMembers: v.array(v.string()),
+      nextShow: v.union(artistDirectoryShowValue, v.null()),
+      lastShow: v.union(artistDirectoryShowValue, v.null()),
+    }),
+  ),
+  handler: async (ctx) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const now = Date.now();
+    const organizations = await getAllOrganizations(ctx);
+    const profiles = await ctx.db.query("organizationProfiles").withIndex("by_organizationType").take(1000);
+    const profileByOrgId = new Map(profiles.map((profile) => [profile.organizationId, profile]));
+    const artists = organizations
+      .map((organization) => {
+        const organizationId = getRecordId(organization);
+        const profile = profileByOrgId.get(organizationId);
+        return { organization, organizationId, profile, type: resolveOrganizationType(organization, profile) };
+      })
+      .filter((row) => isArtistOrganizationType(row.type) && row.profile?.status !== "archived");
+
+    // A member can sit in several acts; look each person up once.
+    const userCache = new Map<string, Promise<{ user: AuthUser | null; phone: string }>>();
+    const loadPerson = (userId: string) => {
+      let pending = userCache.get(userId);
+      if (!pending) {
+        pending = (async () => {
+          const [user, adminProfile] = await Promise.all([
+            findAuthUserById(ctx, userId),
+            ctx.db
+              .query("userAdminProfiles")
+              .withIndex("by_userId", (q) => q.eq("userId", userId))
+              .unique(),
+          ]);
+          return { user, phone: adminProfile?.phone?.trim() ?? "" };
+        })();
+        userCache.set(userId, pending);
+      }
+      return pending;
+    };
+    const eventCache = new Map<Id<"events">, Promise<Doc<"events"> | null>>();
+    const loadEvent = (eventId: Id<"events">) => {
+      let pending = eventCache.get(eventId);
+      if (!pending) {
+        pending = ctx.db.get(eventId);
+        eventCache.set(eventId, pending);
+      }
+      return pending;
+    };
+
+    const rows = await Promise.all(
+      artists.map(async ({ organization, organizationId, profile, type }) => {
+        const [memberships, participations, defaultRider] = await Promise.all([
+          ctx.db
+            .query("userOrganizationMemberships")
+            .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+            .take(100),
+          ctx.db
+            .query("eventBandParticipations")
+            .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+            // Newest bookings first, so a long history can't push out the next show.
+            .order("desc")
+            .take(200),
+          ctx.db
+            .query("bandRiders")
+            .withIndex("by_organizationId_and_isDefault", (q) =>
+              q.eq("organizationId", organizationId).eq("isDefault", true),
+            )
+            .first(),
+        ]);
+        const contact = resolveArtistBookingContact(profile, defaultRider);
+        const members = await Promise.all(
+          memberships
+            .filter((membership) => membership.active)
+            .map(async (membership) => {
+              const { user, phone } = await loadPerson(membership.userId);
+              return {
+                userId: membership.userId,
+                name: user?.name?.trim() || user?.email || "Unknown member",
+                email: user?.email ?? "",
+                phone,
+                bandRole: membership.bandRole?.trim() ?? "",
+                isOrgAdmin: isArtistOrgAdminRole(membership.role),
+              };
+            }),
+        );
+        const shows = (await Promise.all(participations.map((row) => loadEvent(row.eventId))))
+          .filter((event): event is Doc<"events"> => event !== null && event.status !== "cancelled")
+          .map((event) => ({ eventId: event._id, title: event.title, startAt: event.startAt, endAt: event.endAt }));
+        const upcoming = shows.filter((show) => show.endAt >= now).sort((a, b) => a.startAt - b.startAt)[0];
+        const past = shows.filter((show) => show.endAt < now).sort((a, b) => b.startAt - a.startAt)[0];
+        const toShow = (show: (typeof shows)[number] | undefined) =>
+          show ? { eventId: show.eventId, title: show.title, startAt: show.startAt } : null;
+        return {
+          organizationId,
+          name: (profile?.displayName ?? organization.name ?? "").trim() || "Artist",
+          organizationType: type as ArtistOrganizationType,
+          oneLiner: profile?.oneLiner ?? "",
+          genres: profile?.genres ?? [],
+          publicListing: profile?.publicListing ?? false,
+          publicSlug: profile?.publicSlug ?? "",
+          mainContactName: contact.name,
+          mainContactEmail: contact.email,
+          mainContactPhone: contact.phone,
+          mainContactSource: contact.source,
+          payeeName: profile?.designatedPayeeName ?? "",
+          payeeEmail: profile?.designatedPayeeEmail ?? "",
+          members: members.sort((a, b) => a.name.localeCompare(b.name)),
+          bandMembers: profile?.bandMembers ?? [],
+          nextShow: toShow(upcoming),
+          lastShow: toShow(past),
+        };
+      }),
+    );
+    return rows.sort((a, b) => a.name.localeCompare(b.name));
   },
 });
 
