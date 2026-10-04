@@ -91,14 +91,15 @@ Fix anything ugly or broken that the screenshots reveal before opening the PR.
 
 1. Commit only intended files (no screenshots in the feature branch, no env
    files). Push the branch.
-2. Upload the screenshots and get Markdown for them:
-
-   ```bash
-   .agents/skills/autonomous-dev/scripts/upload-screenshots.sh shot1.png shot2.png
-   ```
-
-   This stores them on the orphan `pr-assets` branch (no workflow runs on it)
-   and prints `![alt](raw-url)` lines.
+2. Upload the screenshots to the orphan `pr-assets` branch, which nothing
+   triggers CI on (workflows run on `pull_request` and pushes to `main`).
+   The repo is public, so the raw URLs render in the PR:
+   - If `pr-assets` does not exist yet, create it empty:
+     `git push origin $(git commit-tree $(git mktree </dev/null) -m "PR assets"):refs/heads/pr-assets`
+   - For each image, `PUT repos/{owner}/{repo}/contents/<branch>/<timestamp>-<name>.png`
+     via `gh api --input` with `{message, branch: "pr-assets", content: <base64>}`
+     (send it as a JSON file; large base64 overflows `-f`). Use the returned
+     `content.download_url` in `![caption](url)`.
 3. `gh pr create` with a body written for the reviewer:
    - **What & why** (2–5 lines)
    - **Screenshots** (the uploaded image lines, each with a short caption)
@@ -108,16 +109,6 @@ Fix anything ugly or broken that the screenshots reveal before opening the PR.
 5. Post the PR link plus the same screenshots in chat for the user to review.
 
 ## 5. Autonomous CodeRabbit + CI loop
-
-Get the full state in one call whenever you wake up:
-
-```bash
-.agents/skills/autonomous-dev/scripts/coderabbit-status.sh <pr>
-```
-
-It prints head SHA vs. the last CodeRabbit-reviewed commit, any review-limit
-notice with its wait time, unresolved threads (with GraphQL thread ids),
-merge state, and checks.
 
 ### How CodeRabbit works here
 
@@ -129,6 +120,10 @@ merge state, and checks.
 - Every push to the PR triggers an incremental review that spends capacity.
   So **batch fixes**: address every open finding locally, run the gates, and
   push once. Never push one fix at a time.
+- The limit notice lives in CodeRabbit's summary issue comment (edited in
+  place, marked `rate limited by coderabbit.ai`), not in a review. Compare
+  its `updated_at` with the latest CodeRabbit review's `submitted_at` and
+  `commit_id` to tell whether your head is still unreviewed.
 - Do not tick the "Autopilot" or "Fix CodeRabbit comments" checkboxes in its
   comments. You are the autopilot, and two fixers fight.
 
@@ -139,7 +134,8 @@ merge state, and checks.
    review *body*: some findings appear only there as "outside diff range" or
    "nitpick" sections.
 2. **Push one batch**, then reply on each thread in one line ("Fixed in
-   `abc1234`: …" or "Declining: …") and resolve the threads you fixed:
+   `abc1234`: …" or "Declining: …") and resolve the threads you fixed (ids from
+   the PR's GraphQL `reviewThreads`):
 
    ```bash
    gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -F id=<thread-id>
@@ -155,7 +151,7 @@ merge state, and checks.
    conflicts. If `watch_pull_request` is not available, run a background
    `sleep 540 && gh pr checks <pr>` (Bash `run_in_background`) and continue
    when it exits.
-5. **Review limit hit** (status shows a notice newer than the last review,
+5. **Review limit hit** (the limit notice is newer than the last review,
    and your head commit is unreviewed):
    - Parse N from "available in N minutes". Run a background
      `sleep $(( (N + 2) * 60 ))` so you wake when capacity returns. Keep
