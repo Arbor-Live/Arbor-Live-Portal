@@ -8,20 +8,10 @@ export const metadata: Metadata = {
 
 export default function BandApplicationsPage() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">Artist applications</h1>
-        <p className="text-sm text-muted-foreground">
-          Review public artist applications. Approving creates the artist org, invites the contact
-          (and any listed members), and leaves payout onboarding for them to finish. Public listing
-          stays off until they enable it.
-        </p>
-      </div>
-      <ArborOnlyGuard>
-        <AdminOnlyGuard>
-          <BandApplicationsAdminClient />
-        </AdminOnlyGuard>
-      </ArborOnlyGuard>
-    </div>
+    <ArborOnlyGuard>
+      <AdminOnlyGuard>
+        <BandApplicationsAdminClient />
+      </AdminOnlyGuard>
+    </ArborOnlyGuard>
   );
 }
