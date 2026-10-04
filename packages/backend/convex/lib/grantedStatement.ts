@@ -127,6 +127,8 @@ export type GrantedReferences = {
   invoiceNumbers: string[];
   /** Pre-portal invoice numbers such as `AL250179`. */
   legacyInvoiceNumbers: string[];
+  /** `ALBPAY-XXXXXXX` artist payout IDs, typed into the GrantED line description. */
+  payoutNumbers: string[];
   /** GrantED's own numbers: `S-` payouts, `R-` reimbursements, `PO-`, `I-`. */
   grantedNumbers: string[];
 };
@@ -139,6 +141,7 @@ export function extractGrantedReferences(...texts: (string | undefined)[]): Gran
     requestNumbers: all(/\bALREQ-?([0-9A-Z]{7})\b/g, (m) => `ALREQ-${m[1]}`),
     invoiceNumbers: all(/\bALINV-?([0-9A-Z]{7})\b/g, (m) => `ALINV-${m[1]}`),
     legacyInvoiceNumbers: all(/\bAL(\d{6})\b/g, (m) => `AL${m[1]}`),
+    payoutNumbers: all(/\bALBPAY-?([0-9A-Z]{7})\b/g, (m) => `ALBPAY-${m[1]}`),
     grantedNumbers: all(/\b(S|R|PO|I)-(\d{6})\b/g, (m) => `${m[1]}-${m[2]}`),
   };
 }

@@ -167,7 +167,7 @@ const entryValidator = v.object({
     }),
   ),
   invoices: v.array(invoiceMatchValidator),
-  /** Payouts carrying this row's S-number. */
+  /** Payouts named by this row's `ALBPAY-` ID or carrying its S-number. */
   payouts: v.array(payoutMatchValidator),
   /** Unpaid payouts whose payee and amount fit this S-row (only `confirmed` ones can be marked paid). */
   suggestedPayouts: v.array(payoutMatchValidator),
@@ -259,9 +259,16 @@ class LedgerMatcher {
       });
     }
 
-    const payouts = [];
-    const suggestedPayouts = [];
-    const misnumberedPayouts = [];
+    // Exact matches: the payout ID staff typed into the GrantED line
+    // description, then the S-number recorded on the payout.
+    const exact = new Map<Id<"eventBandPayments">, Doc<"eventBandPayments">>();
+    for (const payoutNumber of entry.payoutNumbers) {
+      const payout = await this.ctx.db
+        .query("eventBandPayments")
+        .withIndex("by_confirmationToken", (q) => q.eq("confirmationToken", payoutNumber))
+        .first();
+      if (payout) exact.set(payout._id, payout);
+    }
     const sNumbers = entry.grantedNumbers.filter((n) => n.startsWith("S-"));
     for (const number of sNumbers) {
       // Staff type the number by hand, with or without the hyphen.
@@ -270,10 +277,13 @@ class LedgerMatcher {
           .query("eventBandPayments")
           .withIndex("by_servicePaymentNumber", (q) => q.eq("servicePaymentNumber", spelling))
           .take(5)) {
-          payouts.push(payoutMatch(payout));
+          exact.set(payout._id, payout);
         }
       }
     }
+    const payouts = [...exact.values()].map(payoutMatch);
+    const suggestedPayouts = [];
+    const misnumberedPayouts = [];
     if (payouts.length === 0 && sNumbers.length > 0) {
       for (const payout of await this.loadOpenPayouts()) {
         if (fitsRow(payout, entry)) suggestedPayouts.push(payoutMatch(payout));

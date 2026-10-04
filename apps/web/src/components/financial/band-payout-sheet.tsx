@@ -4,7 +4,7 @@ import { SheetSection, SheetField } from "@/components/list-page";
 import Link from "next/link";
 import { useState } from "react";
 import { useMutation } from "convex/react";
-import { ArrowSquareOutIcon, CheckIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, CheckIcon, CopyIcon } from "@phosphor-icons/react";
 import { BandPaymentAgreementPdfButton } from "@/components/financial/band-payment-agreement-pdf-button";
 import { EditPayoutDialog } from "@/components/financial/band-payout-dialogs";
 import { StatusPill } from "@/components/page-header";
@@ -19,6 +19,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
+import { grantedFilingFields } from "@/lib/granted-filing";
 import { api } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
@@ -190,6 +191,8 @@ function PayoutSheetBody({
         ) : null}
       </SheetSection>
 
+      {row.status === "confirmed" ? <GrantedFilingSection row={row} /> : null}
+
       <SheetSection title="Payee">
         {!row.payeeComplete ? (
           <p className="rounded-md bg-status-amber-500/15 px-2 py-1 text-xs text-status-amber-800 dark:text-status-amber-200">
@@ -330,11 +333,11 @@ function TransferNumberField({ row }: { row: PayoutRow }) {
           </Button>
         </span>
       ) : (
-        <span className="flex flex-wrap items-center gap-2">
+        <span className="flex flex-col items-start gap-2">
           <Input
             id={`payout-transfer-number-${row._id}`}
             aria-label="Transfer number"
-            className="h-8 w-36 tabular-nums"
+            className="h-8 w-full tabular-nums"
             value={draft}
             autoFocus
             onChange={(event) => setDraft(event.target.value)}
@@ -343,14 +346,78 @@ function TransferNumberField({ row }: { row: PayoutRow }) {
               if (event.key === "Escape") setDraft(null);
             }}
           />
-          <Button type="button" size="sm" disabled={saving || !draft.trim()} onClick={() => void save()}>
-            Save
-          </Button>
-          <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => setDraft(null)}>
-            Cancel
-          </Button>
+          <span className="flex gap-2">
+            <Button type="button" size="sm" disabled={saving || !draft.trim()} onClick={() => void save()}>
+              Save
+            </Button>
+            <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => setDraft(null)}>
+              Cancel
+            </Button>
+          </span>
         </span>
       )}
     </SheetField>
+  );
+}
+
+async function copyText(value: string, message: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    notify.success(message);
+  } catch {
+    notify.error("Could not copy to the clipboard.");
+  }
+}
+
+/**
+ * The Student Service Payment form, filled from the payout. The line
+ * description carries the payout ID so the GrantED statement import can match
+ * the payment and mark this payout paid with its S-number.
+ */
+function GrantedFilingSection({ row }: { row: PayoutRow }) {
+  const fields = grantedFilingFields(row);
+  return (
+    <SheetSection
+      title="File in GrantED"
+      action={
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-6 px-2 text-xs"
+          onClick={() =>
+            void copyText(fields.map((f) => `${f.label}: ${f.value}`).join("\n"), "GrantED details copied.")
+          }
+        >
+          Copy all
+        </Button>
+      }
+    >
+      <p className="text-xs text-muted-foreground">
+        Keep the payout ID in the line description: importing the next statement then marks this payout paid
+        with GrantED&apos;s S-number. Attach the agreement PDF to the line.
+      </p>
+      <dl className="space-y-1.5">
+        {fields.map((field) => (
+          <div key={field.label} className="grid grid-cols-[8rem_minmax(0,1fr)_auto] items-start gap-2 text-sm">
+            <dt className="text-muted-foreground">{field.label}</dt>
+            <dd className="min-w-0 break-words">{field.value}</dd>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              className="size-6"
+              aria-label={`Copy ${field.label.toLowerCase()}`}
+              onClick={() => void copyText(field.value, `${field.label} copied.`)}
+            >
+              <CopyIcon className="size-3.5" />
+            </Button>
+          </div>
+        ))}
+      </dl>
+      {row.canDownloadAgreementPdf ? (
+        <BandPaymentAgreementPdfButton paymentId={row._id} label="Agreement PDF" />
+      ) : null}
+    </SheetSection>
   );
 }

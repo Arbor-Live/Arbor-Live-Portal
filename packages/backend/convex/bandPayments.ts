@@ -135,6 +135,8 @@ const bandPaymentRowValidator = v.object({
   paidByName: v.optional(v.string()),
   /** The Lineup position this act fills, for `?position=` deep links. */
   lineupNeedId: v.optional(v.id("eventArtistNeeds")),
+  /** That position's act type, for the GrantED filing text. */
+  artistType: v.optional(v.string()),
 });
 
 const bandFacingPaymentRowValidator = v.object({
@@ -341,6 +343,7 @@ async function buildBandPaymentRow(
       q.eq("eventId", payment.eventId).eq("organizationId", payment.organizationId),
     )
     .first();
+  const need = participation?.needId ? await ctx.db.get(participation.needId) : null;
   return {
     _id: payment._id,
     eventId: payment.eventId,
@@ -385,6 +388,7 @@ async function buildBandPaymentRow(
     eventEndAt: event.endAt,
     paidByName: payment.paidByName,
     lineupNeedId: participation?.needId,
+    artistType: need?.artistType,
   };
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { BankIcon, CalendarBlankIcon, UploadSimpleIcon } from "@phosphor-icons/react";
 import type { FunctionReturnType } from "convex/server";
@@ -47,10 +47,37 @@ function signedAmount(entry: Entry) {
   return entry.depositUsd !== 0 ? `+${formatUsd(entry.depositUsd)}` : `−${formatUsd(entry.withdrawalUsd)}`;
 }
 
+type PayoutMatch = Entry["payouts"][number];
+
+function rowSNumber(entry: Entry) {
+  return entry.grantedNumbers.find((number) => number.startsWith("S-"));
+}
+
+const normalizeNumber = (value: string) => value.toUpperCase().replace(/[\s-]/g, "");
+
+/**
+ * What a payout needs for a GrantED S-row: signed payouts get marked paid
+ * with the row's number; paid ones recorded under another number get fixed.
+ */
+function payoutAction(payout: PayoutMatch, sNumber: string | undefined) {
+  if (!sNumber) return null;
+  if (payout.status === "confirmed") return "mark_paid" as const;
+  if (
+    payout.status === "paid" &&
+    normalizeNumber(payout.servicePaymentNumber ?? "") !== normalizeNumber(sNumber)
+  ) {
+    return "change_number" as const;
+  }
+  return null;
+}
+
 function needsAttention(entry: Entry) {
+  const sNumber = rowSNumber(entry);
+  const fixable = (payout: PayoutMatch) => payoutAction(payout, sNumber) !== null;
   return (
     entry.invoices.some((invoice) => !invoice.paymentReceivedAt) ||
-    (entry.suggestedPayouts.length > 0 && entry.payouts.length === 0) ||
+    entry.payouts.some(fixable) ||
+    (entry.payouts.length === 0 && entry.suggestedPayouts.some(fixable)) ||
     entry.misnumberedPayouts.length > 0
   );
 }
@@ -219,7 +246,7 @@ function EntryDetails({ entry }: { entry: Entry }) {
   const markPaymentReceived = useMutation(api.paymentProof.markPaymentReceived);
   const markPayoutPaid = useMutation(api.bandPayments.markPaid);
   const correctNumber = useMutation(api.bandPayments.correctServicePaymentNumber);
-  const sNumber = entry.grantedNumbers.find((number) => number.startsWith("S-"));
+  const sNumber = rowSNumber(entry);
 
   async function attempt(action: () => Promise<unknown>, success: string) {
     try {
@@ -228,6 +255,59 @@ function EntryDetails({ entry }: { entry: Entry }) {
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
     }
+  }
+
+  /** The fix a payout needs for this row, as a button, or nothing. */
+  function payoutButton(payout: PayoutMatch) {
+    const action = payoutAction(payout, sNumber);
+    if (!action || !sNumber) return null;
+    const name = payout.payeeName ?? "this payout";
+    if (action === "mark_paid") {
+      return (
+        <Button
+          type="button"
+          size="sm"
+          onClick={() =>
+            void (async () => {
+              const ok = await confirm({
+                title: `Mark ${name} paid as ${sNumber}?`,
+                description: "The artist gets the payment-completed email.",
+                confirmLabel: "Mark paid",
+              });
+              if (!ok) return;
+              await attempt(
+                () => markPayoutPaid({ paymentId: payout._id, servicePaymentNumber: sNumber }),
+                `Payout marked paid as ${sNumber}.`,
+              );
+            })()
+          }
+        >
+          Mark paid as {sNumber}
+        </Button>
+      );
+    }
+    return (
+      <Button
+        type="button"
+        size="sm"
+        onClick={() =>
+          void (async () => {
+            const ok = await confirm({
+              title: `Change ${name}'s transfer number to ${sNumber}?`,
+              description: `It's recorded as ${payout.servicePaymentNumber ?? "nothing"}. The payout stays paid and the artist isn't emailed.`,
+              confirmLabel: "Change number",
+            });
+            if (!ok) return;
+            await attempt(
+              () => correctNumber({ paymentId: payout._id, servicePaymentNumber: sNumber }),
+              `Transfer number changed to ${sNumber}.`,
+            );
+          })()
+        }
+      >
+        Change to {sNumber}
+      </Button>
+    );
   }
 
   return (
@@ -304,100 +384,37 @@ function EntryDetails({ entry }: { entry: Entry }) {
         <SheetSection title="Artist payout">
           <ul className="space-y-3 text-sm">
             {entry.payouts.map((payout) => (
-              <li key={payout._id}>
-                <Link
-                  className="font-medium underline-offset-4 hover:underline"
-                  href={`/dashboard/financial-hub/artist-payouts?payout=${payout._id}`}
-                >
-                  {payout.payeeName ?? "Artist payout"}
-                </Link>
-                <span className="text-muted-foreground">
-                  {" "}
-                  · {formatUsd(payout.totalUsd)} · {payout.status === "paid" ? "Paid" : "Not marked paid"}
-                </span>
-              </li>
+              <PayoutLine
+                key={payout._id}
+                payout={payout}
+                note={payout.status === "paid" ? `Paid · #${payout.servicePaymentNumber ?? "no number"}` : "Not marked paid"}
+                action={payoutButton(payout)}
+              />
             ))}
             {entry.payouts.length === 0
               ? entry.suggestedPayouts.map((payout) => (
-                  <li key={payout._id} className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <Link
-                        className="font-medium underline-offset-4 hover:underline"
-                        href={`/dashboard/financial-hub/artist-payouts?payout=${payout._id}`}
-                      >
-                        {payout.payeeName ?? "Artist payout"}
-                      </Link>
-                      <span className="text-muted-foreground"> · {formatUsd(payout.totalUsd)}</span>
-                      <p className="text-xs text-muted-foreground">
-                        Same payee and amount as this row.{" "}
-                        {payout.status === "confirmed"
-                          ? "Signed and waiting to be marked paid."
-                          : "The artist hasn't signed in the portal yet, so it can't be marked paid."}
-                      </p>
-                    </div>
-                    {sNumber && payout.status === "confirmed" ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() =>
-                          void (async () => {
-                            const ok = await confirm({
-                              title: `Mark ${payout.payeeName ?? "this payout"} paid as ${sNumber}?`,
-                              description: "The artist gets the payment-completed email.",
-                              confirmLabel: "Mark paid",
-                            });
-                            if (!ok) return;
-                            await attempt(
-                              () => markPayoutPaid({ paymentId: payout._id, servicePaymentNumber: sNumber }),
-                              `Payout marked paid as ${sNumber}.`,
-                            );
-                          })()
-                        }
-                      >
-                        Mark paid as {sNumber}
-                      </Button>
-                    ) : null}
-                  </li>
+                  <PayoutLine
+                    key={payout._id}
+                    payout={payout}
+                    note={`Same payee and amount as this row. ${
+                      payout.status === "confirmed"
+                        ? "Signed and waiting to be marked paid."
+                        : "The artist hasn't signed in the portal yet, so it can't be marked paid."
+                    }`}
+                    action={payoutButton(payout)}
+                  />
                 ))
               : null}
             {entry.misnumberedPayouts.map((payout) => (
-              <li key={payout._id} className="flex flex-wrap items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <Link
-                    className="font-medium underline-offset-4 hover:underline"
-                    href={`/dashboard/financial-hub/artist-payouts?payout=${payout._id}`}
-                  >
-                    {payout.payeeName ?? "Artist payout"}
-                  </Link>
-                  <span className="text-muted-foreground"> · {formatUsd(payout.totalUsd)} · Paid</span>
-                  <p className="text-xs text-status-amber-800 dark:text-status-amber-200">
-                    Same payee and amount, but recorded as{" "}
-                    {payout.servicePaymentNumber ? `#${payout.servicePaymentNumber}` : "no number"}.
-                  </p>
-                </div>
-                {sNumber ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() =>
-                      void (async () => {
-                        const ok = await confirm({
-                          title: `Change ${payout.payeeName ?? "this payout"}'s transfer number to ${sNumber}?`,
-                          description: `It's recorded as ${payout.servicePaymentNumber ?? "nothing"}. The payout stays paid and the artist isn't emailed.`,
-                          confirmLabel: "Change number",
-                        });
-                        if (!ok) return;
-                        await attempt(
-                          () => correctNumber({ paymentId: payout._id, servicePaymentNumber: sNumber }),
-                          `Transfer number changed to ${sNumber}.`,
-                        );
-                      })()
-                    }
-                  >
-                    Change to {sNumber}
-                  </Button>
-                ) : null}
-              </li>
+              <PayoutLine
+                key={payout._id}
+                payout={payout}
+                warning
+                note={`Same payee and amount, but recorded as ${
+                  payout.servicePaymentNumber ? `#${payout.servicePaymentNumber}` : "no number"
+                }.`}
+                action={payoutButton(payout)}
+              />
             ))}
           </ul>
         </SheetSection>
@@ -450,5 +467,39 @@ function ImportStatementButton({ onImported }: { onImported: (accountNumber: str
         {busy ? "Importing…" : "Import statement"}
       </Button>
     </>
+  );
+}
+
+function PayoutLine({
+  payout,
+  note,
+  warning,
+  action,
+}: {
+  payout: PayoutMatch;
+  note: string;
+  warning?: boolean;
+  action: ReactNode;
+}) {
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2">
+      <div className="min-w-0">
+        <Link
+          className="font-medium underline-offset-4 hover:underline"
+          href={`/dashboard/financial-hub/artist-payouts?payout=${payout._id}`}
+        >
+          {payout.payeeName ?? "Artist payout"}
+        </Link>
+        <span className="text-muted-foreground"> · {formatUsd(payout.totalUsd)}</span>
+        <p
+          className={
+            warning ? "text-xs text-status-amber-800 dark:text-status-amber-200" : "text-xs text-muted-foreground"
+          }
+        >
+          {note}
+        </p>
+      </div>
+      {action}
+    </li>
   );
 }

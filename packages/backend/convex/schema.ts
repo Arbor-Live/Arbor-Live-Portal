@@ -1979,6 +1979,7 @@ export default defineSchema({
     requestNumbers: v.array(v.string()),
     invoiceNumbers: v.array(v.string()),
     legacyInvoiceNumbers: v.array(v.string()),
+    payoutNumbers: v.array(v.string()),
     grantedNumbers: v.array(v.string()),
     importedAt: v.number(),
   })

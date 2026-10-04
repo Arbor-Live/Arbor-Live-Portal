@@ -80,11 +80,15 @@ describe("parseGrantedStatement", () => {
 describe("extractGrantedReferences", () => {
   it("finds portal and GrantED numbers", () => {
     expect(
-      extractGrantedReferences("S-006038", "Payment ALREQ-XLTUBZB, alinv-4K8Z2NP, INV.#AL250148 for PO-001551"),
+      extractGrantedReferences(
+        "S-006038",
+        "Payment ALREQ-XLTUBZB, alinv-4K8Z2NP, INV.#AL250148 for PO-001551; Electronic Agreement ALBPAY-TPU9HW4",
+      ),
     ).toEqual({
       requestNumbers: ["ALREQ-XLTUBZB"],
       invoiceNumbers: ["ALINV-4K8Z2NP"],
       legacyInvoiceNumbers: ["AL250148"],
+      payoutNumbers: ["ALBPAY-TPU9HW4"],
       grantedNumbers: ["S-006038", "PO-001551"],
     });
   });
