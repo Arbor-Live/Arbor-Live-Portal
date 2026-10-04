@@ -34,7 +34,7 @@ One Vercel build deploys both sides via `packages/backend/scripts/vercel-deploy.
 
 - Append jobs to `MIGRATION_SERIES` / `runAll` in `convex/migrations.ts`;
   never reorder completed ones. Breaking schema changes: widen–migrate–narrow
-  (see the `convex-migration-helper` skill).
+  (see the `convex-migrate` skill).
 - Local: `pnpm --filter backend migrate`. Prod manual: `pnpm --filter backend
   migrate:prod`. Status: `npx convex run --component migrations lib:getStatus
   --watch`.

@@ -36,7 +36,7 @@ Dependency direction: `web` depends on `backend` (generated API bindings),
   `GET /calendar.ics` events feed; Better Auth routes).
 - `migrations.ts` — `@convex-dev/migrations` runner (`runAll` after deploy).
   Append new jobs to the end of `runAll`; never reorder completed ones.
-- See the convex-migration-helper skill for widen–migrate–narrow.
+- See the convex-migrate skill for widen–migrate–narrow.
 
 ### Module tour
 
