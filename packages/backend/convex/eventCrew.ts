@@ -274,8 +274,8 @@ export const deleteUnassignedShifts = mutation({
 export const getOtForecastForUser = query({
   args: {
     userId: v.string(),
-    rangeStart: v.number(),
-    rangeEnd: v.number(),
+    eventId: v.id("events"),
+    shifts: v.array(v.object({ startsAt: v.number(), endsAt: v.number() })),
   },
   returns: v.object({
     hasOt: v.boolean(),
@@ -287,7 +287,7 @@ export const getOtForecastForUser = query({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    return await getUserOtForecast(ctx, args.userId, args.rangeStart, args.rangeEnd);
+    return await getUserOtForecast(ctx, args.userId, args.eventId, args.shifts.slice(0, 100));
   },
 });
 

@@ -49,7 +49,7 @@ import {
 } from "@/lib/crew-shift-assign";
 import { countStaffing, isOpenSlot, isTraineeShift } from "@/lib/crew-shift-kinds";
 import { shiftBelongsToBlock, shiftTimesMatchBlock } from "@/lib/event-schedule-draft";
-import { formatDateTimeRange, payPeriodForDate } from "@/lib/format";
+import { formatDate, formatDateTimeRange } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
@@ -151,19 +151,17 @@ export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
   const stillLooking = staffing.open > 0 || staffing.backup > 0;
 
   const assignedUsers = useMemo(() => {
-    const byId = new Map<string, string>();
+    const byId = new Map<string, { name: string; windows: SectionForAvailability[] }>();
     for (const shift of shifts) {
       const userId = shift.userId?.trim();
-      if (userId) byId.set(userId, shift.personName || userId);
+      if (!userId) continue;
+      const person = byId.get(userId) ?? { name: shift.personName || userId, windows: [] };
+      const window = shiftWindow(shift);
+      if (window) person.windows.push(window);
+      byId.set(userId, person);
     }
-    return [...byId.entries()].map(([userId, name]) => ({ userId, name }));
+    return [...byId.entries()].map(([userId, person]) => ({ userId, ...person }));
   }, [shifts]);
-
-  const [nowMs] = useState(() => Date.now());
-  // OT is checked in the pay period the event falls in.
-  const firstSectionStart = sectionBlocks
-    .map((block) => localDateTimeInputToMs(block.startsAt))
-    .find((ms): ms is number => ms != null);
 
   function updateShift(index: number, next: S) {
     setShifts((prev) => prev.map((shift, i) => (i === index ? next : shift)));
@@ -246,9 +244,10 @@ export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
             {assignedUsers.map((person) => (
               <OvertimeRisk
                 key={person.userId}
+                eventId={eventId}
                 userId={person.userId}
                 name={person.name}
-                atMs={firstSectionStart ?? nowMs}
+                shifts={person.windows}
               />
             ))}
           </div>
@@ -425,22 +424,40 @@ function AvailabilityLine({
   );
 }
 
-function OvertimeRisk({ userId, name, atMs }: { userId: string; name: string; atMs: number }) {
-  const period = useMemo(() => payPeriodForDate(atMs), [atMs]);
-  const forecast = useQuery(api.eventCrew.getOtForecastForUser, {
-    userId,
-    rangeStart: period.startMs,
-    rangeEnd: period.endMs,
-  });
+function OvertimeRisk({
+  eventId,
+  userId,
+  name,
+  shifts,
+}: {
+  eventId: Id<"events">;
+  userId: string;
+  name: string;
+  shifts: SectionForAvailability[];
+}) {
+  const forecast = useQuery(
+    api.eventCrew.getOtForecastForUser,
+    shifts.length > 0 ? { eventId, userId, shifts } : "skip",
+  );
   if (!forecast?.hasOt && !forecast?.hasDt) return null;
+  const longDays = [...forecast.dtDays, ...forecast.otDays]
+    .sort((a, b) => a.dayKey.localeCompare(b.dayKey))
+    .map((day) => `${dayLabel(day.dayKey)} (${day.hours}h)`);
   return (
     <p className="flex items-center gap-1.5 text-xs text-status-amber-800">
       <WarningIcon className="size-3.5 shrink-0" weight="fill" aria-hidden />
-      Overtime: {name} is over pay-period limits
-      {forecast.hasDt ? " (a day over 12h)" : ""}
-      {forecast.otWeeks.length > 0 ? " (a week over 40h)" : ""}.
+      Overtime: {name}
+      {longDays.length > 0 ? ` works over 8h on ${longDays.join(", ")}` : ""}
+      {longDays.length > 0 && forecast.otWeeks.length > 0 ? " and" : ""}
+      {forecast.otWeeks.length > 0 ? " goes over 40h that week" : ""}
+      {forecast.hasDt ? ", past 12h is double time" : ""}.
     </p>
   );
+}
+
+function dayLabel(dayKey: string) {
+  const ms = localDateTimeInputToMs(`${dayKey}T12:00`);
+  return ms == null ? dayKey : formatDate(ms);
 }
 
 function SectionStaffing<S extends ShiftDraftForAssign>({
