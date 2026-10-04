@@ -49,6 +49,31 @@ test.describe("changing an approved quote", () => {
     await expect(page.getByText("Unsaved changes")).toBeVisible();
   });
 
+  test("a long line name wraps inside the decision dialog on desktop and phone", async ({ page, browser }) => {
+    // One unbreakable run, like a long crew name in a crew line's label.
+    const label = `E2E Maximiliana-Bartholomew-Featherstonehaugh-Wolfeschlegelsteinhausenberger ${Date.now()}`;
+    await approvedQuote(page, browser, label);
+
+    const dialog = await repriceAndSave(page);
+    await expect(dialog.getByTestId("quote-change-list")).toContainText(label);
+    for (const viewport of [
+      { width: 1280, height: 900 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(viewport);
+      const overflow = await dialog.evaluate((el) => el.scrollWidth - el.clientWidth);
+      expect(overflow, `horizontal overflow at ${viewport.width}px`).toBeLessThanOrEqual(1);
+      const box = await dialog.boundingBox();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
+    }
+    // The dialog scrolls rather than running off a short screen.
+    await dialog.getByRole("button", { name: "Cancel" }).scrollIntoViewIfNeeded();
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeInViewport();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toHaveCount(0);
+  });
+
   test("sending for re-approval saves a version and shows the client what changed", async ({ page, browser }) => {
     const { invoiceId, publicPath } = await approvedQuote(page, browser, `E2E Approved Resend ${Date.now()}`);
 
