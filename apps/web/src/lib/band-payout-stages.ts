@@ -114,6 +114,10 @@ export function payoutAgeLabel(row: PayoutRow, nowMs: number) {
     return `Event in ${days} day${days === 1 ? "" : "s"}`;
   }
   const days = dayCount(nowMs - row.stageEnteredAt);
+  if (row.status === "cancelled") {
+    if (days < 1) return "Removed today";
+    return `Removed ${days} day${days === 1 ? "" : "s"} ago`;
+  }
   if (row.stage === "paid") {
     if (days < 1) return "Paid today";
     return `Paid ${days} day${days === 1 ? "" : "s"} ago`;

@@ -1911,6 +1911,12 @@ export default defineSchema({
     confirmationReplyFrom: v.optional(v.string()),
     confirmationReplyBody: v.optional(v.string()),
     confirmationReplyEmailId: v.optional(v.string()),
+    /**
+     * Set when staff confirmed the payout with the artist by email instead of
+     * the portal e-signature: a screenshot of the reply, and who attached it.
+     */
+    emailConfirmationStorageFileId: v.optional(v.id("_storage")),
+    emailConfirmedByName: v.optional(v.string()),
     servicePaymentNumber: v.optional(v.string()),
     paidAt: v.optional(v.number()),
     paidByUserId: v.optional(v.string()),

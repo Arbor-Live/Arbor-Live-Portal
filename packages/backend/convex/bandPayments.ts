@@ -137,6 +137,9 @@ const bandPaymentRowValidator = v.object({
   lineupNeedId: v.optional(v.id("eventArtistNeeds")),
   /** That position's act type, for the GrantED filing text. */
   artistType: v.optional(v.string()),
+  /** Screenshot of the artist's email reply, when confirmed by email. */
+  emailConfirmationUrl: v.optional(v.string()),
+  emailConfirmedByName: v.optional(v.string()),
 });
 
 const bandFacingPaymentRowValidator = v.object({
@@ -389,6 +392,10 @@ async function buildBandPaymentRow(
     paidByName: payment.paidByName,
     lineupNeedId: participation?.needId,
     artistType: need?.artistType,
+    emailConfirmationUrl: payment.emailConfirmationStorageFileId
+      ? ((await ctx.storage.getUrl(payment.emailConfirmationStorageFileId)) ?? undefined)
+      : undefined,
+    emailConfirmedByName: payment.emailConfirmedByName,
   };
 }
 
@@ -1320,6 +1327,124 @@ export const correctServicePaymentNumber = mutation({
     const servicePaymentNumber = args.servicePaymentNumber.trim();
     if (!servicePaymentNumber) throw new Error("Transfer / Service Payment number is required.");
     await ctx.db.patch(payment._id, { servicePaymentNumber, updatedAt: Date.now() });
+    return null;
+  },
+});
+
+const CANCELLED_PAYOUTS_CAP = 100;
+
+/** Removed payouts, newest first, so a payout removed by mistake can be restored. */
+export const listCancelledPayouts = query({
+  args: {},
+  returns: v.array(bandPaymentRowValidator),
+  handler: async (ctx) => {
+    await requireArborInternalContext(ctx);
+    const cancelled = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_status", (q) => q.eq("status", "cancelled"))
+      .order("desc")
+      .take(CANCELLED_PAYOUTS_CAP);
+    return await buildPipelineRows(ctx, cancelled);
+  },
+});
+
+/**
+ * Bring back a removed payout at the stage it had reached: signed payouts
+ * stay signed, sent requests wait on the signature again, and anything
+ * earlier rejoins the queue as a new payout would.
+ */
+export const restorePayment = mutation({
+  args: { paymentId: v.id("eventBandPayments") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment) throw new Error("Artist payment not found.");
+    if (payment.status !== "cancelled") throw new Error("Only removed payouts can be restored.");
+    const event = await ctx.db.get(payment.eventId);
+    if (!event) throw new Error("Event not found.");
+
+    const siblings = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", payment.eventId).eq("organizationId", payment.organizationId),
+      )
+      .take(10);
+    if (siblings.some((other) => other._id !== payment._id && other.status !== "cancelled")) {
+      throw new Error("This act already has a payout for this event. Edit that one instead.");
+    }
+
+    const now = Date.now();
+    let status: BandPaymentStatus;
+    if (payment.confirmedAt) status = "confirmed";
+    else if (payment.confirmationEmailSentAt) status = "awaiting_confirmation";
+    else {
+      const payeeSnapshot = await refreshPayeeSnapshot(ctx, payment.organizationId);
+      status = computeNextStatus({
+        existing: null,
+        event,
+        nowMs: now,
+        payeeComplete: payeeSnapshot.payeeComplete,
+        onboardingComplete: await isOrganizationBandOnboardingComplete(ctx, payment.organizationId),
+      });
+    }
+    await ctx.db.patch(payment._id, {
+      status,
+      ...bandPaymentStatusStamp("cancelled", status, now),
+      updatedAt: now,
+    });
+    await syncEventBandsCost(ctx, payment.eventId);
+    return null;
+  },
+});
+
+export const generateEmailConfirmationUploadUrl = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx) => {
+    await requireArborInternalContext(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+/** Screenshots of an email thread; anything larger means the wrong file was picked. */
+const MAX_EMAIL_CONFIRMATION_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Record that the artist agreed by email instead of the portal e-signature.
+ * The screenshot stays on the payout as the record, and the payout counts as
+ * signed, so it can be marked paid.
+ */
+export const confirmByEmail = mutation({
+  args: {
+    paymentId: v.id("eventBandPayments"),
+    storageFileId: v.id("_storage"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment) throw new Error("Artist payment not found.");
+    if (payment.status !== "pending_email" && payment.status !== "awaiting_confirmation") {
+      throw new Error("Only payouts waiting on the artist's signature can be confirmed by email.");
+    }
+    const metadata = await ctx.db.system.get(args.storageFileId);
+    if (!metadata) throw new Error("The uploaded screenshot was not found.");
+    if (metadata.size > MAX_EMAIL_CONFIRMATION_BYTES) {
+      throw new Error("Screenshots must be 25 MB or smaller.");
+    }
+    const identity = await resolveAuthUserIdentity(ctx, getUserId(user));
+    const now = Date.now();
+    await ctx.db.patch(payment._id, {
+      status: "confirmed",
+      ...bandPaymentStatusStamp(payment.status, "confirmed", now),
+      confirmedAt: now,
+      emailConfirmationStorageFileId: args.storageFileId,
+      emailConfirmedByName: identity?.name || user.name?.trim() || user.email?.trim() || "Arbor staff",
+      updatedAt: now,
+    });
     return null;
   },
 });

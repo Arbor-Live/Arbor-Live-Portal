@@ -160,6 +160,7 @@ export function FinancialHubBandPayoutsClient() {
   const paidArgs = paidRangeArgs(paidRange, nowMs);
   const paid = useQuery(api.bandPayments.listPaidPayouts, paidArgs ?? {});
   const counts = useQuery(api.bandPayments.getQueueCounts, {});
+  const cancelled = useQuery(api.bandPayments.listCancelledPayouts, {});
 
   const sendConfirmation = useMutation(api.bandPayments.sendConfirmationEmail);
   const sendConfirmationBatch = useMutation(api.bandPayments.sendConfirmationEmailBatch);
@@ -168,6 +169,7 @@ export function FinancialHubBandPayoutsClient() {
   const syncStalePayeePayments = useMutation(api.bandPayments.syncStalePayeePayments);
   const markPaidBatch = useMutation(api.bandPayments.markPaidBatch);
   const cancelPayment = useMutation(api.bandPayments.cancelPayment);
+  const restorePaymentMutation = useMutation(api.bandPayments.restorePayment);
   const downloadAgreement = useAction(api.bandPaymentPdfDownload.downloadByPaymentId);
   const { confirm } = useAppDialog();
 
@@ -179,6 +181,7 @@ export function FinancialHubBandPayoutsClient() {
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortKey>("waiting");
   const [paidOpen, setPaidOpen] = useState(false);
+  const [removedOpen, setRemovedOpen] = useState(false);
   const [sendRows, setSendRows] = useState<PayoutRow[] | null>(null);
   const [payRows, setPayRows] = useState<PayoutRow[] | null>(null);
   const [busyId, setBusyId] = useState<Id<"eventBandPayments"> | null>(null);
@@ -245,7 +248,17 @@ export function FinancialHubBandPayoutsClient() {
   const stagesById = new Map(stages.map((group) => [group.stage, group]));
   const groups = PAYOUT_GROUPS;
 
-  const selectedRow = allRows.find((row) => row._id === selectedId) ?? null;
+  // Removed payouts, most recently removed first, under the same search.
+  const removedRows = useMemo(
+    () =>
+      (cancelled ?? [])
+        .filter((row) => matchesSearch(row, needle))
+        .sort((a, b) => b.stageEnteredAt - a.stageEnteredAt),
+    [cancelled, needle],
+  );
+
+  const selectedRow =
+    [...allRows, ...(cancelled ?? [])].find((row) => row._id === selectedId) ?? null;
 
   async function attempt(action: () => Promise<unknown>, success: string) {
     try {
@@ -339,6 +352,13 @@ export function FinancialHubBandPayoutsClient() {
     return removed;
   }
 
+  async function restorePayout(row: PayoutRow) {
+    return await attempt(
+      () => restorePaymentMutation({ paymentId: row._id }),
+      `${row.bandName}'s payout is back in the pipeline.`,
+    );
+  }
+
   async function onDownloadAgreement(row: PayoutRow) {
     try {
       const result = await downloadAgreement({ paymentId: row._id });
@@ -348,7 +368,7 @@ export function FinancialHubBandPayoutsClient() {
     }
   }
 
-  const sheetHandlers: PayoutSheetHandlers = { runPrimary, remove: removePayout };
+  const sheetHandlers: PayoutSheetHandlers = { runPrimary, remove: removePayout, restore: restorePayout };
 
   function scrollToStage(stage: PayoutStage) {
     document.getElementById(`payout-stage-${stage}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -517,6 +537,7 @@ export function FinancialHubBandPayoutsClient() {
                 onPrimary={() => void runPrimary(row)}
                 onDownloadAgreement={() => void onDownloadAgreement(row)}
                 onRemove={() => void removePayout(row)}
+                onRestore={() => void restorePayout(row)}
               />
             ))}
           </ul>
@@ -680,6 +701,60 @@ export function FinancialHubBandPayoutsClient() {
               })}
             </div>
           )}
+
+          {(cancelled?.length ?? 0) > 0 ? (
+            <section data-testid="payout-group-removed" className="space-y-2">
+              <div className="border">
+                <div className="flex flex-wrap items-center gap-2 bg-muted/20 px-3 py-2">
+                  <button
+                    type="button"
+                    aria-expanded={removedOpen}
+                    aria-label={removedOpen ? "Hide removed payouts" : "Show removed payouts"}
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => setRemovedOpen((open) => !open)}
+                  >
+                    {removedOpen ? (
+                      <CaretDownIcon className="size-4" aria-hidden />
+                    ) : (
+                      <CaretRightIcon className="size-4" aria-hidden />
+                    )}
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-semibold">
+                      Removed
+                      <span className="font-normal text-muted-foreground tabular-nums"> · {removedRows.length}</span>
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Payouts taken off the pipeline. Restore one to pick it up where it left off.
+                    </p>
+                  </div>
+                  <span className="w-24 shrink-0 text-right text-sm font-medium tabular-nums">
+                    {formatUsd(sumUsd(removedRows))}
+                  </span>
+                </div>
+                {removedOpen && removedRows.length > 0 ? (
+                  <ul className="divide-y border-t">
+                    {removedRows.map((row) => (
+                      <PayoutListRow
+                        key={row._id}
+                        row={row}
+                        nowMs={nowMs}
+                        selectable={false}
+                        checked={false}
+                        busy={busyId === row._id}
+                        onCheckedChange={() => {}}
+                        onOpen={() => setSelectedId(row._id)}
+                        onPrimary={() => {}}
+                        onDownloadAgreement={() => void onDownloadAgreement(row)}
+                        onRemove={() => {}}
+                        onRestore={() => void restorePayout(row)}
+                      />
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
         </>
       )}
 
@@ -719,6 +794,7 @@ function PayoutListRow({
   onPrimary,
   onDownloadAgreement,
   onRemove,
+  onRestore,
 }: {
   row: PayoutRow;
   nowMs: number;
@@ -730,6 +806,7 @@ function PayoutListRow({
   onPrimary: () => void;
   onDownloadAgreement: () => void;
   onRemove: () => void;
+  onRestore: () => void;
 }) {
   const stage = row.stage ?? "upcoming";
   const primary = payoutPrimaryAction(row.status);
@@ -757,6 +834,10 @@ function PayoutListRow({
               <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onPrimary}>
                 {primary.label}
               </Button>
+            ) : row.status === "cancelled" ? (
+              <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onRestore}>
+                Restore
+              </Button>
             ) : null}
           </div>
           <DropdownMenu>
@@ -782,7 +863,11 @@ function PayoutListRow({
               <DropdownMenuItem asChild>
                 <Link href={`/dashboard/events/${row.eventId}`}>Open event</Link>
               </DropdownMenuItem>
-              {row.status !== "paid" ? (
+              {row.status === "cancelled" ? (
+                <DropdownMenuItem className="md:hidden" disabled={busy} onSelect={onRestore}>
+                  Restore payout
+                </DropdownMenuItem>
+              ) : row.status !== "paid" ? (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onSelect={onRemove}>

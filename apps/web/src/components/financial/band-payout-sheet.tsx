@@ -2,7 +2,7 @@
 
 import { SheetSection, SheetField } from "@/components/list-page";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { ArrowSquareOutIcon, CheckIcon, CopyIcon } from "@phosphor-icons/react";
 import { BandPaymentAgreementPdfButton } from "@/components/financial/band-payment-agreement-pdf-button";
@@ -20,7 +20,8 @@ import {
 } from "@/components/ui/sheet";
 import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
 import { grantedFilingFields } from "@/lib/granted-filing";
-import { api } from "@/lib/convex-api";
+import { compressImageToLimit } from "@/lib/image-processing";
+import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
   PAYOUT_STAGE_WHO,
@@ -40,6 +41,8 @@ export type PayoutSheetHandlers = {
   runPrimary: (row: PayoutRow) => Promise<unknown>;
   /** Resolves true once the payout is removed; false if cancelled or it failed. */
   remove: (row: PayoutRow) => Promise<boolean>;
+  /** Brings back a removed payout; resolves whether it worked. */
+  restore: (row: PayoutRow) => Promise<boolean>;
 };
 
 /** Details for one payout: payee, amounts, activity, and links back to the Lineup. */
@@ -92,9 +95,12 @@ function activitySteps(row: PayoutRow): Step[] {
       detail: row.confirmationSentByName,
     },
     {
-      label: "Signed",
+      label: row.emailConfirmationUrl ? "Confirmed by email" : "Signed",
       at: row.confirmedAt,
-      detail: row.signatureTypedName ?? row.confirmationReplyFrom,
+      detail:
+        row.signatureTypedName ??
+        row.confirmationReplyFrom ??
+        (row.emailConfirmedByName ? `Screenshot attached by ${row.emailConfirmedByName}` : undefined),
     },
     {
       label: "Paid",
@@ -145,7 +151,7 @@ function PayoutSheetBody({
           {row.venueName ? ` · ${row.venueName}` : ""}
         </SheetDescription>
         <p className="text-sm">
-          {PAYOUT_STAGE_WHO[stage]}
+          {row.status === "cancelled" ? "Removed from the pipeline" : PAYOUT_STAGE_WHO[stage]}
           <span className="text-muted-foreground"> · {payoutAgeLabel(row, nowMs)}</span>
         </p>
       </SheetHeader>
@@ -169,6 +175,18 @@ function PayoutSheetBody({
           <SheetField label="Payment ID">
             <span className="tabular-nums">{row.confirmationToken}</span>
           </SheetField>
+          {row.emailConfirmationUrl ? (
+            <SheetField label="Confirmation">
+              <a
+                className="underline-offset-4 hover:underline"
+                href={row.emailConfirmationUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Email screenshot
+              </a>
+            </SheetField>
+          ) : null}
           {row.status === "paid" ? (
             <TransferNumberField row={row} />
           ) : row.servicePaymentNumber ? (
@@ -182,7 +200,7 @@ function PayoutSheetBody({
             {row.canDownloadAgreementPdf ? (
               <BandPaymentAgreementPdfButton paymentId={row._id} label="Agreement PDF" />
             ) : null}
-            {row.status !== "paid" ? (
+            {row.status !== "paid" && row.status !== "cancelled" ? (
               <Button type="button" size="sm" variant="outline" onClick={() => setEditing(true)}>
                 Edit payout
               </Button>
@@ -190,6 +208,10 @@ function PayoutSheetBody({
           </div>
         ) : null}
       </SheetSection>
+
+      {row.status === "pending_email" || row.status === "awaiting_confirmation" ? (
+        <EmailConfirmationSection row={row} />
+      ) : null}
 
       {row.status === "confirmed" ? <GrantedFilingSection row={row} /> : null}
 
@@ -260,7 +282,11 @@ function PayoutSheetBody({
       </SheetSection>
 
       <SheetFooter className="flex-row flex-wrap justify-end gap-2 border-t">
-        {row.status !== "paid" ? (
+        {row.status === "cancelled" ? (
+          <Button type="button" size="sm" disabled={busy} onClick={() => void run(() => handlers.restore(row))}>
+            Restore payout
+          </Button>
+        ) : row.status !== "paid" ? (
           <Button
             type="button"
             variant="destructive"
@@ -395,7 +421,8 @@ function GrantedFilingSection({ row }: { row: PayoutRow }) {
     >
       <p className="text-xs text-muted-foreground">
         Keep the payout ID in the line description: importing the next statement then marks this payout paid
-        with GrantED&apos;s S-number. Attach the agreement PDF to the line.
+        with GrantED&apos;s S-number. Attach the {row.emailConfirmationUrl ? "email screenshot" : "agreement PDF"} to
+        the line.
       </p>
       <dl className="space-y-1.5">
         {fields.map((field) => (
@@ -415,9 +442,69 @@ function GrantedFilingSection({ row }: { row: PayoutRow }) {
           </div>
         ))}
       </dl>
-      {row.canDownloadAgreementPdf ? (
+      {row.emailConfirmationUrl ? (
+        <Button asChild size="sm" variant="outline">
+          <a href={row.emailConfirmationUrl} target="_blank" rel="noreferrer">
+            Email screenshot
+          </a>
+        </Button>
+      ) : row.canDownloadAgreementPdf ? (
         <BandPaymentAgreementPdfButton paymentId={row._id} label="Agreement PDF" />
       ) : null}
+    </SheetSection>
+  );
+}
+
+/**
+ * When the artist agreed by email instead of signing in the portal: attach a
+ * screenshot of their reply and the payout counts as signed.
+ */
+function EmailConfirmationSection({ row }: { row: PayoutRow }) {
+  const generateUploadUrl = useMutation(api.bandPayments.generateEmailConfirmationUploadUrl);
+  const confirmByEmail = useMutation(api.bandPayments.confirmByEmail);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function upload(file: File) {
+    setUploading(true);
+    try {
+      const prepared = file.type.startsWith("image/") ? await compressImageToLimit(file) : file;
+      const response = await fetch(await generateUploadUrl({}), {
+        method: "POST",
+        headers: { "Content-Type": prepared.type || "application/octet-stream" },
+        body: prepared,
+      });
+      if (!response.ok) throw new Error("Upload failed");
+      const { storageId } = (await response.json()) as { storageId: Id<"_storage"> };
+      await confirmByEmail({ paymentId: row._id, storageFileId: storageId });
+      notify.success("Confirmed by email. The payout is ready to pay.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Could not attach the screenshot."));
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  return (
+    <SheetSection title="Confirmed by email instead?">
+      <p className="text-xs text-muted-foreground">
+        If {row.designatedPayeeName ?? "the artist"} agreed by email rather than signing here, attach a screenshot of
+        their reply. It stays on the payout as the record, and the payout moves to ready to pay.
+      </p>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*,application/pdf"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void upload(file);
+        }}
+      />
+      <Button type="button" size="sm" variant="outline" disabled={uploading} onClick={() => inputRef.current?.click()}>
+        {uploading ? "Attaching…" : "Attach email screenshot"}
+      </Button>
     </SheetSection>
   );
 }
