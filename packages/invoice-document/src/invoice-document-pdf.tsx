@@ -8,6 +8,17 @@ import {
   View,
 } from "@react-pdf/renderer";
 import { ArborLogoPdf } from "./arbor-logo-pdf";
+import {
+  crewLinePerson,
+  describeHeadcount,
+  describeHoursTimesRate,
+  formatPeople,
+  groupCrewBySection,
+  parseCrewLine,
+  sumCrewAmountUsd,
+  type CrewGroup,
+  type CrewLine,
+} from "./crew-sections";
 import { currency, groupInvoiceSections } from "./format";
 import { invoiceTheme } from "./theme";
 import type { InvoiceDocumentData, InvoiceLineItem } from "./types";
@@ -142,6 +153,63 @@ const styles = StyleSheet.create({
     borderBottomColor: invoiceTheme.border,
     marginVertical: 8,
   },
+  crewDay: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 3,
+    borderBottomWidth: 1,
+    borderBottomColor: invoiceTheme.border,
+    fontSize: 8,
+    fontWeight: 700,
+    color: invoiceTheme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  crewSectionRow: {
+    flexDirection: "row",
+    paddingHorizontal: 8,
+    paddingTop: 6,
+    paddingBottom: 2,
+  },
+  crewSectionTitle: {
+    fontSize: 9.5,
+    fontWeight: 700,
+  },
+  crewMuted: {
+    fontSize: 8,
+    color: invoiceTheme.textMuted,
+  },
+  crewPersonRow: {
+    flexDirection: "row",
+    marginLeft: 18,
+    paddingRight: 8,
+    paddingLeft: 8,
+    paddingVertical: 2.5,
+    borderLeftWidth: 1,
+    borderLeftColor: invoiceTheme.border,
+  },
+  crewSectionEnd: {
+    borderBottomWidth: 1,
+    borderBottomColor: invoiceTheme.border,
+    paddingBottom: 4,
+  },
+  crewLead: {
+    fontSize: 7,
+    fontWeight: 700,
+    color: invoiceTheme.primary,
+  },
+  crewTotal: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    borderTopWidth: 1.5,
+    borderTopColor: invoiceTheme.text,
+    fontSize: 10,
+    fontWeight: 700,
+  },
 });
 
 type InvoiceDocumentPdfProps = {
@@ -222,7 +290,7 @@ export function InvoiceDocumentPdf({ data, logoSrc }: InvoiceDocumentPdfProps) {
             <SectionTable title="External Rentals" rows={sections.external} showProvider />
           ) : null}
           {sections.artists.length ? <ArtistsSectionTable rows={sections.artists} /> : null}
-          {sections.crew.length ? <SectionTable title="Crew" rows={sections.crew} /> : null}
+          {sections.crew.length ? <CrewSectionTable rows={sections.crew} /> : null}
           {sections.fees.length ? <SectionTable title="Fees" rows={sections.fees} /> : null}
 
           <View style={styles.card} wrap={false}>
@@ -394,6 +462,116 @@ function SectionTable({
           </Text>
         </View>
       ))}
+    </View>
+  );
+}
+
+const crewItemFlex = 3;
+/** Sections up to this many lines never split across pages. */
+const KEEP_TOGETHER_MAX_LINES = 14;
+const crewRateFlex = 1.5;
+const crewAmountFlex = 1;
+
+/** One billed crew line under its section: who, role, hours × rate, amount. */
+function CrewPersonRow({ line }: { line: CrewLine }) {
+  const person = crewLinePerson(line);
+  return (
+    <View style={styles.crewPersonRow} wrap={false}>
+      <View style={{ flex: crewItemFlex, paddingRight: 8 }}>
+        {line.manualLabel ? (
+          <Text style={styles.td}>{formatPeople(line.people)}</Text>
+        ) : (
+          <Text style={styles.td}>
+            <Text style={line.person ? {} : { fontStyle: "italic", color: invoiceTheme.textMuted }}>
+              {person ?? line.role ?? "Crew"}
+            </Text>
+            {line.lead ? <Text style={styles.crewLead}>{"  LEAD"}</Text> : null}
+            {person && line.role ? <Text style={styles.crewMuted}>{`  ·  ${line.role}`}</Text> : null}
+          </Text>
+        )}
+        {line.notes ? <Text style={styles.crewMuted}>{line.notes}</Text> : null}
+      </View>
+      <Text style={[styles.crewMuted, { flex: crewRateFlex, textAlign: "right", fontSize: 8.5 }]}>
+        {describeHoursTimesRate(line)}
+      </Text>
+      <Text style={[styles.td, { flex: crewAmountFlex, textAlign: "right" }]}>{currency(line.amountUsd)}</Text>
+    </View>
+  );
+}
+
+/**
+ * A Run of Show section with every person listed. Small sections never split
+ * across pages; a very long one may, but its header keeps rows after it. A
+ * hand-entered people × hours row is its own one-line section.
+ */
+function CrewSectionBlock({ group }: { group: CrewGroup }) {
+  const keepTogether = group.lines.length <= KEEP_TOGETHER_MAX_LINES;
+  const single = group.lines.length === 1 && group.lines[0]!.manualLabel ? group.lines[0]! : undefined;
+  return (
+    <View style={styles.crewSectionEnd} wrap={!keepTogether}>
+      <View style={styles.crewSectionRow} minPresenceAhead={keepTogether ? undefined : 48}>
+        <Text style={[styles.crewSectionTitle, { flex: crewItemFlex, paddingRight: 8 }]}>
+          {group.title}
+          <Text style={[styles.crewMuted, { fontWeight: 400 }]}>
+            {`   ${describeHeadcount(group.lines)}`}
+          </Text>
+        </Text>
+        <Text style={[styles.crewMuted, { flex: crewRateFlex, textAlign: "right", fontSize: 8.5 }]}>
+          {single ? describeHoursTimesRate(single) : ""}
+        </Text>
+        <Text style={[styles.crewSectionTitle, { flex: crewAmountFlex, textAlign: "right" }]}>
+          {currency(group.amountUsd)}
+        </Text>
+      </View>
+      {single
+        ? null
+        : group.lines.map((line) => <CrewPersonRow key={line.id} line={line} />)}
+    </View>
+  );
+}
+
+/**
+ * Crew by day (multi-day bookings) and Run of Show section, every section
+ * expanded. Presentation only: section, day, and crew totals are the exact sum
+ * of the billed lines.
+ */
+function CrewSectionTable({ rows }: { rows: InvoiceLineItem[] }) {
+  const lines = rows.map(parseCrewLine);
+  const days = groupCrewBySection(lines);
+  return (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle} minPresenceAhead={80}>
+        Crew
+      </Text>
+      <View style={styles.tableHeader}>
+        <Text style={[styles.th, { flex: crewItemFlex }]}>Section and crew</Text>
+        <Text style={[styles.th, { flex: crewRateFlex, textAlign: "right" }]}>Hours × rate</Text>
+        <Text style={[styles.th, { flex: crewAmountFlex, textAlign: "right" }]}>Amount</Text>
+      </View>
+      {days.map((day) => {
+        const [first, ...rest] = day.groups;
+        return (
+          <View key={day.key}>
+            {/* The day heading travels with its first section (when that fits on a page). */}
+            <View wrap={!first || first.lines.length > KEEP_TOGETHER_MAX_LINES} minPresenceAhead={60}>
+              {day.title ? (
+                <View style={styles.crewDay}>
+                  <Text>{day.title}</Text>
+                  <Text>{currency(day.amountUsd)}</Text>
+                </View>
+              ) : null}
+              {first ? <CrewSectionBlock group={first} /> : null}
+            </View>
+            {rest.map((group) => (
+              <CrewSectionBlock key={group.key} group={group} />
+            ))}
+          </View>
+        );
+      })}
+      <View style={styles.crewTotal} wrap={false}>
+        <Text>Crew total</Text>
+        <Text>{currency(sumCrewAmountUsd(lines))}</Text>
+      </View>
     </View>
   );
 }

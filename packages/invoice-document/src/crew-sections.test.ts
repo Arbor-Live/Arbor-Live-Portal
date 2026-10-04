@@ -2,26 +2,26 @@ import { describe, expect, it } from "vitest";
 import {
   describeHeadcount,
   groupCrewBySection,
-  parsePublicCrewLine,
+  parseCrewLine,
   sumCrewAmountUsd,
-  type PublicCrewLineInput,
-} from "./public-quote-crew";
+  type CrewLineInput,
+} from "./crew-sections";
 
-function line(label: string, hours: number, rateUsd: number, extra: Partial<PublicCrewLineInput> = {}) {
+function line(label: string, hours: number, rateUsd: number, extra: Partial<CrewLineInput> = {}) {
   return {
-    _id: `${label}-${hours}-${rateUsd}`,
+    id: `${label}-${hours}-${rateUsd}`,
     label,
     quantity: hours,
     rateUsd,
     amountUsd: Number((hours * rateUsd).toFixed(2)),
     ...extra,
-  } satisfies PublicCrewLineInput;
+  } satisfies CrewLineInput;
 }
 
-describe("parsePublicCrewLine", () => {
+describe("parseCrewLine", () => {
   it("reads section, role, person and the lead tag", () => {
     expect(
-      parsePublicCrewLine(line("Load-in — Sound engineer (Maximiliano Fernández-Castellanos (Lead))", 3, 35)),
+      parseCrewLine(line("Load-in — Sound engineer (Maximiliano Fernández-Castellanos (Lead))", 3, 35)),
     ).toMatchObject({
       section: "Load-in",
       role: "Sound engineer",
@@ -34,22 +34,22 @@ describe("parsePublicCrewLine", () => {
   });
 
   it("reads open slots, role-less shifts and day prefixes", () => {
-    expect(parsePublicCrewLine(line("Day 2 — Strike — Stagehand (Open slot)", 2, 22))).toMatchObject({
+    expect(parseCrewLine(line("Day 2 — Strike — Stagehand (Open slot)", 2, 22))).toMatchObject({
       day: "Day 2",
       section: "Strike",
       role: "Stagehand",
       openSlot: true,
     });
-    expect(parsePublicCrewLine(line("Show — Alex Kim (Lead)", 4, 35))).toMatchObject({
+    expect(parseCrewLine(line("Show — Alex Kim (Lead)", 4, 35))).toMatchObject({
       section: "Show",
       person: "Alex Kim",
       lead: true,
     });
-    expect(parsePublicCrewLine(line("Show — Open slot", 4, 25))).toMatchObject({ openSlot: true });
+    expect(parseCrewLine(line("Show — Open slot", 4, 25))).toMatchObject({ openSlot: true });
   });
 
   it("keeps parentheses inside a role", () => {
-    expect(parsePublicCrewLine(line("Show — A1 (FOH) (Priya Natarajan)", 4, 25))).toMatchObject({
+    expect(parseCrewLine(line("Show — A1 (FOH) (Priya Natarajan)", 4, 25))).toMatchObject({
       role: "A1 (FOH)",
       person: "Priya Natarajan",
     });
@@ -57,7 +57,7 @@ describe("parsePublicCrewLine", () => {
 
   it("treats hand-entered rows as people × hours under their own label", () => {
     expect(
-      parsePublicCrewLine(
+      parseCrewLine(
         line("Extra hands — load-out", 3, 22, { memberCount: 2, performanceHours: 1.5, crewSource: "manual" }),
       ),
     ).toMatchObject({ manualLabel: "Extra hands — load-out", people: 2, hoursEach: 1.5 });
@@ -65,14 +65,14 @@ describe("parsePublicCrewLine", () => {
 
   it("files a hand-entered row under its day when the label starts with one", () => {
     expect(
-      parsePublicCrewLine(
+      parseCrewLine(
         line("Day 2 — Extra hands", 3, 22, { memberCount: 2, performanceHours: 1.5, crewSource: "manual" }),
       ),
     ).toMatchObject({ day: "Day 2", manualLabel: "Extra hands", people: 2 });
   });
 
   it("shows an unrecognised label as the role", () => {
-    const parsed = parsePublicCrewLine(line("Stage manager", 5, 30));
+    const parsed = parseCrewLine(line("Stage manager", 5, 30));
     expect(parsed.role).toBe("Stage manager");
     expect(parsed.person).toBeUndefined();
   });
@@ -88,7 +88,7 @@ describe("groupCrewBySection", () => {
     line("Extra hands", 3, 22, { memberCount: 2, performanceHours: 1.5, crewSource: "manual" }),
     // Odd cents, so a float sum would drift.
     line("Day 2 — Show — Lighting (Sam)", 3.33, 25.01),
-  ].map(parsePublicCrewLine);
+  ].map(parseCrewLine);
 
   it("groups by day then section in quote order, with hand-entered rows last", () => {
     const days = groupCrewBySection(lines);
@@ -117,7 +117,7 @@ describe("groupCrewBySection", () => {
   });
 
   it("has no day headings on a single-day quote", () => {
-    const days = groupCrewBySection([parsePublicCrewLine(line("Show — Sound (Ana)", 4, 25))]);
+    const days = groupCrewBySection([parseCrewLine(line("Show — Sound (Ana)", 4, 25))]);
     expect(days).toHaveLength(1);
     expect(days[0]!.title).toBeUndefined();
   });

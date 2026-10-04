@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./web": "./src/web.ts",
+    "./crew": "./src/crew-sections.ts",
     "./pdf": "./src/render-pdf.tsx",
     "./types": "./src/types.ts"
   },

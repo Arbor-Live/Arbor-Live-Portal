@@ -111,4 +111,23 @@ describe("buildInvoiceDocumentData", () => {
     });
     expect(result.lineItems[0].label).toBe("Alex (Lead)");
   });
+
+  it("keeps the hand-entered marker on crew lines", () => {
+    const result = buildInvoiceDocumentData({
+      invoice,
+      lineItems: [
+        {
+          section: "crew",
+          label: "Extra hands",
+          quantity: 3,
+          rateUsd: 22,
+          amountUsd: 66,
+          memberCount: 2,
+          performanceHours: 1.5,
+          crewSource: "manual",
+        },
+      ],
+    });
+    expect(result.lineItems[0].crewSource).toBe("manual");
+  });
 });

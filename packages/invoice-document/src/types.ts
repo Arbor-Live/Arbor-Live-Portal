@@ -22,6 +22,8 @@ export type InvoiceLineItem = {
   memberCount?: number;
   /** Artist lines: hours performing (when known). */
   performanceHours?: number;
+  /** Crew lines: hand-entered people × hours, not one shift from the schedule. */
+  crewSource?: "manual";
 };
 
 export type InvoiceDocumentInvoice = {
