@@ -53,7 +53,7 @@ const overrideKey = (template: string, channel: Channel) => `${template}:${chann
 export function NotificationPreferences() {
   const preferences = useQuery(api.account.getMyNotificationPreferences, {});
   const update = useMutation(api.account.updateMyNotificationPreference);
-  // Optimistic per-switch overrides until the reactive query catches up.
+  // Optimistic value per chip while its save is in flight.
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,11 +74,13 @@ export function NotificationPreferences() {
     try {
       await update({ template, channel, enabled });
     } catch (toggleError) {
-      setOverrides((previous) => ({ ...previous, [key]: !enabled }));
       setError(
         toggleError instanceof Error ? toggleError.message : "Unable to save your notification settings.",
       );
     } finally {
+      // Convex applies the mutation's query updates before it resolves, so the
+      // server value takes over without a flicker (and on failure, reverts).
+      setOverrides(({ [key]: _settled, ...rest }) => rest);
       setBusy(null);
     }
   }
