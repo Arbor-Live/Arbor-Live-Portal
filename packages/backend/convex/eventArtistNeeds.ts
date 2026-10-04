@@ -40,6 +40,7 @@ import { syncInvoiceLineForSlot } from "./lib/artistLineSync";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { removePositionRow as removeSlotRow } from "./lib/positionRows";
 import { syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
+import { requireOutreachAccess } from "./lib/outreachAccess";
 
 const MAX_NEED_CANDIDATES = 60;
 
@@ -702,6 +703,7 @@ const MAX_OPEN_POSITION_EVENTS = 150;
 const MAX_POSITIONS_PER_EVENT = 100;
 const MAX_ACTS_PER_EVENT = 50;
 const MAX_INQUIRIES_PER_EVENT = 300;
+const MAX_OUTREACH_PER_EVENT = 400;
 
 const openPositionValue = v.object({
   needId: v.id("eventArtistNeeds"),
@@ -733,13 +735,16 @@ export const listOpenPositions = query({
         operationsLeadUserId: v.optional(v.string()),
         operationsLeadName: v.optional(v.string()),
         openPositions: v.array(openPositionValue),
+        /** Staff outreach (`eventArtistOutreach`) for the date, leaving out acts already booked. */
+        outreach: v.object({ asked: v.number(), available: v.number(), unavailable: v.number() }),
       }),
     ),
     /** A scan limit was hit, so the list may be missing positions. */
     truncated: v.boolean(),
   }),
   handler: async (ctx) => {
-    await requireArborInternalContext(ctx);
+    // Open Positions is an Operations board; crew don't book acts.
+    await requireOutreachAccess(ctx);
     // A little slack so tonight's show still shows while it's on.
     const now = Date.now() - 6 * 60 * 60 * 1000;
     const events = await ctx.db
@@ -784,6 +789,37 @@ export const listOpenPositions = query({
         if (inquiry.status !== "submitted") continue;
         inquiryCount.set(inquiry.needId, (inquiryCount.get(inquiry.needId) ?? 0) + 1);
       }
+      const outreachRows = await ctx.db
+        .query("eventArtistOutreach")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(MAX_OUTREACH_PER_EVENT);
+      if (outreachRows.length === MAX_OUTREACH_PER_EVENT) truncated = true;
+      // `acts` is capped; past the cap, look each outreach act up by index so a
+      // booked act is never counted as pending.
+      const actsComplete = acts.length < MAX_ACTS_PER_EVENT;
+      const bookedOrgs = new Set(acts.map((act) => act.organizationId));
+      const isBookedOrg = async (organizationId: string) =>
+        bookedOrgs.has(organizationId) ||
+        (!actsComplete &&
+          (await ctx.db
+            .query("eventBandParticipations")
+            .withIndex("by_eventId_and_organizationId", (q) =>
+              q.eq("eventId", event._id).eq("organizationId", organizationId),
+            )
+            .unique()) !== null);
+      const bookedNames = new Set(
+        positions.flatMap((position) => {
+          const name = position.externalArtistName?.trim().toLowerCase();
+          return name ? [name] : [];
+        }),
+      );
+      const outreach = { asked: 0, available: 0, unavailable: 0 };
+      for (const row of outreachRows) {
+        const booked = row.organizationId
+          ? await isBookedOrg(row.organizationId)
+          : bookedNames.has(row.externalName?.trim().toLowerCase() ?? "");
+        if (!booked) outreach[row.status] += 1;
+      }
       const openPositions = open.map((position) => ({
         needId: position._id,
         label: position.label?.trim() ?? "",
@@ -804,6 +840,7 @@ export const listOpenPositions = query({
         totalPositions: positions.length,
         operationsLeadUserId: event.operationsLeadUserId,
         openPositions,
+        outreach,
       });
     }
     // One batch lookup for every distinct operations lead, so a lead who is no

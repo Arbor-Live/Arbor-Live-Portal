@@ -37,6 +37,33 @@ export function AdminOnlyGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Blocks Arbor staff outside the Operations team (crew), the way
+ * `AdminOnlyGuard` blocks non-admins. Admins always pass. Convex enforces the
+ * same rule; this keeps the refusal legible instead of an error boundary.
+ */
+export function OperationsOrAdminGuard({ children }: { children: React.ReactNode }) {
+  const shell = useSessionShell();
+  const viewer = useSessionViewer();
+
+  if (shell === undefined) return null;
+  if (!viewer?.isAdmin && !viewer?.verticals.includes("Operations")) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Operations access required</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          This section is limited to the Operations team and Arbor Live admins. Ask an admin if you need
+          access.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <>{children}</>;
+}
+
 export function ArborOnlyGuard({ children }: { children: React.ReactNode }) {
   const shell = useSessionShell();
   const activeOrg = shell === undefined ? undefined : (shell?.activeOrganization ?? null);

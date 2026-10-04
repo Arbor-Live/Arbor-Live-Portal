@@ -5,7 +5,7 @@ import { unclaimSlot } from "./eventBandParticipation";
 import { deleteActBlocks } from "./runOfShow";
 
 /**
- * Deletes a position with its inquiries and blocks; a seated act is unlinked,
+ * Deletes a position with its inquiries and blocks (outreach tagged to it is untagged); a seated act is unlinked,
  * not removed (it keeps its run-of-show on the act row).
  *
  * Lives in its own module so apply/regenerate paths can reuse it without
@@ -22,6 +22,14 @@ export async function removePositionRow(ctx: MutationCtx, needId: Id<"eventArtis
     .take(200);
   for (const inquiry of inquiries) {
     await ctx.db.delete(inquiry._id);
+  }
+  // Outreach is event-level: acts tagged for this slot go back to "any slot".
+  const outreach = await ctx.db
+    .query("eventArtistOutreach")
+    .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+    .take(200);
+  for (const row of outreach) {
+    await ctx.db.patch(row._id, { needId: undefined, updatedAt: Date.now() });
   }
   // Unlink any act that was booked against this slot rather than orphaning it.
   const filled = await ctx.db

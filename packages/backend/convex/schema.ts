@@ -1530,6 +1530,29 @@ export default defineSchema({
     .index("by_organizationId", ["organizationId"])
     .index("by_organizationId_and_needId", ["organizationId", "needId"]),
 
+  /**
+   * Staff outreach for an event's open positions: an act ops asked to play the
+   * date, and what they said. Event-level, since an act free that night can
+   * fill any open slot; `needId` optionally tags the slot it's meant for.
+   * Unlike `eventArtistInquiries` (the artist asks us), staff drive these.
+   * Either a portal artist (`organizationId`) or an act not on the portal
+   * (`externalName`). "Booked" is derived from the lineup, never stored.
+   */
+  eventArtistOutreach: defineTable({
+    eventId: v.id("events"),
+    needId: v.optional(v.id("eventArtistNeeds")),
+    organizationId: v.optional(v.string()),
+    externalName: v.optional(v.string()),
+    status: v.union(v.literal("asked"), v.literal("available"), v.literal("unavailable")),
+    note: v.optional(v.string()),
+    askedAt: v.number(),
+    askedByUserId: v.string(),
+    respondedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_needId", ["needId"]),
+
   eventRentalFulfillments: defineTable({
     eventId: v.id("events"),
     direction: rentalFulfillmentDirectionValue,
