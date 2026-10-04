@@ -2,27 +2,27 @@ import { expect, test, type Page } from "@playwright/test";
 import { runConvex } from "../helpers/convex";
 import { e2eEnv } from "../helpers/env";
 
-const IN_APP_SWITCH = "Comment mentions: In-app";
-const PUSH_SWITCH = "Comment mentions: Push";
+const IN_APP_CHIP = "Comment mentions: In the bell";
+const PUSH_CHIP = "Comment mentions: Push";
 
-async function setSwitch(page: Page, name: string, on: boolean) {
-  const control = page.getByRole("switch", { name, exact: true });
-  if ((await control.getAttribute("aria-checked")) !== String(on)) await control.click();
-  await expect(control).toHaveAttribute("aria-checked", String(on));
+async function setChip(page: Page, name: string, on: boolean) {
+  const control = page.getByRole("button", { name, exact: true });
+  if ((await control.getAttribute("aria-pressed")) !== String(on)) await control.click();
+  await expect(control).toHaveAttribute("aria-pressed", String(on));
 }
 
 test.describe("notification preferences", () => {
   test.afterEach(async ({ page }) => {
     // The admin account is shared across specs; leave mentions on.
     await page.goto("/dashboard/account");
-    await setSwitch(page, IN_APP_SWITCH, true);
+    await setChip(page, IN_APP_CHIP, true);
   });
 
   test("muting a type in the bell stops new ones from appearing there", async ({ page }) => {
     await page.goto("/dashboard/account");
-    await setSwitch(page, IN_APP_SWITCH, false);
+    await setChip(page, IN_APP_CHIP, false);
     // Push rides on the in-app row, so it locks off with it.
-    await expect(page.getByRole("switch", { name: PUSH_SWITCH, exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: PUSH_CHIP, exact: true })).toBeDisabled();
 
     const title = `E2E muted mention ${Date.now()}`;
     runConvex("e2eHelpers:enqueueInAppNotificationEmail", {

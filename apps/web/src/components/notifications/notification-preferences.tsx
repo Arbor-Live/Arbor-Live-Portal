@@ -2,18 +2,25 @@
 
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { BellIcon } from "@phosphor-icons/react";
+import {
+  BellIcon,
+  DeviceMobileIcon,
+  EnvelopeSimpleIcon,
+  type Icon,
+} from "@phosphor-icons/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
+import { Toggle } from "@/components/ui/toggle";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/convex-api";
+import { cn } from "@/lib/utils";
 
 type Channel = "email" | "inApp" | "push";
 
-const CHANNELS: { key: Channel; label: string }[] = [
-  { key: "email", label: "Email" },
-  { key: "inApp", label: "In-app" },
-  { key: "push", label: "Push" },
+const CHANNELS: { key: Channel; label: string; icon: Icon }[] = [
+  { key: "email", label: "Email", icon: EnvelopeSimpleIcon },
+  { key: "inApp", label: "In the bell", icon: BellIcon },
+  { key: "push", label: "Push", icon: DeviceMobileIcon },
 ];
 
 type Preference = {
@@ -78,56 +85,45 @@ export function NotificationPreferences() {
         <CardDescription>
           Choose where each notification reaches you. Push also needs to be on for the device above.
         </CardDescription>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-2xs text-muted-foreground">
+          {CHANNELS.map(({ key, label, icon: ChannelIcon }) => (
+            <span key={key} className="inline-flex items-center gap-1">
+              <ChannelIcon weight="fill" className="size-3.5 text-primary" />
+              {label}
+            </span>
+          ))}
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {preferences === undefined ? (
           <p className="text-sm text-muted-foreground">Loading notification settings…</p>
         ) : (
-          [...groups.entries()].map(([group, entries], groupIndex) => (
-            <div key={group} className="space-y-3">
-              <div className="flex items-end justify-between gap-4">
-                <p className="text-xs font-medium text-muted-foreground">{group}</p>
-                {groupIndex === 0 ? (
-                  <div className="flex shrink-0 gap-2" aria-hidden>
-                    {CHANNELS.map((channel) => (
-                      <span key={channel.key} className="w-12 text-center text-2xs text-muted-foreground">
-                        {channel.label}
-                      </span>
-                    ))}
+          <TooltipProvider delayDuration={300}>
+            {[...groups.entries()].map(([group, entries]) => (
+              <div key={group} className="space-y-1">
+                <p className="pb-1 text-xs font-medium text-muted-foreground">{group}</p>
+                {entries.map((entry) => (
+                  <div key={entry.template} className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="text-sm">{entry.label}</span>
+                    <div className="flex shrink-0 gap-1">
+                      {CHANNELS.map((channel) => (
+                        <ChannelChip
+                          key={channel.key}
+                          channel={channel}
+                          rowLabel={entry.label}
+                          on={value(entry, channel.key)}
+                          // Push needs the bell row; it locks off with it.
+                          locked={channel.key === "push" && value(entry, "inApp") === false}
+                          busy={busy === overrideKey(entry.template, channel.key)}
+                          onChange={(next) => void toggle(entry.template, channel.key, next)}
+                        />
+                      ))}
+                    </div>
                   </div>
-                ) : null}
+                ))}
               </div>
-              {entries.map((entry) => (
-                <div key={entry.template} className="flex items-center justify-between gap-4">
-                  <span className="text-sm">{entry.label}</span>
-                  <div className="flex shrink-0 gap-2">
-                    {CHANNELS.map((channel) => {
-                      const checked = value(entry, channel.key);
-                      const pushBlocked = channel.key === "push" && value(entry, "inApp") === false;
-                      return (
-                        <span key={channel.key} className="flex w-12 justify-center">
-                          {checked === null ? (
-                            <span className="text-xs text-muted-foreground" aria-hidden>
-                              —
-                            </span>
-                          ) : (
-                            <Switch
-                              aria-label={`${entry.label}: ${channel.label}`}
-                              checked={checked && !pushBlocked}
-                              disabled={
-                                pushBlocked || busy === overrideKey(entry.template, channel.key)
-                              }
-                              onCheckedChange={(next) => void toggle(entry.template, channel.key, next)}
-                            />
-                          )}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ))
+            ))}
+          </TooltipProvider>
         )}
         {error ? (
           <Alert variant="destructive">
@@ -136,5 +132,55 @@ export function NotificationPreferences() {
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+/** One channel's on/off as an icon button: filled when on, outline when off. */
+function ChannelChip({
+  channel,
+  rowLabel,
+  on,
+  locked,
+  busy,
+  onChange,
+}: {
+  channel: (typeof CHANNELS)[number];
+  rowLabel: string;
+  on: boolean | null;
+  locked: boolean;
+  busy: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  const ChannelIcon = channel.icon;
+  // Email-only types: keep the column aligned without a control.
+  if (on === null) return <span className="size-8" aria-hidden />;
+  const pressed = on && !locked;
+  const hint = locked
+    ? "Push needs “In the bell” on"
+    : `${channel.label}: ${pressed ? "on" : "off"}`;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/* Span keeps the tooltip working while the toggle is disabled. */}
+        <span>
+          <Toggle
+            size="sm"
+            aria-label={`${rowLabel}: ${channel.label}`}
+            pressed={pressed}
+            disabled={locked || busy}
+            onPressedChange={onChange}
+            className={cn(
+              "size-8 min-w-8 rounded-full border px-0",
+              pressed
+                ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary data-[state=on]:bg-primary/10"
+                : "border-border text-muted-foreground/70",
+            )}
+          >
+            <ChannelIcon weight={pressed ? "fill" : "regular"} className="size-4" />
+          </Toggle>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top">{hint}</TooltipContent>
+    </Tooltip>
   );
 }
