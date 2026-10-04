@@ -13,6 +13,8 @@ description:
 
 Delivery loop: verified → PR open → CI green → reviews resolved → mergeable.
 Do not stop halfway; do not merge unless the user said to.
+For the whole brief → mergeable PR flow (build, screenshots, CodeRabbit
+review limits), use the `autonomous-dev` skill, which builds on this one.
 
 ## 1. Verify before opening
 
