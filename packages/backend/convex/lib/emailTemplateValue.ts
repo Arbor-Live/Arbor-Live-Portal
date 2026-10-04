@@ -50,3 +50,6 @@ export const emailTemplateValue = v.union(
   v.literal("weekly_digest"),
   v.literal("this_week_at_arbor"),
 );
+
+/** Notification-center rows: every email template plus the Home Screen nudge. */
+export const notificationTemplateValue = v.union(emailTemplateValue, v.literal("app_install"));

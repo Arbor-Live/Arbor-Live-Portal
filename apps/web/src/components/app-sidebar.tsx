@@ -24,6 +24,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { NavSecondary } from "@/components/nav-secondary"
+import { InstallAppSidebarButton } from "@/components/notifications/install-app-sidebar-button"
 import { NavUser } from "@/components/nav-user"
 import {
   Sidebar,
@@ -513,7 +514,10 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             )
           })}
         </SidebarMenu>
-        <NavSecondary items={secondaryItems} className="mt-auto" />
+        <div className="mt-auto">
+          <InstallAppSidebarButton />
+          <NavSecondary items={secondaryItems} />
+        </div>
       </SidebarContent>
       <SidebarFooter className="border-t">
         <NavUser

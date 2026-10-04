@@ -9,6 +9,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { api, type Id } from "@/lib/convex-api";
 import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useInstallPrompt } from "./install-prompt-store";
+import { PushPrompt } from "./push-settings";
 import { useUnreadNotifications } from "./use-unread-notifications";
 
 /** Header bell: unread badge and a popover of recent notifications. */
@@ -54,7 +56,20 @@ function NotificationList({
   const markRead = useMutation(api.notifications.markRead);
   const markAllRead = useMutation(api.notifications.markAllRead);
 
-  const open = (notification: { _id: Id<"notifications">; path?: string; readAt?: number }) => {
+  const { openDialog: openInstallDialog } = useInstallPrompt();
+
+  const open = (notification: {
+    _id: Id<"notifications">;
+    template: string;
+    path?: string;
+    readAt?: number;
+  }) => {
+    // The install nudge stays unread until the app is opened from the Home Screen.
+    if (notification.template === "app_install") {
+      onNavigate();
+      openInstallDialog();
+      return;
+    }
     if (notification.readAt === undefined) {
       void markRead({ notificationIds: [notification._id] }).catch(() => undefined);
     }
@@ -94,7 +109,10 @@ function NotificationList({
                     onClick={() => open(notification)}
                     className={cn(
                       "flex w-full gap-2.5 px-3 py-2.5 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none",
-                      !notification.path && !unread && "cursor-default hover:bg-transparent",
+                      !notification.path &&
+                        !unread &&
+                        notification.template !== "app_install" &&
+                        "cursor-default hover:bg-transparent",
                     )}
                   >
                     <span
@@ -130,6 +148,7 @@ function NotificationList({
           </ul>
         )}
       </div>
+      <PushPrompt />
     </>
   );
 }

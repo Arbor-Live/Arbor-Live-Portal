@@ -155,7 +155,7 @@ export async function recordInAppNotification(
   if (existing.some((row) => row.sourceKey === args.idempotencyKey)) return null;
 
   if (!args.debounce) {
-    return await ctx.db.insert("notifications", {
+    const notificationId = await ctx.db.insert("notifications", {
       userId: args.userId,
       template: args.template,
       status: "delivered",
@@ -165,6 +165,8 @@ export async function recordInAppNotification(
       generation: 1,
       createdAt: now,
     });
+    await schedulePushForNotification(ctx, args.userId, notificationId);
+    return notificationId;
   }
 
   const pending = existing.find((row) => row.status === "pending");
@@ -215,6 +217,23 @@ export async function deliverPendingNotification(
     }
   }
   await ctx.db.patch(row._id, { status: "delivered", createdAt: Date.now() });
+  await schedulePushForNotification(ctx, row.userId, row._id);
+}
+
+/** Fan a delivered row out to the user's push devices, if they have any. */
+export async function schedulePushForNotification(
+  ctx: MutationCtx,
+  userId: string,
+  notificationId: Id<"notifications">,
+) {
+  const device = await ctx.db
+    .query("pushSubscriptions")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .first();
+  if (!device) return;
+  await ctx.scheduler.runAfter(0, internal.pushDelivery.sendPushForNotification, {
+    notificationId,
+  });
 }
 
 /** Mirror of `cancelPendingDebouncedEmail`: a superseded update never shows. */

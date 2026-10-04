@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import { getCurrentUserOrNull, getUserId, requireAuth } from "./lib/auth";
-import { emailTemplateValue } from "./lib/emailTemplateValue";
+import { notificationTemplateValue } from "./lib/emailTemplateValue";
 import {
   deliverPendingNotification as deliverPendingNotificationRow,
   NOTIFICATION_LIST_LIMIT,
@@ -11,7 +11,7 @@ import {
 
 const notificationValue = v.object({
   _id: v.id("notifications"),
-  template: emailTemplateValue,
+  template: notificationTemplateValue,
   title: v.string(),
   body: v.optional(v.string()),
   path: v.optional(v.string()),

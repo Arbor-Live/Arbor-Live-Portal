@@ -779,6 +779,77 @@ export const enqueueInAppNotificationEmail = mutation({
   },
 });
 
+/** Test-only: forget a user's Home Screen install and nudge so the flow can rerun. */
+export const resetAppInstall = mutation({
+  args: { email: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const user = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: args.email.trim().toLowerCase() }],
+    });
+    const userId = getId(user);
+    if (!userId) throw new Error("User not found.");
+    const installs = await ctx.db
+      .query("appInstalls")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .take(10);
+    for (const row of installs) await ctx.db.delete(row._id);
+    const nudges = await ctx.db
+      .query("notifications")
+      .withIndex("by_userId_and_dedupeKey", (q) =>
+        q.eq("userId", userId).eq("dedupeKey", "app_install"),
+      )
+      .take(10);
+    for (const row of nudges) await ctx.db.delete(row._id);
+    return null;
+  },
+});
+
+/** Test-only: register a push device so delivery can be exercised without a browser. */
+export const seedPushSubscription = mutation({
+  args: { email: v.string(), endpoint: v.string(), p256dh: v.string(), auth: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const user = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: args.email.trim().toLowerCase() }],
+    });
+    const userId = getId(user);
+    if (!userId) throw new Error("User not found.");
+    await ctx.db.insert("pushSubscriptions", {
+      userId,
+      endpoint: args.endpoint,
+      p256dh: args.p256dh,
+      auth: args.auth,
+      createdAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/** Test-only: push devices registered for a user (endpoints only). */
+export const listPushEndpoints = query({
+  args: { email: v.string() },
+  returns: v.array(v.string()),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const user = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: args.email.trim().toLowerCase() }],
+    });
+    const userId = getId(user);
+    if (!userId) return [];
+    const rows = await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .take(20);
+    return rows.map((row) => row.endpoint);
+  },
+});
+
 /**
  * Test-only: ensure a Better Auth user plus a profile phone so contact surfaces
  * that resolve leads by `events.eventManagerUserId` / `dayOfLeadUserId` find a

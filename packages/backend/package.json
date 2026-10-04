@@ -33,11 +33,13 @@
     "convex": "^1.46.0",
     "nanoid": "^6.0.1",
     "react-email": "^6.11.0",
-    "resend": "^6.32.0"
+    "resend": "^6.32.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@better-auth/cli": "^1.4.21",
     "@types/node": "^26.6.4",
+    "@types/web-push": "^3.6.4",
     "typescript": "^6.0.3"
   }
 }

@@ -27,6 +27,7 @@ import {
 } from "@/lib/validations/account";
 import { formatDate } from "@/lib/format";
 import { AvatarUploadField } from "@/components/account/avatar-upload-field";
+import { PushNotificationSettings } from "@/components/notifications/push-settings";
 import { normalizeAvatarFile } from "@/lib/image-processing";
 import {
   BellIcon,
@@ -528,6 +529,8 @@ export function AccountSettingsClient() {
           </Form>
         </CardContent>
       </Card>
+
+      <PushNotificationSettings />
 
       <EmailNotificationPreferences />
 

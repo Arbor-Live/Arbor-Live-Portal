@@ -7,7 +7,7 @@ import { userStatusValue } from "./lib/userStatus";
 import { eventSeriesPositionTemplateValue } from "./lib/eventSeriesPositions";
 import { artistNeedActTypeValue, artistNeedTypeValue } from "./lib/artistNeedTypes";
 import { eventGroupKindValue } from "./lib/eventGroupKind";
-import { emailTemplateValue } from "./lib/emailTemplateValue";
+import { emailTemplateValue, notificationTemplateValue } from "./lib/emailTemplateValue";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -1676,7 +1676,8 @@ export default defineSchema({
    */
   notifications: defineTable({
     userId: v.string(),
-    template: emailTemplateValue,
+    /** Email template it mirrors, or `app_install` for the Home Screen nudge. */
+    template: notificationTemplateValue,
     status: v.union(v.literal("pending"), v.literal("delivered")),
     title: v.string(),
     body: v.optional(v.string()),
@@ -1696,6 +1697,24 @@ export default defineSchema({
     .index("by_userId_and_dedupeKey", ["userId", "dedupeKey"])
     .index("by_dedupeKey", ["dedupeKey"])
     .index("by_createdAt", ["createdAt"]),
+
+  /** Web Push endpoints, one per browser/device the user turned push on for. */
+  pushSubscriptions: defineTable({
+    userId: v.string(),
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
+    userAgent: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_endpoint", ["endpoint"]),
+
+  /** Set the first time a user opens the portal from their Home Screen. */
+  appInstalls: defineTable({
+    userId: v.string(),
+    firstStandaloneAt: v.number(),
+  }).index("by_userId", ["userId"]),
 
 
   eventRequests: defineTable({

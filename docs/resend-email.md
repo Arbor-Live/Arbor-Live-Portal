@@ -27,6 +27,22 @@ confirmations, and newsletters stay email-only.
   previous row with the same debounce key.
 - Email opt-outs don't suppress in-app rows. Rows are pruned after 180 days.
 
+#### Push and the Home Screen app
+
+- Delivered rows also go out as Web Push to every device the user turned push
+  on for (Account settings → Push notifications, or the bell's footer prompt).
+  `pushDelivery.ts` sends; `public/sw.js` shows the notification, sets the app
+  badge, and opens the row's page on tap. Endpoints the push service reports
+  gone (404/410) are deleted. Needs `VAPID_*` env vars (see
+  [environment-variables.md](environment-variables.md)).
+- iOS only allows push from the Home Screen app (`app/manifest.ts`). The first
+  time someone opens the portal in a phone browser they get one
+  `app_install` notification, and the mobile sidebar shows **Add to Home
+  Screen** until they open it from the Home Screen (`appInstall.ts`,
+  `appInstalls` table). That launch marks the nudge read. Home Screen apps on
+  iOS have their own cookies, so people sign in once more there.
+- Reading a row in the app clears it from the OS tray and updates the badge.
+
 ### From-address domain
 
 Resend only delivers from a **verified sending domain**. In the Resend

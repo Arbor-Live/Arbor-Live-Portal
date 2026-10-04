@@ -36,6 +36,12 @@ export const metadata: Metadata = {
     "Arbor Live is Stanford's only student-run live event production company, bringing live events to every corner of campus.",
   icons: {
     icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "Arbor Live",
+    statusBarStyle: "default",
   },
 };
 
