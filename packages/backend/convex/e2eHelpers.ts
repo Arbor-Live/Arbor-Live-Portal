@@ -1225,9 +1225,61 @@ export const seedSubmittedBookingRequest = mutation({
  * Test-only: converted booking request with quote already on the request track portal.
  * Avoids the heavy invoice-editor UI path that flakes under anonymous CI Convex limits.
  */
+/**
+ * Crew lines shaped like the invoice editor saves them (one per shift, labeled
+ * `[Day N — ]Section — Role (Person)`), plus one hand-entered people × hours
+ * row. Headcount changes by phase: 4 on load-in, 2 on the show, 3 on strike.
+ */
+function e2eCrewQuoteLines(layout: "single_day" | "multi_day") {
+  const lead = "Maximiliano Fernández-Castellanos (Lead)";
+  const phases: Array<{ label: string; hours: number; rateUsd: number }> = [
+    { label: `Load-in — Sound engineer (${lead})`, hours: 3, rateUsd: 35 },
+    { label: "Load-in — Sound engineer (Priya Natarajan)", hours: 3, rateUsd: 25 },
+    { label: "Load-in — Stagehand (Jordan Lee)", hours: 3, rateUsd: 22 },
+    { label: "Load-in — Stagehand (Open slot)", hours: 3, rateUsd: 22 },
+    { label: `Show — Sound engineer (${lead})`, hours: 4.5, rateUsd: 35 },
+    { label: "Show — Lighting tech (Sam Okafor)", hours: 4.5, rateUsd: 25 },
+    { label: "Strike — Sound engineer (Priya Natarajan)", hours: 2, rateUsd: 25 },
+    { label: "Strike — Stagehand (Jordan Lee)", hours: 2, rateUsd: 22 },
+    { label: "Strike — Stagehand (Open slot)", hours: 2, rateUsd: 22 },
+  ];
+  const days = layout === "multi_day" ? ["Day 1 — ", "Day 2 — "] : [""];
+  const lines: Array<{
+    label: string;
+    quantity: number;
+    rateUsd: number;
+    amountUsd: number;
+    memberCount?: number;
+    performanceHours?: number;
+    crewSource?: "manual";
+  }> = [];
+  for (const prefix of days) {
+    for (const phase of phases) {
+      lines.push({
+        label: `${prefix}${phase.label}`,
+        quantity: phase.hours,
+        rateUsd: phase.rateUsd,
+        amountUsd: Number((phase.hours * phase.rateUsd).toFixed(2)),
+      });
+    }
+  }
+  lines.push({
+    label: "Extra hands for load-out",
+    quantity: 3,
+    rateUsd: 22,
+    amountUsd: 66,
+    memberCount: 2,
+    performanceHours: 1.5,
+    crewSource: "manual",
+  });
+  return lines;
+}
+
 export const seedBookingReadyForTrackApprove = mutation({
   args: {
     eventName: v.optional(v.string()),
+    /** Bill a realistic, phased crew section on the quote. */
+    crew: v.optional(v.union(v.literal("single_day"), v.literal("multi_day"))),
   },
   returns: v.object({
     requestId: v.id("eventRequests"),
@@ -1241,6 +1293,8 @@ export const seedBookingReadyForTrackApprove = mutation({
     assertE2eHelpersEnabled();
     const now = Date.now();
     const seeded = await insertSubmittedBookingRequest(ctx, args.eventName);
+    const crewLines = args.crew ? e2eCrewQuoteLines(args.crew) : [];
+    const crewSubtotalUsd = Number(crewLines.reduce((sum, line) => sum + line.amountUsd, 0).toFixed(2));
     const invoiceNumber = `ALINV-${makeInvoiceSuffix()}`;
     const invoiceId = await ctx.db.insert("invoices", {
       invoiceNumber,
@@ -1261,10 +1315,10 @@ export const seedBookingReadyForTrackApprove = mutation({
       equipmentSubtotalUsd: 100,
       externalRentalsSubtotalUsd: 0,
       artistsSubtotalUsd: 0,
-      crewSubtotalUsd: 0,
+      crewSubtotalUsd,
       feesSubtotalUsd: 0,
-      subtotalUsd: 100,
-      totalUsd: 100,
+      subtotalUsd: 100 + crewSubtotalUsd,
+      totalUsd: 100 + crewSubtotalUsd,
       clientApprovalStatus: "pending",
       sourceEventRequestId: seeded.requestId,
       clientReviewReadyAt: now,
@@ -1282,6 +1336,16 @@ export const seedBookingReadyForTrackApprove = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    for (const [index, line] of crewLines.entries()) {
+      await ctx.db.insert("invoiceLineItems", {
+        invoiceId,
+        section: "crew",
+        order: index + 1,
+        ...line,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
     const eventId = await ctx.db.insert("events", {
       title: seeded.eventName,
       status: "tentative",

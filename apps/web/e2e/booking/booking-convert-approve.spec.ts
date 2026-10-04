@@ -30,4 +30,38 @@ test.describe("booking track approve", () => {
     expect(state.status).toBe("converted");
     expect(state.convertedAt).toBeTruthy();
   });
+
+  test("client reads the quote's crew by day and section, with headcount per phase", async ({ page }) => {
+    const seeded = runConvex("e2eHelpers:seedBookingReadyForTrackApprove", {
+      eventName: `E2E Track Crew ${Date.now()}`,
+      crew: "multi_day",
+    }) as { trackPath: string };
+
+    await page.goto(`${seeded.trackPath}?tab=quote`);
+    const crew = page.getByTestId("public-quote-crew");
+    await expect(crew).toBeVisible({ timeout: 25_000 });
+
+    await expect(crew.getByRole("heading", { name: "Day 1" })).toBeVisible();
+    await expect(crew.getByRole("heading", { name: "Day 2" })).toBeVisible();
+    const sections = crew.getByTestId("public-quote-crew-section");
+    // Load-in / Show / Strike on each day, plus the hand-entered row.
+    await expect(sections).toHaveCount(7);
+    const loadIn = sections.first();
+    await expect(loadIn.getByTestId("public-quote-crew-headcount")).toHaveText("4 people × 3 hrs");
+    await expect(loadIn).toContainText("$312.00");
+    await expect(sections.nth(1).getByTestId("public-quote-crew-headcount")).toHaveText("2 people × 4.5 hrs");
+    await expect(sections.last().getByTestId("public-quote-crew-headcount")).toHaveText("2 people × 1.5 hrs");
+
+    // Opening a section shows who works it at what rate.
+    await loadIn.locator("summary").click();
+    const lead = loadIn.getByTestId("public-quote-crew-line").first();
+    await expect(lead).toContainText("Maximiliano Fernández-Castellanos");
+    await expect(lead).toContainText("Lead");
+    await expect(lead).toContainText("3 hrs × $35/hr");
+    await expect(loadIn.getByText("To be assigned")).toBeVisible();
+
+    // Presentation only: the crew total still matches the billed crew subtotal.
+    await expect(crew.getByTestId("public-quote-crew-total")).toHaveText("$1,506.00");
+    await expect(page.getByText("Crew: $1,506.00")).toBeVisible();
+  });
 });
