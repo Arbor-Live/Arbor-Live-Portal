@@ -28,7 +28,7 @@ the whole PR (`gh pr diff`, `gh pr view`), not just the latest push.
 - Query efficiency: session shell pattern, search-on-demand pickers, no stacked
   viewer queries — see `docs/convex-efficiency.md`.
 - Schema changes additive-safe, or use widen–migrate–narrow
-  (`convex-migration-helper` skill) with migration jobs appended, never
+  (`convex-migrate` skill) with migration jobs appended, never
   reordered.
 
 **UI**

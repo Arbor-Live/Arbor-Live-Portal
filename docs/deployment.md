@@ -88,7 +88,7 @@ deployment; it gates production-only behavior (e.g. real email sending paths).
   back Convex functions or schema — if the bad deploy included backend
   changes, redeploy the previous commit instead so both sides stay in sync.
 - Convex schema changes are additive-safe by default; for breaking changes
-  follow the widen–migrate–narrow process (see the `convex-migration-helper`
+  follow the widen–migrate–narrow process (see the `convex-migrate`
   skill and `convex/migrations.ts` / `@convex-dev/migrations`).
 
 ## Deploy failure triage

@@ -22,6 +22,7 @@ check_link() {
 check_link ".claude/skills" "../.agents/skills"
 check_link ".cursor/skills" "../.agents/skills"
 check_link "packages/backend/.agents/skills" "../../.agents/skills"
+check_link "packages/backend/.claude/skills" "../../.agents/skills"
 
 for dir in .agents/skills/*/; do
   name=$(basename "$dir")
