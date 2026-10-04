@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "convex": "^1.42.3",
+    "convex": "^1.46.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
