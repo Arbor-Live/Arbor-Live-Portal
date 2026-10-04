@@ -467,8 +467,25 @@ function SectionTable({
 }
 
 const crewItemFlex = 3;
-/** Sections up to this many lines never split across pages. */
-const KEEP_TOGETHER_MAX_LINES = 14;
+/**
+ * A section is kept on one page when its estimated wrapped rows fit well
+ * within a Letter page (~720pt usable; a row is ~11pt). Bigger ones may split,
+ * since react-pdf clips an unbreakable view taller than a page.
+ */
+const KEEP_TOGETHER_MAX_ROWS = 30;
+/** Characters of name · role · notes that fit on one row of the first column. */
+const CREW_CHARS_PER_ROW = 60;
+
+function estimatedRows(group: CrewGroup) {
+  return group.lines.reduce((rows, line) => {
+    const text = [crewLinePerson(line) ?? line.role, line.role, line.notes].filter(Boolean).join(" · ");
+    return rows + Math.max(1, Math.ceil(text.length / CREW_CHARS_PER_ROW));
+  }, 1);
+}
+
+function keepTogether(group: CrewGroup | undefined) {
+  return group !== undefined && estimatedRows(group) <= KEEP_TOGETHER_MAX_ROWS;
+}
 const crewRateFlex = 1.5;
 const crewAmountFlex = 1;
 
@@ -500,21 +517,22 @@ function CrewPersonRow({ line }: { line: CrewLine }) {
 }
 
 /**
- * A Run of Show section with every person listed. Small sections never split
- * across pages; a very long one may, but its header keeps rows after it. A
+ * A Run of Show section with every person listed. Sections that fit never split
+ * across pages; an oversized one may, but its header keeps rows after it. A
  * hand-entered people × hours row is its own one-line section.
  */
 function CrewSectionBlock({ group }: { group: CrewGroup }) {
-  const keepTogether = group.lines.length <= KEEP_TOGETHER_MAX_LINES;
+  const unbreakable = keepTogether(group);
   const single = group.lines.length === 1 && group.lines[0]!.manualLabel ? group.lines[0]! : undefined;
   return (
-    <View style={styles.crewSectionEnd} wrap={!keepTogether}>
-      <View style={styles.crewSectionRow} minPresenceAhead={keepTogether ? undefined : 48}>
+    <View style={styles.crewSectionEnd} wrap={!unbreakable}>
+      <View style={styles.crewSectionRow} minPresenceAhead={unbreakable ? undefined : 48}>
         <Text style={[styles.crewSectionTitle, { flex: crewItemFlex, paddingRight: 8 }]}>
           {group.title}
           <Text style={[styles.crewMuted, { fontWeight: 400 }]}>
             {`   ${describeHeadcount(group.lines)}`}
           </Text>
+          {single?.notes ? <Text style={[styles.crewMuted, { fontWeight: 400 }]}>{`\n${single.notes}`}</Text> : null}
         </Text>
         <Text style={[styles.crewMuted, { flex: crewRateFlex, textAlign: "right", fontSize: 8.5 }]}>
           {single ? describeHoursTimesRate(single) : ""}
@@ -536,7 +554,7 @@ function CrewSectionBlock({ group }: { group: CrewGroup }) {
  * of the billed lines.
  */
 function CrewSectionTable({ rows }: { rows: InvoiceLineItem[] }) {
-  const lines = rows.map(parseCrewLine);
+  const lines = rows.map((row) => parseCrewLine({ ...row, notes: row.detailNote }));
   const days = groupCrewBySection(lines);
   return (
     <View style={styles.card}>
@@ -553,7 +571,7 @@ function CrewSectionTable({ rows }: { rows: InvoiceLineItem[] }) {
         return (
           <View key={day.key}>
             {/* The day heading travels with its first section (when that fits on a page). */}
-            <View wrap={!first || first.lines.length > KEEP_TOGETHER_MAX_LINES} minPresenceAhead={60}>
+            <View wrap={!keepTogether(first)} minPresenceAhead={60}>
               {day.title ? (
                 <View style={styles.crewDay}>
                   <Text>{day.title}</Text>

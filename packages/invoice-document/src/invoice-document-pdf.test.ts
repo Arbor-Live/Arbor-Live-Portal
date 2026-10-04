@@ -22,11 +22,11 @@ const data: InvoiceDocumentData = {
     equipmentSubtotalUsd: 0,
     externalRentalsSubtotalUsd: 0,
     artistsSubtotalUsd: 0,
-    crewSubtotalUsd: 351.5,
+    crewSubtotalUsd: 349.5,
     feesSubtotalUsd: 0,
-    subtotalUsd: 351.5,
+    subtotalUsd: 349.5,
     discountAmountUsd: 0,
-    totalUsd: 351.5,
+    totalUsd: 349.5,
   },
   lineItems: [
     crew("Day 1 — Load-in — Sound engineer (Ana (Lead))", 3, 35),
@@ -41,5 +41,13 @@ describe("InvoiceDocumentPdf crew sections", () => {
     const buffer = await renderInvoicePdfBuffer(data);
     expect(buffer.subarray(0, 5).toString()).toBe("%PDF-");
     expect(buffer.length).toBeGreaterThan(1000);
+  });
+
+  it("renders a crew section too tall for one page", async () => {
+    const lines = Array.from({ length: 60 }, (_, index) =>
+      crew(`Load-in — Rigging assistant for the main stage truss (Crew member ${index + 1} with a long name)`, 3, 22),
+    );
+    const buffer = await renderInvoicePdfBuffer({ ...data, lineItems: lines });
+    expect(buffer.subarray(0, 5).toString()).toBe("%PDF-");
   });
 });
