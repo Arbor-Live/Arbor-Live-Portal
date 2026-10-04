@@ -91,6 +91,7 @@ export function toDocumentLineItem(
       row.performanceHours > 0
         ? row.performanceHours
         : undefined,
+    crewSource: row.section === "crew" ? row.crewSource : undefined,
   };
 }
 

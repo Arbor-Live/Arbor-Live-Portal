@@ -40,6 +40,7 @@ const invoiceDocumentValidator = v.object({
       amountUsd: v.number(),
       memberCount: v.optional(v.number()),
       performanceHours: v.optional(v.number()),
+      crewSource: v.optional(v.literal("manual")),
     }),
   ),
 });

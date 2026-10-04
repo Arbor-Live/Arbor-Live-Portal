@@ -45,6 +45,7 @@ export function buildInvoiceDocumentData(args: {
       amountUsd: line.amountUsd,
       memberCount: line.memberCount,
       performanceHours: line.performanceHours,
+      crewSource: line.crewSource,
     })),
   };
 }

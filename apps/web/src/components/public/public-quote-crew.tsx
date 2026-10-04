@@ -2,32 +2,22 @@
 
 import { CaretRightIcon } from "@phosphor-icons/react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatUsd } from "@/lib/format";
 import {
   crewLinePerson,
   describeHeadcount,
-  formatHours,
+  describeHoursTimesRate,
   formatPeople,
   groupCrewBySection,
-  parsePublicCrewLine,
+  parseCrewLine,
   sumCrewAmountUsd,
   type CrewGroup,
-  type PublicCrewLine,
-  type PublicCrewLineInput,
-} from "@/lib/public-quote-crew";
-
-function formatRate(rateUsd: number) {
-  const usd = formatUsd(rateUsd);
-  return `${Number.isInteger(rateUsd) ? usd.replace(/\.00$/, "") : usd}/hr`;
-}
-
-function hoursTimesRate(line: PublicCrewLine) {
-  const people = line.people > 1 ? `${line.people} × ` : "";
-  return `${people}${formatHours(line.hoursEach)} × ${formatRate(line.rateUsd)}`;
-}
+  type CrewLine,
+  type CrewLineInput,
+} from "@arbor/invoice-document/crew";
+import { formatUsd } from "@/lib/format";
 
 /** One billed line inside an opened section: who, their role, hours × rate = amount. */
-function CrewLineRow({ line }: { line: PublicCrewLine }) {
+function CrewLineRow({ line }: { line: CrewLine }) {
   const person = crewLinePerson(line);
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 py-2 text-sm" data-testid="public-quote-crew-line">
@@ -51,7 +41,7 @@ function CrewLineRow({ line }: { line: PublicCrewLine }) {
       </div>
       <div className="text-right tabular-nums">
         <p>{formatUsd(line.amountUsd)}</p>
-        <p className="text-xs whitespace-nowrap text-muted-foreground">{hoursTimesRate(line)}</p>
+        <p className="text-xs whitespace-nowrap text-muted-foreground">{describeHoursTimesRate(line)}</p>
       </div>
     </li>
   );
@@ -88,9 +78,13 @@ function CrewSection({ group }: { group: CrewGroup }) {
  * of Show section, so headcount per phase reads at a glance. Presentation only:
  * every section, day, and the crew total is the exact sum of its billed lines.
  */
-export function PublicQuoteCrew({ lineItems }: { lineItems: PublicCrewLineInput[] }) {
+export function PublicQuoteCrew({
+  lineItems,
+}: {
+  lineItems: Array<Omit<CrewLineInput, "id"> & { _id: string }>;
+}) {
   if (!lineItems.length) return null;
-  const lines = lineItems.map(parsePublicCrewLine);
+  const lines = lineItems.map(({ _id, ...line }) => parseCrewLine({ ...line, id: _id }));
   const days = groupCrewBySection(lines);
   return (
     <Card data-testid="public-quote-crew">
