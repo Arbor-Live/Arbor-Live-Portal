@@ -91,10 +91,13 @@ export function parsePublicCrewLine(line: PublicCrewLineInput): PublicCrewLine {
     amountUsd: line.amountUsd,
     notes: line.notes?.trim() || undefined,
   };
+  const segments = line.label.split(SEPARATOR).map((segment) => segment.trim());
+  const day = segments.length > 1 && DAY_PREFIX.test(segments[0]!) ? segments.shift() : undefined;
   if (line.crewSource === "manual" || (people && people > 1)) {
     return {
       ...base,
-      manualLabel: line.label.trim(),
+      day,
+      manualLabel: segments.join(SEPARATOR),
       lead: false,
       openSlot: false,
       people: people ?? 1,
@@ -102,8 +105,6 @@ export function parsePublicCrewLine(line: PublicCrewLineInput): PublicCrewLine {
     };
   }
 
-  const segments = line.label.split(SEPARATOR).map((segment) => segment.trim());
-  const day = segments.length > 1 && DAY_PREFIX.test(segments[0]!) ? segments.shift() : undefined;
   const tail = segments.pop() ?? "";
   const section = segments.length ? segments.join(SEPARATOR) : undefined;
   const { head, inner } = splitTrailingParens(tail);

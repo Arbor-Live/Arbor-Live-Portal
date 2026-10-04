@@ -63,6 +63,14 @@ describe("parsePublicCrewLine", () => {
     ).toMatchObject({ manualLabel: "Extra hands — load-out", people: 2, hoursEach: 1.5 });
   });
 
+  it("files a hand-entered row under its day when the label starts with one", () => {
+    expect(
+      parsePublicCrewLine(
+        line("Day 2 — Extra hands", 3, 22, { memberCount: 2, performanceHours: 1.5, crewSource: "manual" }),
+      ),
+    ).toMatchObject({ day: "Day 2", manualLabel: "Extra hands", people: 2 });
+  });
+
   it("shows an unrecognised label as the role", () => {
     const parsed = parsePublicCrewLine(line("Stage manager", 5, 30));
     expect(parsed.role).toBe("Stage manager");
