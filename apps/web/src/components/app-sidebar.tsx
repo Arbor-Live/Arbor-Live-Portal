@@ -60,6 +60,10 @@ type NavSubItem = {
   staffOnly?: boolean
   /** The act workspace: artists and admins, not other Arbor staff. */
   actWorkspace?: boolean
+  /** Operations team and admins only (not crew). */
+  opsOnly?: boolean
+  /** Label for Arbor staff when it differs from the artist's own ("Edit artist profile" vs "Profile"). */
+  staffTitle?: string
 }
 
 type NavItem = {
@@ -117,7 +121,6 @@ const eventsSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/events" },
   { title: "Venues", url: "/dashboard/events/venues", adminOnly: true },
   { title: "Open Mic", url: "/dashboard/events/open-mic" },
-  { title: "Open Positions", url: "/dashboard/events/positions" },
   { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", adminOnly: true },
   { title: "My Availability", url: "/dashboard/events/my-availability" },
   { title: "My Post-event work", url: "/dashboard/events/post-event" },
@@ -140,14 +143,18 @@ const marketingSubItems: NavSubItem[] = [
   { title: "Settings", url: "/dashboard/marketing/settings" },
 ]
 
+// Staff see the booking work first (open positions, who to contact, new acts),
+// then editing one act. An artist sees only its own act: Profile, Team,
+// Technical riders, Payments.
 const bandsSubItems: NavSubItem[] = [
-  { title: "Profile", url: "/dashboard/artists", actWorkspace: true },
-  { title: "Team", url: "/dashboard/artists/team", actWorkspace: true },
-  { title: "Technical riders", url: "/dashboard/artists/riders", actWorkspace: true },
-  { title: "Payments", url: "/dashboard/artists/payments", actWorkspace: true },
+  { title: "Open positions", url: "/dashboard/artists/positions", staffOnly: true, opsOnly: true },
   { title: "Directory", url: "/dashboard/artists/directory", staffOnly: true },
-  { title: "Organizations", url: "/dashboard/users/organizations", adminOnly: true },
   { title: "Artist applications", url: "/dashboard/users/artist-applications", adminOnly: true },
+  { title: "Organizations", url: "/dashboard/users/organizations", adminOnly: true },
+  { title: "Profile", staffTitle: "Edit artist profile", url: "/dashboard/artists", actWorkspace: true },
+  { title: "Team", url: "/dashboard/artists/team", actWorkspace: true },
+  { title: "Technical riders", staffTitle: "Edit artist riders", url: "/dashboard/artists/riders", actWorkspace: true },
+  { title: "Payments", url: "/dashboard/artists/payments", actWorkspace: true },
 ]
 
 const sectionSubItems: Record<string, NavSubItem[]> = {
@@ -417,8 +424,12 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                   !effectiveIsAdmin &&
                   item.url === "/dashboard/artists" &&
                   (subItem.actWorkspace || subItem.adminOnly)
-                ),
+                ) &&
+                !(subItem.opsOnly && !effectiveIsAdmin && !effectiveHasOperationsAccess),
             )
+              .map((subItem) =>
+                !isBandContext && subItem.staffTitle ? { ...subItem, title: subItem.staffTitle } : subItem,
+              )
             const activeSubItemUrl = (subItems ?? [])
               .filter(
                 (subItem) =>

@@ -799,6 +799,8 @@ export const seedCrewedEventWithSchedule = mutation({
     marketingImageUrl: v.optional(v.string()),
     /** Seeds one open artist position on the event. */
     openPosition: v.optional(v.boolean()),
+    /** Also seeds an open "Opener" (live band) position, for multi-slot bills. */
+    openerPosition: v.optional(v.boolean()),
   },
   returns: v.object({
     eventId: v.id("events"),
@@ -876,6 +878,18 @@ export const seedCrewedEventWithSchedule = mutation({
         label: "Headliner",
         artistTypes: [],
         genres: "indie, jazz",
+        status: "open",
+        createdByUserId: "e2e",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    if (args.openerPosition) {
+      await ctx.db.insert("eventArtistNeeds", {
+        eventId,
+        sortOrder: now + 1,
+        label: "Opener",
+        artistTypes: ["band"],
         status: "open",
         createdByUserId: "e2e",
         createdAt: now,

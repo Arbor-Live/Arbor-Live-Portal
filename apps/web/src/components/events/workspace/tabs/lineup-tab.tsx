@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { EventArtistBillSection } from "@/components/events/event-artist-bill-section";
 import { EventBandRidersSection } from "@/components/events/event-band-riders-section";
+import { OutreachCard } from "@/components/events/outreach/outreach-card";
 import { Field } from "@/components/events/workspace/event-fields";
 import { useEventWorkspace } from "@/components/events/workspace/event-workspace-provider";
 
@@ -95,6 +96,7 @@ export function LineupTab() {
   return (
     <div className="space-y-4">
       <EventArtistBillSection eventId={eventId} canEdit={canEdit} />
+      <OutreachCard eventId={eventId} canEdit={canEdit} />
       <EventBandRidersSection eventId={eventId} />
       {isAdmin ? <OpenMicCard /> : null}
     </div>

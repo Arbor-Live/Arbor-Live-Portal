@@ -74,6 +74,20 @@ canonical description of the domain itself.
   (`users.listArtistDirectory`). Search matches people too, and phone numbers
   on digits alone, so staff can paste a number from a group chat
   (`lib/artist-directory.ts`).
+- **Artist outreach** (`eventArtistOutreach`): staff track which acts they
+  asked to play an event and what each said (Waiting · Available · Can't, plus
+  a note). One list per **event**, not per position: an act free that night can
+  fill any open slot, and can be tagged for one slot (`needId`) when it only
+  fits that one. It is the staff-driven side; `eventArtistInquiries` is the
+  artist asking us. Operations team and admins only (`lib/outreachAccess.ts`);
+  crew get the artist directory but not outreach. Worked from Open Positions (the event's **Outreach** button,
+  `?outreach=<eventId>`) or the Outreach card on the Lineup tab. **Book** fills
+  an open slot the act's type fits (the tagged slot first): a portal act joins
+  the bill and the slot's pending inquiries close as when accepting one; an
+  outside act fills it by name. "Booked" is derived from the lineup, never
+  stored. Acts that can't make it fold behind a "Show N who can't" toggle, and
+  the Lineup card collapses to its summary once every slot is filled.
+  Deleting a position untags its outreach.
 - **Which rider a show uses.** An act can keep several riders and marks one
   default. From a show's panel on their home (`/dashboard?show=<eventId>`) the
   act can pick a different rider for that show
@@ -340,7 +354,7 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   and publicly listable. Riders sit in their own card below the bill.
 - **Operations lead** (`events.operationsLeadUserId`) — the person responsible
   for filling an event's lineup. Assigned inline on the **Open positions** board
-  (`/dashboard/events/positions`), which lists upcoming events with unfilled
+  (`/dashboard/artists/positions`, Operations team and admins only), which lists upcoming events with unfilled
   slots soonest-first and can filter to **Assigned to me**. It is a
   coordination flag only and grants no extra event access.
 - **Schedule blocks** (`eventScheduleBlocks`) are the planning unit: typed

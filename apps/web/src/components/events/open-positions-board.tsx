@@ -9,7 +9,8 @@ import {
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { ChatCircleIcon, UserCircleIcon } from "@phosphor-icons/react";
+import type { FunctionReturnType } from "convex/server";
+import { ChatCircleIcon, PhoneOutgoingIcon, UserCircleIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
@@ -28,6 +29,10 @@ import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
 import { academicPeriod, periodMsRange } from "@/lib/academic-periods";
 import { formatDate, formatTime, pacificDateKey } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { outreachStage, outreachSummary, type OutreachStage } from "@/lib/artist-outreach";
+import { useSheetParam } from "@/hooks/use-sheet-param";
+import { DetailSheet, DetailSheetFooter, DetailSheetHeader, SheetSection } from "@/components/list-page";
+import { OutreachChecklist } from "@/components/events/outreach/outreach-checklist";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -60,6 +65,23 @@ const TYPE_FILTER_OPTIONS = [
   ...ACT_TYPE_OPTIONS,
   { value: "no_preference", label: TYPE_LABELS.no_preference },
 ];
+
+const OUTREACH_OPTIONS: Array<{ value: OutreachStage; label: string }> = [
+  { value: "none", label: "Nobody asked yet" },
+  { value: "waiting", label: "Waiting on replies" },
+  { value: "available", label: "An act is available" },
+  { value: "declined", label: "Everyone said no" },
+];
+
+/** Outreach line per stage: emerald when an act can play, amber while waiting. */
+const OUTREACH_TONE: Record<OutreachStage, string> = {
+  none: "text-muted-foreground",
+  waiting: "text-status-amber-700 dark:text-status-amber-300",
+  available: "text-status-emerald-700 dark:text-status-emerald-300",
+  declined: "text-destructive",
+};
+
+type BoardEvent = FunctionReturnType<typeof api.eventArtistNeeds.listOpenPositions>["events"][number];
 
 /** Days until the show: red inside a week, amber inside three. */
 function countdown(startAt: number, now: number) {
@@ -95,6 +117,7 @@ export function OpenPositionsBoard() {
   // Value shown until the server query catches up with an assigned lead.
   const [leadOverrides, setLeadOverrides] = useState<Record<string, string>>({});
   const [now] = useState(() => Date.now());
+  const [outreachEventId, setOutreachEventId] = useSheetParam("outreach");
 
   const userSelectOptions: UserSelectOption[] = useMemo(() => {
     const base = assignableCrewSelectOptions(
@@ -151,6 +174,7 @@ export function OpenPositionsBoard() {
           .map((name) => ({ value: name, label: name })),
       },
       { id: "inquiries", label: "Inquiries", options: INQUIRY_OPTIONS, single: true },
+      { id: "outreach", label: "Outreach", options: OUTREACH_OPTIONS },
     ],
     [events],
   );
@@ -165,6 +189,7 @@ export function OpenPositionsBoard() {
       const lead = leadOverrides[event.eventId] ?? event.operationsLeadUserId ?? "";
       if (assignedToMe && lead !== viewerUserId) return [];
       if (!matchesFilter(filters.venue, event.venueName ?? "")) return [];
+      if (!matchesFilter(filters.outreach, outreachStage(event.outreach))) return [];
       const positions = event.openPositions.filter((position) => {
         const types = position.artistTypes.length > 0 ? position.artistTypes : ["no_preference"];
         if (!matchesFilter(filters.type, types)) return false;
@@ -187,6 +212,8 @@ export function OpenPositionsBoard() {
     });
   }, [assignedToMe, events, filters, leadOverrides, now, range, search, viewerUserId]);
 
+  const outreachEvent = events?.find((event) => event.eventId === outreachEventId) ?? null;
+  const awaitingReplies = visible.filter((event) => outreachStage(event.outreach) === "waiting").length;
   const openCount = visible.reduce((total, event) => total + event.openPositions.length, 0);
   const withInquiries = visible.reduce(
     (total, event) => total + event.openPositions.filter((position) => position.inquiryCount > 0).length,
@@ -239,7 +266,9 @@ export function OpenPositionsBoard() {
               : "Every position in this range is filled."
             : `${openCount} open position${openCount === 1 ? "" : "s"} across ${visible.length} event${
                 visible.length === 1 ? "" : "s"
-              }${withInquiries ? ` · ${withInquiries} with inquiries to review` : ""}`}
+              }${withInquiries ? ` · ${withInquiries} with inquiries to review` : ""}${
+                awaitingReplies ? ` · ${awaitingReplies} waiting on replies` : ""
+              }`}
         </p>
       )}
       {result?.truncated ? (
@@ -287,6 +316,16 @@ export function OpenPositionsBoard() {
                     clearable
                   />
                 </div>
+                <span
+                  className={cn("ml-auto text-xs", OUTREACH_TONE[outreachStage(event.outreach)])}
+                  data-testid="open-positions-outreach"
+                >
+                  {outreachSummary(event.outreach)}
+                </span>
+                <Button type="button" size="sm" variant="outline" onClick={() => setOutreachEventId(event.eventId)}>
+                  <PhoneOutgoingIcon />
+                  Outreach
+                </Button>
               </div>
               <ul className="divide-y border-t">
                 {event.openPositions.map((position) => (
@@ -323,6 +362,38 @@ export function OpenPositionsBoard() {
           );
         })}
       </div>
+
+      <DetailSheet
+        open={outreachEvent !== null}
+        onOpenChange={(open) => {
+          if (!open) setOutreachEventId(null);
+        }}
+        testId="outreach-sheet"
+      >
+        {outreachEvent ? <EventOutreachBody key={outreachEvent.eventId} event={outreachEvent} /> : null}
+      </DetailSheet>
     </div>
+  );
+}
+
+/** The board's side panel: who we've asked to play an event, and booking them into its slots. */
+function EventOutreachBody({ event }: { event: BoardEvent }) {
+  const lineupPath = getEventEditorTabPath(event.eventId, "artists");
+  const open = event.openPositions.map((position) => position.label || artistTypesLabel(position.artistTypes)).join(", ");
+  return (
+    <>
+      <DetailSheetHeader
+        title={event.title}
+        description={`${formatDate(event.startAt)}${event.venueName ? ` · ${event.venueName}` : ""} · Open: ${open}`}
+      />
+      <SheetSection title="Outreach">
+        <OutreachChecklist eventId={event.eventId} idPrefix="board" />
+      </SheetSection>
+      <DetailSheetFooter>
+        <Button asChild size="sm" variant="outline">
+          <Link href={lineupPath}>Open the lineup</Link>
+        </Button>
+      </DetailSheetFooter>
+    </>
   );
 }
