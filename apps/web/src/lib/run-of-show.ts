@@ -1,4 +1,5 @@
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
+import type { ArtistNeedType } from "@/components/events/lineup/lineup-model";
 import { localDateTimeInputToMs, toLocalDateTimeInput } from "@/lib/crew-availability";
 import { formatTime, pacificDayIndexFromAnchor } from "@/lib/format";
 import { isSectionBlockType } from "@/lib/schedule-block-types";
@@ -21,6 +22,8 @@ export type RunOfShowAct = {
   needId?: string;
   /** A lineup position nobody has filled yet ("TBA"). */
   open: boolean;
+  /** The lineup position's artist type, when the act fills one. */
+  artistType?: ArtistNeedType;
 };
 
 export function actKeyOf(ref: { participationId?: string; needId?: string }) {
@@ -221,20 +224,24 @@ export function runOfShowIssues(
 }
 
 export type BuildRunOfShowInput = {
-  /** Acts in the order they play, each with its set length. */
-  playOrder: Array<{ act: RunOfShowAct; setMinutes: number }>;
+  /** Acts in the order they play, each with its set and soundcheck length (0 skips the soundcheck). */
+  playOrder: Array<{ act: RunOfShowAct; setMinutes: number; soundcheckMinutes: number }>;
   doorsAt: number;
   firstSetAt: number;
   changeoverMinutes: number;
-  soundcheckMinutes: number;
   /** Reverse puts the headliner (last to play) first, so openers' gear stays set. */
   soundcheckOrder: "reverse" | "same";
   eventStartAt: number;
 };
 
+export function totalSoundcheckMinutes(rows: Array<{ soundcheckMinutes: number }>) {
+  return rows.reduce((total, row) => total + Math.max(0, row.soundcheckMinutes), 0);
+}
+
 /**
  * Lay out doors, soundchecks, sets, and changeovers. Replaces existing doors,
- * changeovers, and the included acts' soundcheck/set (keeping their ids);
+ * changeovers, and the included acts' soundcheck/set (keeping their ids; an act
+ * with no soundcheck time loses its old one);
  * sections and other acts' blocks stay. Adds a Show section when no section
  * holds the sets.
  */
@@ -299,11 +306,12 @@ export function buildRunOfShow(
   const doorsEnd = input.firstSetAt > input.doorsAt ? input.firstSetAt : input.doorsAt + 15 * MINUTE;
   built.push(draft("doors", "Doors", input.doorsAt, doorsEnd));
 
-  const checkOrder =
-    input.soundcheckOrder === "reverse" ? [...input.playOrder].reverse() : input.playOrder;
-  let checkStart = input.doorsAt - checkOrder.length * input.soundcheckMinutes * MINUTE;
-  for (const { act } of checkOrder) {
-    const end = checkStart + input.soundcheckMinutes * MINUTE;
+  const checkOrder = (
+    input.soundcheckOrder === "reverse" ? [...input.playOrder].reverse() : input.playOrder
+  ).filter((row) => row.soundcheckMinutes > 0);
+  let checkStart = input.doorsAt - totalSoundcheckMinutes(checkOrder) * MINUTE;
+  for (const { act, soundcheckMinutes } of checkOrder) {
+    const end = checkStart + soundcheckMinutes * MINUTE;
     built.push(draft("soundcheck", `${act.name} soundcheck`, checkStart, end, act));
     checkStart = end;
   }

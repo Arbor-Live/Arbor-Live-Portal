@@ -24,12 +24,17 @@ import {
   pacificDateKey,
   toPacificDateTimeInput,
 } from "@/lib/format";
-import { actKeyOf, type BuildRunOfShowInput, type RunOfShowAct } from "@/lib/run-of-show";
+import {
+  actKeyOf,
+  totalSoundcheckMinutes,
+  type BuildRunOfShowInput,
+  type RunOfShowAct,
+} from "@/lib/run-of-show";
 
 const DEFAULT_SET_MINUTES = 45;
 const DEFAULT_HEADLINER_MINUTES = 60;
 
-type PlayRow = { act: RunOfShowAct; setMinutes: number };
+type PlayRow = { act: RunOfShowAct; setMinutes: number; soundcheckMinutes: number };
 
 function timeOf(ms: number) {
   return toPacificDateTimeInput(ms).split("T")[1] ?? "";
@@ -38,6 +43,8 @@ function timeOf(ms: number) {
 /** Defaults: first set at the event start, doors a few minutes before. */
 const DOORS_BEFORE_START_MINUTES = 5;
 const DEFAULT_SOUNDCHECK_MINUTES = 15;
+/** DJs usually only need a quick line check. */
+const DEFAULT_DJ_SOUNDCHECK_MINUTES = 5;
 const HOUR = 60 * 60_000;
 
 /** Acts by their current set time, then unscheduled acts in lineup order. */
@@ -57,6 +64,17 @@ function defaultPlayOrder(acts: RunOfShowAct[], blocks: TimelineBlockDraft[]) {
       return a.index - b.index;
     })
     .map(({ act }) => act);
+}
+
+/** An act's current soundcheck length, else a default for its type. */
+function defaultSoundcheckMinutes(act: RunOfShowAct, blocks: TimelineBlockDraft[]) {
+  const existing = blocks.find(
+    (block) => block.blockType === "soundcheck" && actKeyOf(block) === act.key,
+  );
+  const start = existing ? localDateTimeInputToMs(existing.startsAt) : null;
+  const end = existing ? localDateTimeInputToMs(existing.endsAt) : null;
+  if (start != null && end != null && end > start) return Math.round((end - start) / 60_000);
+  return act.artistType === "dj" ? DEFAULT_DJ_SOUNDCHECK_MINUTES : DEFAULT_SOUNDCHECK_MINUTES;
 }
 
 /**
@@ -85,12 +103,12 @@ export function BuildRunOfShowDialog({
   );
   const [firstSetTime, setFirstSetTime] = useState(() => timeOf(eventStartAt));
   const [changeoverMinutes, setChangeoverMinutes] = useState(15);
-  const [soundcheckMinutes, setSoundcheckMinutes] = useState(DEFAULT_SOUNDCHECK_MINUTES);
   const [soundcheckOrder, setSoundcheckOrder] = useState<"reverse" | "same">("reverse");
   const [rows, setRows] = useState<PlayRow[]>(() =>
     defaultPlayOrder(acts, blocks).map((act, index, all) => ({
       act,
       setMinutes: index === all.length - 1 ? DEFAULT_HEADLINER_MINUTES : DEFAULT_SET_MINUTES,
+      soundcheckMinutes: defaultSoundcheckMinutes(act, blocks),
     })),
   );
 
@@ -110,13 +128,23 @@ export function BuildRunOfShowDialog({
 
   const preview = useMemo(() => {
     if (doorsAt == null || firstSetAt == null || rows.length === 0) return null;
-    const checksStart = doorsAt - rows.length * soundcheckMinutes * 60_000;
+    const checksStart = doorsAt - totalSoundcheckMinutes(rows) * 60_000;
     const setsEnd =
       firstSetAt +
       rows.reduce((total, row) => total + row.setMinutes, 0) * 60_000 +
       (rows.length - 1) * changeoverMinutes * 60_000;
-    return `Soundchecks ${formatTime(checksStart)} – ${formatTime(doorsAt)} · Doors ${formatTime(doorsAt)} · Sets ${formatTime(firstSetAt)} – ${formatTime(setsEnd)}`;
-  }, [doorsAt, firstSetAt, rows, soundcheckMinutes, changeoverMinutes]);
+    return [
+      checksStart < doorsAt ? `Soundchecks ${formatTime(checksStart)} – ${formatTime(doorsAt)}` : null,
+      `Doors ${formatTime(doorsAt)}`,
+      `Sets ${formatTime(firstSetAt)} – ${formatTime(setsEnd)}`,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }, [doorsAt, firstSetAt, rows, changeoverMinutes]);
+
+  function updateRow(index: number, patch: Partial<PlayRow>) {
+    setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }
 
   const replacesExisting = blocks.some(
     (block) =>
@@ -143,7 +171,7 @@ export function BuildRunOfShowDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MagicWandIcon className="size-4" />
@@ -186,33 +214,26 @@ export function BuildRunOfShowDialog({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="ros-soundcheck">Soundcheck (min each)</Label>
-              <NumberInput
-                id="ros-soundcheck"
-                min={5}
-                step={5}
-                value={soundcheckMinutes}
-                onValueChange={setSoundcheckMinutes}
+              <Label>Soundcheck order</Label>
+              <SearchableSelect
+                value={soundcheckOrder}
+                onChange={(value) => setSoundcheckOrder(value === "same" ? "same" : "reverse")}
+                options={[
+                  { value: "reverse", label: "Reverse of play order (recommended)" },
+                  { value: "same", label: "Same as play order" },
+                ]}
+                placeholder="Search order..."
+                emptyLabel="Soundcheck order"
               />
             </div>
           </div>
 
           <div className="space-y-1">
-            <Label>Soundcheck order</Label>
-            <SearchableSelect
-              value={soundcheckOrder}
-              onChange={(value) => setSoundcheckOrder(value === "same" ? "same" : "reverse")}
-              options={[
-                { value: "reverse", label: "Reverse of play order (recommended)" },
-                { value: "same", label: "Same as play order" },
-              ]}
-              placeholder="Search order..."
-              emptyLabel="Soundcheck order"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label>Play order</Label>
+            <div className="flex items-end gap-2 pr-10 text-xs text-muted-foreground">
+              <Label className="flex-1">Play order</Label>
+              <span className="w-24">Soundcheck</span>
+              <span className="w-24">Set</span>
+            </div>
             {rows.length === 0 ? (
               <p className="border border-dashed px-3 py-4 text-center text-sm text-muted-foreground">
                 Add acts to the lineup first.
@@ -254,19 +275,31 @@ export function BuildRunOfShowDialog({
                         </span>
                       ) : null}
                     </span>
-                    <NumberInput
-                      min={5}
-                      step={5}
-                      aria-label={`${row.act.name} set length in minutes`}
-                      className="h-8 w-20"
-                      value={row.setMinutes}
-                      onValueChange={(setMinutes) =>
-                        setRows((prev) =>
-                          prev.map((candidate, i) => (i === index ? { ...candidate, setMinutes } : candidate)),
-                        )
-                      }
-                    />
-                    <span className="text-xs text-muted-foreground">min</span>
+                    <div className="flex w-24 items-center gap-1">
+                      <NumberInput
+                        min={0}
+                        step={5}
+                        aria-label={`${row.act.name} soundcheck length in minutes`}
+                        title="0 for no soundcheck"
+                        className="h-8 w-16"
+                        value={row.soundcheckMinutes}
+                        onValueChange={(soundcheckMinutes) => updateRow(index, { soundcheckMinutes })}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {row.soundcheckMinutes > 0 ? "min" : "none"}
+                      </span>
+                    </div>
+                    <div className="flex w-24 items-center gap-1">
+                      <NumberInput
+                        min={5}
+                        step={5}
+                        aria-label={`${row.act.name} set length in minutes`}
+                        className="h-8 w-16"
+                        value={row.setMinutes}
+                        onValueChange={(setMinutes) => updateRow(index, { setMinutes })}
+                      />
+                      <span className="text-xs text-muted-foreground">min</span>
+                    </div>
                     <Button
                       type="button"
                       variant="ghost"
@@ -305,7 +338,6 @@ export function BuildRunOfShowDialog({
                 doorsAt,
                 firstSetAt,
                 changeoverMinutes,
-                soundcheckMinutes,
                 soundcheckOrder,
                 eventStartAt,
               });
