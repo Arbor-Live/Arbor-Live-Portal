@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Doc, Id } from "../_generated/dataModel";
-import { artistTypeMatchesNeed, buildArtistOpportunityRow } from "./eventArtistNeeds";
+import {
+  artistTypeMatchesNeed,
+  artistTypesLabel,
+  artistTypesMatchNeed,
+  artistTypesOf,
+  buildArtistOpportunityRow,
+} from "./eventArtistNeeds";
 import { latestWebsiteVisibleDesign } from "./marketingDesigns";
 
 const EVENT_ID = "ke1" as Id<"events">;
@@ -11,7 +17,7 @@ function need(partial: Partial<Doc<"eventArtistNeeds">> = {}): Doc<"eventArtistN
     _id: "kn1" as Id<"eventArtistNeeds">,
     _creationTime: 0,
     eventId: EVENT_ID,
-    artistType: "band",
+    artistTypes: ["band"],
     genres: "indie",
     label: "Headliner",
     status: "open",
@@ -140,5 +146,26 @@ describe("artistTypeMatchesNeed", () => {
     expect(artistTypeMatchesNeed("singer_songwriter", "singer_songwriter")).toBe(true);
     expect(artistTypeMatchesNeed("singer_songwriter", "band")).toBe(false);
     expect(artistTypeMatchesNeed("singer_songwriter", "dj")).toBe(false);
+  });
+});
+
+describe("positions looking for several kinds of act", () => {
+  it("offers a band-or-DJ position to bands, singer-songwriters and DJs", () => {
+    expect(artistTypesMatchNeed(["band", "dj"], "band")).toBe(true);
+    expect(artistTypesMatchNeed(["band", "dj"], "singer_songwriter")).toBe(true);
+    expect(artistTypesMatchNeed(["band", "dj"], "dj")).toBe(true);
+    expect(artistTypesMatchNeed(["dj"], "band")).toBe(false);
+  });
+
+  it("treats an empty list as no preference", () => {
+    expect(artistTypesMatchNeed([], "other")).toBe(true);
+    expect(artistTypesLabel([])).toBe("No preference");
+    expect(artistTypesLabel(["band", "dj"])).toBe("Live band or DJ");
+  });
+
+  it("reads the legacy single artistType and normalizes order", () => {
+    expect(artistTypesOf({ artistType: "dj" })).toEqual(["dj"]);
+    expect(artistTypesOf({ artistType: "no_preference" })).toEqual([]);
+    expect(artistTypesOf({ artistTypes: ["dj", "band", "dj"] })).toEqual(["band", "dj"]);
   });
 });

@@ -38,14 +38,12 @@ export async function ensureActPosition(
     eventId: row.eventId,
     sortOrder: Number.isFinite(lastOrder) ? lastOrder + 1 : now,
     label: ROLE_LABELS[row.role],
-    artistType:
-      profile?.organizationType === "dj"
-        ? "dj"
-        : profile?.organizationType === "band"
-          ? "band"
-          : profile?.organizationType === "singer_songwriter"
-            ? "singer_songwriter"
-            : "no_preference",
+    artistTypes:
+      profile?.organizationType === "band" ||
+      profile?.organizationType === "dj" ||
+      profile?.organizationType === "singer_songwriter"
+        ? [profile.organizationType]
+        : [],
     status: "open",
     createdAt: now,
     updatedAt: now,

@@ -1,4 +1,8 @@
-import type { ArtistNeedType } from "@/components/events/lineup/lineup-model";
+import {
+  normalizeArtistTypes,
+  type ArtistNeedActType,
+  type ArtistNeedType,
+} from "@/components/events/lineup/lineup-model";
 
 /**
  * Series position templates: the shape of a series' bill. Times are offsets
@@ -7,7 +11,10 @@ import type { ArtistNeedType } from "@/components/events/lineup/lineup-model";
 export type SeriesPositionTemplate = {
   templateKey: string;
   label: string;
-  artistType: ArtistNeedType;
+  /** Empty means no preference. */
+  artistTypes?: ArtistNeedActType[];
+  /** @deprecated Read by `templateArtistTypes` until the backfill clears it. */
+  artistType?: ArtistNeedType;
   genres?: string;
   dayIndex: number;
   setOffsetMs?: number;
@@ -21,7 +28,8 @@ export type SeriesPositionTemplateDraft = {
   /** Empty for a position that hasn't been saved yet. */
   templateKey: string;
   label: string;
-  artistType: ArtistNeedType;
+  /** Empty means no preference. */
+  artistTypes: ArtistNeedActType[];
   genres: string;
   /** Hours from the occurrence start; empty means no set window. */
   setOffsetHours: string;
@@ -31,19 +39,13 @@ export type SeriesPositionTemplateDraft = {
   soundcheckDurationMinutes: string;
 };
 
-export const POSITION_TYPE_OPTIONS = [
-  { value: "band", label: "Live band" },
-  { value: "dj", label: "DJ" },
-  { value: "singer_songwriter", label: "Singer-songwriter" },
-  { value: "no_preference", label: "No preference" },
-];
-
-export const POSITION_TYPE_LABELS: Record<ArtistNeedType, string> = {
-  band: "Live band",
-  dj: "DJ",
-  singer_songwriter: "Singer-songwriter",
-  no_preference: "No preference",
-};
+/** What a template looks for, reading the legacy single `artistType` too. */
+function templateArtistTypes(template: SeriesPositionTemplate): ArtistNeedActType[] {
+  if (template.artistTypes) return normalizeArtistTypes(template.artistTypes);
+  return template.artistType && template.artistType !== "no_preference"
+    ? [template.artistType]
+    : [];
+}
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -88,7 +90,7 @@ export function positionTemplatesToDrafts(
     clientId: template.templateKey || `position-template-${index}`,
     templateKey: template.templateKey,
     label: template.label,
-    artistType: template.artistType,
+    artistTypes: templateArtistTypes(template),
     genres: template.genres ?? "",
     setOffsetHours: offsetToHours(template.setOffsetMs),
     setDurationMinutes: durationToMinutes(template.setDurationMs),
@@ -106,7 +108,7 @@ export function positionDraftToTemplate(
     templateKey:
       draft.templateKey || `pos_${crypto.randomUUID().replaceAll("-", "")}`,
     label: draft.label.trim(),
-    artistType: draft.artistType,
+    artistTypes: draft.artistTypes,
     genres: draft.genres.trim() || undefined,
     dayIndex: dayIndexForOffset(setOffsetMs, soundcheckOffsetMs),
     setOffsetMs,

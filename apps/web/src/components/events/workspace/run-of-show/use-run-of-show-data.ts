@@ -28,7 +28,7 @@ export function useRunOfShowData(eventId: Id<"events">) {
             name: booked.name,
             participationId: booked.participationId,
             open: false,
-            artistType: slot.artistType,
+            artistTypes: slot.artistTypes,
           },
         ];
       }
@@ -39,7 +39,7 @@ export function useRunOfShowData(eventId: Id<"events">) {
           name: external || slot.label.trim() || "TBA",
           needId: slot.needId,
           open: !external,
-          artistType: slot.artistType,
+          artistTypes: slot.artistTypes,
         },
       ];
     });

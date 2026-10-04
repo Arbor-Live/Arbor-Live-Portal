@@ -1,6 +1,13 @@
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
-import type { ArtistNeedType } from "./eventArtistNeeds";
+import {
+  artistNeedActTypeValue,
+  artistNeedTypeValue,
+  artistTypesOf,
+  ARTIST_NEED_TYPE_LABELS,
+  type ArtistNeedActType,
+  type ArtistNeedType,
+} from "./artistNeedTypes";
 
 /**
  * Series position templates: the shape of a series' bill, applied to each
@@ -16,12 +23,10 @@ export const eventSeriesPositionTemplateValue = v.object({
   /** Stable id so re-applying updates a position instead of duplicating it. */
   templateKey: v.string(),
   label: v.string(),
-  artistType: v.union(
-    v.literal("band"),
-    v.literal("dj"),
-    v.literal("singer_songwriter"),
-    v.literal("no_preference"),
-  ),
+  /** Kinds of act the position is looking for; empty means no preference. */
+  artistTypes: v.optional(v.array(artistNeedActTypeValue)),
+  /** @deprecated Single-type predecessor of `artistTypes`; read via `artistTypesOf`. */
+  artistType: v.optional(artistNeedTypeValue),
   genres: v.optional(v.string()),
   /** Day the slot is on, relative to each occurrence's start. */
   dayIndex: v.number(),
@@ -36,7 +41,9 @@ export const eventSeriesPositionTemplateValue = v.object({
 export type EventSeriesPositionTemplate = {
   templateKey: string;
   label: string;
-  artistType: ArtistNeedType;
+  artistTypes?: ArtistNeedActType[];
+  /** @deprecated See `artistTypes`. */
+  artistType?: ArtistNeedType;
   genres?: string;
   dayIndex: number;
   setOffsetMs?: number;
@@ -249,12 +256,12 @@ export function planPositionTemplateApplication(
   return { actions, removeIds, stampKeys };
 }
 
-const UNNAMED_POSITION_LABELS: Record<ArtistNeedType, string> = {
-  band: "Live band",
-  dj: "DJ",
-  singer_songwriter: "Singer-songwriter",
-  no_preference: "Open position",
-};
+/** An unnamed position is named after what it's looking for. */
+function unnamedPositionLabel(types: readonly ArtistNeedActType[]) {
+  return types.length === 0
+    ? "Open position"
+    : types.map((type) => ARTIST_NEED_TYPE_LABELS[type]).join(" or ");
+}
 
 /** A window's length, or undefined when it has no usable end (end at or before start). */
 function positiveDuration(startsAt: number | undefined, endsAt: number | undefined) {
@@ -267,7 +274,8 @@ export function positionTemplateFromSlot(
   slot: {
     templateKey?: string;
     label?: string;
-    artistType: ArtistNeedType;
+    artistTypes?: ArtistNeedActType[];
+    artistType?: ArtistNeedType;
     genres?: string;
     setStartsAt?: number;
     setEndsAt?: number;
@@ -294,8 +302,8 @@ export function positionTemplateFromSlot(
   return {
     templateKey: slot.templateKey ?? `pos_${crypto.randomUUID().replaceAll("-", "")}`,
     // An unnamed position still imports: it is named after what it's looking for.
-    label: slot.label?.trim() || UNNAMED_POSITION_LABELS[slot.artistType],
-    artistType: slot.artistType,
+    label: slot.label?.trim() || unnamedPositionLabel(artistTypesOf(slot)),
+    artistTypes: artistTypesOf(slot),
     genres: slot.genres?.trim() || undefined,
     dayIndex: dayIndexFromAnchor(anchorTime),
     setOffsetMs,

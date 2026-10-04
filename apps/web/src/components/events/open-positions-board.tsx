@@ -19,7 +19,11 @@ import { useSessionShell, useSessionViewer } from "@/components/session-shell-pr
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import { assignableCrewSelectOptions } from "@/lib/user-select-description";
-import { TYPE_OPTIONS } from "@/components/events/lineup/lineup-model";
+import {
+  ACT_TYPE_OPTIONS,
+  TYPE_LABELS,
+  artistTypesLabel,
+} from "@/components/events/lineup/lineup-model";
 import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
 import { academicPeriod, periodMsRange } from "@/lib/academic-periods";
 import { formatDate, formatTime, pacificDateKey } from "@/lib/format";
@@ -52,7 +56,10 @@ const INQUIRY_OPTIONS = [
   { value: "none", label: "No inquiries yet" },
 ];
 
-const TYPE_LABELS = new Map(TYPE_OPTIONS.map((option) => [option.value, option.label]));
+const TYPE_FILTER_OPTIONS = [
+  ...ACT_TYPE_OPTIONS,
+  { value: "no_preference", label: TYPE_LABELS.no_preference },
+];
 
 /** Days until the show: red inside a week, amber inside three. */
 function countdown(startAt: number, now: number) {
@@ -135,7 +142,7 @@ export function OpenPositionsBoard() {
 
   const filterDefinitions = useMemo<FilterDefinition[]>(
     () => [
-      { id: "type", label: "Artist type", options: TYPE_OPTIONS.map((option) => ({ ...option })) },
+      { id: "type", label: "Artist type", options: TYPE_FILTER_OPTIONS.map((option) => ({ ...option })) },
       {
         id: "venue",
         label: "Venue",
@@ -159,7 +166,8 @@ export function OpenPositionsBoard() {
       if (assignedToMe && lead !== viewerUserId) return [];
       if (!matchesFilter(filters.venue, event.venueName ?? "")) return [];
       const positions = event.openPositions.filter((position) => {
-        if (!matchesFilter(filters.type, position.artistType)) return false;
+        const types = position.artistTypes.length > 0 ? position.artistTypes : ["no_preference"];
+        if (!matchesFilter(filters.type, types)) return false;
         if (!matchesFilter(filters.inquiries, position.inquiryCount > 0 ? "some" : "none")) return false;
         if (needles.length === 0) return true;
         const haystack = [
@@ -167,7 +175,7 @@ export function OpenPositionsBoard() {
           event.venueName,
           position.label,
           position.genres,
-          TYPE_LABELS.get(position.artistType),
+          artistTypesLabel(position.artistTypes),
         ]
           .join(" ")
           .toLowerCase();
@@ -296,7 +304,7 @@ export function OpenPositionsBoard() {
                     <div className="min-w-40 flex-1">
                       <p className="truncate text-sm font-medium">{position.label || "Unnamed position"}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {[TYPE_LABELS.get(position.artistType), position.genres].filter(Boolean).join(" · ")}
+                        {[artistTypesLabel(position.artistTypes), position.genres].filter(Boolean).join(" · ")}
                       </p>
                     </div>
                     {position.inquiryCount > 0 ? (

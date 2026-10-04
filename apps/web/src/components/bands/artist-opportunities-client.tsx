@@ -37,15 +37,10 @@ import { PosterPlaceholderImage } from "@/components/public/poster-placeholder-i
 import { notify } from "@/lib/notify";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { cn } from "@/lib/utils";
-
-type ArtistNeedType = "band" | "dj" | "singer_songwriter" | "no_preference";
-
-const TYPE_LABELS: Record<ArtistNeedType, string> = {
-  band: "Live band",
-  dj: "DJ",
-  singer_songwriter: "Singer-songwriter",
-  no_preference: "No preference",
-};
+import {
+  artistTypesLabel,
+  type ArtistNeedActType,
+} from "@/components/events/lineup/lineup-model";
 
 /**
  * "For you" is the default: positions looking for this act's kind of act, plus
@@ -73,19 +68,23 @@ export function ArtistOpportunitiesClient() {
     searchParams.get("position"),
   );
 
-  // Type and search narrow on the server; with no Type chip it's "for you".
+  // An act type and search narrow on the server; with no Type chip it's "for
+  // you". "No preference" narrows here, to positions that list no type.
+  const typeFilter = filters.type?.values[0];
   const serverNeeds = useQuery(api.eventArtistNeeds.listOpenNeedsForArtist, {
-    artistType: (filters.type?.values[0] as ArtistNeedType | undefined) ?? undefined,
+    artistType:
+      typeFilter && typeFilter !== "no_preference" ? (typeFilter as ArtistNeedActType) : undefined,
     query: search.trim() || undefined,
   });
   const needs = useMemo(
     () =>
       serverNeeds?.filter(
         (need) =>
+          (typeFilter !== "no_preference" || need.artistTypes.length === 0) &&
           matchesFilter(filters.venue, need.venueName) &&
           matchesFilter(filters.requested, need.alreadyInquired ? "requested" : "open"),
       ),
-    [filters.requested, filters.venue, serverNeeds],
+    [filters.requested, filters.venue, serverNeeds, typeFilter],
   );
   const filterDefinitions = useMemo<FilterDefinition[]>(
     () => [
@@ -223,7 +222,7 @@ function OpportunityRow({
         <p className="truncate font-medium">{need.title}</p>
         <p className="truncate text-xs text-muted-foreground">
           {need.setStartsAt != null ? `Set ${formatTime(need.setStartsAt)} · ` : ""}
-          {TYPE_LABELS[need.artistType]}
+          {artistTypesLabel(need.artistTypes)}
           {need.genres ? ` · ${need.genres}` : ""}
         </p>
         {need.description ? (
@@ -350,7 +349,7 @@ function OpportunitySheetBody({
         <SheetTitle>{row.title}</SheetTitle>
         <SheetDescription>
           {row.label.trim() ? `${row.label.trim()} · ` : ""}
-          {TYPE_LABELS[row.artistType]}
+          {artistTypesLabel(row.artistTypes)}
         </SheetDescription>
       </SheetHeader>
 
@@ -385,7 +384,7 @@ function OpportunitySheetBody({
           <dt className="text-muted-foreground">Position</dt>
           <dd>{row.label.trim() || "Open position"}</dd>
           <dt className="text-muted-foreground">Act</dt>
-          <dd>{TYPE_LABELS[row.artistType]}</dd>
+          <dd>{artistTypesLabel(row.artistTypes)}</dd>
           {row.genres ? (
             <>
               <dt className="text-muted-foreground">Genres</dt>
