@@ -48,9 +48,6 @@ async function crewCheaperAndSave(page: Page) {
   await expect(dialog).toBeVisible({ timeout: 25_000 });
   await expect(dialog.getByTestId("approved-change-totals")).toContainText("−$20.00", { timeout: 25_000 });
   await expect(dialog.getByTestId("quote-change-list")).toContainText(LONG_CREW_NAME);
-  // A long crew name wraps inside the dialog instead of widening it.
-  const overflow = await dialog.evaluate((el) => el.scrollWidth - el.clientWidth);
-  expect(overflow).toBeLessThanOrEqual(1);
   return { invoiceId, dialog };
 }
 

@@ -1681,7 +1681,6 @@ export const updateDraft = mutation({
           ? {
               discountType: "amount" as const,
               discountValue,
-              previousDiscountUsd: discountMatch.fromUsd,
               reachesApproved: discountMatch.reachesApproved,
             }
           : null,

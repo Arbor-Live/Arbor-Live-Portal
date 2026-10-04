@@ -104,7 +104,7 @@ the URL looks like cloud.
 | Staff mark payment received | Covered | `quotes/payment-proof-verify.spec.ts` (Batch 3) |
 | Line item add / edit / remove + totals | Covered | `quotes/invoice-line-items.spec.ts` (Batch 8) — asserts the browser's `computeInvoiceDraftTotals` and the server's `computeTotals` agree |
 | Discount amount / percent + clamp + warning | Covered | `quotes/invoice-discount.spec.ts` (Batch 8) |
-| Approved quote: lower the existing discount when crew came in cheaper | Covered | `quotes/invoice-approved-changes.spec.ts` — seeded via `seedApprovedQuoteWithDiscountAndCrew` (long crew name, asserts no horizontal overflow); accept saves a `matched_approval` version at the approved total, Keep dismisses |
+| Approved quote: lower the existing discount when crew came in cheaper | Covered | `quotes/invoice-approved-changes.spec.ts` — seeded via `seedApprovedQuoteWithDiscountAndCrew` (crew lines carry a long name); accept saves a `matched_approval` version at the approved total, Keep dismisses |
 | Send quote to client → withdraw → re-send | Covered | `quotes/invoice-send-for-review.spec.ts` (Batch 8) — request-linked quotes only |
 | Approval token regeneration | Covered | `quotes/invoice-token-regeneration.spec.ts` (Batch 8) — asserts the old link dies, and that dismissing the confirm changes nothing |
 | Editing an approved quote resets approval | Covered | `quotes/invoice-reset-and-duplicate.spec.ts` (Batch 8) |
