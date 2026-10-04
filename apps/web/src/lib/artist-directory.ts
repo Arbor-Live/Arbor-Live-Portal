@@ -30,6 +30,8 @@ export type ArtistDirectoryEntry = {
 /** Fewer digits than this is a house number or a year, not a phone search. */
 const MIN_PHONE_DIGITS = 4;
 
+const PHONE_QUERY = /^[\d\s().+-]+$/;
+
 export function phoneDigits(value: string) {
   const digits = value.replace(/\D/g, "");
   // Drop the US country code so "+1 650…" matches "650…".
@@ -76,7 +78,8 @@ export function matchArtistDirectoryEntry(
 ): { person: ArtistDirectoryPerson | null } | null {
   const text = query.trim().toLowerCase();
   if (!text) return { person: null };
-  const queryDigits = phoneDigits(text);
+  // Only a query made of phone characters is a phone search: "band 2024" is text.
+  const queryDigits = PHONE_QUERY.test(text) ? phoneDigits(text) : "";
   const digits = queryDigits.length >= MIN_PHONE_DIGITS ? queryDigits : "";
   if ([entry.name, entry.oneLiner, ...entry.genres].join(" ").toLowerCase().includes(text)) {
     return { person: null };

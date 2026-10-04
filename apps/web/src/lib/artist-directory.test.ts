@@ -59,6 +59,10 @@ describe("matchArtistDirectoryEntry", () => {
     expect(matchArtistDirectoryEntry(LARKS, "0199")?.person?.name).toBe("Alex Kim");
   });
 
+  it("doesn't treat digits inside a text query as a phone number", () => {
+    expect(matchArtistDirectoryEntry(LARKS, "larks 0199")).toBeNull();
+  });
+
   it("ignores short digit runs and misses", () => {
     expect(matchArtistDirectoryEntry(LARKS, "55")).toBeNull();
     expect(matchArtistDirectoryEntry(LARKS, "nobody")).toBeNull();

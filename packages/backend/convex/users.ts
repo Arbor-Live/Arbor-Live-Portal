@@ -793,6 +793,13 @@ const artistDirectoryShowValue = v.object({
   startAt: v.number(),
 });
 
+/** Multi-day shows that started up to this long ago may still be on. */
+const ARTIST_DIRECTORY_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
+/** Upcoming events scanned for each act's next show. */
+const ARTIST_DIRECTORY_MAX_UPCOMING_EVENTS = 300;
+/** An act's most recent bookings, searched for its last show. */
+const ARTIST_DIRECTORY_RECENT_BOOKINGS = 10;
+
 /**
  * The act's booking contact with the same precedence as event contacts
  * (`lib/eventContacts.ts` `buildBandContacts`): the profile's name and
@@ -848,15 +855,24 @@ export const listArtistDirectory = query({
     await requireArborInternalContext(ctx);
     const now = Date.now();
     const organizations = await getAllOrganizations(ctx);
-    const profiles = await ctx.db.query("organizationProfiles").withIndex("by_organizationType").take(1000);
-    const profileByOrgId = new Map(profiles.map((profile) => [profile.organizationId, profile]));
-    const artists = organizations
-      .map((organization) => {
-        const organizationId = getRecordId(organization);
-        const profile = profileByOrgId.get(organizationId);
-        return { organization, organizationId, profile, type: resolveOrganizationType(organization, profile) };
-      })
-      .filter((row) => isArtistOrganizationType(row.type) && row.profile?.status !== "archived");
+    // One indexed lookup per organization, so no profile is dropped by a page cap.
+    const artists = (
+      await Promise.all(
+        organizations.map(async (organization) => {
+          const organizationId = getRecordId(organization);
+          const profile = await ctx.db
+            .query("organizationProfiles")
+            .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+            .unique();
+          return {
+            organization,
+            organizationId,
+            profile: profile ?? undefined,
+            type: resolveOrganizationType(organization, profile),
+          };
+        }),
+      )
+    ).filter((row) => isArtistOrganizationType(row.type) && row.profile?.status !== "archived");
 
     // A member can sit in several acts; look each person up once.
     const userCache = new Map<string, Promise<{ user: AuthUser | null; phone: string }>>();
@@ -887,9 +903,29 @@ export const listArtistDirectory = query({
       return pending;
     };
 
+    // Next shows come from one scan of upcoming events (not every act's whole
+    // history), so reads stay bounded however many artists or bookings there are.
+    const nextShowByOrg = new Map<string, Doc<"events">>();
+    const upcomingEvents = await ctx.db
+      .query("events")
+      .withIndex("by_startAt", (q) => q.gte("startAt", now - ARTIST_DIRECTORY_LOOKBACK_MS))
+      .take(ARTIST_DIRECTORY_MAX_UPCOMING_EVENTS);
+    for (const event of upcomingEvents) {
+      if (event.endAt < now || event.status === "cancelled") continue;
+      eventCache.set(event._id, Promise.resolve(event));
+      const acts = await ctx.db
+        .query("eventBandParticipations")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(50);
+      for (const act of acts) {
+        const current = nextShowByOrg.get(act.organizationId);
+        if (!current || event.startAt < current.startAt) nextShowByOrg.set(act.organizationId, event);
+      }
+    }
+
     const rows = await Promise.all(
       artists.map(async ({ organization, organizationId, profile, type }) => {
-        const [memberships, participations, defaultRider] = await Promise.all([
+        const [memberships, recentBookings] = await Promise.all([
           ctx.db
             .query("userOrganizationMemberships")
             .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
@@ -897,16 +933,21 @@ export const listArtistDirectory = query({
           ctx.db
             .query("eventBandParticipations")
             .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
-            // Newest bookings first, so a long history can't push out the next show.
             .order("desc")
-            .take(200),
-          ctx.db
-            .query("bandRiders")
-            .withIndex("by_organizationId_and_isDefault", (q) =>
-              q.eq("organizationId", organizationId).eq("isDefault", true),
-            )
-            .first(),
+            .take(ARTIST_DIRECTORY_RECENT_BOOKINGS),
         ]);
+        // The rider only stands in for a missing booking contact; skip the read otherwise.
+        const hasProfileContact = Boolean(
+          profile?.mainContactName?.trim() || profile?.mainContactEmail?.trim() || profile?.mainContactPhone?.trim(),
+        );
+        const defaultRider = hasProfileContact
+          ? null
+          : await ctx.db
+              .query("bandRiders")
+              .withIndex("by_organizationId_and_isDefault", (q) =>
+                q.eq("organizationId", organizationId).eq("isDefault", true),
+              )
+              .first();
         const contact = resolveArtistBookingContact(profile, defaultRider);
         const members = await Promise.all(
           memberships
@@ -923,13 +964,11 @@ export const listArtistDirectory = query({
               };
             }),
         );
-        const shows = (await Promise.all(participations.map((row) => loadEvent(row.eventId))))
-          .filter((event): event is Doc<"events"> => event !== null && event.status !== "cancelled")
-          .map((event) => ({ eventId: event._id, title: event.title, startAt: event.startAt, endAt: event.endAt }));
-        const upcoming = shows.filter((show) => show.endAt >= now).sort((a, b) => a.startAt - b.startAt)[0];
-        const past = shows.filter((show) => show.endAt < now).sort((a, b) => b.startAt - a.startAt)[0];
-        const toShow = (show: (typeof shows)[number] | undefined) =>
-          show ? { eventId: show.eventId, title: show.title, startAt: show.startAt } : null;
+        const lastShow = (await Promise.all(recentBookings.map((row) => loadEvent(row.eventId))))
+          .filter((event): event is Doc<"events"> => event !== null && event.status !== "cancelled" && event.endAt < now)
+          .sort((a, b) => b.startAt - a.startAt)[0];
+        const toShow = (show: Doc<"events"> | undefined) =>
+          show ? { eventId: show._id, title: show.title, startAt: show.startAt } : null;
         return {
           organizationId,
           name: (profile?.displayName ?? organization.name ?? "").trim() || "Artist",
@@ -946,8 +985,8 @@ export const listArtistDirectory = query({
           payeeEmail: profile?.designatedPayeeEmail ?? "",
           members: members.sort((a, b) => a.name.localeCompare(b.name)),
           bandMembers: profile?.bandMembers ?? [],
-          nextShow: toShow(upcoming),
-          lastShow: toShow(past),
+          nextShow: toShow(nextShowByOrg.get(organizationId)),
+          lastShow: toShow(lastShow),
         };
       }),
     );
