@@ -28,9 +28,24 @@ type Preference = {
   label: string;
   group: string;
   email: boolean;
+  emailLocked: boolean;
   inApp: boolean | null;
   push: boolean | null;
 };
+
+/** A channel the user can't change here, shown fixed on or off with the reason. */
+type ChannelLock = { on: boolean; reason: string };
+
+function channelLock(entry: Preference, channel: Channel, inAppOn: boolean | null): ChannelLock | null {
+  if (channel === "email" && entry.emailLocked) {
+    return { on: true, reason: "Always on: this email carries the calendar invite" };
+  }
+  // Push needs the bell row; it locks off with it.
+  if (channel === "push" && inAppOn === false) {
+    return { on: false, reason: "Push needs “In the bell” on" };
+  }
+  return null;
+}
 
 const overrideKey = (template: string, channel: Channel) => `${template}:${channel}`;
 
@@ -112,8 +127,7 @@ export function NotificationPreferences() {
                           channel={channel}
                           rowLabel={entry.label}
                           on={value(entry, channel.key)}
-                          // Push needs the bell row; it locks off with it.
-                          locked={channel.key === "push" && value(entry, "inApp") === false}
+                          lock={channelLock(entry, channel.key, value(entry, "inApp"))}
                           busy={busy === overrideKey(entry.template, channel.key)}
                           onChange={(next) => void toggle(entry.template, channel.key, next)}
                         />
@@ -140,24 +154,22 @@ function ChannelChip({
   channel,
   rowLabel,
   on,
-  locked,
+  lock,
   busy,
   onChange,
 }: {
   channel: (typeof CHANNELS)[number];
   rowLabel: string;
   on: boolean | null;
-  locked: boolean;
+  lock: ChannelLock | null;
   busy: boolean;
   onChange: (next: boolean) => void;
 }) {
   const ChannelIcon = channel.icon;
   // Email-only types: keep the column aligned without a control.
   if (on === null) return <span className="size-8" aria-hidden />;
-  const pressed = on && !locked;
-  const hint = locked
-    ? "Push needs “In the bell” on"
-    : `${channel.label}: ${pressed ? "on" : "off"}`;
+  const pressed = lock ? lock.on : on;
+  const hint = lock ? lock.reason : `${channel.label}: ${pressed ? "on" : "off"}`;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -167,13 +179,15 @@ function ChannelChip({
             size="sm"
             aria-label={`${rowLabel}: ${channel.label}`}
             pressed={pressed}
-            disabled={locked || busy}
+            disabled={lock !== null || busy}
             onPressedChange={onChange}
             className={cn(
               "size-8 min-w-8 rounded-full border px-0",
               pressed
                 ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary data-[state=on]:bg-primary/10"
                 : "border-border text-muted-foreground/70",
+              // A fixed-on channel still reads as on, just not clickable.
+              lock?.on && "disabled:opacity-60",
             )}
           >
             <ChannelIcon weight={pressed ? "fill" : "regular"} className="size-4" />

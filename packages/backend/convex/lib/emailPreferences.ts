@@ -202,6 +202,17 @@ export type EmailPreferenceSource = {
   pushOptOuts?: readonly string[];
 };
 
+/**
+ * Emails that carry the crew calendar invite (`invite.ics` / `cancel.ics`), so
+ * they always send. Their bell and push channels stay configurable, and old
+ * email opt-outs for them are ignored.
+ */
+const EMAIL_REQUIRED_TEMPLATES = new Set<string>(["crew_scheduled", "crew_unscheduled"]);
+
+export function isEmailRequired(template: string) {
+  return EMAIL_REQUIRED_TEMPLATES.has(template);
+}
+
 /** Where a notification can reach someone; each has its own opt-out list. */
 export type NotificationChannel = "email" | "inApp" | "push";
 
@@ -223,6 +234,7 @@ export function isTemplateEnabledForChannel(
   channel: NotificationChannel,
 ): boolean {
   if (!isConfigurableEmailTemplate(template)) return true;
+  if (channel === "email" && isEmailRequired(template)) return true;
   return !(profile?.[OPT_OUT_FIELD[channel]] ?? []).includes(template);
 }
 
@@ -245,7 +257,7 @@ export function isEmailTemplateEnabled(
   profile: EmailPreferenceSource | null | undefined,
   template: EmailTemplate,
 ): boolean {
-  return !resolveDisabledEmailTemplates(profile).has(template);
+  return isTemplateEnabledForChannel(profile, template, "email");
 }
 
 export type EmailPreferenceApplicability = {

@@ -5,7 +5,11 @@ import { internalAction, mutation, query, type MutationCtx } from "./_generated/
 import { createAuth } from "./auth";
 import { SITE_URL } from "./email/constants";
 import { getUserId, requireAuth } from "./lib/auth";
-import { isConfigurableEmailTemplate, OPT_OUT_FIELD } from "./lib/emailPreferences";
+import {
+  isConfigurableEmailTemplate,
+  isEmailRequired,
+  OPT_OUT_FIELD,
+} from "./lib/emailPreferences";
 import { listUserNotificationPreferences } from "./lib/emailPreferenceViewer";
 import { isInAppNotificationTemplate } from "./lib/inAppNotifications";
 import { assertUsernameAvailable, normalizeUsername } from "./lib/username";
@@ -68,6 +72,7 @@ export const getMyNotificationPreferences = query({
       label: v.string(),
       group: v.string(),
       email: v.boolean(),
+      emailLocked: v.boolean(),
       inApp: v.union(v.boolean(), v.null()),
       push: v.union(v.boolean(), v.null()),
     }),
@@ -90,6 +95,9 @@ export const updateMyNotificationPreference = mutation({
     const userId = getUserId(await requireAuth(ctx));
     if (!isConfigurableEmailTemplate(args.template)) {
       throw new Error(`Unknown notification preference: ${args.template}`);
+    }
+    if (args.channel === "email" && isEmailRequired(args.template)) {
+      throw new Error("This email carries the calendar invite, so it can't be turned off.");
     }
     if (args.channel !== "email" && !isInAppNotificationTemplate(args.template)) {
       throw new Error("This notification is email-only.");

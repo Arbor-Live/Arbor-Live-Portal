@@ -3,6 +3,7 @@ import {
   emailOptOutsForInviteKind,
   isConfigurableEmailTemplate,
   isEmailPreferenceApplicable,
+  isEmailRequired,
   isEmailTemplateEnabled,
   isTemplateEnabledForChannel,
   listApplicableEmailPreferences,
@@ -90,14 +91,14 @@ describe("isEmailPreferenceApplicable", () => {
 
 describe("isTemplateEnabledForChannel", () => {
   const profile = {
-    emailOptOuts: ["crew_scheduled"],
+    emailOptOuts: ["event_cancelled"],
     inAppOptOuts: ["comment_mention"],
     pushOptOuts: ["schedule_published"],
   };
 
   it("reads each channel's own opt-out list", () => {
-    expect(isTemplateEnabledForChannel(profile, "crew_scheduled", "email")).toBe(false);
-    expect(isTemplateEnabledForChannel(profile, "crew_scheduled", "inApp")).toBe(true);
+    expect(isTemplateEnabledForChannel(profile, "event_cancelled", "email")).toBe(false);
+    expect(isTemplateEnabledForChannel(profile, "event_cancelled", "inApp")).toBe(true);
     expect(isTemplateEnabledForChannel(profile, "comment_mention", "inApp")).toBe(false);
     expect(isTemplateEnabledForChannel(profile, "comment_mention", "push")).toBe(true);
     expect(isTemplateEnabledForChannel(profile, "schedule_published", "push")).toBe(false);
@@ -107,6 +108,18 @@ describe("isTemplateEnabledForChannel", () => {
     const muted = { emailOptOuts: ["password_reset"], pushOptOuts: ["band_payment_confirmation"] };
     expect(isTemplateEnabledForChannel(muted, "password_reset", "email")).toBe(true);
     expect(isTemplateEnabledForChannel(muted, "band_payment_confirmation", "push")).toBe(true);
+  });
+
+  it("always sends calendar-invite emails, but their bell and push stay optional", () => {
+    const muted = {
+      emailOptOuts: ["crew_scheduled", "crew_unscheduled"],
+      pushOptOuts: ["crew_scheduled"],
+    };
+    expect(isEmailRequired("crew_scheduled")).toBe(true);
+    expect(isEmailRequired("schedule_published")).toBe(false);
+    expect(isTemplateEnabledForChannel(muted, "crew_scheduled", "email")).toBe(true);
+    expect(isTemplateEnabledForChannel(muted, "crew_unscheduled", "email")).toBe(true);
+    expect(isTemplateEnabledForChannel(muted, "crew_scheduled", "push")).toBe(false);
   });
 
   it("defaults everything on", () => {

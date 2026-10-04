@@ -29,8 +29,10 @@ confirmations, and newsletters stay email-only.
   page: email (`emailOptOuts`), in-app (`inAppOptOuts`: no row, so no push
   either) and push (`pushOptOuts`: the row still shows in the bell). Checked by
   `isTemplateEnabledForChannel` in `enqueue.ts` and `schedulePushForNotification`.
-  Admins editing someone in the person sheet only manage email. Rows are pruned
-  after 180 days.
+  Admins editing someone in the person sheet only manage email. The crew
+  scheduled/unscheduled emails carry the calendar invite, so their email can't
+  be turned off (`isEmailRequired`; old opt-outs are ignored), though their bell
+  and push can. Rows are pruned after 180 days.
 
 #### Push and the Home Screen app
 
