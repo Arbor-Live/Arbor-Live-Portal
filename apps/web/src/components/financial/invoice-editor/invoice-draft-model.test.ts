@@ -41,7 +41,7 @@ describe("layoutArtistBill", () => {
       eventId: "e1",
       needId,
       label: needId,
-      artistType: "band" as const,
+      artistTypes: ["band" as const],
       status: "open" as const,
       genres: "",
       invoiceIds,

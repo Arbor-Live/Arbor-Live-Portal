@@ -25,6 +25,7 @@ import { consolidatePackageIntoOneIncludedUnit } from "./lib/packageContentMigra
 import { normalizeCrewLineLabel } from "./lib/normalizeCrewLineLabel";
 import { syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
 import { ensureActPosition } from "./lib/actPositions";
+import { artistTypesOf } from "./lib/artistNeedTypes";
 import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
 
 /**
@@ -785,6 +786,30 @@ export const groupMultiDayBookings = migrations.define({
   },
 });
 
+/** Positions can look for several kinds of act: move `artistType` into `artistTypes`. */
+export const migratePositionArtistTypeToArtistTypes = migrations.define({
+  table: "eventArtistNeeds",
+  migrateOne: async (_ctx, need) => {
+    if (need.artistType === undefined) return;
+    return { artistTypes: artistTypesOf(need), artistType: undefined };
+  },
+});
+
+/** Same move for the position templates stored on each event group. */
+export const migrateSeriesPositionTemplateArtistTypes = migrations.define({
+  table: "eventSeries",
+  migrateOne: async (_ctx, series) => {
+    const templates = series.positionTemplates;
+    if (!templates?.some((template) => template.artistType !== undefined)) return;
+    return {
+      positionTemplates: templates.map((template) => {
+        const { artistType: _legacy, ...rest } = template;
+        return { ...rest, artistTypes: artistTypesOf(template) };
+      }),
+    };
+  },
+});
+
 /**
  * Payment now opens with the final invoice after the event (#406), not at
  * approval. Quotes already approved keep payment open, so no client who was
@@ -842,6 +867,8 @@ const MIGRATION_SERIES = [
   internal.migrations.keepPaymentOpenForApprovedQuotes,
   internal.migrations.backfillEventGroupKinds,
   internal.migrations.groupMultiDayBookings,
+  internal.migrations.migratePositionArtistTypeToArtistTypes,
+  internal.migrations.migrateSeriesPositionTemplateArtistTypes,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

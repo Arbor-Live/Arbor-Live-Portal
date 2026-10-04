@@ -5,6 +5,7 @@ import { artistOrganizationTypeValue } from "./lib/organizationType";
 import { scheduleBlockTypeValue } from "./lib/scheduleBlockTypes";
 import { userStatusValue } from "./lib/userStatus";
 import { eventSeriesPositionTemplateValue } from "./lib/eventSeriesPositions";
+import { artistNeedActTypeValue, artistNeedTypeValue } from "./lib/artistNeedTypes";
 import { eventGroupKindValue } from "./lib/eventGroupKind";
 
 const publicBucketValue = v.union(
@@ -1492,12 +1493,10 @@ export default defineSchema({
     templateKey: v.optional(v.string()),
     /** Optional slot name, e.g. "Headliner", "Opener", "Late set". */
     label: v.optional(v.string()),
-    artistType: v.union(
-      v.literal("band"),
-      v.literal("dj"),
-      v.literal("singer_songwriter"),
-      v.literal("no_preference"),
-    ),
+    /** Kinds of act the position is looking for; empty means no preference. */
+    artistTypes: v.optional(v.array(artistNeedActTypeValue)),
+    /** @deprecated Single-type predecessor of `artistTypes`; read via `artistTypesOf`, drop after the backfill. */
+    artistType: v.optional(artistNeedTypeValue),
     genres: v.optional(v.string()),
     status: v.union(v.literal("open"), v.literal("inquiring")),
     /**

@@ -11,14 +11,16 @@ import {
 import { resolveBandName } from "./lib/bandIdentity";
 import {
   artistNeedStatusValue,
-  artistNeedTypeValue,
-  ARTIST_NEED_TYPE_LABELS,
-  artistTypeMatchesNeed,
+  artistNeedActTypeValue,
+  artistTypesLabel,
+  artistTypesMatchNeed,
+  artistTypesOf,
   buildArtistOpportunityRow,
   effectiveArtistNeedStatus,
+  normalizeArtistTypes,
   resolveEventArtistBooking,
   slotIsBooked,
-  type ArtistNeedType,
+  type ArtistNeedActType,
   type ArtistOpportunityRow,
   type EffectiveArtistNeedStatus,
 } from "./lib/eventArtistNeeds";
@@ -120,7 +122,7 @@ export const getForEvent = query({
           needId: slot._id,
           sortOrder: slot.sortOrder ?? slot.createdAt,
           label: slot.label ?? "",
-          artistType: slot.artistType,
+          artistTypes: artistTypesOf(slot),
           genres: slot.genres ?? "",
           status: slot.status,
           effectiveStatus: effectiveArtistNeedStatus(
@@ -165,7 +167,8 @@ export const listNeedStatusForEvents = query({
       eventId: Id<"events">;
       needId: Id<"eventArtistNeeds">;
       label: string;
-      artistType: ArtistNeedType;
+      /** Empty means "no preference". */
+      artistTypes: ArtistNeedActType[];
       status: EffectiveArtistNeedStatus;
       genres: string;
       /** The platform act seated on it. */
@@ -193,7 +196,7 @@ export const listNeedStatusForEvents = query({
           eventId,
           needId: slot._id,
           label: slot.label ?? "",
-          artistType: slot.artistType,
+          artistTypes: artistTypesOf(slot),
           status: effectiveArtistNeedStatus(slot.status, booked),
           genres: slot.genres ?? "",
           actOrganizationId: act?.organizationId,
@@ -212,7 +215,8 @@ export const upsertSlot = mutation({
     eventId: v.id("events"),
     needId: v.optional(v.id("eventArtistNeeds")),
     label: v.optional(v.string()),
-    artistType: artistNeedTypeValue,
+    /** Kinds of act the position is looking for; empty means no preference. */
+    artistTypes: v.array(artistNeedActTypeValue),
     genres: v.optional(v.string()),
     status: artistNeedStatusValue,
     /** Set to create the position already filled by an outside act. */
@@ -226,6 +230,7 @@ export const upsertSlot = mutation({
     const now = Date.now();
     const label = trimOptional(args.label);
     const genres = trimOptional(args.genres);
+    const artistTypes = normalizeArtistTypes(args.artistTypes);
 
     if (args.needId) {
       const existing = await ctx.db.get(args.needId);
@@ -234,7 +239,8 @@ export const upsertSlot = mutation({
       }
       await ctx.db.patch(existing._id, {
         label,
-        artistType: args.artistType,
+        artistTypes,
+        artistType: undefined,
         genres,
         status: args.status,
         ...(args.externalArtistName !== undefined
@@ -252,7 +258,7 @@ export const upsertSlot = mutation({
       eventId: args.eventId,
       sortOrder: (existingRows.at(-1)?.sortOrder ?? existingRows.at(-1)?.createdAt ?? now) + 1,
       label,
-      artistType: args.artistType,
+      artistTypes,
       genres,
       status: args.status,
       externalArtistName: trimOptional(args.externalArtistName),
@@ -488,7 +494,7 @@ export const submitInquiry = mutation({
     if (!isArtistListableEvent(event, Date.now())) {
       throw new Error("This slot is no longer available.");
     }
-    if (!artistTypeMatchesNeed(need.artistType, context.organizationType)) {
+    if (!artistTypesMatchNeed(artistTypesOf(need), context.organizationType)) {
       throw new Error("This slot is not looking for your kind of act.");
     }
     if (slotIsBooked(need, new Set()) || (await findActForSlot(ctx, need._id))) {
@@ -603,7 +609,8 @@ export const acceptInquiry = mutation({
 
 export const listOpenNeedsForArtist = query({
   args: {
-    artistType: v.optional(artistNeedTypeValue),
+    /** Only positions looking for this kind of act. */
+    artistType: v.optional(artistNeedActTypeValue),
     query: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -648,13 +655,14 @@ export const listOpenNeedsForArtist = query({
     }
 
     for (const need of candidates) {
-      if (args.artistType && need.artistType !== args.artistType) continue;
-      if (!artistTypeMatchesNeed(need.artistType, context.organizationType)) continue;
+      const lookingFor = artistTypesOf(need);
+      if (args.artistType && !lookingFor.includes(args.artistType)) continue;
+      if (!artistTypesMatchNeed(lookingFor, context.organizationType)) continue;
       const event = await ctx.db.get(need.eventId);
       if (!isArtistListableEvent(event, now)) continue;
       if (slotIsBooked(need, new Set()) || (await findActForSlot(ctx, need._id))) continue;
 
-      const typeLabel = ARTIST_NEED_TYPE_LABELS[need.artistType];
+      const typeLabel = artistTypesLabel(lookingFor);
       const slotLabel = need.label?.trim();
       if (needles.length > 0) {
         const haystack = [event.title, event.venueName, need.genres, typeLabel, slotLabel]
@@ -698,7 +706,7 @@ const MAX_INQUIRIES_PER_EVENT = 300;
 const openPositionValue = v.object({
   needId: v.id("eventArtistNeeds"),
   label: v.string(),
-  artistType: artistNeedTypeValue,
+  artistTypes: v.array(artistNeedActTypeValue),
   genres: v.string(),
   status: artistNeedStatusValue,
   inquiryCount: v.number(),
@@ -779,7 +787,7 @@ export const listOpenPositions = query({
       const openPositions = open.map((position) => ({
         needId: position._id,
         label: position.label?.trim() ?? "",
-        artistType: position.artistType,
+        artistTypes: artistTypesOf(position),
         genres: position.genres ?? "",
         status: position.status,
         inquiryCount: inquiryCount.get(position._id) ?? 0,
@@ -857,7 +865,7 @@ export const listMyInquiries = query({
           timezone: event?.timezone,
           venueName: event?.venueName ?? "",
           label: need?.label ?? "",
-          artistType: need?.artistType ?? ("no_preference" as const),
+          artistTypes: need ? artistTypesOf(need) : [],
           genres: need?.genres ?? "",
           status: inquiry.status,
           message: inquiry.message ?? "",

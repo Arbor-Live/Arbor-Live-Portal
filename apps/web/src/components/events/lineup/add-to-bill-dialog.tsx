@@ -20,7 +20,8 @@ import {
   type SearchableSelectOption,
 } from "@/components/inventory/searchable-select";
 import { AddBandForm, InviteBandForm } from "@/components/events/lineup/lineup-forms";
-import { TYPE_OPTIONS, type ArtistNeedType } from "@/components/events/lineup/lineup-model";
+import { ArtistTypesPicker } from "@/components/events/lineup/artist-types-picker";
+import type { ArtistNeedActType } from "@/components/events/lineup/lineup-model";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 
@@ -182,7 +183,7 @@ function OutsideActForm({
         await upsertSlot({
           eventId,
           label: positionName.trim() || undefined,
-          artistType: "no_preference",
+          artistTypes: [],
           status: "open",
           externalArtistName: artist,
         });
@@ -239,7 +240,7 @@ function OutsideActForm({
 function OpenPositionForm({ eventId, onDone }: { eventId: Id<"events">; onDone: () => void }) {
   const upsertSlot = useMutation(api.eventArtistNeeds.upsertSlot);
   const [label, setLabel] = useState("");
-  const [artistType, setArtistType] = useState<ArtistNeedType>("no_preference");
+  const [artistTypes, setArtistTypes] = useState<ArtistNeedActType[]>([]);
   const [genres, setGenres] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -249,7 +250,7 @@ function OpenPositionForm({ eventId, onDone }: { eventId: Id<"events">; onDone: 
       await upsertSlot({
         eventId,
         label: label.trim() || undefined,
-        artistType,
+        artistTypes,
         genres: genres.trim() || undefined,
         status: "open",
       });
@@ -276,26 +277,18 @@ function OpenPositionForm({ eventId, onDone }: { eventId: Id<"events">; onDone: 
           onChange={(event) => setLabel(event.target.value)}
         />
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1">
-          <Label>Looking for</Label>
-          <SearchableSelect
-            value={artistType}
-            onChange={(value) => setArtistType((value || "no_preference") as ArtistNeedType)}
-            options={TYPE_OPTIONS}
-            placeholder="Select type"
-            emptyLabel="Select type"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="open-position-genres">Genres / vibes</Label>
-          <Input
-            id="open-position-genres"
-            value={genres}
-            placeholder="e.g. indie, jazz, house"
-            onChange={(event) => setGenres(event.target.value)}
-          />
-        </div>
+      <div className="space-y-1">
+        <Label htmlFor="open-position-types">Looking for</Label>
+        <ArtistTypesPicker id="open-position-types" value={artistTypes} onChange={setArtistTypes} />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="open-position-genres">Genres / vibes</Label>
+        <Input
+          id="open-position-genres"
+          value={genres}
+          placeholder="e.g. indie, jazz, house"
+          onChange={(event) => setGenres(event.target.value)}
+        />
       </div>
       <div className="flex gap-2">
         <Button type="button" disabled={busy} onClick={() => void onSave()}>

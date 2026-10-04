@@ -2,7 +2,7 @@ import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { listAdminEmailsForVertical } from "../lib/auth";
 import { resolveBandName } from "../lib/bandIdentity";
-import { ARTIST_NEED_TYPE_LABELS } from "../lib/eventArtistNeeds";
+import { artistTypesLabel, artistTypesOf } from "../lib/eventArtistNeeds";
 import {
   EVENT_TIMEZONE,
   eventArtistsUrl,
@@ -44,7 +44,7 @@ export async function scheduleArtistNeedInquiryEmail(
         eventTitle: args.event.title,
         dateRangeLabel,
         venueName: args.event.venueName,
-        artistTypeLabel: ARTIST_NEED_TYPE_LABELS[args.need.artistType],
+        artistTypeLabel: artistTypesLabel(artistTypesOf(args.need)),
         genres: args.need.genres,
         message: args.message,
         reviewUrl,

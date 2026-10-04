@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/sheet";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
+import { ArtistTypesPicker } from "@/components/events/lineup/artist-types-picker";
 import {
   AddBandForm,
   EventBandPaymentForm,
@@ -27,7 +28,6 @@ import {
 } from "@/components/events/lineup/lineup-forms";
 import {
   SLOT_STATUS_OPTIONS,
-  TYPE_OPTIONS,
   effectiveStatusClass,
   effectiveStatusLabel,
   rowActName,
@@ -36,7 +36,6 @@ import {
   slotTitle,
   toSlotDraft,
   type ArtistNeedStatus,
-  type ArtistNeedType,
   type ActTimesPatch,
   type BillRow,
   type RiderRow,
@@ -199,16 +198,12 @@ function PositionSheetBody({
           </div>
           {!actName ? (
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label>Looking for</Label>
-                <SearchableSelect
-                  value={draft.artistType}
-                  onChange={(value) => setDraft({ ...draft, artistType: value as ArtistNeedType })}
-                  options={TYPE_OPTIONS}
-                  placeholder="Select type"
-                  emptyLabel="Select type"
-                  clearable
-                  clearLabel="Clear"
+              <div className="space-y-1 sm:col-span-2">
+                <Label htmlFor="position-types">Looking for</Label>
+                <ArtistTypesPicker
+                  id="position-types"
+                  value={draft.artistTypes}
+                  onChange={(artistTypes) => setDraft({ ...draft, artistTypes })}
                 />
               </div>
               <div className="space-y-1">

@@ -10,7 +10,7 @@ describe("position template draft round trip", () => {
         {
           templateKey: `k${minutes}`,
           label: "Opener",
-          artistType: "band" as const,
+          artistTypes: ["band" as const],
           dayIndex: 0,
           setOffsetMs: minutes * MINUTE,
           setDurationMs: 60 * MINUTE,
@@ -22,5 +22,18 @@ describe("position template draft round trip", () => {
       expect(back?.setOffsetMs).toBe(minutes * MINUTE);
       expect(back?.soundcheckOffsetMs).toBe(-minutes * MINUTE);
     }
+  });
+
+  it("keeps several looked-for types and reads a legacy single type", () => {
+    const [many] = positionDraftsToTemplates(
+      positionTemplatesToDrafts([
+        { templateKey: "k", label: "Late set", artistTypes: ["dj", "band"], dayIndex: 0 },
+      ]),
+    );
+    expect(many?.artistTypes).toEqual(["band", "dj"]);
+    const [legacy] = positionTemplatesToDrafts([
+      { templateKey: "k", label: "Late set", artistType: "dj", dayIndex: 0 },
+    ]);
+    expect(legacy?.artistTypes).toEqual(["dj"]);
   });
 });

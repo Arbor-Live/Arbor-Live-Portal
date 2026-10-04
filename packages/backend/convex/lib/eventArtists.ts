@@ -1,6 +1,7 @@
 import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { findAuthOrganizationById } from "./auth";
+import { artistTypesOf } from "./artistNeedTypes";
 import {
   buildArtistLinks,
   resolvePublicHeroImageUrl,
@@ -117,6 +118,7 @@ export async function getEventArtists(
       continue;
     }
     const outside = position.externalArtistName?.trim();
+    const lookingFor = artistTypesOf(position);
     entries.push({
       billOrder,
       artist: {
@@ -124,8 +126,8 @@ export async function getEventArtists(
         kind: outside ? "outside" : "tba",
         name: outside || position.label?.trim() || "To be announced",
         role: "other",
-        organizationType:
-          position.artistType === "no_preference" ? "other" : position.artistType,
+        // Only a position looking for one kind of act says what's coming.
+        organizationType: lookingFor.length === 1 ? lookingFor[0] : "other",
         genres: [],
         links: [],
         setStartsAt: position.setStartsAt,

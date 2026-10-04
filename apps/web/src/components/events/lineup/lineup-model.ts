@@ -3,6 +3,8 @@ import type { api } from "@/lib/convex-api";
 import type { PerformerRow } from "@/components/events/lineup/lineup-forms";
 
 export type ArtistNeedType = "band" | "dj" | "singer_songwriter" | "no_preference";
+/** A kind of act a position looks for; a position may look for several (none = no preference). */
+export type ArtistNeedActType = Exclude<ArtistNeedType, "no_preference">;
 export type ArtistNeedStatus = "open" | "inquiring";
 export type EffectiveArtistNeedStatus = ArtistNeedStatus | "booked";
 
@@ -24,11 +26,10 @@ export type BillRow = {
   performer?: PerformerRow;
 };
 
-export const TYPE_OPTIONS = [
+export const ACT_TYPE_OPTIONS: Array<{ value: ArtistNeedActType; label: string }> = [
   { value: "band", label: "Live band" },
   { value: "dj", label: "DJ" },
   { value: "singer_songwriter", label: "Singer-songwriter" },
-  { value: "no_preference", label: "No preference" },
 ];
 
 export const SLOT_STATUS_OPTIONS = [
@@ -60,8 +61,19 @@ export function effectiveStatusClass(status: EffectiveArtistNeedStatus) {
   }
 }
 
-export function slotTitle(slot: { label: string; artistType: ArtistNeedType }) {
-  return slot.label.trim() || TYPE_LABELS[slot.artistType];
+/** "Live band or DJ"; "No preference" when the list is empty. */
+export function artistTypesLabel(types: readonly ArtistNeedActType[]) {
+  if (types.length === 0) return TYPE_LABELS.no_preference;
+  return types.map((type) => TYPE_LABELS[type]).join(" or ");
+}
+
+/** Keep the picker's canonical order, whatever order types were toggled in. */
+export function normalizeArtistTypes(types: readonly string[]): ArtistNeedActType[] {
+  return ACT_TYPE_OPTIONS.map((option) => option.value).filter((type) => types.includes(type));
+}
+
+export function slotTitle(slot: { label: string; artistTypes: ArtistNeedActType[] }) {
+  return slot.label.trim() || artistTypesLabel(slot.artistTypes);
 }
 
 export function rowStatus(row: BillRow): EffectiveArtistNeedStatus {
@@ -99,8 +111,8 @@ export type ActTimesPatch = {
 
 export type SlotDraft = {
   label: string;
-  /** Empty means "unset" — saved as `no_preference`. */
-  artistType: ArtistNeedType | "";
+  /** Empty means no preference. */
+  artistTypes: ArtistNeedActType[];
   genres: string;
   /** Empty means "unset" — saved as `open`. */
   status: ArtistNeedStatus | "";
@@ -109,7 +121,7 @@ export type SlotDraft = {
 export function toSlotDraft(slot: SlotRow): SlotDraft {
   return {
     label: slot.label,
-    artistType: slot.artistType,
+    artistTypes: slot.artistTypes,
     genres: slot.genres,
     status: slot.status,
   };
@@ -118,7 +130,7 @@ export function toSlotDraft(slot: SlotRow): SlotDraft {
 export function slotDraftsEqual(a: SlotDraft, b: SlotDraft) {
   return (
     a.label === b.label &&
-    a.artistType === b.artistType &&
+    a.artistTypes.join() === b.artistTypes.join() &&
     a.genres === b.genres &&
     a.status === b.status
   );

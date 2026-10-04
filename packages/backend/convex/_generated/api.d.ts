@@ -118,6 +118,7 @@ import type * as lib_analyticsQuery from "../lib/analyticsQuery.js";
 import type * as lib_analyticsTime from "../lib/analyticsTime.js";
 import type * as lib_approvalDiscount from "../lib/approvalDiscount.js";
 import type * as lib_artistLineSync from "../lib/artistLineSync.js";
+import type * as lib_artistNeedTypes from "../lib/artistNeedTypes.js";
 import type * as lib_assetScan from "../lib/assetScan.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_bandIdentity from "../lib/bandIdentity.js";
@@ -389,6 +390,7 @@ declare const fullApi: ApiFromModules<{
   "lib/analyticsTime": typeof lib_analyticsTime;
   "lib/approvalDiscount": typeof lib_approvalDiscount;
   "lib/artistLineSync": typeof lib_artistLineSync;
+  "lib/artistNeedTypes": typeof lib_artistNeedTypes;
   "lib/assetScan": typeof lib_assetScan;
   "lib/auth": typeof lib_auth;
   "lib/bandIdentity": typeof lib_bandIdentity;

@@ -31,7 +31,7 @@ import {
   type PerformerRow,
 } from "@/components/events/lineup/lineup-forms";
 import {
-  TYPE_LABELS,
+  artistTypesLabel,
   effectiveStatusClass,
   effectiveStatusLabel,
   rowActName,
@@ -254,7 +254,7 @@ function EventArtistBillPanel({
             eventId,
             needId: slot.needId,
             label: draft.label.trim() || undefined,
-            artistType: draft.artistType || "no_preference",
+            artistTypes: draft.artistTypes,
             genres: draft.genres.trim() || undefined,
             status: draft.status || "open",
           }),
@@ -543,7 +543,7 @@ function EventArtistBillPanel({
                       <p className="truncate font-medium">{actName}</p>
                     ) : (
                       <p className="truncate text-muted-foreground">
-                        Open · {TYPE_LABELS[row.slot?.artistType ?? "no_preference"]}
+                        Open · {artistTypesLabel(row.slot?.artistTypes ?? [])}
                         {row.slot?.genres.trim() ? ` · ${row.slot.genres.trim()}` : ""}
                       </p>
                     )}

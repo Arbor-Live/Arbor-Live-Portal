@@ -1,5 +1,5 @@
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
-import type { ArtistNeedType } from "@/components/events/lineup/lineup-model";
+import type { ArtistNeedActType } from "@/components/events/lineup/lineup-model";
 import { localDateTimeInputToMs, toLocalDateTimeInput } from "@/lib/crew-availability";
 import { formatTime, pacificDayIndexFromAnchor } from "@/lib/format";
 import { isSectionBlockType } from "@/lib/schedule-block-types";
@@ -22,8 +22,8 @@ export type RunOfShowAct = {
   needId?: string;
   /** A lineup position nobody has filled yet ("TBA"). */
   open: boolean;
-  /** The lineup position's artist type, when the act fills one. */
-  artistType?: ArtistNeedType;
+  /** What the lineup position looks for, when the act fills one. */
+  artistTypes?: ArtistNeedActType[];
 };
 
 export function actKeyOf(ref: { participationId?: string; needId?: string }) {

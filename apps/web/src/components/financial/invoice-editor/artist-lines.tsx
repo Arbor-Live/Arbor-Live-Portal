@@ -18,7 +18,6 @@ import {
   layoutArtistBill,
   type ArtistRow,
   type BillPosition,
-  type InvoiceArtistPosition,
 } from "./invoice-draft-model";
 import {
   AmountCell,
@@ -31,13 +30,8 @@ import {
   removeRow,
 } from "./line-items-layout";
 import type { InvoiceDraft } from "./use-invoice-draft";
+import { artistTypesLabel } from "@/components/events/lineup/lineup-model";
 
-const ARTIST_TYPE_LABELS: Record<InvoiceArtistPosition["artistType"], string> = {
-  band: "Live band",
-  dj: "DJ",
-  singer_songwriter: "Singer-songwriter",
-  no_preference: "No preference",
-};
 
 /** The linked days an artist line can belong to (multi-day bookings; none on a series). */
 export function artistDays(draft: InvoiceDraft) {
@@ -82,7 +76,7 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
       eventId: row.eventId as string,
       needId: row.needId as string,
       label: row.label,
-      artistType: row.artistType,
+      artistTypes: row.artistTypes,
       status: row.status,
       genres: row.genres,
       actOrganizationId: row.actOrganizationId,
@@ -278,7 +272,7 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
 }
 
 function positionName(position: BillPosition) {
-  return position.actName || position.label.trim() || ARTIST_TYPE_LABELS[position.artistType];
+  return position.actName || position.label.trim() || artistTypesLabel(position.artistTypes);
 }
 
 /** A position on the bill this quote doesn't price yet. */
@@ -296,7 +290,7 @@ function OpenPositionRow({
   const role = position.label.trim();
   const detail = [
     position.actName && role ? role : null,
-    ARTIST_TYPE_LABELS[position.artistType],
+    artistTypesLabel(position.artistTypes),
     position.genres,
     position.actName ? "booked" : position.status,
   ]

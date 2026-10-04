@@ -55,32 +55,3 @@ test("build run of show number fields can be cleared and retyped", async ({ page
   await setLength.blur();
   await expect(setLength).toHaveValue("5");
 });
-
-  // Clear and retype: the field stays empty while clearing, then reads 30.
-  await soundcheck.fill("");
-  await expect(soundcheck).toHaveValue("");
-  await soundcheck.pressSequentially("30");
-  await expect(soundcheck).toHaveValue("30");
-
-  // Below the minimum is allowed mid-typing and snaps to 5 on blur.
-  await soundcheck.fill("3");
-  await expect(soundcheck).toHaveValue("3");
-  await soundcheck.blur();
-  await expect(soundcheck).toHaveValue("5");
-
-  // Left empty, it falls back to the minimum on blur.
-  await soundcheck.fill("");
-  await soundcheck.blur();
-  await expect(soundcheck).toHaveValue("5");
-
-  const changeover = page.getByLabel("Changeover (min)");
-  await changeover.fill("");
-  await changeover.pressSequentially("20");
-  await expect(changeover).toHaveValue("20");
-
-  const setLength = page.getByLabel(/set length in minutes/).first();
-  await setLength.fill("");
-  await expect(setLength).toHaveValue("");
-  await setLength.pressSequentially("50");
-  await expect(setLength).toHaveValue("50");
-});

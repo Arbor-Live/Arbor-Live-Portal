@@ -18,7 +18,7 @@ function template(partial: Partial<EventSeriesPositionTemplate> = {}): EventSeri
   return {
     templateKey: "key-headliner",
     label: "Headliner",
-    artistType: "band",
+    artistTypes: ["band"],
     dayIndex: 0,
     setOffsetMs: 2 * 60 * 60 * 1000,
     setDurationMs: 60 * 60 * 1000,
@@ -99,7 +99,7 @@ describe("positionWindowFromTemplate", () => {
 
   it("leaves windows undefined when the template has no offset", () => {
     const window = positionWindowFromTemplate(
-      { templateKey: "k", label: "", artistType: "dj", dayIndex: 0 },
+      { templateKey: "k", label: "", artistTypes: ["dj"], dayIndex: 0 },
       0,
     );
     expect(window).toEqual({
@@ -117,7 +117,7 @@ describe("positionTemplateFromSlot", () => {
     const exported = positionTemplateFromSlot(
       {
         label: "  Headliner ",
-        artistType: "band",
+        artistTypes: ["band"],
         genres: " indie ",
         setStartsAt: start + 2 * 60 * 60 * 1000,
         setEndsAt: start + 3 * 60 * 60 * 1000,
@@ -135,7 +135,7 @@ describe("positionTemplateFromSlot", () => {
 
   it("keeps an existing templateKey so imports do not reset identity", () => {
     const exported = positionTemplateFromSlot(
-      { templateKey: "key-headliner", label: "Headliner", artistType: "band" },
+      { templateKey: "key-headliner", label: "Headliner", artistTypes: ["band"] },
       0,
       () => 0,
     );
@@ -240,16 +240,26 @@ describe("assertValidPositionTemplates", () => {
 describe("positionTemplateFromSlot for unusual positions", () => {
   it("names an unnamed position after what it's looking for", () => {
     expect(
-      positionTemplateFromSlot({ artistType: "dj" }, 0, () => 0).label,
+      positionTemplateFromSlot({ artistTypes: ["dj"] }, 0, () => 0).label,
     ).toBe("DJ");
     expect(
-      positionTemplateFromSlot({ label: "  ", artistType: "band" }, 0, () => 0).label,
+      positionTemplateFromSlot({ label: "  ", artistTypes: ["band"] }, 0, () => 0).label,
     ).toBe("Live band");
+    expect(
+      positionTemplateFromSlot({ artistTypes: ["dj", "band"] }, 0, () => 0).label,
+    ).toBe("Live band or DJ");
+    expect(positionTemplateFromSlot({ artistTypes: [] }, 0, () => 0).label).toBe("Open position");
+  });
+
+  it("reads a legacy single artistType", () => {
+    const exported = positionTemplateFromSlot({ artistType: "dj" }, 0, () => 0);
+    expect(exported.artistTypes).toEqual(["dj"]);
+    expect(exported.artistType).toBeUndefined();
   });
 
   it("drops a window whose end is not after its start", () => {
     const exported = positionTemplateFromSlot(
-      { artistType: "band", setStartsAt: 1000, setEndsAt: 1000, soundcheckStartsAt: 500, soundcheckEndsAt: 100 },
+      { artistTypes: ["band"], setStartsAt: 1000, setEndsAt: 1000, soundcheckStartsAt: 500, soundcheckEndsAt: 100 },
       0,
       () => 0,
     );

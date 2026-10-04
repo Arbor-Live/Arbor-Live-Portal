@@ -74,7 +74,9 @@ function defaultSoundcheckMinutes(act: RunOfShowAct, blocks: TimelineBlockDraft[
   const start = existing ? localDateTimeInputToMs(existing.startsAt) : null;
   const end = existing ? localDateTimeInputToMs(existing.endsAt) : null;
   if (start != null && end != null && end > start) return Math.round((end - start) / 60_000);
-  return act.artistType === "dj" ? DEFAULT_DJ_SOUNDCHECK_MINUTES : DEFAULT_SOUNDCHECK_MINUTES;
+  // A DJ's short soundcheck only when the position is for a DJ alone.
+  const djOnly = act.artistTypes?.length === 1 && act.artistTypes[0] === "dj";
+  return djOnly ? DEFAULT_DJ_SOUNDCHECK_MINUTES : DEFAULT_SOUNDCHECK_MINUTES;
 }
 
 /**

@@ -18,6 +18,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
+import { ArtistTypesPicker } from "@/components/events/lineup/artist-types-picker";
+import { artistTypesLabel } from "@/components/events/lineup/lineup-model";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
@@ -32,8 +34,6 @@ import {
   formatPositionDraftWindows,
   positionDraftsToTemplates,
   positionTemplatesToDrafts,
-  POSITION_TYPE_LABELS,
-  POSITION_TYPE_OPTIONS,
   type SeriesPositionTemplate,
   type SeriesPositionTemplateDraft,
 } from "@/lib/event-series-positions";
@@ -57,7 +57,7 @@ function emptyDraft(clientId: string): SeriesPositionTemplateDraft {
     clientId,
     templateKey: "",
     label: "",
-    artistType: "band",
+    artistTypes: ["band"],
     genres: "",
     setOffsetHours: "",
     setDurationMinutes: "",
@@ -243,7 +243,7 @@ export function EventSeriesPositionEditor({
                           {draft.label.trim() || "Unnamed position"}
                         </span>
                         <span className="block text-xs text-muted-foreground">
-                          {POSITION_TYPE_LABELS[draft.artistType]}
+                          {artistTypesLabel(draft.artistTypes)}
                           {windows ? ` · ${windows}` : ""}
                         </span>
                       </span>
@@ -411,16 +411,12 @@ function PositionTemplateBody({
           />
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1">
-            <Label>Looking for</Label>
-            <SearchableSelect
-              value={draft.artistType}
-              onChange={(value) =>
-                onChange(id, { artistType: value as SeriesPositionTemplateDraft["artistType"] })
-              }
-              options={POSITION_TYPE_OPTIONS}
-              placeholder="Select type"
-              emptyLabel="Select type"
+          <div className="space-y-1 sm:col-span-2">
+            <Label htmlFor="position-template-types">Looking for</Label>
+            <ArtistTypesPicker
+              id="position-template-types"
+              value={draft.artistTypes}
+              onChange={(artistTypes) => onChange(id, { artistTypes })}
             />
           </div>
           <div className="space-y-1">

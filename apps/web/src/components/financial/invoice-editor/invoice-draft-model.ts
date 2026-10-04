@@ -45,7 +45,8 @@ export type FeeRow = { feeDefinitionId: string; label: string; quantity: string;
 export type InvoiceArtistPosition = {
   needId: string;
   label: string;
-  artistType: "band" | "dj" | "singer_songwriter" | "no_preference";
+  /** Empty means no preference. */
+  artistTypes: Array<"band" | "dj" | "singer_songwriter">;
   status: "open" | "inquiring" | "booked";
   genres: string;
 };

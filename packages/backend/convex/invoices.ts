@@ -645,7 +645,7 @@ async function syncArtistSlotsForInvoice(
       slotId = await ctx.db.insert("eventArtistNeeds", {
         eventId: line.eventId!,
         label: trimOptional(line.label),
-        artistType: "no_preference",
+        artistTypes: [],
         status: "open",
         createdAt: now,
         updatedAt: now,

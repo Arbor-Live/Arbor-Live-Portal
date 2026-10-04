@@ -24,6 +24,7 @@ import {
   positionWindowFromTemplate,
   type EventSeriesPositionTemplate,
 } from "./eventSeriesPositions";
+import { artistTypesOf } from "./artistNeedTypes";
 import { removePositionRow } from "./positionRows";
 import { isActBlock, syncNeedBlocks } from "./runOfShow";
 import type { ScheduleBlockType } from "./scheduleBlockTypes";
@@ -467,7 +468,7 @@ export async function applyPositionTemplates(
       templateKey: template.templateKey,
       sortOrder: orderByKey.get(template.templateKey) ?? 0,
       label: template.label.trim() || undefined,
-      artistType: template.artistType,
+      artistTypes: artistTypesOf(template),
       genres: template.genres?.trim() || undefined,
       ...window,
     };
@@ -487,6 +488,7 @@ export async function applyPositionTemplates(
     // `replace` (not `patch`) so a template that dropped a set/soundcheck
     // window actually clears the stored times.
     const next: Doc<"eventArtistNeeds"> = { ...existing, ...fields, updatedAt: now };
+    delete next.artistType;
     delete next.setStartsAt;
     delete next.setEndsAt;
     delete next.soundcheckStartsAt;

@@ -5,6 +5,7 @@ import { Combobox as ComboboxPrimitive } from "@base-ui/react"
 import { CaretDownIcon, CheckIcon, XIcon } from "@phosphor-icons/react"
 
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import { usePickerPortalContainer } from "@/components/ui/portaled-picker"
 import {
   InputGroup,
@@ -177,8 +178,75 @@ function ComboboxEmpty({ className, ...props }: ComboboxPrimitive.Empty.Props) {
   )
 }
 
+function ComboboxChips({
+  className,
+  ...props
+}: React.ComponentPropsWithRef<typeof ComboboxPrimitive.Chips> &
+  ComboboxPrimitive.Chips.Props) {
+  return (
+    <ComboboxPrimitive.Chips
+      data-slot="combobox-chips"
+      className={cn(
+        "flex min-h-9 flex-wrap items-center gap-1 rounded-none border border-input bg-transparent px-2 py-1 text-sm transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50 dark:bg-input/30",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function ComboboxChip({
+  className,
+  children,
+  showRemove = true,
+  ...props
+}: ComboboxPrimitive.Chip.Props & { showRemove?: boolean }) {
+  return (
+    <ComboboxPrimitive.Chip
+      data-slot="combobox-chip"
+      className={cn(
+        "flex h-6 w-fit items-center gap-1 rounded-none bg-muted px-1.5 text-xs font-medium whitespace-nowrap text-foreground has-data-[slot=combobox-chip-remove]:pr-0",
+        className
+      )}
+      {...props}
+    >
+      {children}
+      {showRemove ? (
+        <ComboboxPrimitive.ChipRemove
+          render={<Button variant="ghost" size="icon-xs" />}
+          className="-ml-1 opacity-60 hover:opacity-100"
+          data-slot="combobox-chip-remove"
+        >
+          <XIcon className="pointer-events-none" />
+        </ComboboxPrimitive.ChipRemove>
+      ) : null}
+    </ComboboxPrimitive.Chip>
+  )
+}
+
+function ComboboxChipsInput({ className, ...props }: ComboboxPrimitive.Input.Props) {
+  return (
+    <ComboboxPrimitive.Input
+      data-slot="combobox-chip-input"
+      className={cn(
+        "h-6 min-w-16 flex-1 bg-transparent outline-none placeholder:text-muted-foreground",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+/** Anchor the popup to the chips row instead of the input. */
+function useComboboxAnchor() {
+  return React.useRef<HTMLDivElement | null>(null)
+}
+
 export {
   Combobox,
+  ComboboxChip,
+  ComboboxChips,
+  ComboboxChipsInput,
   ComboboxClear,
   ComboboxContent,
   ComboboxEmpty,
@@ -187,4 +255,5 @@ export {
   ComboboxList,
   ComboboxTrigger,
   ComboboxValue,
+  useComboboxAnchor,
 }
