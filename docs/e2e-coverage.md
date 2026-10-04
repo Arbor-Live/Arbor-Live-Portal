@@ -115,7 +115,7 @@ the URL looks like cloud.
 | Fee definitions | Covered | `quotes/invoice-fee-definitions.spec.ts` (Batch 14) — add/edit default amount/disable/enable/delete on the settings card, plus the editor link: picking a definition pre-fills the fee-row rate and the persisted line carries `feeDefinitionId` |
 | Terms templates | Covered | `quotes/invoice-terms-templates.spec.ts` (Batch 14) — add/edit markdown/disable/enable/delete on the settings card, plus the editor link: a checked template lands on `termsIds` and renders on the public quote page |
 | PDF download / void | None | Deferred |
-| Per-user crew rates (`/users/crew-rates`) | Covered | `users/user-rates-admin.spec.ts` (Batch 9) — custom rate, then a pinned mode resolving to the global rate; reads the globals, never writes them |
+| Per-user crew rates (`/users/crew-rates`) | Covered | `users/user-rates-admin.spec.ts` (Batch 9, list shell #410) — custom rate then a pinned mode, both from the side panel and checked against the resolved rate; Mode filter; `?person=` deep link; the Edit global rates dialog opens and cancels. Reads the globals, never writes them |
 | Invoice settings (global crew rates) | Deferred | `invoiceSettings.update` writes **global** crew rates. On the shared deployment that silently re-prices every other worktree's crew lines, so it is not safe to drive from a spec |
 
 ### Events and schedule

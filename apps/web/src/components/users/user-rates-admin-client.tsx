@@ -1,275 +1,310 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
-import { api } from "@/lib/convex-api";
-import { FormSaveBar } from "@/components/forms";
-import { Form } from "@/components/ui/form";
-import { TextFormField } from "@/components/forms/text-form-field";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useConvexForm } from "@/hooks/use-convex-form";
+import { CurrencyDollarIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
 import {
-  globalCrewRatesSchema,
-  userRateSchema,
-  type GlobalCrewRatesFormValues,
-  type UserRateFormValues,
-} from "@/lib/validations/financial";
-import { CheckIcon, CircleNotchIcon, WarningCircleIcon } from "@phosphor-icons/react";
+  activeFilters,
+  FilterBar,
+  matchesFilter,
+  type FilterDefinition,
+  type FilterState,
+} from "@/components/filter-bar";
+import { ListRow } from "@/components/list-row";
+import { DetailSheet, EmptyState, ListSummary, RowCell, RowFlag, RowList, RowMenu, RowText } from "@/components/list-page";
+import { MetaItem, PageHeader, StatusPill } from "@/components/page-header";
+import { roleLabel } from "@/components/users/directory/shared";
+import { Button } from "@/components/ui/button";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/convex-api";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import {
+  CREW_RATE_MODES,
+  CREW_RATE_MODE_LABELS,
+  CREW_RATE_MODE_TONES,
+  crewRateMode,
+  crewRateRoles,
+  formatHourly,
+  hasNoRate,
+  summarizeCrewRates,
+  type CrewRateMode,
+  type CrewRateRow,
+  type GlobalCrewRates,
+} from "@/lib/crew-rate-modes";
+import { notify } from "@/lib/notify";
+import { CrewRateSheetBody } from "./crew-rates/crew-rate-sheet";
+import { GlobalRatesDialog } from "./crew-rates/global-rates-dialog";
+
+/** `?person=<userId>` opens that person's rate panel. */
+const PERSON_PARAM = "person";
+const NO_RATE = "zero";
+
+function setPersonParam(value: string | null) {
+  const url = new URL(window.location.href);
+  if (value) url.searchParams.set(PERSON_PARAM, value);
+  else url.searchParams.delete(PERSON_PARAM);
+  window.history.replaceState(null, "", url);
+}
+
+function plural(count: number, noun: string, nouns = `${noun}s`) {
+  return `${count.toLocaleString()} ${count === 1 ? noun : nouns}`;
+}
+
+async function attempt(action: () => Promise<unknown>, success: string) {
+  try {
+    await action();
+    notify.success(success);
+    return true;
+  } catch (error) {
+    notify.error(getConvexErrorMessage(error));
+    return false;
+  }
+}
 
 export function UserRatesAdminClient() {
+  const searchParams = useSearchParams();
+  const [panel, setPanel] = useState<string | null>(() => searchParams.get(PERSON_PARAM));
+  const [globalsOpen, setGlobalsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<FilterState>({});
+
   const users = useQuery(api.users.listWithRates, {});
   const invoiceSettings = useQuery(api.invoiceSettings.get, {});
   const updateInvoiceSettings = useMutation(api.invoiceSettings.update);
-
-  const globalForm = useConvexForm<GlobalCrewRatesFormValues>({
-    schema: globalCrewRatesSchema,
-    defaultValues: { defaultCrewRateUsd: 0, defaultLeadRateUsd: 0 },
-    mode: "onTouched",
-  });
-
-  useEffect(() => {
-    if (!invoiceSettings) return;
-    if (globalForm.formState.isDirty) return;
-    globalForm.reset({
-      defaultCrewRateUsd: invoiceSettings.crewNormalRateUsd ?? 0,
-      defaultLeadRateUsd:
-        invoiceSettings.crewLeadRateUsd ?? invoiceSettings.crewOtRateUsd ?? 0,
-    });
-  }, [invoiceSettings, globalForm]);
-
-  const onSaveGlobalRates = globalForm.submitMutation(async (values) => {
-    await updateInvoiceSettings({
-      crewNormalRateUsd: values.defaultCrewRateUsd,
-      crewLeadRateUsd: values.defaultLeadRateUsd,
-      crewOtRateUsd: values.defaultLeadRateUsd,
-    });
-  });
-
-  const rows = useMemo(() => users ?? [], [users]);
-  const normalRate = invoiceSettings?.crewNormalRateUsd ?? 0;
-  const leadRate =
-    invoiceSettings?.crewLeadRateUsd ?? invoiceSettings?.crewOtRateUsd ?? 0;
-
-  return (
-    <div className="space-y-4 pb-24">
-      <Card>
-        <CardHeader>
-          <CardTitle>Global Crew Rates</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Normal and Lead rates for invoice crew pricing and for users pinned to those modes.
-            Empty shift cost estimates default to the average of both.
-          </p>
-          <Form {...globalForm}>
-            <form
-              onSubmit={globalForm.handleSubmit(onSaveGlobalRates)}
-              className="grid gap-3 md:grid-cols-3"
-            >
-              <TextFormField
-                name="defaultCrewRateUsd"
-                label="Normal Rate (USD)"
-                type="number"
-              />
-              <TextFormField
-                name="defaultLeadRateUsd"
-                label="Lead Rate (USD)"
-                type="number"
-              />
-              <div className="flex items-end">
-                <Button type="submit" disabled={globalForm.saveStatus === "saving"}>
-                  Save Global Crew Rates
-                </Button>
-              </div>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>User Compensation Rates</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Pin users to Normal or Lead (auto-syncs when globals change), or set a Custom fixed
-            rate. Existing users stay Custom until pinned.
-          </p>
-          <div className="space-y-2">
-            {rows.map((user) => (
-              <UserRateRow
-                key={user.id}
-                userId={user.id}
-                name={user.name}
-                meta={[user.role, user.email, user.payrollMethod].filter(Boolean).join(" • ")}
-                rateMode={user.rateMode ?? "custom"}
-                customHourlyRateUsd={user.customHourlyRateUsd}
-                effectiveHourlyRateUsd={user.hourlyRateUsd}
-                normalRate={normalRate}
-                leadRate={leadRate}
-              />
-            ))}
-            {users === undefined ? (
-              <p className="text-sm text-muted-foreground">Loading users...</p>
-            ) : null}
-            {users?.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No users found.</p>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
-
-      <FormSaveBar
-        tier="C"
-        saveStatus={globalForm.saveStatus}
-        saveError={globalForm.saveError}
-        isDirty={globalForm.formState.isDirty}
-        saveLabel="Save Global Crew Rates"
-        onSave={() => void globalForm.handleSubmit(onSaveGlobalRates)()}
-        onDiscard={() => {
-          if (!invoiceSettings) return;
-          globalForm.reset({
-            defaultCrewRateUsd: invoiceSettings.crewNormalRateUsd ?? 0,
-            defaultLeadRateUsd:
-              invoiceSettings.crewLeadRateUsd ?? invoiceSettings.crewOtRateUsd ?? 0,
-          });
-        }}
-        onRetry={() => void globalForm.handleSubmit(onSaveGlobalRates)()}
-      />
-    </div>
-  );
-}
-
-function UserRateRow({
-  userId,
-  name,
-  meta,
-  rateMode,
-  customHourlyRateUsd,
-  effectiveHourlyRateUsd,
-  normalRate,
-  leadRate,
-}: {
-  userId: string;
-  name: string;
-  meta: string;
-  rateMode: "normal" | "lead" | "custom";
-  customHourlyRateUsd: number | null;
-  effectiveHourlyRateUsd: number | null;
-  normalRate: number;
-  leadRate: number;
-}) {
   const setCompensationRate = useMutation(api.users.setCompensationRate);
 
-  const form = useConvexForm<UserRateFormValues>({
-    schema: userRateSchema,
-    defaultValues: {
-      rateMode,
-      hourlyRateUsd: customHourlyRateUsd ?? effectiveHourlyRateUsd ?? 0,
-    },
-    mode: "onChange",
-  });
+  const globals: GlobalCrewRates = {
+    normal: invoiceSettings?.crewNormalRateUsd ?? 0,
+    lead: invoiceSettings?.crewLeadRateUsd ?? invoiceSettings?.crewOtRateUsd ?? 0,
+  };
 
-  useEffect(() => {
-    if (form.formState.isDirty) return;
-    form.reset({
-      rateMode,
-      hourlyRateUsd: customHourlyRateUsd ?? effectiveHourlyRateUsd ?? 0,
-    });
-  }, [rateMode, customHourlyRateUsd, effectiveHourlyRateUsd, form]);
+  const allRows = useMemo(() => (users ?? []) as CrewRateRow[], [users]);
+  const applied = activeFilters(filters);
 
-  const watchedMode = form.watch("rateMode");
-  const previewRate =
-    watchedMode === "normal"
-      ? normalRate
-      : watchedMode === "lead"
-        ? leadRate
-        : form.watch("hourlyRateUsd");
+  const roleOptions = useMemo(() => {
+    const roles = new Set(allRows.flatMap((row) => crewRateRoles(row.role)));
+    return [...roles]
+      .map((value) => ({ value, label: roleLabel(value) }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [allRows]);
 
-  const onSave = form.submitMutation(
-    async (values) => {
-      await setCompensationRate({
-        userId,
-        rateMode: values.rateMode,
-        hourlyRateUsd: values.rateMode === "custom" ? values.hourlyRateUsd : undefined,
-      });
-      return values;
-    },
-    {
-      onSuccess: (values) => {
-        form.reset(values);
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () => [
+      {
+        id: "mode",
+        label: "Mode",
+        options: CREW_RATE_MODES.map((value) => ({ value, label: CREW_RATE_MODE_LABELS[value] })),
       },
-    },
+      { id: "role", label: "Role", options: roleOptions },
+      {
+        id: "rate",
+        label: "Rate",
+        single: true,
+        options: [{ value: NO_RATE, label: "$0", description: "No rate set, or a rate of $0" }],
+      },
+    ],
+    [roleOptions],
   );
 
+  // The query returns everyone (bounded server-side), so filter in place.
+  const rows = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return allRows.filter((row) => {
+      if (query && ![row.name, row.email].some((value) => value.toLowerCase().includes(query))) return false;
+      return (
+        matchesFilter(applied.mode, crewRateMode(row)) &&
+        matchesFilter(applied.role, crewRateRoles(row.role)) &&
+        matchesFilter(applied.rate, hasNoRate(row) ? NO_RATE : "set")
+      );
+    });
+  }, [allRows, applied.mode, applied.rate, applied.role, search]);
+
+  const panelRow = panel ? allRows.find((row) => row.id === panel) : undefined;
+
+  // A `?person=` link to someone who isn't in the list: drop the param rather
+  // than hold an empty panel open.
+  useEffect(() => {
+    if (!panel || users === undefined || panelRow) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- close the panel once the list says the row is gone
+    setPanel(null);
+    setPersonParam(null);
+  }, [panel, panelRow, users]);
+
+  const summary = summarizeCrewRates(rows);
+  const pinned = {
+    normal: allRows.filter((row) => row.rateMode === "normal").length,
+    lead: allRows.filter((row) => row.rateMode === "lead").length,
+  };
+  const filterCount = (search.trim() ? 1 : 0) + Object.keys(applied).length;
+  const loading = users === undefined || invoiceSettings === undefined;
+
+  function openPanel(value: string | null) {
+    setPanel(value);
+    setPersonParam(value);
+  }
+
+  async function saveGlobals(next: GlobalCrewRates) {
+    const ok = await attempt(
+      () =>
+        updateInvoiceSettings({
+          crewNormalRateUsd: next.normal,
+          crewLeadRateUsd: next.lead,
+          // Older readers still look at the overtime rate; keep it on Lead.
+          crewOtRateUsd: next.lead,
+        }),
+      "Global crew rates saved",
+    );
+    if (ok) setGlobalsOpen(false);
+    return ok;
+  }
+
+  async function saveRate(person: CrewRateRow, args: { rateMode: CrewRateMode; hourlyRateUsd?: number }) {
+    const ok = await attempt(
+      () => setCompensationRate({ userId: person.id, ...args }),
+      `Saved ${person.name}'s rate`,
+    );
+    if (ok) openPanel(null);
+    return ok;
+  }
+
   return (
-    <div
-      data-testid={`user-rate-row-${userId}`}
-      className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_1.4fr_24px]"
-    >
-      <div>
-        <p className="text-sm font-medium">{name}</p>
-        <p className="text-xs text-muted-foreground">{meta}</p>
-        <p className="text-xs text-muted-foreground mt-1">Effective: ${previewRate}/hr</p>
-      </div>
-      <Form {...form}>
-        <form
-          onSubmit={form.handleSubmit(onSave)}
-          className="flex flex-wrap items-end gap-2"
-        >
-          <div className="min-w-35 space-y-1">
-            <Label className="text-xs">Mode</Label>
-            <Select
-              value={form.watch("rateMode")}
-              onValueChange={(value) =>
-                form.setValue("rateMode", value as UserRateFormValues["rateMode"], {
-                  shouldDirty: true,
-                })
+    <div className="space-y-4 pb-24" data-testid="crew-rates-page">
+      <PageHeader
+        title="Crew rates"
+        description="What each person is paid per hour. Normal and Lead follow the global rates; Custom is a fixed rate for one person. Rates price timecards and invoice crew lines."
+        actions={
+          <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => setGlobalsOpen(true)}>
+            <SlidersHorizontalIcon />
+            Edit global rates
+          </Button>
+        }
+        meta={
+          loading ? (
+            <Skeleton className="h-5 w-48" />
+          ) : (
+            <>
+              <MetaItem icon={CurrencyDollarIcon}>
+                <span data-testid="crew-rates-global-normal">Normal {formatHourly(globals.normal)}</span>
+              </MetaItem>
+              <MetaItem icon={CurrencyDollarIcon}>
+                <span data-testid="crew-rates-global-lead">Lead {formatHourly(globals.lead)}</span>
+              </MetaItem>
+            </>
+          )
+        }
+      />
+
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search name or email…"
+        searchLabel="Search people"
+        filters={filterDefinitions}
+        value={filters}
+        onChange={setFilters}
+      />
+
+      {loading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-72" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      ) : (
+        <>
+          <ListSummary
+            testId="crew-rates-summary"
+            order="Alphabetical by name. Open a person to change their mode or rate."
+          >
+            {plural(summary.people, "person", "people")} · {summary.custom} on custom rates · {summary.noRate} with no
+            rate
+          </ListSummary>
+
+          {rows.length === 0 ? (
+            <EmptyState
+              action={
+                filterCount ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearch("");
+                      setFilters({});
+                    }}
+                  >
+                    Show everyone
+                  </Button>
+                ) : null
               }
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="normal">Normal (${normalRate})</SelectItem>
-                <SelectItem value="lead">Lead (${leadRate})</SelectItem>
-                <SelectItem value="custom">Custom</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {watchedMode === "custom" ? (
-            <div className="min-w-0 flex-1">
-              <TextFormField
-                name="hourlyRateUsd"
-                label="Custom USD"
-                type="number"
-                placeholder="Hourly rate (USD)"
-              />
-            </div>
-          ) : null}
-          {form.formState.isDirty ? (
-            <Button type="submit" size="sm" disabled={form.saveStatus === "saving"}>
-              Save
-            </Button>
-          ) : null}
-        </form>
-      </Form>
-      <span className="flex self-center justify-end">
-        {form.saveStatus === "saving" ? (
-          <CircleNotchIcon className="size-4 animate-spin text-muted-foreground" />
-        ) : form.saveStatus === "error" ? (
-          <WarningCircleIcon
-            className="size-4 text-destructive"
-            weight="fill"
-            aria-label={form.saveError ?? "Save failed"}
+              {filterCount
+                ? "Nobody matches this search and these filters."
+                : "No people yet. Invite crew from Users, then set their rates here."}
+            </EmptyState>
+          ) : (
+            <RowList joined testId="crew-rates-list">
+              {rows.map((row) => {
+                const mode = crewRateMode(row);
+                const noRate = hasNoRate(row);
+                const roles = crewRateRoles(row.role).map(roleLabel).join(", ");
+                return (
+                  <ListRow
+                    key={row.id}
+                    data-testid={`crew-rate-row-${row.id}`}
+                    onOpen={() => openPanel(row.id)}
+                    actions={
+                      <RowMenu label={`More for ${row.name}`}>
+                        <DropdownMenuItem onSelect={() => openPanel(row.id)}>Edit rate</DropdownMenuItem>
+                      </RowMenu>
+                    }
+                  >
+                    <RowText title={row.name} detail={[roles, row.email].filter(Boolean).join(" · ")} />
+                    {noRate ? <RowFlag className="hidden sm:inline">No rate</RowFlag> : null}
+                    <StatusPill tone={CREW_RATE_MODE_TONES[mode]} className="hidden h-6 w-20 justify-center sm:inline-flex">
+                      {CREW_RATE_MODE_LABELS[mode]}
+                    </StatusPill>
+                    <RowCell className="w-20 font-medium">
+                      {row.hourlyRateUsd === null ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        formatHourly(row.hourlyRateUsd)
+                      )}
+                    </RowCell>
+                  </ListRow>
+                );
+              })}
+            </RowList>
+          )}
+        </>
+      )}
+
+      <DetailSheet
+        open={Boolean(panelRow)}
+        onOpenChange={(open) => {
+          if (!open) openPanel(null);
+        }}
+        testId="crew-rate-sheet"
+      >
+        {panelRow ? (
+          <CrewRateSheetBody
+            key={panelRow.id}
+            person={panelRow}
+            globals={globals}
+            onSave={(args) => saveRate(panelRow, args)}
+            onCancel={() => openPanel(null)}
           />
-        ) : form.saveStatus === "saved" ? (
-          <CheckIcon className="size-4 text-status-emerald-600" weight="bold" />
         ) : null}
-      </span>
+      </DetailSheet>
+
+      <GlobalRatesDialog
+        open={globalsOpen}
+        onOpenChange={setGlobalsOpen}
+        rates={globals}
+        pinned={pinned}
+        onSave={saveGlobals}
+      />
     </div>
   );
 }
