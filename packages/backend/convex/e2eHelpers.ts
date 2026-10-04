@@ -3744,6 +3744,7 @@ export const getLatestBandApplicationByEmail = query({
       contactEmail: v.string(),
       bandDisplayName: v.string(),
       organizationId: v.union(v.string(), v.null()),
+      declineReason: v.union(v.string(), v.null()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -3763,6 +3764,7 @@ export const getLatestBandApplicationByEmail = query({
       contactEmail: match.contactEmail,
       bandDisplayName: match.bandDisplayName,
       organizationId: match.organizationId ?? null,
+      declineReason: match.declineReason ?? null,
     };
   },
 });

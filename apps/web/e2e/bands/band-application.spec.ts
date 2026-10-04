@@ -45,15 +45,22 @@ test.describe("public band application", () => {
 
     const adminContext = await browser.newContext({ storageState: adminAuthFile });
     const adminPage = await adminContext.newPage();
+    // The page starts on pending applications.
     await adminPage.goto("/dashboard/users/artist-applications");
-    await expect(adminPage.getByRole("button", { name: "Pending" }).first()).toBeVisible({
-      timeout: 25_000,
-    });
-    await adminPage.getByRole("button", { name: "Pending" }).click();
-    await expect(adminPage.getByText(bandName).first()).toBeVisible({ timeout: 20_000 });
+    await expect(adminPage.getByTestId("artist-applications-page")).toBeVisible({ timeout: 25_000 });
+    await expect(adminPage.getByTestId("filter-chip-status")).toContainText("Pending");
+    await adminPage.getByRole("textbox", { name: "Search applications" }).fill(bandName);
+    const row = adminPage.getByTestId("artist-application-row").filter({ hasText: bandName });
+    await expect(row).toBeVisible({ timeout: 20_000 });
+    await expect(adminPage.getByTestId("artist-applications-group-submitted")).toContainText(bandName);
 
-    const row = adminPage.locator("article").filter({ hasText: bandName });
-    await row.getByRole("button", { name: "Approve", exact: true }).click();
+    await row.getByRole("button", { name: new RegExp(`^.*${bandName}`) }).first().click();
+    const sheet = adminPage.getByTestId("artist-application-sheet");
+    await expect(sheet).toBeVisible({ timeout: 20_000 });
+    await expect(sheet).toContainText(contactName);
+    await expect(sheet).toContainText("Solo performer");
+    await expect(adminPage).toHaveURL(new RegExp(`application=${app.applicationId}`));
+    await sheet.getByRole("button", { name: "Approve", exact: true }).click();
 
     const approved = await pollConvex<{
       status: string;
@@ -67,8 +74,15 @@ test.describe("public band application", () => {
     expect(approved.bandDisplayName).toBe(bandName);
     expect(approved.organizationId).toBeTruthy();
 
-    await adminPage.getByRole("button", { name: "Approved" }).click();
-    await expect(adminPage.getByText(bandName).first()).toBeVisible({ timeout: 20_000 });
+    // The panel closes on success, and the row leaves the pending view.
+    await expect(sheet).toHaveCount(0, { timeout: 20_000 });
+    await expect(row).toHaveCount(0, { timeout: 20_000 });
+
+    // A deep link opens it again, across every status.
+    await adminPage.goto(`/dashboard/users/artist-applications?application=${app.applicationId}`);
+    await expect(sheet).toBeVisible({ timeout: 25_000 });
+    await expect(sheet).toContainText("Approved");
+    await expect(sheet.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
     await adminContext.close();
   });
 });

@@ -171,6 +171,7 @@ the URL looks like cloud.
 | Payee e-sign → mark paid | Covered | `bands/band-payment-esign.spec.ts` (e-sign) + `bands/band-payouts-queue.spec.ts` (mark paid via queue UI) |
 | Band shows home + assignment | Covered | `bands/band-shows-home.spec.ts` — `/dashboard` Your shows, upcoming chip, e-sign from recent card, staff Assign band → `band_assigned` email |
 | Public `/artists/apply` → admin approve | Covered | `bands/band-application.spec.ts` (Batch 3) |
+| Artist application decline (`/users/artist-applications`) | Covered | `bands/band-application-decline.spec.ts` (list shell #409) — decline from the panel with a reason (a cancelled confirm leaves it pending), and from the row menu without one; the row moves from Pending to Declined |
 | Band payouts admin queue UI | Covered | `bands/band-payouts-queue.spec.ts` — send signature request + mark paid |
 | Band portal beyond e-sign | Partial | Onboarding (Batch 4) + shows home + artist-page invite resend/remove; payee settings still light |
 | Artist org invite resend / remove (`/dashboard/artists`) | Covered | `bands/artist-invite-lifecycle.spec.ts` — invite → resend same row → remove, dismissed confirm, and refused access-level mismatch |
@@ -218,7 +219,8 @@ the URL looks like cloud.
 | `events/event-comments.spec.ts` | Event comments + @mention typeahead |
 | `bands/band-payment-esign.spec.ts` | Band e-sign + helper mark paid |
 | `bands/band-shows-home.spec.ts` | Band Your shows home, assign → email, e-sign from card |
-| `bands/band-application.spec.ts` | Band apply + admin approve (Batch 3) |
+| `bands/band-application.spec.ts` | Band apply + admin approve from the side panel, then the `?application=` deep link (Batch 3, #409) |
+| `bands/band-application-decline.spec.ts` | Artist application decline from the panel and the row menu, both confirmed (#409) |
 | `bands/artist-invite-lifecycle.spec.ts` | Artist-page pending invite resend + remove, including access-level mismatch |
 | `booking/booking-submit.spec.ts` | Public `/request` wizard submit (Batch 3) |
 | `booking/request-inbox.spec.ts` | Inbox list UX: open view, status filter, all statuses (Batch 13) |
