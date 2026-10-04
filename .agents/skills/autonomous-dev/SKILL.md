@@ -94,26 +94,48 @@ users see.
 
 Fix anything ugly or broken that the screenshots reveal before opening the PR.
 
+Two traps when judging "nothing broke":
+
+- **Code that runs inside Convex must be checked through Convex.** PDFs
+  (`@react-pdf`) and email rendering also run in Convex node actions, which
+  bundle dependencies differently from Node or Vitest. A PDF that renders in
+  a test can still fail in the action (`@react-pdf/renderer` 4.9 did). Call
+  a real action, e.g. `convex run paymentProofPublic:downloadInvoicePdfByQuoteToken`
+  with a token from `e2eHelpers:seedMinimalPublicQuote`.
+- **On a loaded machine, compare against `main` before blaming the change.**
+  1s query timeouts in `findAuthUserById` and "You must be signed in" right
+  after sign-in show up when CPU is starved. Run the same check on a `main`
+  build, alternating the two, before calling it a regression.
+
 ## 4. Open the PR (with screenshots)
 
 1. Commit only intended files (no screenshots in the feature branch, no env
    files). Push the branch.
-2. Upload the screenshots to the orphan `pr-assets` branch, which nothing
-   triggers CI on (workflows run on `pull_request` and pushes to `main`).
-   The repo is public, so the raw URLs render in the PR:
-   - If `pr-assets` does not exist yet, create it empty:
-     `git push origin $(git commit-tree $(git mktree </dev/null) -m "PR assets"):refs/heads/pr-assets`
-   - For each image, `PUT repos/{owner}/{repo}/contents/<branch>/<timestamp>-<name>.png`
-     via `gh api --input` with `{message, branch: "pr-assets", content: <base64>}`
-     (send it as a JSON file; large base64 overflows `-f`). Use the returned
-     `content.download_url` in `![caption](url)`.
-3. `gh pr create` with a body written for the reviewer:
+2. Write the body to a file with ordinary Markdown image references to the
+   **local** screenshot paths, and pass the same files to `--attach`. `gh`
+   uploads them as GitHub attachments and rewrites each reference to the
+   uploaded URL (`gh` ≥ 2.99; see the `gh` skill's "Attaching images and
+   videos"):
+
+   ```bash
+   gh pr create --base main --title "…" --body-file /tmp/pr-body.md \
+     --attach /tmp/shots/1-main-flow.png --attach /tmp/shots/2-narrow.png
+   ```
+
+   **Never put screenshots on a git branch** (no asset branches, no
+   raw.githubusercontent links). To add or replace images later, edit the
+   body the same way: `gh pr edit <n> --body-file … --attach …`. Uploads need
+   write access and a user token (OAuth or PAT); GitHub App tokens are
+   refused.
+
+   The body should be written for the reviewer:
    - **What & why** (2–5 lines)
-   - **Screenshots** (the uploaded image lines, each with a short caption)
+   - **Screenshots** (each image with a short caption)
    - **Decisions I made** (from step 1; omit if none)
    - **How to verify** / **Test plan** (what you ran, what passed)
-4. Register it with T3: `link_pull_request` with the PR URL.
-5. Post the PR link plus the same screenshots in chat for the user to review.
+3. Register it with T3: `link_pull_request` with the PR URL.
+4. Post the PR link plus the same screenshots in chat (embed the local
+   paths) for the user to review.
 
 ## 5. Autonomous CodeRabbit + CI loop
 
