@@ -14,6 +14,7 @@ import {
 import { resolveProfileMembership } from "./lib/userVerticals";
 import { resolveUserStatus } from "./lib/userStatus";
 import { assertE2eHelpersEnabled } from "./lib/e2eGuard";
+import { emailTemplateValue } from "./lib/emailTemplateValue";
 import { recordInvoiceRevision, snapshotInvoice } from "./lib/invoiceRevisions";
 import { findAuthUsersByIds } from "./lib/auth";
 import {
@@ -742,6 +743,10 @@ export const enqueueInAppNotificationEmail = mutation({
     path: v.string(),
     title: v.optional(v.string()),
     debounceMs: v.optional(v.number()),
+    /** Another in-app template (default: a comment mention), shown with date + venue. */
+    template: v.optional(emailTemplateValue),
+    dateRangeLabel: v.optional(v.string()),
+    venueName: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -751,20 +756,33 @@ export const enqueueInAppNotificationEmail = mutation({
       throw new Error("enqueueInAppNotificationEmail requires an @arborlive.test address.");
     }
     const nonce = Date.now();
+    const url = `${SITE_URL}${args.path}`;
     const email = {
-      template: "comment_mention" as const,
+      template: args.template ?? ("comment_mention" as const),
       to,
       subject: args.title?.trim() || `You were mentioned: E2E ${nonce}`,
       idempotencyKey: `e2e_in_app:${to}:${nonce}`,
-      payload: {
-        authorName: "E2E Bot",
-        subjectKindLabel: "Damage report",
-        subjectTitle: "E2E",
-        contextRows: [],
-        commentSnippet: "Can you take a look?",
-        url: `${SITE_URL}${args.path}`,
-        ctaLabel: "Open",
-      },
+      payload: args.template
+        ? {
+            // Every link field the in-app mapping might read for this template.
+            eventUrl: url,
+            reviewUrl: url,
+            invoiceUrl: url,
+            portalUrl: url,
+            reportUrl: url,
+            requestsUrl: url,
+            dateRangeLabel: args.dateRangeLabel,
+            venueName: args.venueName,
+          }
+        : {
+            authorName: "E2E Bot",
+            subjectKindLabel: "Damage report",
+            subjectTitle: "E2E",
+            contextRows: [],
+            commentSnippet: "Can you take a look?",
+            url,
+            ctaLabel: "Open",
+          },
     };
     if (args.debounceMs !== undefined) {
       await enqueueDebouncedEmail(ctx, {
@@ -776,6 +794,35 @@ export const enqueueInAppNotificationEmail = mutation({
       await enqueueEmail(ctx, email);
     }
     return null;
+  },
+});
+
+/** Test-only: delete a user's notification-center rows (bounded batch). */
+export const clearNotifications = mutation({
+  args: { email: v.string() },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const user = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: args.email.trim().toLowerCase() }],
+    });
+    const userId = getId(user);
+    if (!userId) throw new Error("User not found.");
+    let deleted = 0;
+    for (const status of ["pending", "delivered"] as const) {
+      const rows = await ctx.db
+        .query("notifications")
+        .withIndex("by_userId_and_status_and_createdAt", (q) =>
+          q.eq("userId", userId).eq("status", status),
+        )
+        .take(200);
+      for (const row of rows) {
+        await ctx.db.delete(row._id);
+        deleted += 1;
+      }
+    }
+    return deleted;
   },
 });
 

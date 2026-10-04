@@ -184,7 +184,7 @@ function ChannelChip({
             disabled={lock !== null || busy}
             onPressedChange={onChange}
             className={cn(
-              "size-8 min-w-8 rounded-full border px-0",
+              "size-8 min-w-8 border px-0",
               pressed
                 ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary data-[state=on]:bg-primary/10"
                 : "border-border text-muted-foreground/70",
