@@ -31,13 +31,13 @@
     "@react-email/render": "^2.1.0",
     "better-auth": "^1.6.25",
     "convex": "^1.46.0",
-    "nanoid": "^6.0.0",
-    "react-email": "^6.9.1",
-    "resend": "^6.18.1"
+    "nanoid": "^6.0.1",
+    "react-email": "^6.11.0",
+    "resend": "^6.32.0"
   },
   "devDependencies": {
     "@better-auth/cli": "^1.4.21",
-    "@types/node": "^26.1.2",
+    "@types/node": "^26.6.4",
     "typescript": "^6.0.3"
   }
 }
