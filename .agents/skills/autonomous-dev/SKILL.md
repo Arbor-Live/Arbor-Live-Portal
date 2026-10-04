@@ -81,9 +81,16 @@ users see.
    If styling changed, also capture dark mode (`preview_set_appearance`).
 4. **Show them in chat** by embedding the saved paths:
    `![Ledger page, desktop](/abs/path/from/screenshotPath.png)`.
-5. If the preview tools are unavailable, say so, and capture with Playwright
-   instead (`await page.screenshot({ path })` in a throwaway script or spec
-   run) so the user still gets images.
+5. **Playwright is an equally valid path.** Switch to it whenever the T3
+   browser is unavailable or fights you (popovers that won't open, drags that
+   won't start, lost sessions, `chrome-error://` tabs), or when a scripted
+   run is simply more reliable, e.g. multi-step flows or several viewports.
+   Write a throwaway spec under `apps/web/e2e/`, reuse the role sessions
+   from `e2e/.auth/*.json` via `test.use({ storageState })` (see
+   `e2e-testing`), and call `await page.screenshot({ path, fullPage: true })`
+   at each state. Embed those PNG paths in chat exactly like step 4. Delete
+   the spec afterwards unless it is worth keeping as a real test. Say which
+   path you used.
 
 Fix anything ugly or broken that the screenshots reveal before opening the PR.
 
