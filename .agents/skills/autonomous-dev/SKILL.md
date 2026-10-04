@@ -94,19 +94,41 @@ users see.
 
 Fix anything ugly or broken that the screenshots reveal before opening the PR.
 
+Two traps when judging "nothing broke":
+
+- **Code that runs inside Convex must be checked through Convex.** PDFs
+  (`@react-pdf`) and email rendering also run in Convex node actions, which
+  bundle dependencies differently from Node or Vitest. A PDF that renders in
+  a test can still fail in the action (`@react-pdf/renderer` 4.9 did). Call
+  a real action, e.g. `convex run paymentProofPublic:downloadInvoicePdfByQuoteToken`
+  with a token from `e2eHelpers:seedMinimalPublicQuote`.
+- **On a loaded machine, compare against `main` before blaming the change.**
+  1s query timeouts in `findAuthUserById` and "You must be signed in" right
+  after sign-in show up when CPU is starved. Run the same check on a `main`
+  build, alternating the two, before calling it a regression.
+
 ## 4. Open the PR (with screenshots)
 
 1. Commit only intended files (no screenshots in the feature branch, no env
    files). Push the branch.
-2. Upload the screenshots to the orphan `pr-assets` branch, which nothing
-   triggers CI on (workflows run on `pull_request` and pushes to `main`).
-   The repo is public, so the raw URLs render in the PR:
-   - If `pr-assets` does not exist yet, create it empty:
-     `git push origin $(git commit-tree $(git mktree </dev/null) -m "PR assets"):refs/heads/pr-assets`
-   - For each image, `PUT repos/{owner}/{repo}/contents/<branch>/<timestamp>-<name>.png`
-     via `gh api --input` with `{message, branch: "pr-assets", content: <base64>}`
-     (send it as a JSON file; large base64 overflows `-f`). Use the returned
-     `content.download_url` in `![caption](url)`.
+2. Upload the screenshots to an orphan branch per PR named
+   `pr-assets/<pr-number>-<slug>` (the repo's existing convention; nothing
+   triggers CI on it, since workflows run on `pull_request` and pushes to
+   `main`). The repo is public, so raw URLs render in the PR. If the PR has
+   no number yet, open it first and add the screenshots by editing the body.
+
+   ```bash
+   tree=$(for f in 1-main-flow.png 2-narrow.png; do
+     printf "100644 blob %s\t%s\n" "$(git hash-object -w "$f")" "$(basename "$f")"
+   done | git mktree)
+   commit=$(git commit-tree "$tree" -m "Screenshots for #<n> (PR assets only)")
+   git push origin "${commit}:refs/heads/pr-assets/<n>-<slug>"
+   ```
+
+   Embed `https://raw.githubusercontent.com/{owner}/{repo}/${commit}/<file>`
+   (pin the commit SHA, not the branch name, so links survive re-uploads).
+   Number files in reading order. In zsh, brace the variable (`${commit}:`),
+   otherwise `$commit:r` is read as a path modifier.
 3. `gh pr create` with a body written for the reviewer:
    - **What & why** (2–5 lines)
    - **Screenshots** (the uploaded image lines, each with a short caption)
