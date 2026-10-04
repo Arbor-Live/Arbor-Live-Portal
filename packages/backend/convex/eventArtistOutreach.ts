@@ -25,7 +25,6 @@ import { syncNeedBlocks } from "./lib/runOfShow";
 /** An event's bill is asked of a few dozen acts at most; past this the list is noise. */
 export const MAX_OUTREACH_PER_EVENT = 60;
 const MAX_SLOTS = 100;
-const MAX_ACTS = 50;
 
 const outreachStatusValue = v.union(v.literal("asked"), v.literal("available"), v.literal("unavailable"));
 
@@ -58,20 +57,37 @@ function slotLabel(slot: Doc<"eventArtistNeeds">) {
   return slot.label?.trim() || artistTypesLabel(artistTypesOf(slot));
 }
 
+/**
+ * The event's slots in bill order, with which are filled. Each slot's act is
+ * an indexed point lookup, so a long bill can't hide a filled slot behind a
+ * page cap.
+ */
 async function loadSlots(ctx: QueryCtx, eventId: Id<"events">) {
-  const [slots, acts] = await Promise.all([
-    ctx.db
-      .query("eventArtistNeeds")
-      .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-      .take(MAX_SLOTS),
-    ctx.db
-      .query("eventBandParticipations")
-      .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-      .take(MAX_ACTS),
-  ]);
+  const slots = await ctx.db
+    .query("eventArtistNeeds")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(MAX_SLOTS);
   slots.sort((a, b) => (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt) || a.createdAt - b.createdAt);
-  const filled = new Set(acts.flatMap((act) => (act.needId ? [act.needId] : [])));
-  return { slots, acts, filled };
+  const seated = await Promise.all(
+    slots.map((slot) =>
+      ctx.db
+        .query("eventBandParticipations")
+        .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+        .first(),
+    ),
+  );
+  const filled = new Set(slots.filter((_, index) => seated[index] !== null).map((slot) => slot._id));
+  return { slots, filled };
+}
+
+/** The act's participation on the event, looked up by index (never from a capped list). */
+async function findParticipation(ctx: QueryCtx, eventId: Id<"events">, organizationId: string) {
+  return await ctx.db
+    .query("eventBandParticipations")
+    .withIndex("by_eventId_and_organizationId", (q) =>
+      q.eq("eventId", eventId).eq("organizationId", organizationId),
+    )
+    .unique();
 }
 
 async function requireRow(ctx: MutationCtx, outreachId: Id<"eventArtistOutreach">) {
@@ -96,7 +112,7 @@ export const listForEvent = query({
   returns: v.object({ rows: v.array(outreachRowValue), slots: v.array(outreachSlotValue) }),
   handler: async (ctx, args) => {
     await requireOutreachAccess(ctx);
-    const [{ slots, acts, filled }, rows] = await Promise.all([
+    const [{ slots, filled }, rows] = await Promise.all([
       loadSlots(ctx, args.eventId),
       ctx.db
         .query("eventArtistOutreach")
@@ -105,7 +121,6 @@ export const listForEvent = query({
     ]);
     const slotById = new Map(slots.map((slot) => [slot._id, slot]));
     const openSlots = slots.filter((slot) => !slotIsBooked(slot, filled));
-    const actByOrg = new Map(acts.map((act) => [act.organizationId, act]));
     const askers = await findAuthUsersByIds(
       ctx,
       rows.map((row) => row.askedByUserId),
@@ -114,14 +129,15 @@ export const listForEvent = query({
     const orgs = new Map(
       await Promise.all(
         orgIds.map(async (organizationId) => {
-          const [name, profile] = await Promise.all([
+          const [name, profile, act] = await Promise.all([
             resolveBandName(ctx, organizationId),
             ctx.db
               .query("organizationProfiles")
               .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
               .unique(),
+            findParticipation(ctx, args.eventId, organizationId),
           ]);
-          return [organizationId, { name, type: profile?.organizationType ?? "band" }] as const;
+          return [organizationId, { name, type: profile?.organizationType ?? "band", act }] as const;
         }),
       ),
     );
@@ -132,7 +148,7 @@ export const listForEvent = query({
       const tagged = row.needId && slotById.has(row.needId) ? row.needId : null;
       let booked: { label: string } | null = null;
       if (row.organizationId) {
-        const act = actByOrg.get(row.organizationId);
+        const act = org?.act;
         if (act) {
           const slot = act.needId ? slotById.get(act.needId) : undefined;
           booked = { label: slot ? slotLabel(slot) : "On the bill" };
@@ -299,12 +315,15 @@ export const book = mutation({
     const now = Date.now();
     if (row.organizationId) {
       const organizationId = row.organizationId;
-      const existing = await ctx.db
-        .query("eventBandParticipations")
-        .withIndex("by_eventId_and_organizationId", (q) =>
-          q.eq("eventId", need.eventId).eq("organizationId", organizationId),
-        )
+      // Same rule as the slots `listForEvent` offers: a DJ can't take a live-band slot.
+      const profile = await ctx.db
+        .query("organizationProfiles")
+        .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
         .unique();
+      if (!artistTypesMatchNeed(artistTypesOf(need), profile?.organizationType ?? "band")) {
+        throw new Error(`${await resolveBandName(ctx, organizationId)} doesn't fit that position's act type.`);
+      }
+      const existing = await findParticipation(ctx, need.eventId, organizationId);
       if (existing?.needId) throw new Error(`${await resolveBandName(ctx, organizationId)} is already on the bill.`);
       await upsertEventBandParticipation(ctx, {
         eventId: need.eventId,

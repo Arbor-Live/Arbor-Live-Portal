@@ -794,7 +794,19 @@ export const listOpenPositions = query({
         .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
         .take(MAX_OUTREACH_PER_EVENT);
       if (outreachRows.length === MAX_OUTREACH_PER_EVENT) truncated = true;
+      // `acts` is capped; past the cap, look each outreach act up by index so a
+      // booked act is never counted as pending.
+      const actsComplete = acts.length < MAX_ACTS_PER_EVENT;
       const bookedOrgs = new Set(acts.map((act) => act.organizationId));
+      const isBookedOrg = async (organizationId: string) =>
+        bookedOrgs.has(organizationId) ||
+        (!actsComplete &&
+          (await ctx.db
+            .query("eventBandParticipations")
+            .withIndex("by_eventId_and_organizationId", (q) =>
+              q.eq("eventId", event._id).eq("organizationId", organizationId),
+            )
+            .unique()) !== null);
       const bookedNames = new Set(
         positions.flatMap((position) => {
           const name = position.externalArtistName?.trim().toLowerCase();
@@ -804,7 +816,7 @@ export const listOpenPositions = query({
       const outreach = { asked: 0, available: 0, unavailable: 0 };
       for (const row of outreachRows) {
         const booked = row.organizationId
-          ? bookedOrgs.has(row.organizationId)
+          ? await isBookedOrg(row.organizationId)
           : bookedNames.has(row.externalName?.trim().toLowerCase() ?? "");
         if (!booked) outreach[row.status] += 1;
       }
