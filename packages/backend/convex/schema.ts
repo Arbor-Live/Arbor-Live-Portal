@@ -1111,6 +1111,10 @@ export default defineSchema({
     assignableAsCrew: v.optional(v.boolean()),
     /** Email templates this user opted out of (keys from `email/constants.ts`). */
     emailOptOuts: v.optional(v.array(v.string())),
+    /** Templates this user muted in the notification center (no row, so no push either). */
+    inAppOptOuts: v.optional(v.array(v.string())),
+    /** Templates this user still sees in the notification center but not as push. */
+    pushOptOuts: v.optional(v.array(v.string())),
     calendarInviteEmail: v.optional(v.string()),
     /** Missing/legacy ⇒ stanford payroll. */
     payrollMethod: v.optional(payrollMethodValue),

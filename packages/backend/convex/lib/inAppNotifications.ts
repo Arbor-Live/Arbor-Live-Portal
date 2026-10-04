@@ -2,6 +2,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { type EmailTemplate, SITE_URL } from "../email/constants";
+import { isConfigurableEmailTemplate, isTemplateEnabledForChannel } from "./emailPreferences";
 
 /**
  * In-app notifications mirror the email queue: `email/enqueue.ts` calls
@@ -165,7 +166,7 @@ export async function recordInAppNotification(
       generation: 1,
       createdAt: now,
     });
-    await schedulePushForNotification(ctx, args.userId, notificationId);
+    await schedulePushForNotification(ctx, args.userId, notificationId, args.template);
     return notificationId;
   }
 
@@ -217,15 +218,23 @@ export async function deliverPendingNotification(
     }
   }
   await ctx.db.patch(row._id, { status: "delivered", createdAt: Date.now() });
-  await schedulePushForNotification(ctx, row.userId, row._id);
+  await schedulePushForNotification(ctx, row.userId, row._id, row.template);
 }
 
-/** Fan a delivered row out to the user's push devices, if they have any. */
+/** Fan a delivered row out to the user's push devices, unless they muted its push. */
 export async function schedulePushForNotification(
   ctx: MutationCtx,
   userId: string,
   notificationId: Id<"notifications">,
+  template: Doc<"notifications">["template"],
 ) {
+  if (isConfigurableEmailTemplate(template)) {
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    if (!isTemplateEnabledForChannel(profile, template, "push")) return;
+  }
   const device = await ctx.db
     .query("pushSubscriptions")
     .withIndex("by_userId", (q) => q.eq("userId", userId))

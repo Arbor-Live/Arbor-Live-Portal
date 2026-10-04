@@ -194,6 +194,7 @@ the URL looks like cloud.
 |---------|--------|--------------|
 | Timecards | Covered | `timecards/timecard-view.spec.ts` (Batch 6) — read-only; app has no submit mutation |
 | Notification center | Covered | `notifications/notification-center.spec.ts` — auto-read on visiting the linked page, click-through, debounced rows stay hidden. Seed: `enqueueInAppNotificationEmail` |
+| Notification preferences | Covered | `notifications/notification-preferences.spec.ts` — muting a type's in-app channel locks its push switch and keeps new ones out of the bell |
 | Home Screen install nudge | Covered | `notifications/app-install.spec.ts` — emulated iPhone gets the nudge + sidebar button, a `navigator.standalone` launch settles both; desktop never nudged. Seed: `resetAppInstall` |
 | Web Push delivery | Deferred | Playwright contexts are incognito, where Chrome disables the Push API. Verified by hand with a persistent profile; `seedPushSubscription` / `listPushEndpoints` cover expired-endpoint pruning |
 | Immich media albums | Deferred | External service |

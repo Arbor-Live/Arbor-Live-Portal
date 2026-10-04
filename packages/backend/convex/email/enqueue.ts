@@ -5,7 +5,7 @@ import { internalMutation, internalQuery, type MutationCtx } from "../_generated
 import { findAuthUserByEmail, getUserId } from "../lib/auth";
 import {
   isConfigurableEmailTemplate,
-  isEmailTemplateEnabled,
+  isTemplateEnabledForChannel,
 } from "../lib/emailPreferences";
 import type { EmailTemplate } from "./constants";
 import { emailTemplateValue } from "../lib/emailTemplateValue";
@@ -55,36 +55,27 @@ async function resolveRecipientUserId(
 }
 
 /**
- * True when the recipient opted out of this template. Configurable templates are
- * resolved to the recipient's admin profile; unknown addresses are never suppressed.
- */
-async function isRecipientOptedOut(
-  ctx: MutationCtx,
-  args: EnqueueEmailArgs,
-  userId: string | null,
-): Promise<boolean> {
-  if (!isConfigurableEmailTemplate(args.template)) return false;
-  if (!userId) return false;
-  const profile = await ctx.db
-    .query("userAdminProfiles")
-    .withIndex("by_userId", (q) => q.eq("userId", userId))
-    .unique();
-  return !isEmailTemplateEnabled(profile, args.template);
-}
-
-/**
- * Resolve the recipient and mirror the email into their notification center
- * (independent of their email opt-out). Returns whether the email should send.
+ * Resolve the recipient, mirror the email into their notification center
+ * unless they muted it there, and return whether the email itself should send.
+ * Each channel has its own opt-out; unknown addresses are never suppressed.
  */
 async function prepareRecipient(
   ctx: MutationCtx,
   args: EnqueueEmailArgs,
   debounce?: { key: string; delayMs: number },
 ): Promise<boolean> {
-  const needsUser =
-    isConfigurableEmailTemplate(args.template) || isInAppNotificationTemplate(args.template);
-  const userId = needsUser ? await resolveRecipientUserId(ctx, args) : null;
-  if (userId) {
+  const configurable = isConfigurableEmailTemplate(args.template);
+  const inApp = isInAppNotificationTemplate(args.template);
+  if (!configurable && !inApp) return true;
+  const userId = await resolveRecipientUserId(ctx, args);
+  if (!userId) return true;
+  const profile = configurable
+    ? await ctx.db
+        .query("userAdminProfiles")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .unique()
+    : null;
+  if (inApp && isTemplateEnabledForChannel(profile, args.template, "inApp")) {
     await recordInAppNotification(ctx, {
       userId,
       template: args.template,
@@ -95,7 +86,7 @@ async function prepareRecipient(
       debounce,
     });
   }
-  return !(await isRecipientOptedOut(ctx, args, userId));
+  return isTemplateEnabledForChannel(profile, args.template, "email");
 }
 
 export async function enqueueEmail(ctx: MutationCtx, args: EnqueueEmailArgs) {

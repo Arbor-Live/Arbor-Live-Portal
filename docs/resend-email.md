@@ -25,7 +25,12 @@ confirmations, and newsletters stay email-only.
 - Debounced emails create a `pending` row that only appears once the window
   closes; cancelling the debounced email drops it, and delivery replaces the
   previous row with the same debounce key.
-- Email opt-outs don't suppress in-app rows. Rows are pruned after 180 days.
+- Each configurable template has three independent switches on the account
+  page: email (`emailOptOuts`), in-app (`inAppOptOuts`: no row, so no push
+  either) and push (`pushOptOuts`: the row still shows in the bell). Checked by
+  `isTemplateEnabledForChannel` in `enqueue.ts` and `schedulePushForNotification`.
+  Admins editing someone in the person sheet only manage email. Rows are pruned
+  after 180 days.
 
 #### Push and the Home Screen app
 

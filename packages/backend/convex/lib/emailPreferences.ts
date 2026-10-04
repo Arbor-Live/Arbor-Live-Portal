@@ -198,7 +198,33 @@ export function isConfigurableEmailTemplate(template: string): template is Email
 /** The only field needed to resolve a user's opt-outs. */
 export type EmailPreferenceSource = {
   emailOptOuts?: readonly string[];
+  inAppOptOuts?: readonly string[];
+  pushOptOuts?: readonly string[];
 };
+
+/** Where a notification can reach someone; each has its own opt-out list. */
+export type NotificationChannel = "email" | "inApp" | "push";
+
+export const NOTIFICATION_CHANNELS: readonly NotificationChannel[] = ["email", "inApp", "push"];
+
+export const OPT_OUT_FIELD = {
+  email: "emailOptOuts",
+  inApp: "inAppOptOuts",
+  push: "pushOptOuts",
+} as const satisfies Record<NotificationChannel, keyof EmailPreferenceSource>;
+
+/**
+ * Whether `template` may reach this user on `channel`. Only configurable
+ * templates can be turned off; the rest (auth, transactional) always go out.
+ */
+export function isTemplateEnabledForChannel(
+  profile: EmailPreferenceSource | null | undefined,
+  template: string,
+  channel: NotificationChannel,
+): boolean {
+  if (!isConfigurableEmailTemplate(template)) return true;
+  return !(profile?.[OPT_OUT_FIELD[channel]] ?? []).includes(template);
+}
 
 /**
  * Advisors historically received no Operations damage-report email. Seed that

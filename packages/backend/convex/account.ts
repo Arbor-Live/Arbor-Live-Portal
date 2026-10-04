@@ -5,8 +5,9 @@ import { internalAction, mutation, query, type MutationCtx } from "./_generated/
 import { createAuth } from "./auth";
 import { SITE_URL } from "./email/constants";
 import { getUserId, requireAuth } from "./lib/auth";
-import { isConfigurableEmailTemplate } from "./lib/emailPreferences";
-import { listUserEmailPreferences } from "./lib/emailPreferenceViewer";
+import { isConfigurableEmailTemplate, OPT_OUT_FIELD } from "./lib/emailPreferences";
+import { listUserNotificationPreferences } from "./lib/emailPreferenceViewer";
+import { isInAppNotificationTemplate } from "./lib/inAppNotifications";
 import { assertUsernameAvailable, normalizeUsername } from "./lib/username";
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
@@ -59,44 +60,50 @@ export const getMyAccount = query({
   },
 });
 
-export const getMyEmailPreferences = query({
+export const getMyNotificationPreferences = query({
   args: {},
   returns: v.array(
     v.object({
       template: v.string(),
       label: v.string(),
       group: v.string(),
-      enabled: v.boolean(),
+      email: v.boolean(),
+      inApp: v.union(v.boolean(), v.null()),
+      push: v.union(v.boolean(), v.null()),
     }),
   ),
   handler: async (ctx) => {
     const user = await requireAuth(ctx);
-    return await listUserEmailPreferences(ctx, getUserId(user));
+    return await listUserNotificationPreferences(ctx, getUserId(user));
   },
 });
 
-export const updateMyEmailPreferences = mutation({
-  args: { disabledTemplates: v.array(v.string()) },
+/** Turn one notification type on or off for one channel. */
+export const updateMyNotificationPreference = mutation({
+  args: {
+    template: v.string(),
+    channel: v.union(v.literal("email"), v.literal("inApp"), v.literal("push")),
+    enabled: v.boolean(),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const user = await requireAuth(ctx);
-    const userId = getUserId(user);
-    const unknown = args.disabledTemplates.filter(
-      (template) => !isConfigurableEmailTemplate(template),
-    );
-    if (unknown.length > 0) {
-      throw new Error(`Unknown email preference: ${unknown.join(", ")}`);
+    const userId = getUserId(await requireAuth(ctx));
+    if (!isConfigurableEmailTemplate(args.template)) {
+      throw new Error(`Unknown notification preference: ${args.template}`);
     }
-    const disabled = [...new Set(args.disabledTemplates)];
-    const now = Date.now();
-    const fields = {
-      emailOptOuts: disabled,
-      updatedAt: now,
-    };
+    if (args.channel !== "email" && !isInAppNotificationTemplate(args.template)) {
+      throw new Error("This notification is email-only.");
+    }
+    const field = OPT_OUT_FIELD[args.channel];
     const existing = await ctx.db
       .query("userAdminProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .unique();
+    const current = new Set(existing?.[field] ?? []);
+    if (args.enabled) current.delete(args.template);
+    else current.add(args.template);
+    const now = Date.now();
+    const fields = { [field]: [...current], updatedAt: now };
     if (existing) {
       await ctx.db.patch(existing._id, fields);
       return null;
