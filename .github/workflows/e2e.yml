@@ -130,7 +130,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: read
+      contents: write # no-PAT fallback: push failure screenshots to ci-e2e-media
       pull-requests: write # post/replace the flake comment
     steps:
       - name: Checkout
@@ -175,7 +175,8 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # User PAT (Pull requests: write). App tokens can't upload attachments.
+          # Optional user PAT (Pull requests: write). App tokens can't upload
+          # attachments, so without it screenshots go to the ci-e2e-media branch.
           E2E_COMMENT_TOKEN: ${{ secrets.E2E_COMMENT_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: node scripts/e2e-flake-comment.mjs
