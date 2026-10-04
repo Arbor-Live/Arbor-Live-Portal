@@ -293,7 +293,7 @@ labels (`TAB_ICONS` in `event-workspace-nav.tsx`, `MOMENT_ICONS` in
 | Event / date | `CalendarDotsIcon` (nav, Run of Show tab), `CalendarBlankIcon` (a date in a meta line) |
 | Venue / location | `MapPinIcon` |
 | Host / organization | `BuildingsIcon` |
-| A person (manager, owner) | `UserCircleIcon`; a single user avatar placeholder `UserIcon` |
+| A person (manager, owner) | `UserCircleIcon` (also the **My work** nav section, the viewer's own pages); a single user avatar placeholder `UserIcon` |
 | Crew / a group of people | `UsersThreeIcon` (crew counts); `UsersIcon` is the Users *nav* item only |
 | Artist / act | `MicrophoneStageIcon` (Lineup tab, sets); `GuitarIcon` is the Artists *nav* item only |
 | Soundcheck · doors · changeover | `SpeakerHighIcon` · `DoorOpenIcon` · `ArrowsLeftRightIcon` |

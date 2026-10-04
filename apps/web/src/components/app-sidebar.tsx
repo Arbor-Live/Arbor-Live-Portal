@@ -50,6 +50,7 @@ import {
   MegaphoneIcon,
   MusicNotesIcon,
   ImagesIcon,
+  UserCircleIcon,
 } from "@phosphor-icons/react"
 
 type NavSubItem = {
@@ -73,10 +74,14 @@ type NavItem = {
   adminOnly?: boolean
   bandOnly?: boolean
   marketingOnly?: boolean
+  /** Arbor staff only (crew, Ops, admins); hidden from artists. */
+  arborOnly?: boolean
 }
 
 const navItems: NavItem[] = [
   { title: "Home", url: "/dashboard", icon: HouseIcon },
+  // A section of links only: its pages live under Events and Timecards.
+  { title: "My work", url: "/dashboard/my-work", icon: UserCircleIcon, arborOnly: true },
   { title: "Events", url: "/dashboard/events", icon: CalendarDotsIcon },
   { title: "Ops Center", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, adminOnly: true },
   { title: "Users", url: "/dashboard/users", icon: UsersIcon, adminOnly: true },
@@ -92,13 +97,13 @@ const navItems: NavItem[] = [
 ]
 
 const inventorySubItems: NavSubItem[] = [
-  { title: "Inventory Items", url: "/dashboard/inventory/items" },
-  { title: "Borrow Requests", url: "/dashboard/inventory/borrow-requests" },
-  { title: "Damage & Repair", url: "/dashboard/inventory/damage" },
+  { title: "Items", url: "/dashboard/inventory/items" },
+  { title: "Borrow requests", url: "/dashboard/inventory/borrow-requests" },
+  { title: "Damage & repair", url: "/dashboard/inventory/damage" },
   { title: "Types", url: "/dashboard/inventory/types", adminOnly: true },
   { title: "Packages", url: "/dashboard/inventory/packages" },
-  { title: "Storage Locations", url: "/dashboard/inventory/storage-locations" },
-  { title: "Lost & Found", url: "/dashboard/inventory/lost-found" },
+  { title: "Storage locations", url: "/dashboard/inventory/storage-locations" },
+  { title: "Lost & found", url: "/dashboard/inventory/lost-found" },
   { title: "Print queue", url: "/dashboard/inventory/print-queue", adminOnly: true },
   { title: "Import CSV", url: "/dashboard/inventory/import", adminOnly: true },
 ]
@@ -106,26 +111,28 @@ const inventorySubItems: NavSubItem[] = [
 const financialHubSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/financial-hub" },
   { title: "Insights", url: "/dashboard/financial-hub/insights" },
-  { title: "Booking Requests", url: "/dashboard/financial-hub/requests" },
+  { title: "Booking requests", url: "/dashboard/financial-hub/requests" },
   { title: "Invoices", url: "/dashboard/financial-hub/invoices" },
   { title: "Artist payouts", url: "/dashboard/financial-hub/artist-payouts" },
   { title: "GrantED ledger", url: "/dashboard/financial-hub/granted" },
   { title: "Crew timecards", url: "/dashboard/timecards" },
-  { title: "My Timecards", url: "/dashboard/timecards/mine" },
   { title: "Billing hosts", url: "/dashboard/financial-hub/organizations" },
-  { title: "Create Invoice", url: "/dashboard/financial-hub/invoices/new" },
   { title: "Settings", url: "/dashboard/financial-hub/settings" },
 ]
 
+// "Create event" is a button on the Overview, not a menu entry.
 const eventsSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/events" },
+  { title: "Crew scheduling", url: "/dashboard/events/crew-scheduling", adminOnly: true },
   { title: "Venues", url: "/dashboard/events/venues", adminOnly: true },
   { title: "Open Mic", url: "/dashboard/events/open-mic" },
-  { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", adminOnly: true },
-  { title: "My Availability", url: "/dashboard/events/my-availability" },
-  { title: "My Post-event work", url: "/dashboard/events/post-event" },
-  { title: "My Timecards", url: "/dashboard/timecards/mine" },
-  { title: "Create Event", url: "/dashboard/events/new", adminOnly: true },
+]
+
+/** The viewer's own work as crew: every Arbor staff member, admins and Ops included. */
+const myWorkSubItems: NavSubItem[] = [
+  { title: "My availability", url: "/dashboard/events/my-availability" },
+  { title: "My post-event work", url: "/dashboard/events/post-event" },
+  { title: "My timecards", url: "/dashboard/timecards/mine" },
 ]
 
 const usersSubItems: NavSubItem[] = [
@@ -133,7 +140,7 @@ const usersSubItems: NavSubItem[] = [
   { title: "Invitations", url: "/dashboard/users/invitations" },
   { title: "Organizations", url: "/dashboard/users/organizations" },
   { title: "Crew applications", url: "/dashboard/users/crew-applications", adminOnly: true },
-  { title: "Crew Rates", url: "/dashboard/users/crew-rates" },
+  { title: "Crew rates", url: "/dashboard/users/crew-rates" },
 ]
 
 const marketingSubItems: NavSubItem[] = [
@@ -144,13 +151,12 @@ const marketingSubItems: NavSubItem[] = [
 ]
 
 // Staff see the booking work first (open positions, who to contact, new acts),
-// then editing one act. An artist sees only its own act: Profile, Team,
+// then editing one act. Artist organizations are managed under Users. An artist sees only its own act: Profile, Team,
 // Technical riders, Payments.
 const bandsSubItems: NavSubItem[] = [
   { title: "Open positions", url: "/dashboard/artists/positions", staffOnly: true, opsOnly: true },
   { title: "Directory", url: "/dashboard/artists/directory", staffOnly: true },
   { title: "Artist applications", url: "/dashboard/users/artist-applications", adminOnly: true },
-  { title: "Organizations", url: "/dashboard/users/organizations", adminOnly: true },
   { title: "Profile", staffTitle: "Edit artist profile", url: "/dashboard/artists", actWorkspace: true },
   { title: "Team", url: "/dashboard/artists/team", actWorkspace: true },
   { title: "Technical riders", staffTitle: "Edit artist riders", url: "/dashboard/artists/riders", actWorkspace: true },
@@ -158,6 +164,7 @@ const bandsSubItems: NavSubItem[] = [
 ]
 
 const sectionSubItems: Record<string, NavSubItem[]> = {
+  "/dashboard/my-work": myWorkSubItems,
   "/dashboard/events": eventsSubItems,
   "/dashboard/financial-hub": financialHubSubItems,
   "/dashboard/inventory": inventorySubItems,
@@ -188,6 +195,7 @@ function canAccessNavItem(
   },
 ) {
   if (access.isBandContext) {
+    if (item.arborOnly) return false
     if (item.bandOnly) return true
     // Band orgs keep Home, profile / riders / payments even though the section is
     // admin-facing for Arbor Live.
@@ -312,6 +320,42 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
       isBandContext && item.url === "/dashboard/artists" ? { ...item, title: "Your act" } : item,
     )
 
+  function subItemsFor(item: NavItem) {
+    return visibleSubItems(sectionSubItems[item.url], {
+      isAdmin: effectiveIsAdmin,
+      hasOperationsAccess: effectiveHasOperationsAccess,
+    })
+      ?.filter(
+        (subItem) =>
+          !(
+            !isBandContext &&
+            item.url === "/dashboard/artists" &&
+            (subItem.url === "/dashboard/artists/payments" || subItem.url === "/dashboard/artists/team")
+          ) &&
+          !(isBandContext && subItem.staffOnly) &&
+          // The act workspace and artist admin pages are for portal admins,
+          // not every staff member who sees the section for the directory.
+          !(
+            !isBandContext &&
+            !effectiveIsAdmin &&
+            item.url === "/dashboard/artists" &&
+            (subItem.actWorkspace || subItem.adminOnly)
+          ) &&
+          !(subItem.opsOnly && !effectiveIsAdmin && !effectiveHasOperationsAccess),
+      )
+      .map((subItem) =>
+        !isBandContext && subItem.staffTitle ? { ...subItem, title: subItem.staffTitle } : subItem,
+      )
+  }
+  const navSections = scopedNavItems.map((item) => ({ item, subItems: subItemsFor(item) }))
+  // One highlighted page across the whole sidebar: the longest URL that
+  // matches, so /dashboard/timecards/mine (My work) beats /dashboard/timecards
+  // (Ops Center) and an event page highlights Events → Overview.
+  const activeSubItemUrl = navSections
+    .flatMap(({ subItems }) => subItems ?? [])
+    .filter((subItem) => pathname === subItem.url || pathname.startsWith(`${subItem.url}/`))
+    .sort((a, b) => b.url.length - a.url.length)[0]?.url
+
   function pendingChipCountForUrl(url: string): number {
     switch (url) {
       case "/dashboard/events/my-availability":
@@ -398,50 +442,16 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <SidebarMenu>
-          {scopedNavItems.map((item) => {
+          {navSections.map(({ item, subItems }) => {
             const Icon = item.icon
-            const subItems = visibleSubItems(sectionSubItems[item.url], {
-              isAdmin: effectiveIsAdmin,
-              hasOperationsAccess: effectiveHasOperationsAccess,
-            })?.filter(
-              (subItem) =>
-                !(
-                  (effectiveIsAdmin || effectiveHasOperationsAccess) &&
-                  item.url === "/dashboard/events" &&
-                  subItem.url === "/dashboard/timecards/mine"
-                ) &&
-                !(
-                  !isBandContext &&
-                  item.url === "/dashboard/artists" &&
-                  (subItem.url === "/dashboard/artists/payments" ||
-                    subItem.url === "/dashboard/artists/team")
-                ) &&
-                !(isBandContext && subItem.staffOnly) &&
-                // The act workspace and artist admin pages are for portal admins,
-                // not every staff member who sees the section for the directory.
-                !(
-                  !isBandContext &&
-                  !effectiveIsAdmin &&
-                  item.url === "/dashboard/artists" &&
-                  (subItem.actWorkspace || subItem.adminOnly)
-                ) &&
-                !(subItem.opsOnly && !effectiveIsAdmin && !effectiveHasOperationsAccess),
-            )
-              .map((subItem) =>
-                !isBandContext && subItem.staffTitle ? { ...subItem, title: subItem.staffTitle } : subItem,
-              )
-            const activeSubItemUrl = (subItems ?? [])
-              .filter(
-                (subItem) =>
-                  pathname === subItem.url || pathname.startsWith(`${subItem.url}/`),
-              )
-              .sort((a, b) => b.url.length - a.url.length)[0]?.url
             const hasCollapsibleSubItems = Boolean(subItems && subItems.length > 1)
-            const isParentActive =
-              pathname === item.url ||
-              pathname.startsWith(`${item.url}/`) ||
-              (item.url === "/dashboard/financial-hub" &&
-                pathname.startsWith("/dashboard/timecards"))
+            // A section with pages is active when one of its pages is the
+            // highlighted one; Home and other single pages match their own URL.
+            const isParentActive = subItems?.length
+              ? subItems.some((subItem) => subItem.url === activeSubItemUrl)
+              : item.url === "/dashboard"
+                ? pathname === item.url
+                : pathname === item.url || pathname.startsWith(`${item.url}/`)
             const sectionOpen = hasCollapsibleSubItems
               ? isParentActive || (openSections[item.url] ?? false)
               : true
