@@ -143,7 +143,7 @@ test.describe("Users organizations no longer hosts band details", () => {
 });
 
 test.describe("admin sidebar advertises Artists", () => {
-  test("admin sees the section; crew does not", async ({ page, browser }) => {
+  test("admin sees the whole section; crew see only the directory", async ({ page, browser }) => {
     await page.goto("/dashboard");
     await expect(page.getByRole("heading", { name: "Home" }).first()).toBeVisible({
       timeout: 30_000,
@@ -161,12 +161,12 @@ test.describe("admin sidebar advertises Artists", () => {
     await crewPage.goto("/dashboard");
     await expect(crewPage.getByRole("heading").first()).toBeVisible({ timeout: 30_000 });
     const crewSidebar = crewPage.locator('[data-slot="sidebar"]').first();
-    await expect(
-      crewSidebar.getByRole("button", { name: "Artists", exact: true }),
-    ).toHaveCount(0);
-    await expect(
-      crewSidebar.getByRole("link", { name: "Artists", exact: true }),
-    ).toHaveCount(0);
+    await expect(crewSidebar.getByText("Artists", { exact: true })).toBeVisible();
+    await crewPage.goto("/dashboard/artists/directory");
+    await expect(crewPage.getByTestId("artist-directory")).toBeVisible({ timeout: 30_000 });
+    await expect(crewSidebar.locator('a[href="/dashboard/artists/directory"]').first()).toBeVisible();
+    await expect(crewSidebar.getByRole("link", { name: "Organizations", exact: true })).toHaveCount(0);
+    await expect(crewSidebar.getByRole("link", { name: "Profile", exact: true })).toHaveCount(0);
     await crewContext.close();
   });
 });

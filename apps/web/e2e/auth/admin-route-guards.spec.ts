@@ -59,12 +59,14 @@ test.describe("admin route guards", () => {
     await expect(sidebar.getByRole("button", { name: "Users", exact: true })).toHaveCount(0);
     await expect(sidebar.getByRole("link", { name: "Ops Center", exact: true })).toHaveCount(0);
     await expect(sidebar.getByRole("button", { name: "Ops Center", exact: true })).toHaveCount(0);
-    await expect(
-      sidebar.getByRole("button", { name: "Artists", exact: true }),
-    ).toHaveCount(0);
-    await expect(
-      sidebar.getByRole("link", { name: "Artists", exact: true }),
-    ).toHaveCount(0);
+
+    // Crew get the Artists section for the directory, without the admin pages in it.
+    await page.goto("/dashboard/artists/directory");
+    await expect(page.getByTestId("artist-directory")).toBeVisible({ timeout: 30_000 });
+    await expect(sidebar.locator('a[href="/dashboard/artists/directory"]').first()).toBeVisible();
+    for (const adminPage of ["Profile", "Technical riders", "Organizations", "Artist applications"]) {
+      await expect(sidebar.getByRole("link", { name: adminPage, exact: true })).toHaveCount(0);
+    }
   });
 
   test("non-admin crew is refused on bands and performers", async ({ page }) => {

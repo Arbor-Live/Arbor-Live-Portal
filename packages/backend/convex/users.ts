@@ -42,7 +42,11 @@ import {
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import { marketingDesignLinkValue, normalizeMarketingLinks } from "./lib/marketingLinks";
 import { buildArtistLinks } from "./lib/publicArtistProfile";
-import { artistOrganizationTypeValue, isArtistOrganizationType } from "./lib/organizationType";
+import {
+  artistOrganizationTypeValue,
+  isArtistOrganizationType,
+  type ArtistOrganizationType,
+} from "./lib/organizationType";
 import {
   collectKeysFromOrganizationProfile,
   releaseReplacedR2Reference,
@@ -771,6 +775,222 @@ export const listBandsForInvoiceLines = query({
         memberCount,
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+const artistDirectoryPersonValue = v.object({
+  userId: v.string(),
+  name: v.string(),
+  email: v.string(),
+  phone: v.string(),
+  bandRole: v.string(),
+  isOrgAdmin: v.boolean(),
+});
+
+const artistDirectoryShowValue = v.object({
+  eventId: v.id("events"),
+  title: v.string(),
+  startAt: v.number(),
+});
+
+/** Multi-day shows that started up to this long ago may still be on. */
+const ARTIST_DIRECTORY_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
+/** Upcoming events scanned for each act's next show. */
+const ARTIST_DIRECTORY_MAX_UPCOMING_EVENTS = 300;
+/** An act's most recent bookings, searched for its last show. */
+const ARTIST_DIRECTORY_RECENT_BOOKINGS = 10;
+
+/**
+ * The act's booking contact with the same precedence as event contacts
+ * (`lib/eventContacts.ts` `buildBandContacts`): the profile's name and
+ * email/phone win, and the default rider's day-of contact fills the gaps.
+ */
+function resolveArtistBookingContact(
+  profile: Pick<Doc<"organizationProfiles">, "mainContactName" | "mainContactEmail" | "mainContactPhone"> | undefined,
+  rider: Pick<Doc<"bandRiders">, "contactName" | "contactEmail" | "contactPhone"> | null,
+) {
+  const profileName = profile?.mainContactName?.trim() ?? "";
+  const profileEmail = profile?.mainContactEmail?.trim() ?? "";
+  const profilePhone = profile?.mainContactPhone?.trim() ?? "";
+  const profileReach = Boolean(profileEmail || profilePhone);
+  const name = profileName || rider?.contactName?.trim() || "";
+  const email = profileReach ? profileEmail : (rider?.contactEmail?.trim() ?? "");
+  const phone = profileReach ? profilePhone : (rider?.contactPhone?.trim() ?? "");
+  const source: "profile" | "rider" | "none" =
+    profileName || profileReach ? "profile" : name || email || phone ? "rider" : "none";
+  return { name, email, phone, source };
+}
+
+/**
+ * Every active artist with the people to reach: the main contact, portal
+ * members (with their profile phone), the payee and listed band members.
+ * Listed or not, so staff can match a group chat to an act. Arbor staff only.
+ */
+export const listArtistDirectory = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      organizationId: v.string(),
+      name: v.string(),
+      organizationType: artistOrganizationTypeValue,
+      oneLiner: v.string(),
+      genres: v.array(v.string()),
+      publicListing: v.boolean(),
+      publicSlug: v.string(),
+      mainContactName: v.string(),
+      mainContactEmail: v.string(),
+      mainContactPhone: v.string(),
+      /** "rider" when the profile has no booking contact and the default rider's day-of contact stands in. */
+      mainContactSource: v.union(v.literal("profile"), v.literal("rider"), v.literal("none")),
+      payeeName: v.string(),
+      payeeEmail: v.string(),
+      members: v.array(artistDirectoryPersonValue),
+      bandMembers: v.array(v.string()),
+      nextShow: v.union(artistDirectoryShowValue, v.null()),
+      lastShow: v.union(artistDirectoryShowValue, v.null()),
+    }),
+  ),
+  handler: async (ctx) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const now = Date.now();
+    const organizations = await getAllOrganizations(ctx);
+    // One indexed lookup per organization, so no profile is dropped by a page cap.
+    const artists = (
+      await Promise.all(
+        organizations.map(async (organization) => {
+          const organizationId = getRecordId(organization);
+          const profile = await ctx.db
+            .query("organizationProfiles")
+            .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+            .unique();
+          return {
+            organization,
+            organizationId,
+            profile: profile ?? undefined,
+            type: resolveOrganizationType(organization, profile),
+          };
+        }),
+      )
+    ).filter((row) => isArtistOrganizationType(row.type) && row.profile?.status !== "archived");
+
+    // A member can sit in several acts; look each person up once.
+    const userCache = new Map<string, Promise<{ user: AuthUser | null; phone: string }>>();
+    const loadPerson = (userId: string) => {
+      let pending = userCache.get(userId);
+      if (!pending) {
+        pending = (async () => {
+          const [user, adminProfile] = await Promise.all([
+            findAuthUserById(ctx, userId),
+            ctx.db
+              .query("userAdminProfiles")
+              .withIndex("by_userId", (q) => q.eq("userId", userId))
+              .unique(),
+          ]);
+          return { user, phone: adminProfile?.phone?.trim() ?? "" };
+        })();
+        userCache.set(userId, pending);
+      }
+      return pending;
+    };
+    const eventCache = new Map<Id<"events">, Promise<Doc<"events"> | null>>();
+    const loadEvent = (eventId: Id<"events">) => {
+      let pending = eventCache.get(eventId);
+      if (!pending) {
+        pending = ctx.db.get(eventId);
+        eventCache.set(eventId, pending);
+      }
+      return pending;
+    };
+
+    // Next shows come from one scan of upcoming events (not every act's whole
+    // history), so reads stay bounded however many artists or bookings there are.
+    const nextShowByOrg = new Map<string, Doc<"events">>();
+    const upcomingEvents = await ctx.db
+      .query("events")
+      .withIndex("by_startAt", (q) => q.gte("startAt", now - ARTIST_DIRECTORY_LOOKBACK_MS))
+      .take(ARTIST_DIRECTORY_MAX_UPCOMING_EVENTS);
+    for (const event of upcomingEvents) {
+      if (event.endAt < now || event.status === "cancelled") continue;
+      eventCache.set(event._id, Promise.resolve(event));
+      const acts = await ctx.db
+        .query("eventBandParticipations")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(50);
+      for (const act of acts) {
+        const current = nextShowByOrg.get(act.organizationId);
+        if (!current || event.startAt < current.startAt) nextShowByOrg.set(act.organizationId, event);
+      }
+    }
+
+    const rows = await Promise.all(
+      artists.map(async ({ organization, organizationId, profile, type }) => {
+        const [memberships, recentBookings] = await Promise.all([
+          ctx.db
+            .query("userOrganizationMemberships")
+            .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+            .take(100),
+          ctx.db
+            .query("eventBandParticipations")
+            .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+            .order("desc")
+            .take(ARTIST_DIRECTORY_RECENT_BOOKINGS),
+        ]);
+        // The rider only stands in for a missing booking contact; skip the read otherwise.
+        const hasProfileContact = Boolean(
+          profile?.mainContactName?.trim() || profile?.mainContactEmail?.trim() || profile?.mainContactPhone?.trim(),
+        );
+        const defaultRider = hasProfileContact
+          ? null
+          : await ctx.db
+              .query("bandRiders")
+              .withIndex("by_organizationId_and_isDefault", (q) =>
+                q.eq("organizationId", organizationId).eq("isDefault", true),
+              )
+              .first();
+        const contact = resolveArtistBookingContact(profile, defaultRider);
+        const members = await Promise.all(
+          memberships
+            .filter((membership) => membership.active)
+            .map(async (membership) => {
+              const { user, phone } = await loadPerson(membership.userId);
+              return {
+                userId: membership.userId,
+                name: user?.name?.trim() || user?.email || "Unknown member",
+                email: user?.email ?? "",
+                phone,
+                bandRole: membership.bandRole?.trim() ?? "",
+                isOrgAdmin: isArtistOrgAdminRole(membership.role),
+              };
+            }),
+        );
+        const lastShow = (await Promise.all(recentBookings.map((row) => loadEvent(row.eventId))))
+          .filter((event): event is Doc<"events"> => event !== null && event.status !== "cancelled" && event.endAt < now)
+          .sort((a, b) => b.startAt - a.startAt)[0];
+        const toShow = (show: Doc<"events"> | undefined) =>
+          show ? { eventId: show._id, title: show.title, startAt: show.startAt } : null;
+        return {
+          organizationId,
+          name: (profile?.displayName ?? organization.name ?? "").trim() || "Artist",
+          organizationType: type as ArtistOrganizationType,
+          oneLiner: profile?.oneLiner ?? "",
+          genres: profile?.genres ?? [],
+          publicListing: profile?.publicListing ?? false,
+          publicSlug: profile?.publicSlug ?? "",
+          mainContactName: contact.name,
+          mainContactEmail: contact.email,
+          mainContactPhone: contact.phone,
+          mainContactSource: contact.source,
+          payeeName: profile?.designatedPayeeName ?? "",
+          payeeEmail: profile?.designatedPayeeEmail ?? "",
+          members: members.sort((a, b) => a.name.localeCompare(b.name)),
+          bandMembers: profile?.bandMembers ?? [],
+          nextShow: toShow(nextShowByOrg.get(organizationId)),
+          lastShow: toShow(lastShow),
+        };
+      }),
+    );
+    return rows.sort((a, b) => a.name.localeCompare(b.name));
   },
 });
 

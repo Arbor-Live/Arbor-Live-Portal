@@ -4461,6 +4461,38 @@ export const getBandOrganizationProfileByDisplayName = query({
 /**
  * Test-only: read a band organization profile by org id.
  */
+/** Test-only: set an artist's booking contact, listed members and listing (artist directory). */
+export const setArtistBookingContact = mutation({
+  args: {
+    organizationId: v.string(),
+    mainContactName: v.optional(v.string()),
+    mainContactEmail: v.optional(v.string()),
+    mainContactPhone: v.optional(v.string()),
+    bandMembers: v.optional(v.array(v.string())),
+    oneLiner: v.optional(v.string()),
+    publicListing: v.optional(v.boolean()),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const profile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .unique();
+    if (!profile) throw new Error("Artist profile not found. Run ensureBandPayeeUser first.");
+    await ctx.db.patch(profile._id, {
+      mainContactName: args.mainContactName,
+      mainContactEmail: args.mainContactEmail,
+      mainContactPhone: args.mainContactPhone,
+      bandMembers: args.bandMembers,
+      oneLiner: args.oneLiner,
+      publicListing: args.publicListing,
+      updatedAt: Date.now(),
+    });
+    return { ok: true as const };
+  },
+});
+
 export const getBandOrganizationProfileByOrgId = query({
   args: { organizationId: v.string() },
   returns: v.union(

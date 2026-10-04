@@ -56,6 +56,10 @@ type NavSubItem = {
   title: string
   url: string
   adminOnly?: boolean
+  /** Arbor staff only: hidden from artists viewing their own act. */
+  staffOnly?: boolean
+  /** The act workspace: artists and admins, not other Arbor staff. */
+  actWorkspace?: boolean
 }
 
 type NavItem = {
@@ -137,10 +141,11 @@ const marketingSubItems: NavSubItem[] = [
 ]
 
 const bandsSubItems: NavSubItem[] = [
-  { title: "Profile", url: "/dashboard/artists" },
-  { title: "Team", url: "/dashboard/artists/team" },
-  { title: "Technical riders", url: "/dashboard/artists/riders" },
-  { title: "Payments", url: "/dashboard/artists/payments" },
+  { title: "Profile", url: "/dashboard/artists", actWorkspace: true },
+  { title: "Team", url: "/dashboard/artists/team", actWorkspace: true },
+  { title: "Technical riders", url: "/dashboard/artists/riders", actWorkspace: true },
+  { title: "Payments", url: "/dashboard/artists/payments", actWorkspace: true },
+  { title: "Directory", url: "/dashboard/artists/directory", staffOnly: true },
   { title: "Organizations", url: "/dashboard/users/organizations", adminOnly: true },
   { title: "Artist applications", url: "/dashboard/users/artist-applications", adminOnly: true },
 ]
@@ -192,8 +197,9 @@ function canAccessNavItem(
   }
   if (item.bandOnly) return false
   if (item.url === "/dashboard" && !access.isCrewContext && !access.isAdminHomeContext) return false
-  // Portal admins only on the Arbor side; band orgs already returned above.
-  if (item.url === "/dashboard/artists") return access.isAdmin
+  // Every Arbor staff member gets the directory here; the act workspace inside
+  // it stays admin-only (see the sub-item filter).
+  if (item.url === "/dashboard/artists") return true
   if (access.isAdmin) return true
   if (item.adminOnly && !access.hasOperationsAccess) return false
   if (item.marketingOnly && !access.hasMarketingAccess) return false
@@ -402,6 +408,15 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                   item.url === "/dashboard/artists" &&
                   (subItem.url === "/dashboard/artists/payments" ||
                     subItem.url === "/dashboard/artists/team")
+                ) &&
+                !(isBandContext && subItem.staffOnly) &&
+                // The act workspace and artist admin pages are for portal admins,
+                // not every staff member who sees the section for the directory.
+                !(
+                  !isBandContext &&
+                  !effectiveIsAdmin &&
+                  item.url === "/dashboard/artists" &&
+                  (subItem.actWorkspace || subItem.adminOnly)
                 ),
             )
             const activeSubItemUrl = (subItems ?? [])
@@ -475,7 +490,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                     </>
                   ) : (
                     <SidebarMenuButton asChild isActive={isParentActive} className="text-sm">
-                      <Link href={item.url}>
+                      {/* A section with one page (Artists for crew: the directory) links straight to it. */}
+                      <Link href={subItems?.length === 1 ? subItems[0].url : item.url}>
                         <Icon />
                         <span>{item.title}</span>
                       </Link>
