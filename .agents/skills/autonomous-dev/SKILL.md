@@ -111,31 +111,31 @@ Two traps when judging "nothing broke":
 
 1. Commit only intended files (no screenshots in the feature branch, no env
    files). Push the branch.
-2. Upload the screenshots to an orphan branch per PR named
-   `pr-assets/<pr-number>-<slug>` (the repo's existing convention; nothing
-   triggers CI on it, since workflows run on `pull_request` and pushes to
-   `main`). The repo is public, so raw URLs render in the PR. If the PR has
-   no number yet, open it first and add the screenshots by editing the body.
+2. Write the body to a file with ordinary Markdown image references to the
+   **local** screenshot paths, and pass the same files to `--attach`. `gh`
+   uploads them as GitHub attachments and rewrites each reference to the
+   uploaded URL (`gh` ≥ 2.99; see the `gh` skill's "Attaching images and
+   videos"):
 
    ```bash
-   tree=$(for f in 1-main-flow.png 2-narrow.png; do
-     printf "100644 blob %s\t%s\n" "$(git hash-object -w "$f")" "$(basename "$f")"
-   done | git mktree)
-   commit=$(git commit-tree "$tree" -m "Screenshots for #<n> (PR assets only)")
-   git push origin "${commit}:refs/heads/pr-assets/<n>-<slug>"
+   gh pr create --base main --title "…" --body-file /tmp/pr-body.md \
+     --attach /tmp/shots/1-main-flow.png --attach /tmp/shots/2-narrow.png
    ```
 
-   Embed `https://raw.githubusercontent.com/{owner}/{repo}/${commit}/<file>`
-   (pin the commit SHA, not the branch name, so links survive re-uploads).
-   Number files in reading order. In zsh, brace the variable (`${commit}:`),
-   otherwise `$commit:r` is read as a path modifier.
-3. `gh pr create` with a body written for the reviewer:
+   **Never put screenshots on a git branch** (no asset branches, no
+   raw.githubusercontent links). To add or replace images later, edit the
+   body the same way: `gh pr edit <n> --body-file … --attach …`. Uploads need
+   write access and a user token (OAuth or PAT); GitHub App tokens are
+   refused.
+
+   The body should be written for the reviewer:
    - **What & why** (2–5 lines)
-   - **Screenshots** (the uploaded image lines, each with a short caption)
+   - **Screenshots** (each image with a short caption)
    - **Decisions I made** (from step 1; omit if none)
    - **How to verify** / **Test plan** (what you ran, what passed)
-4. Register it with T3: `link_pull_request` with the PR URL.
-5. Post the PR link plus the same screenshots in chat for the user to review.
+3. Register it with T3: `link_pull_request` with the PR URL.
+4. Post the PR link plus the same screenshots in chat (embed the local
+   paths) for the user to review.
 
 ## 5. Autonomous CodeRabbit + CI loop
 

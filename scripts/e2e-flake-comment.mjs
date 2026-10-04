@@ -2,16 +2,17 @@
 /**
  * Post a PR comment for failed/flaky e2e tests, with screenshots inline.
  *
- * GitHub has no attachment API, so an image only renders in a comment if it is
- * already reachable over HTTP. We push the screenshots to an orphan branch and
- * link their raw URLs — that needs `contents: write` and `pull-requests: write`
- * on GITHUB_TOKEN, but no PAT.
+ * Screenshots are uploaded as GitHub attachments with `gh pr comment --attach`
+ * (gh >= 2.99), never pushed to a branch. Attachment uploads refuse GitHub App
+ * tokens, including Actions' GITHUB_TOKEN, so images need E2E_COMMENT_TOKEN: a
+ * fine-grained PAT with Pull requests: read/write on this repo. Without it the
+ * comment is text-only and points at the run's artifacts.
  *
  * Fork PRs get a read-only token, so this exits quietly rather than failing the
  * job: a missing comment must never turn a green suite red.
  *
- * Env: GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_SERVER_URL,
- *      PR_NUMBER, MEDIA_BRANCH (default "ci-e2e-media")
+ * Env: GITHUB_TOKEN, E2E_COMMENT_TOKEN (optional), GITHUB_REPOSITORY,
+ *      GITHUB_RUN_ID, GITHUB_SERVER_URL, PR_NUMBER
  */
 import { execFileSync } from "child_process";
 import fs from "fs";
@@ -25,7 +26,8 @@ const repo = process.env.GITHUB_REPOSITORY ?? "";
 const runId = process.env.GITHUB_RUN_ID ?? "";
 const serverUrl = process.env.GITHUB_SERVER_URL ?? "https://github.com";
 const prNumber = process.env.PR_NUMBER ?? "";
-const mediaBranch = process.env.MEDIA_BRANCH ?? "ci-e2e-media";
+/** A user token can upload attachments; Actions' app token (ghs_) cannot. */
+const attachToken = process.env.E2E_COMMENT_TOKEN ?? "";
 /** Identifies our comment so repeat runs edit rather than pile up. */
 const MARKER = "<!-- e2e-flake-report -->";
 /** Comments get unreadable past a handful of screenshots. */
@@ -94,56 +96,24 @@ function main() {
   }
 
   const runUrl = `${serverUrl}/${repo}/actions/runs/${runId}`;
-  let mediaBase = "";
-  const uploaded = [];
 
-  // Stage screenshots on the media branch. Best-effort: if the push is refused
-  // (fork PR, protected branch), fall back to a text-only comment.
-  const media = problems.flatMap((p) => p.attachments).slice(0, MAX_MEDIA);
-  if (media.length && !dryRun) {
-    const staging = fs.mkdtempSync(path.join(os.tmpdir(), "e2e-media-"));
-    try {
-      sh("git", ["init", "-q", "-b", mediaBranch], { cwd: staging });
-      sh("git", ["config", "user.name", "github-actions[bot]"], { cwd: staging });
-      sh("git", [
-        "config",
-        "user.email",
-        "41898282+github-actions[bot]@users.noreply.github.com",
-      ], { cwd: staging });
-
-      const dir = path.join(staging, "runs", runId);
-      fs.mkdirSync(dir, { recursive: true });
-      media.forEach((src, index) => {
-        if (!fs.existsSync(src)) return;
-        const name = `${index}-${path.basename(src)}`.replace(/[^\w.-]/g, "_");
-        fs.copyFileSync(src, path.join(dir, name));
-        uploaded.push({ src, name });
-      });
-
-      if (uploaded.length) {
-        sh("git", ["add", "-A"], { cwd: staging });
-        sh("git", ["commit", "-q", "-m", `e2e media for run ${runId}`], { cwd: staging });
-        const remote = `https://x-access-token:${process.env.GITHUB_TOKEN}@github.com/${repo}.git`;
-        // Orphan history, force-pushed per run: this branch is a scratch space,
-        // never a record. Old runs are replaced rather than accumulated.
-        sh("git", ["push", "-q", "--force", remote, `${mediaBranch}:${mediaBranch}`], {
-          cwd: staging,
-        });
-        mediaBase = `https://raw.githubusercontent.com/${repo}/${mediaBranch}/runs/${runId}`;
-      }
-    } catch (error) {
-      console.warn(
-        `Could not stage screenshots (text-only comment): ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
-      );
-      mediaBase = "";
-    } finally {
-      fs.rmSync(staging, { recursive: true, force: true });
+  // Copy screenshots to short, unique local paths. `gh --attach` uploads each
+  // one and rewrites the Markdown reference that points at it.
+  const media = [];
+  const staging = fs.mkdtempSync(path.join(os.tmpdir(), "e2e-media-"));
+  if (attachToken && !dryRun) {
+    for (const src of problems.flatMap((p) => p.attachments)) {
+      if (media.length >= MAX_MEDIA) break;
+      if (!fs.existsSync(src) || media.some((m) => m.src === src)) continue;
+      const dest = path.join(staging, `${media.length}-${path.basename(src)}`.replace(/[^\w.-]/g, "_"));
+      fs.copyFileSync(src, dest);
+      media.push({ src, dest });
     }
   }
+  const localBySrc = new Map(media.map((m) => [m.src, m.dest]));
 
   const failed = problems.filter((p) => p.status === "unexpected");
   const flaky = problems.filter((p) => p.status === "flaky");
-  const uploadedBySrc = new Map(uploaded.map((u) => [u.src, u.name]));
 
   const lines = [
     MARKER,
@@ -166,67 +136,89 @@ function main() {
     if (problem.error) {
       lines.push("", "```", problem.error, "```");
     }
-    const shot = problem.attachments.map((a) => uploadedBySrc.get(a)).find(Boolean);
-    if (shot && mediaBase) {
-      lines.push("", `<img src="${mediaBase}/${shot}" width="700" alt="failure screenshot">`);
+    const shot = problem.attachments.map((a) => localBySrc.get(a)).find(Boolean);
+    if (shot) {
+      lines.push("", `![failure screenshot](${shot})`);
     }
     lines.push("", "</details>", "");
   }
 
-  if (!mediaBase && media.length && !dryRun) {
-    lines.push("_Screenshots could not be hosted for inline display — see run artifacts._");
+  const hasScreenshots = problems.some((p) => p.attachments.length);
+  if (hasScreenshots && !media.length && !dryRun) {
+    lines.push("_Screenshots are in the run's artifacts (no E2E_COMMENT_TOKEN to attach them)._");
   }
 
   const body = lines.join("\n");
   if (dryRun) {
-    console.log(`--- dry run: ${problems.length} problem(s), ${media.length} screenshot(s) ---`);
+    console.log(`--- dry run: ${problems.length} problem(s) ---`);
     console.log(body);
+    fs.rmSync(staging, { recursive: true, force: true });
     return;
   }
-  const bodyFile = path.join(os.tmpdir(), `e2e-comment-${runId}.md`);
+  const bodyFile = path.join(staging, "comment.md");
   fs.writeFileSync(bodyFile, body);
 
-  // Update our previous comment if one exists, so reruns don't pile up.
-  let existingId = "";
+  // Replace our previous report so reruns don't pile up. `--edit-last` would
+  // edit the token owner's latest comment, which need not be this report.
   try {
-    const raw = sh("gh", [
+    const ids = sh("gh", [
       "api",
       `repos/${repo}/issues/${prNumber}/comments`,
+      "--paginate",
       "--jq",
-      `[.[] | select(.body | contains("${MARKER}")) | .id] | last // ""`,
-    ]);
-    existingId = raw.trim();
+      `.[] | select(.body | contains("${MARKER}")) | .id`,
+    ]).split("\n").filter(Boolean);
+    for (const id of ids) {
+      sh("gh", ["api", "--method", "DELETE", `repos/${repo}/issues/comments/${id}`]);
+    }
   } catch {
-    // fall through to creating a new comment
+    // An old report left behind is harmless; keep going.
   }
 
+  const comment = (args, env = process.env) =>
+    sh("gh", ["pr", "comment", prNumber, "--repo", repo, "--body-file", bodyFile, ...args], {
+      env,
+    });
   try {
-    if (existingId) {
-      sh("gh", [
-        "api",
-        "--method",
-        "PATCH",
-        `repos/${repo}/issues/comments/${existingId}`,
-        "-F",
-        `body=@${bodyFile}`,
-      ]);
-      console.log(`Updated flake comment ${existingId}`);
-    } else {
-      sh("gh", [
-        "api",
-        "--method",
-        "POST",
-        `repos/${repo}/issues/${prNumber}/comments`,
-        "-F",
-        `body=@${bodyFile}`,
-      ]);
-      console.log("Posted flake comment");
+    if (media.length) {
+      try {
+        comment(
+          media.map((m) => ["--attach", `${m.dest}#failure screenshot`]).flat(),
+          { ...process.env, GH_TOKEN: attachToken },
+        );
+        console.log(`Posted flake comment with ${media.length} screenshot(s)`);
+        return;
+      } catch (error) {
+        // gh refuses before posting (token kind, permission) or posts with the
+        // uploads that succeeded and exits non-zero. Only fall back if nothing
+        // was posted.
+        console.warn(`Attachment upload failed: ${firstLine(error)}`);
+        const posted = sh("gh", [
+          "api",
+          `repos/${repo}/issues/${prNumber}/comments`,
+          "--paginate",
+          "--jq",
+          `[.[] | select(.body | contains("${MARKER}"))] | length`,
+        ]).trim();
+        if (posted !== "0") return;
+        fs.writeFileSync(
+          bodyFile,
+          body.replace(/\n\n!\[failure screenshot\]\([^)]*\)/g, "") +
+            "\n_Screenshots could not be attached — see the run's artifacts._",
+        );
+      }
     }
+    comment([]);
+    console.log("Posted flake comment");
   } catch (error) {
-    console.warn(
-      `Could not post flake comment: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
-    );
+    console.warn(`Could not post flake comment: ${firstLine(error)}`);
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true });
   }
+}
+
+function firstLine(error) {
+  return error instanceof Error ? error.message.split("\n")[0] : String(error);
 }
 
 main();

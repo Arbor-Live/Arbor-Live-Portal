@@ -130,8 +130,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write # push failure screenshots to the scratch media branch
-      pull-requests: write # post/update the flake comment
+      contents: read
+      pull-requests: write # post/replace the flake comment
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -164,10 +164,19 @@ jobs:
       # Runs on success too: a green suite can still contain retried (flaky)
       # tests, and those are the ones worth surfacing before they become
       # failures.
+      # `gh pr comment --attach` landed in gh 2.99; older runner images lack it.
+      - name: Ensure gh can attach screenshots
+        if: github.event_name == 'pull_request'
+        run: >-
+          gh pr comment --help | grep -q -- '--attach'
+          || (sudo apt-get update -qq && sudo apt-get install -y -qq gh)
+
       - name: Comment on failures and flakes
         if: github.event_name == 'pull_request'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # User PAT (Pull requests: write). App tokens can't upload attachments.
+          E2E_COMMENT_TOKEN: ${{ secrets.E2E_COMMENT_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: node scripts/e2e-flake-comment.mjs
 
