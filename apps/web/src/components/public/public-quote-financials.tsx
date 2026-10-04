@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatUsd } from "@/lib/format";
+import { PublicQuoteCrew } from "@/components/public/public-quote-crew";
 
 function QuoteSection({
   title,
@@ -45,7 +46,20 @@ export function PublicQuoteFinancials({
   final?: boolean;
   /** Payment opened before the final invoice (a deposit): don't tell them to wait. */
   paymentOpen?: boolean;
-  lineItems: Array<{ _id: string; section: string; label: string; quantity: number; quantityDetail?: string; rateUsd: number; amountUsd: number; notes?: string; detailNote?: string }>;
+  lineItems: Array<{
+    _id: string;
+    section: string;
+    label: string;
+    quantity: number;
+    quantityDetail?: string;
+    rateUsd: number;
+    amountUsd: number;
+    notes?: string;
+    detailNote?: string;
+    memberCount?: number;
+    performanceHours?: number;
+    crewSource?: "manual";
+  }>;
   totals: {
     equipmentSubtotalUsd: number;
     externalRentalsSubtotalUsd: number;
@@ -69,7 +83,7 @@ export function PublicQuoteFinancials({
       <QuoteSection title="Equipment" rows={grouped.equipment} />
       <QuoteSection title="External Rentals" rows={grouped.external} />
       <QuoteSection title="Artists" rows={grouped.artists} />
-      <QuoteSection title="Crew" rows={grouped.crew} />
+      <PublicQuoteCrew lineItems={grouped.crew} />
       <QuoteSection title="Fees" rows={grouped.fees} />
       <Card>
         <CardHeader>
