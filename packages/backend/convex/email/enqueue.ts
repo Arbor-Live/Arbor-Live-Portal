@@ -8,59 +8,15 @@ import {
   isEmailTemplateEnabled,
 } from "../lib/emailPreferences";
 import type { EmailTemplate } from "./constants";
+import { emailTemplateValue } from "../lib/emailTemplateValue";
+import {
+  cancelPendingInAppNotifications,
+  isInAppNotificationTemplate,
+  recordInAppNotification,
+} from "../lib/inAppNotifications";
 
 /** Coalesce rapid schedule/crew edits into one email per recipient. */
 export const EMAIL_DEBOUNCE_MS = 45_000;
-
-const emailTemplateValue = v.union(
-  v.literal("event_cancelled"),
-  v.literal("schedule_published"),
-  v.literal("crew_scheduled"),
-  v.literal("crew_unscheduled"),
-  v.literal("schedule_reminder"),
-  v.literal("user_invite"),
-  v.literal("password_reset"),
-  v.literal("email_verification"),
-  v.literal("change_email_confirmation"),
-  v.literal("booking_request_received"),
-  v.literal("booking_request_admin"),
-  v.literal("booking_quote_ready"),
-  v.literal("payment_proof_reminder"),
-  v.literal("payment_proof_submitted"),
-  v.literal("paying_party_added"),
-  v.literal("quote_changes_requested"),
-  v.literal("quote_updated"),
-  v.literal("band_assigned"),
-  v.literal("band_event_onboarding_invite"),
-  v.literal("band_onboarding_reminder"),
-  v.literal("band_payment_confirmation"),
-  v.literal("band_payment_completed"),
-  v.literal("band_payment_payee_required"),
-  v.literal("onboarding_completed"),
-  v.literal("onboarding_reminder"),
-  v.literal("band_application_received"),
-  v.literal("band_application_approved"),
-  v.literal("band_application_declined"),
-  v.literal("band_application_confirmation"),
-  v.literal("crew_application_received"),
-  v.literal("crew_application_closed"),
-  v.literal("crew_application_confirmation"),
-  v.literal("crew_trainee_intro"),
-  v.literal("rental_outbound_packed"),
-  v.literal("rental_return_processed"),
-  v.literal("post_event_album"),
-  v.literal("event_comment_mention"),
-  v.literal("comment_mention"),
-  v.literal("equipment_borrow_request_admin"),
-  v.literal("equipment_borrow_request_decided"),
-  v.literal("booking_request_declined"),
-  v.literal("quote_approved"),
-  v.literal("payment_proof_rejected"),
-  v.literal("damage_report_admin"),
-  v.literal("artist_need_inquiry"),
-  v.literal("weekly_digest"),
-  v.literal("this_week_at_arbor"),
-);
 
 const emailStatusValue = v.union(
   v.literal("queued"),
@@ -85,20 +41,29 @@ type EnqueueEmailArgs = {
 };
 
 /**
+ * The recipient's account id: explicit `recipientUserId`, else looked up by
+ * email. Unknown addresses (external clients, shared inboxes) resolve to null.
+ */
+async function resolveRecipientUserId(
+  ctx: MutationCtx,
+  args: EnqueueEmailArgs,
+): Promise<string | null> {
+  const explicit = args.recipientUserId?.trim();
+  if (explicit) return explicit;
+  const user = await findAuthUserByEmail(ctx, args.to);
+  return user ? getUserId(user) || null : null;
+}
+
+/**
  * True when the recipient opted out of this template. Configurable templates are
- * resolved to the recipient's admin profile by explicit userId, else by email.
- * Unknown addresses (external clients, shared inboxes) are never suppressed.
+ * resolved to the recipient's admin profile; unknown addresses are never suppressed.
  */
 async function isRecipientOptedOut(
   ctx: MutationCtx,
   args: EnqueueEmailArgs,
+  userId: string | null,
 ): Promise<boolean> {
   if (!isConfigurableEmailTemplate(args.template)) return false;
-  let userId = args.recipientUserId?.trim();
-  if (!userId) {
-    const user = await findAuthUserByEmail(ctx, args.to);
-    userId = user ? getUserId(user) : undefined;
-  }
   if (!userId) return false;
   const profile = await ctx.db
     .query("userAdminProfiles")
@@ -107,8 +72,34 @@ async function isRecipientOptedOut(
   return !isEmailTemplateEnabled(profile, args.template);
 }
 
+/**
+ * Resolve the recipient and mirror the email into their notification center
+ * (independent of their email opt-out). Returns whether the email should send.
+ */
+async function prepareRecipient(
+  ctx: MutationCtx,
+  args: EnqueueEmailArgs,
+  debounce?: { key: string; delayMs: number },
+): Promise<boolean> {
+  const needsUser =
+    isConfigurableEmailTemplate(args.template) || isInAppNotificationTemplate(args.template);
+  const userId = needsUser ? await resolveRecipientUserId(ctx, args) : null;
+  if (userId) {
+    await recordInAppNotification(ctx, {
+      userId,
+      template: args.template,
+      subject: args.subject,
+      payload: args.payload,
+      eventId: args.eventId,
+      idempotencyKey: args.idempotencyKey,
+      debounce,
+    });
+  }
+  return !(await isRecipientOptedOut(ctx, args, userId));
+}
+
 export async function enqueueEmail(ctx: MutationCtx, args: EnqueueEmailArgs) {
-  if (await isRecipientOptedOut(ctx, args)) return null;
+  if (!(await prepareRecipient(ctx, args))) return null;
   const existing = await ctx.db
     .query("emailNotifications")
     .withIndex("by_idempotencyKey", (q) => q.eq("idempotencyKey", args.idempotencyKey))
@@ -166,9 +157,13 @@ export async function enqueueDebouncedEmail(
     debounceMs?: number;
   },
 ) {
-  if (await isRecipientOptedOut(ctx, args)) return null;
-
   const debounceMs = args.debounceMs ?? EMAIL_DEBOUNCE_MS;
+  const shouldSend = await prepareRecipient(ctx, args, {
+    key: args.debounceKey,
+    delayMs: debounceMs,
+  });
+  if (!shouldSend) return null;
+
   const now = Date.now();
   const readyAt = now + debounceMs;
 
@@ -247,6 +242,7 @@ export async function enqueueDebouncedEmail(
 
 /** Drop a queued debounced email so a later flush no-ops (generation mismatch / missing row). */
 export async function cancelPendingDebouncedEmail(ctx: MutationCtx, debounceKey: string) {
+  await cancelPendingInAppNotifications(ctx, debounceKey);
   const pending = await ctx.db
     .query("emailNotifications")
     .withIndex("by_debounceKey_and_status", (q) =>

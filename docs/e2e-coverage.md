@@ -193,6 +193,7 @@ the URL looks like cloud.
 | Surface | Status | Spec / notes |
 |---------|--------|--------------|
 | Timecards | Covered | `timecards/timecard-view.spec.ts` (Batch 6) — read-only; app has no submit mutation |
+| Notification center | Covered | `notifications/notification-center.spec.ts` — auto-read on visiting the linked page, click-through, debounced rows stay hidden. Seed: `enqueueInAppNotificationEmail` |
 | Immich media albums | Deferred | External service |
 | R2 upload happy path | Deferred | Needs R2 in CI |
 

@@ -10,6 +10,23 @@ The portal sends transactional email (schedules, invites, booking quotes, band-p
 - Schedule-published and crew-scheduled emails are **debounced (~45s)** and keyed by content fingerprint so rapid schedule/crew saves (and day-lead recipients) do not flood the same inbox. Crew notices coalesce to one email per person per event with their full current assignment.
 - Fully unassigning someone after they already received a crew invite sends a **crew-unscheduled** email with an ICS `METHOD:CANCEL` attachment (same UID as the invite). Pending schedule emails are dropped; if they are re-assigned before the debounce fires, the cancel email is cancelled instead. Re-sent invites reuse that UID with a bumped `SEQUENCE` (the event's `crewInviteSequence`), so calendar clients update the existing event instead of adding a duplicate.
 
+### In-app notifications
+
+Every email whose recipient has a portal account is also mirrored into their
+notification center (the header bell). `enqueueEmail` / `enqueueDebouncedEmail`
+call `recordInAppNotification` ([`lib/inAppNotifications.ts`](../packages/backend/convex/lib/inAppNotifications.ts)),
+which only covers the templates listed there. Auth emails, applicant/client
+confirmations, and newsletters stay email-only.
+
+- The row's `path` is the first same-origin link in the payload (a sign-in
+  link resolves to its `redirect`). Opening that page in a visible tab marks
+  the row read (`components/notifications/notification-auto-read.tsx`,
+  matching rules in `lib/notification-paths.ts`).
+- Debounced emails create a `pending` row that only appears once the window
+  closes; cancelling the debounced email drops it, and delivery replaces the
+  previous row with the same debounce key.
+- Email opt-outs don't suppress in-app rows. Rows are pruned after 180 days.
+
 ### From-address domain
 
 Resend only delivers from a **verified sending domain**. In the Resend

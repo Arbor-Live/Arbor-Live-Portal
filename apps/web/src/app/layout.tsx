@@ -4,6 +4,7 @@ import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
 import { DevUtilityMenu } from "@/components/dev/dev-utility-menu";
+import { NotificationAutoRead } from "@/components/notifications/notification-auto-read";
 import { SentryUserContext } from "@/components/sentry-user-context";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AppDialogProvider } from "@/components/ui/app-dialog";
@@ -62,6 +63,7 @@ export default async function RootLayout({
         <ThemeProvider>
           <ConvexClientProvider initialToken={initialToken}>
             <SentryUserContext />
+            <NotificationAutoRead />
             <AppDialogProvider>
               {children}
               <Toaster />

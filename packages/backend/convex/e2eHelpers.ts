@@ -24,8 +24,8 @@ import {
 import { deleteEventRecord, deleteInvoiceRecord } from "./lib/bookingChainDelete";
 import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
 import { listEventsLinkedToRequest } from "./lib/bookingDayLoad";
-import { inviteAcceptUrl } from "./email/constants";
-import { enqueueEmail } from "./email/enqueue";
+import { inviteAcceptUrl, SITE_URL } from "./email/constants";
+import { enqueueDebouncedEmail, enqueueEmail } from "./email/enqueue";
 import { scheduleUserInviteEmail } from "./email/invitations";
 import { ensurePostMortemFeedbackRow } from "./postMortemFeedback";
 import {
@@ -728,6 +728,54 @@ export const enqueueSmokeEmail = mutation({
     });
     if (!notificationId) throw new Error("Failed to queue smoke email.");
     return { notificationId };
+  },
+});
+
+/**
+ * Test-only: queue a mention email whose recipient account also gets an
+ * in-app notification linking to `path`. With `debounceMs`, the notification
+ * stays pending (hidden) until the window closes.
+ */
+export const enqueueInAppNotificationEmail = mutation({
+  args: {
+    to: v.string(),
+    path: v.string(),
+    title: v.optional(v.string()),
+    debounceMs: v.optional(v.number()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const to = args.to.trim().toLowerCase();
+    if (!to.endsWith("@arborlive.test")) {
+      throw new Error("enqueueInAppNotificationEmail requires an @arborlive.test address.");
+    }
+    const nonce = Date.now();
+    const email = {
+      template: "comment_mention" as const,
+      to,
+      subject: args.title?.trim() || `You were mentioned: E2E ${nonce}`,
+      idempotencyKey: `e2e_in_app:${to}:${nonce}`,
+      payload: {
+        authorName: "E2E Bot",
+        subjectKindLabel: "Damage report",
+        subjectTitle: "E2E",
+        contextRows: [],
+        commentSnippet: "Can you take a look?",
+        url: `${SITE_URL}${args.path}`,
+        ctaLabel: "Open",
+      },
+    };
+    if (args.debounceMs !== undefined) {
+      await enqueueDebouncedEmail(ctx, {
+        ...email,
+        debounceKey: `e2e_in_app:${to}`,
+        debounceMs: args.debounceMs,
+      });
+    } else {
+      await enqueueEmail(ctx, email);
+    }
+    return null;
   },
 });
 

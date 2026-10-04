@@ -81,4 +81,11 @@ crons.cron(
   {},
 );
 
+crons.cron(
+  "prune old in-app notifications",
+  "40 4 * * *",
+  internal.retention.pruneNotifications,
+  {},
+);
+
 export default crons;
