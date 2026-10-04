@@ -1926,7 +1926,8 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_eventId_and_organizationId", ["eventId", "organizationId"])
     .index("by_confirmationToken", ["confirmationToken"])
-    .index("by_paidAt", ["paidAt"]),
+    .index("by_paidAt", ["paidAt"])
+    .index("by_servicePaymentNumber", ["servicePaymentNumber"]),
 
   eventPaymentProofSubmissions: defineTable({
     /** Absent when the quote is not the event's primary invoice (follow-up quotes). */
@@ -1945,6 +1946,45 @@ export default defineSchema({
     .index("by_eventId", ["eventId"])
     .index("by_invoiceId", ["invoiceId"])
     .index("by_eventId_and_status", ["eventId", "status"]),
+
+  /** GrantED (Stanford ASSU) accounts, as of the latest imported statement. */
+  grantedAccounts: defineTable({
+    accountNumber: v.string(),
+    accountName: v.string(),
+    /** GrantED's balance on the statement, net of pending requests. */
+    balanceUsd: v.number(),
+    /** `YYYY-MM-DD` the statement was run. */
+    statementDate: v.string(),
+    importedAt: v.number(),
+    importedByUserId: v.string(),
+  }).index("by_accountNumber", ["accountNumber"]),
+
+  /**
+   * Rows of imported GrantED account statements (`lib/grantedStatement.ts`).
+   * `fingerprint` de-duplicates overlapping imports. Pending rows are a
+   * snapshot: each import replaces the account's pending rows.
+   */
+  grantedLedgerEntries: defineTable({
+    accountNumber: v.string(),
+    /** `YYYY-MM-DD`. */
+    postedOn: v.string(),
+    source: v.string(),
+    payee: v.optional(v.string()),
+    description: v.string(),
+    depositUsd: v.number(),
+    withdrawalUsd: v.number(),
+    balanceUsd: v.number(),
+    pending: v.boolean(),
+    fingerprint: v.string(),
+    requestNumbers: v.array(v.string()),
+    invoiceNumbers: v.array(v.string()),
+    legacyInvoiceNumbers: v.array(v.string()),
+    grantedNumbers: v.array(v.string()),
+    importedAt: v.number(),
+  })
+    .index("by_fingerprint", ["fingerprint"])
+    .index("by_accountNumber_and_postedOn", ["accountNumber", "postedOn"])
+    .index("by_accountNumber_and_pending", ["accountNumber", "pending"]),
 
   eventPullListItems: defineTable({
     eventId: v.id("events"),

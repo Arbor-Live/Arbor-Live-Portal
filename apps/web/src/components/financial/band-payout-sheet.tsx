@@ -3,11 +3,13 @@
 import { SheetSection, SheetField } from "@/components/list-page";
 import Link from "next/link";
 import { useState } from "react";
+import { useMutation } from "convex/react";
 import { ArrowSquareOutIcon, CheckIcon } from "@phosphor-icons/react";
 import { BandPaymentAgreementPdfButton } from "@/components/financial/band-payment-agreement-pdf-button";
 import { EditPayoutDialog } from "@/components/financial/band-payout-dialogs";
 import { StatusPill } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Sheet,
   SheetContent,
@@ -17,6 +19,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
+import { api } from "@/lib/convex-api";
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
   PAYOUT_STAGE_WHO,
   payoutAgeLabel,
@@ -164,7 +168,9 @@ function PayoutSheetBody({
           <SheetField label="Payment ID">
             <span className="tabular-nums">{row.confirmationToken}</span>
           </SheetField>
-          {row.servicePaymentNumber ? (
+          {row.status === "paid" ? (
+            <TransferNumberField row={row} />
+          ) : row.servicePaymentNumber ? (
             <SheetField label="Transfer #">
               <span className="tabular-nums">{row.servicePaymentNumber}</span>
             </SheetField>
@@ -285,5 +291,66 @@ function PayoutSheetBody({
         }}
       />
     </>
+  );
+}
+
+/** A paid payout's transfer number, correctable when it was mistyped. */
+function TransferNumberField({ row }: { row: PayoutRow }) {
+  const correctNumber = useMutation(api.bandPayments.correctServicePaymentNumber);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (draft === null) return;
+    setSaving(true);
+    try {
+      await correctNumber({ paymentId: row._id, servicePaymentNumber: draft });
+      notify.success("Transfer number updated.");
+      setDraft(null);
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <SheetField label="Transfer #">
+      {draft === null ? (
+        <span className="flex items-center gap-2">
+          <span className="tabular-nums">{row.servicePaymentNumber ?? "Not recorded"}</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-xs"
+            onClick={() => setDraft(row.servicePaymentNumber ?? "")}
+          >
+            Edit
+          </Button>
+        </span>
+      ) : (
+        <span className="flex flex-wrap items-center gap-2">
+          <Input
+            id={`payout-transfer-number-${row._id}`}
+            aria-label="Transfer number"
+            className="h-8 w-36 tabular-nums"
+            value={draft}
+            autoFocus
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void save();
+              if (event.key === "Escape") setDraft(null);
+            }}
+          />
+          <Button type="button" size="sm" disabled={saving || !draft.trim()} onClick={() => void save()}>
+            Save
+          </Button>
+          <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => setDraft(null)}>
+            Cancel
+          </Button>
+        </span>
+      )}
+    </SheetField>
   );
 }

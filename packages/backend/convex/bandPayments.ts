@@ -1295,6 +1295,31 @@ export const markPaidBatch = mutation({
   },
 });
 
+/**
+ * Fix a mistyped transfer / Service Payment number on a paid payout. The
+ * payout stays paid and the artist isn't emailed again.
+ */
+export const correctServicePaymentNumber = mutation({
+  args: {
+    paymentId: v.id("eventBandPayments"),
+    servicePaymentNumber: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment) throw new Error("Artist payment not found.");
+    if (payment.status !== "paid") {
+      throw new Error("Only paid payouts have a transfer number to correct.");
+    }
+    const servicePaymentNumber = args.servicePaymentNumber.trim();
+    if (!servicePaymentNumber) throw new Error("Transfer / Service Payment number is required.");
+    await ctx.db.patch(payment._id, { servicePaymentNumber, updatedAt: Date.now() });
+    return null;
+  },
+});
+
 export const cancelPayment = mutation({
   args: { paymentId: v.id("eventBandPayments") },
   returns: v.null(),
