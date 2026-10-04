@@ -91,7 +91,7 @@ export function QuoteVersionHistory({
                     {formatDate(revision.createdAt)} {who}
                   </span>
                 </div>
-                {revision.note ? <p className="mt-1 text-xs">“{revision.note}”</p> : null}
+                {revision.note ? <p className="mt-1 text-xs wrap-anywhere">“{revision.note}”</p> : null}
                 {revision.recordedLate ? (
                   <p className="mt-1 text-xs text-muted-foreground">
                     Approved before versions were kept; shows the quote as it stood before the next change.

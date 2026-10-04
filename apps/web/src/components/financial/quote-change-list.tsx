@@ -11,23 +11,28 @@ export function QuoteChangeList({ changes }: { changes: QuoteLineChange[] }) {
       {changes.map((change, index) => {
         const line = change.kind === "removed" ? change.before : change.after;
         return (
-          <li key={index} className="flex items-baseline gap-2 px-3 py-1.5">
+          // On a phone the amount drops under the label, so a long crew name gets the full width.
+          <li
+            key={index}
+            className="grid grid-cols-[4rem_minmax(0,1fr)] items-baseline gap-x-2 px-3 py-1.5 sm:grid-cols-[4rem_minmax(0,1fr)_auto]"
+          >
             <span
               className={
                 change.kind === "added"
-                  ? "w-16 shrink-0 text-xs font-medium text-status-emerald-700"
+                  ? "text-xs font-medium text-status-emerald-700"
                   : change.kind === "removed"
-                    ? "w-16 shrink-0 text-xs font-medium text-destructive"
-                    : "w-16 shrink-0 text-xs font-medium text-status-amber-700"
+                    ? "text-xs font-medium text-destructive"
+                    : "text-xs font-medium text-status-amber-700"
               }
             >
               {change.kind === "added" ? "Added" : change.kind === "removed" ? "Removed" : "Changed"}
             </span>
-            <span className="min-w-0 flex-1 truncate">
+            {/* Wraps rather than truncates: crew lines carry names, and a touch screen can't hover a title. */}
+            <span className="min-w-0 wrap-break-word">
               <span className="text-muted-foreground">{QUOTE_SECTION_LABELS[change.section] ?? change.section} · </span>
               {line.label}
             </span>
-            <span className="shrink-0 text-right tabular-nums">
+            <span className="col-start-2 tabular-nums sm:col-start-auto sm:text-right">
               {change.kind === "changed" ? (
                 <>
                   <span className="text-muted-foreground line-through">{formatUsd(change.before.amountUsd)}</span>{" "}

@@ -32,7 +32,7 @@ export function ApprovedChangeDialog({ draft }: { draft: InvoiceDraft }) {
   const open = draft.approvedChangeOpen;
   return (
     <Dialog open={open} onOpenChange={(next) => draft.setApprovedChangeOpen(next)}>
-      <DialogContent className="sm:max-w-xl" data-testid="approved-change-dialog">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl" data-testid="approved-change-dialog">
         {open ? <ApprovedChangeBody draft={draft} /> : null}
       </DialogContent>
     </Dialog>
