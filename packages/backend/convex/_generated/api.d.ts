@@ -116,6 +116,7 @@ import type * as lib_actPositions from "../lib/actPositions.js";
 import type * as lib_analyticsBookings from "../lib/analyticsBookings.js";
 import type * as lib_analyticsQuery from "../lib/analyticsQuery.js";
 import type * as lib_analyticsTime from "../lib/analyticsTime.js";
+import type * as lib_approvalDiscount from "../lib/approvalDiscount.js";
 import type * as lib_artistLineSync from "../lib/artistLineSync.js";
 import type * as lib_assetScan from "../lib/assetScan.js";
 import type * as lib_auth from "../lib/auth.js";
@@ -386,6 +387,7 @@ declare const fullApi: ApiFromModules<{
   "lib/analyticsBookings": typeof lib_analyticsBookings;
   "lib/analyticsQuery": typeof lib_analyticsQuery;
   "lib/analyticsTime": typeof lib_analyticsTime;
+  "lib/approvalDiscount": typeof lib_approvalDiscount;
   "lib/artistLineSync": typeof lib_artistLineSync;
   "lib/assetScan": typeof lib_assetScan;
   "lib/auth": typeof lib_auth;

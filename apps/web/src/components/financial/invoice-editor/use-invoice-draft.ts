@@ -882,8 +882,11 @@ export function useInvoiceDraft({
         if (result.revision?.kind === "reapproval_requested") {
           notify.success(`Saved as version ${result.revision.number} and sent to the client for re-approval.`);
         } else if (result.revision?.kind === "matched_approval" && result.appliedDiscount) {
+          const { discountValue, reachesApproved } = result.appliedDiscount;
           notify.success(
-            `Saved as version ${result.revision.number} with a $${result.appliedDiscount.discountValue.toFixed(2)} discount. The approved total stands.`,
+            `Saved as version ${result.revision.number} with a $${discountValue.toFixed(2)} discount. ${
+              reachesApproved ? "The approved total stands." : "The client's approval stands."
+            }`,
           );
         } else if (result.revision?.kind === "change_kept_approval") {
           notify.success(`Saved as version ${result.revision.number}. The client's approval stands.`);

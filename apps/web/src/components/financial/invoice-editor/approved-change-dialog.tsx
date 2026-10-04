@@ -25,8 +25,11 @@ type Decision = ApprovedChange["decision"];
 
 /**
  * A save that changes what the client approved. Shows the change against the
- * approved version and asks what to do: send it back for approval, or keep
- * the approval with a reason. Cancel writes nothing.
+ * approved version and asks what to do: send it back for approval, keep the
+ * approval with a reason, or set the discount so the total matches the
+ * approval. When the total fell and the quote already has a discount (final
+ * crew came in cheaper), it suggests lowering that discount. Cancel writes
+ * nothing.
  */
 export function ApprovedChangeDialog({ draft }: { draft: InvoiceDraft }) {
   const open = draft.approvedChangeOpen;
@@ -43,6 +46,7 @@ function ApprovedChangeBody({ draft }: { draft: InvoiceDraft }) {
   const [decision, setDecision] = useState<Decision>("request_reapproval");
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const payload = draft.buildPayload();
   const preview = useQuery(
     api.invoices.previewApprovedChange,
@@ -74,17 +78,27 @@ function ApprovedChangeBody({ draft }: { draft: InvoiceDraft }) {
   const approved = preview?.approved ?? null;
   const proposed = preview?.proposed ?? null;
   const changes = approved && proposed ? diffQuoteLines(approved.lines, proposed.lines) : [];
-  // Matching the approval only makes sense when the total went up.
-  const increase = approved && proposed ? proposed.totalUsd - approved.totalUsd : 0;
-  const canMatch = increase >= 0.005;
+  // Raise the discount when the total went up; lower an existing one when it
+  // went down. Not offered when there's nothing to match.
+  const match = preview?.discountMatch ?? null;
+  const canMatch = match !== null;
+  const lowering = match?.kind === "lower";
   const matchUnavailable = matching && !canMatch;
-  const matchDiscount = approved && proposed ? proposed.subtotalUsd - approved.totalUsd : 0;
+  const approvedTotal = formatUsd(approved?.totalUsd ?? 0);
+  const matchOutcome = !match
+    ? ""
+    : match.reachesApproved
+      ? `so the total stays ${approvedTotal}`
+      : `so the total is ${formatUsd(match.totalUsd)}, still ${formatUsd((approved?.totalUsd ?? 0) - match.totalUsd)} under the approved ${approvedTotal}`;
+  const showSuggestion = lowering && !matching && !suggestionDismissed && approved !== null;
   const choiceHelp = matchUnavailable
-    ? "The total didn't go up, so there's nothing to discount. Choose another option."
-    : matching
-    ? `The discount becomes ${formatUsd(matchDiscount)}${
-        proposed && proposed.discountAmountUsd > 0 ? ` (was ${formatUsd(proposed.discountAmountUsd)})` : ""
-      }, so the total stays ${formatUsd(approved?.totalUsd ?? 0)}. The approval stands, and the client sees the updated lines in their quote history.`
+    ? "The total didn't go up and there's no discount to lower, so there's nothing to match. Choose another option."
+    : matching && match
+    ? `${
+        lowering
+          ? `The discount goes from ${formatUsd(match.fromUsd)} to ${formatUsd(match.toUsd)}`
+          : `The discount becomes ${formatUsd(match.toUsd)}${match.fromUsd > 0 ? ` (was ${formatUsd(match.fromUsd)})` : ""}`
+      }, ${matchOutcome}. The approval stands, and the client sees the updated lines in their quote history.`
     : keeping
       ? "The approval stands at the new total. The change is logged with your reason and shows in the client's quote history."
       : "The quote goes back to awaiting approval, and the client gets an email showing the old and new totals.";
@@ -133,6 +147,30 @@ function ApprovedChangeBody({ draft }: { draft: InvoiceDraft }) {
         </div>
       ) : null}
 
+      {showSuggestion && match ? (
+        <div className="space-y-2 border border-primary/40 bg-primary/5 px-3 py-2" data-testid="approved-discount-suggestion">
+          <p className="text-sm font-medium">
+            Discount {formatUsd(match.fromUsd)} → {formatUsd(match.toUsd)}{" "}
+            {match.reachesApproved
+              ? `keeps the total at the approved ${approvedTotal}`
+              : `brings the total to ${formatUsd(match.totalUsd)}`}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {match.reachesApproved
+              ? "The quote came in under what the client approved. Lowering the discount keeps their total the same, and their approval stands."
+              : `The quote came in under the approved ${approvedTotal} by more than the discount, so removing it is as close as the discount can get.`}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" onClick={() => setDecision("match_approval")}>
+              {match.toUsd > 0 ? `Lower to ${formatUsd(match.toUsd)}` : "Remove the discount"}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setSuggestionDismissed(true)}>
+              Keep {formatUsd(match.fromUsd)}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="space-y-2">
         <ToggleGroup
           type="single"
@@ -155,9 +193,9 @@ function ApprovedChangeBody({ draft }: { draft: InvoiceDraft }) {
             value="match_approval"
             className="w-full justify-start"
             disabled={!canMatch}
-            title={canMatch ? undefined : "Only when the total went up"}
+            title={canMatch ? undefined : "Only when the total went up, or went down with a discount to lower"}
           >
-            Update the quote and discount to match the approval
+            {lowering ? "Lower the discount to match the approval" : "Update the quote and discount to match the approval"}
           </ToggleGroupItem>
         </ToggleGroup>
         <p className="text-xs text-muted-foreground" data-testid="approved-change-help">
@@ -188,7 +226,9 @@ function ApprovedChangeBody({ draft }: { draft: InvoiceDraft }) {
             : keeping
               ? "Save and keep approval"
               : matching
-                ? "Save with discount"
+                ? lowering
+                  ? "Save with lower discount"
+                  : "Save with discount"
                 : "Save and send for re-approval"}
         </Button>
       </DialogFooter>

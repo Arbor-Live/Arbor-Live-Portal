@@ -510,9 +510,16 @@ Update `YEARS` there when the Registrar publishes new dates.
       total).
     - `keep_approval`: needs a note; saves a `change_kept_approval` version.
     - `match_approval`: keeps the new lines and sets one amount discount
-      (new subtotal − approved total) so the total stays what the client
-      approved; saves a `matched_approval` version. Only offered when the total
-      went up (e.g. crew repriced at the lead rate).
+      so the total stays what the client approved; saves a `matched_approval`
+      version. The amount comes from `matchDiscountToApproval`
+      (`lib/approvalDiscount.ts`): when the total went up (e.g. crew repriced
+      at the lead rate) it's new subtotal − approved total; when the total went
+      down and the quote already has a discount (final crew came in cheaper),
+      the discount is lowered to that amount, never below zero and never above
+      the existing discount. Not offered when the total went down with no
+      discount. The dialog suggests the lowering ("Discount $40 → $20 keeps the
+      total at the approved $960") with Lower / Keep buttons; it's never
+      applied without that choice.
   - Manager, contact, due date and notes save freely.
   - `recalculateTotals`, `recalculateSeriesEquipmentLines` and
     `resyncEquipmentFromPullList` refuse to change an approved quote, and point
