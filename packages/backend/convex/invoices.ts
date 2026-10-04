@@ -22,6 +22,7 @@ import { resolveArtistLineDayScope } from "./lib/invoiceArtistDays";
 import { isMultiDayGroup, isRecurringGroup } from "./lib/eventGroupKind";
 import { getActivePaymentProofSubmissionForInvoice, getPaymentProofOpensAt } from "./lib/paymentProof";
 import { invoiceDueEndMs } from "./lib/invoicePaymentStatus";
+import { matchDiscountToApproval, type ApprovalDiscountMatch } from "./lib/approvalDiscount";
 import {
   billingQuantityForEquipmentLine,
   findSeriesByInvoiceId,
@@ -454,7 +455,12 @@ const approvedChangeValue = v.object({
   decision: v.union(
     v.literal("request_reapproval"),
     v.literal("keep_approval"),
-    /** Keep the new lines, and add a discount so the total stays what the client approved. */
+    /**
+     * Keep the new lines and set one amount discount so the total stays what
+     * the client approved: raised when the total went up, lowered (never past
+     * the existing discount, never below zero) when it went down. See
+     * `matchDiscountToApproval`.
+     */
     v.literal("match_approval"),
   ),
   /** Why it changed. Required to keep an approval; shown to the client either way. */
@@ -1235,7 +1241,7 @@ export const previewApprovedChange = query({
     await requireArborInternalContext(ctx);
     const invoice = await ctx.db.get(args.id);
     if (!invoice || (invoice.clientApprovalStatus ?? "pending") !== "approved") {
-      return { approved: null, proposed: null };
+      return { approved: null, proposed: null, discountMatch: null };
     }
     const approvedRevision = invoice.approvedRevisionId ? await ctx.db.get(invoice.approvedRevisionId) : null;
     const approvedSnapshot = approvedRevision ?? (await snapshotInvoice(ctx, invoice));
@@ -1254,6 +1260,12 @@ export const previewApprovedChange = query({
       discountValue: args.discountValue,
     });
     return {
+      /** The discount that keeps the approved total, as `updateDraft` would set it for `match_approval`. */
+      discountMatch: matchDiscountToApproval({
+        subtotalUsd: totals.subtotalUsd,
+        discountAmountUsd: totals.discountAmountUsd,
+        approvedTotalUsd: approvedSnapshot.totalUsd,
+      }),
       approved: {
         number: approvedRevision?.number ?? null,
         totalUsd: approvedSnapshot.totalUsd,
@@ -1504,6 +1516,7 @@ export const updateDraft = mutation({
     );
     let discountType = args.discountType;
     let discountValue = args.discountValue;
+    let discountMatch: ApprovalDiscountMatch | null = null;
     const now = Date.now();
 
     const beforeRows = await ctx.db
@@ -1543,16 +1556,24 @@ export const updateDraft = mutation({
       if (approvedChange.decision === "match_approval") {
         const pinned = await ctx.db.get(args.id);
         const approvedTotalUsd = pinned?.approvedTotalUsd ?? existing.totalUsd;
-        if (totals.totalUsd <= approvedTotalUsd) {
+        discountMatch = matchDiscountToApproval({
+          subtotalUsd: totals.subtotalUsd,
+          discountAmountUsd: totals.discountAmountUsd,
+          approvedTotalUsd,
+        });
+        if (!discountMatch) {
           appError(
-            "QUOTE_MATCH_APPROVAL_NOT_HIGHER",
-            "The total didn't go up, so there's nothing to discount back to the approved amount.",
+            "QUOTE_MATCH_APPROVAL_UNAVAILABLE",
+            totals.totalUsd < approvedTotalUsd
+              ? "The total went down and there's no discount to lower, so there's nothing to match."
+              : "The total already matches the approval.",
           );
         }
-        // One amount discount covering everything above the approved total
-        // (it replaces any earlier discount, which it already includes).
+        // One amount discount: raised to cover everything above the approved
+        // total (it replaces any earlier discount, which it already includes),
+        // or lowered, never past the existing discount, when the total fell.
         discountType = "amount";
-        discountValue = Number(Math.max(0, totals.subtotalUsd - approvedTotalUsd).toFixed(2));
+        discountValue = discountMatch.toUsd;
         totals = await computeTotals(
           ctx,
           args.lineItems as LineInput[],
@@ -1624,9 +1645,13 @@ export const updateDraft = mutation({
             ? "matched_approval"
             : "change_kept_approval";
       const matchedNote =
-        kind === "matched_approval"
-          ? `Discounted $${discountValue.toFixed(2)} to keep the approved total.`
-          : undefined;
+        kind !== "matched_approval" || !discountMatch
+          ? undefined
+          : discountMatch.kind === "raise"
+            ? `Discounted $${discountValue.toFixed(2)} to keep the approved total.`
+            : discountMatch.reachesApproved
+              ? `Lowered the discount from $${discountMatch.fromUsd.toFixed(2)} to $${discountValue.toFixed(2)} to keep the approved total.`
+              : `Removed the $${discountMatch.fromUsd.toFixed(2)} discount; the total is still below the approved amount.`;
       const { number } = await recordInvoiceRevision(ctx, args.id, snapshot, {
         kind,
         at: now,
@@ -1652,7 +1677,14 @@ export const updateDraft = mutation({
       revision,
       /** Set when the server rewrote the discount (match_approval); the editor adopts it. */
       appliedDiscount:
-        revision?.kind === "matched_approval" ? { discountType: "amount" as const, discountValue } : null,
+        revision?.kind === "matched_approval" && discountMatch
+          ? {
+              discountType: "amount" as const,
+              discountValue,
+              previousDiscountUsd: discountMatch.fromUsd,
+              reachesApproved: discountMatch.reachesApproved,
+            }
+          : null,
     };
     });
   },

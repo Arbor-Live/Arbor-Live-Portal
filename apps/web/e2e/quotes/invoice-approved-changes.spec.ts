@@ -1,7 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
-import { pollConvex } from "../helpers/convex";
+import { pollConvex, runConvex } from "../helpers/convex";
 import { e2eEnv } from "../helpers/env";
-import { clientApprovedQuote as approvedQuote, saveInvoiceEditor, type InvoiceRevisionsState as RevisionsState } from "../helpers/invoice";
+import {
+  clientApprovedQuote as approvedQuote,
+  invoiceEditorHeading,
+  saveInvoiceEditor,
+  type InvoiceRevisionsState as RevisionsState,
+} from "../helpers/invoice";
 
 /** Reprice the artist line to $400 and click Save, which opens the decision dialog. */
 async function repriceAndSave(page: Page) {
@@ -15,7 +20,38 @@ async function repriceAndSave(page: Page) {
   await expect(totals).toContainText("$400.00");
   await expect(totals).toContainText("+$250.00");
   await expect(dialog.getByTestId("quote-change-list")).toContainText("Changed");
+  // The total went up: lowering a discount is never suggested.
+  await expect(dialog.getByTestId("approved-discount-suggestion")).toHaveCount(0);
   return dialog;
+}
+
+const LONG_CREW_NAME = "Maximiliana Alexandria Bartholomew-Featherstonehaugh-Wolfeschlegelsteinhausenberger";
+
+/**
+ * An approved $960 quote ($1,000 less a $40 discount) whose final crew came
+ * in $20 cheaper: load-in drops from 5h to 4.75h for two people at $40/h.
+ * Saves and returns the open decision dialog.
+ */
+async function crewCheaperAndSave(page: Page) {
+  const { invoiceId } = runConvex("e2eHelpers:seedApprovedQuoteWithDiscountAndCrew", {
+    clientGroupName: `E2E Discount Lower ${Date.now()}`,
+    crewName: LONG_CREW_NAME,
+  }) as { invoiceId: string };
+  await page.goto(`/dashboard/financial-hub/invoices/${invoiceId}`);
+  await expect(invoiceEditorHeading(page)).toBeVisible({ timeout: 60_000 });
+  const hours = page.getByTestId("invoice-row-crew-0").getByLabel("Hours");
+  await expect(hours).toHaveValue("5", { timeout: 30_000 });
+  await hours.fill("4.75");
+  await expect(page.getByText("Unsaved changes")).toBeVisible({ timeout: 30_000 });
+  await saveInvoiceEditor(page);
+  const dialog = page.getByTestId("approved-change-dialog");
+  await expect(dialog).toBeVisible({ timeout: 25_000 });
+  await expect(dialog.getByTestId("approved-change-totals")).toContainText("−$20.00", { timeout: 25_000 });
+  await expect(dialog.getByTestId("quote-change-list")).toContainText(LONG_CREW_NAME);
+  // A long crew name wraps inside the dialog instead of widening it.
+  const overflow = await dialog.evaluate((el) => el.scrollWidth - el.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+  return { invoiceId, dialog };
 }
 
 test.describe("changing an approved quote", () => {
@@ -141,5 +177,52 @@ test.describe("changing an approved quote", () => {
 
     // The editor adopted the server's discount, so nothing reads as unsaved.
     await expect(page.getByText("Unsaved changes")).toHaveCount(0, { timeout: 10_000 });
+  });
+
+  test("cheaper crew suggests lowering the existing discount to keep the approved total", async ({ page }) => {
+    const { invoiceId, dialog } = await crewCheaperAndSave(page);
+
+    const suggestion = dialog.getByTestId("approved-discount-suggestion");
+    await expect(suggestion).toContainText("Discount $40.00 → $20.00 keeps the total at the approved $960.00");
+    await suggestion.getByRole("button", { name: "Lower to $20.00" }).click();
+    await expect(dialog.getByRole("radio", { name: "Lower the discount to match the approval" })).toHaveAttribute(
+      "data-state",
+      "on",
+    );
+    await expect(dialog.getByTestId("approved-change-help")).toContainText(
+      "The discount goes from $40.00 to $20.00, so the total stays $960.00",
+    );
+    await dialog.getByRole("button", { name: "Save with lower discount" }).click();
+    await expect(page.getByText(/Saved as version 2 with a \$20\.00 discount\. The approved total stands/)).toBeVisible({
+      timeout: 25_000,
+    });
+
+    const state = await pollConvex<RevisionsState>(
+      "e2eHelpers:getInvoiceRevisionsState",
+      { invoiceId },
+      (row) => row?.revisions.length === 2,
+    );
+    expect(state.clientApprovalStatus).toBe("approved");
+    expect(state.totalUsd).toBe(960);
+    expect(state.revisions[1]).toMatchObject({ kind: "matched_approval", totalUsd: 960 });
+    expect(state.revisions[1]!.note).toContain("Lowered the discount from $40.00 to $20.00");
+    const totals = await pollConvex<{ discountType: string; discountValue: number; subtotalUsd: number }>(
+      "e2eHelpers:getInvoiceTotalsState",
+      { invoiceId },
+      (row) => Boolean(row),
+    );
+    expect(totals).toMatchObject({ discountType: "amount", discountValue: 20, subtotalUsd: 980 });
+    await expect(page.getByText("Unsaved changes")).toHaveCount(0, { timeout: 10_000 });
+  });
+
+  test("keeping the discount as is leaves the decision to the other choices", async ({ page }) => {
+    const { dialog } = await crewCheaperAndSave(page);
+
+    const suggestion = dialog.getByTestId("approved-discount-suggestion");
+    await suggestion.getByRole("button", { name: "Keep $40.00" }).click();
+    await expect(suggestion).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Save and send for re-approval" })).toBeVisible();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toHaveCount(0);
   });
 });

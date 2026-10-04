@@ -14,6 +14,7 @@ import {
 import { resolveProfileMembership } from "./lib/userVerticals";
 import { resolveUserStatus } from "./lib/userStatus";
 import { assertE2eHelpersEnabled } from "./lib/e2eGuard";
+import { recordInvoiceRevision, snapshotInvoice } from "./lib/invoiceRevisions";
 import { findAuthUsersByIds } from "./lib/auth";
 import {
   assertUsernameAvailable,
@@ -1064,6 +1065,97 @@ export const seedApprovedQuoteWithLinkedEvent = mutation({
       publicApprovalToken,
       path: `/event/${publicApprovalToken}`,
     };
+  },
+});
+
+/**
+ * Test-only: a client-approved quote with a discount and stamped crew lines
+ * (crew names in the labels). Approved at $1,000 − $40 = $960, with its
+ * approved version pinned, and still an estimate so the editor can change it.
+ * `crewName` lets a spec stress long names in the approved-change dialog.
+ */
+export const seedApprovedQuoteWithDiscountAndCrew = mutation({
+  args: {
+    clientGroupName: v.optional(v.string()),
+    crewName: v.optional(v.string()),
+  },
+  returns: v.object({ invoiceId: v.id("invoices"), invoiceNumber: v.string() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const invoiceNumber = `ALINV-${makeInvoiceSuffix()}`;
+    const crewName = args.crewName?.trim() || "E2E Crew Member";
+    const invoiceId = await ctx.db.insert("invoices", {
+      invoiceNumber,
+      status: "draft",
+      issueDate: new Date(now).toISOString().slice(0, 10),
+      managerUserId: "e2e-manager",
+      managerName: "E2E Admin",
+      managerEmail: "e2e-admin@arborlive.test",
+      clientGroupName: args.clientGroupName?.trim() || "E2E Discount Client",
+      clientContactName: "E2E Contact",
+      clientEmail: "e2e-client@example.com",
+      equipmentPricingMode: "nonSubsidized",
+      crewRateMode: "normal",
+      discountType: "amount",
+      discountValue: 40,
+      discountAmountUsd: 40,
+      equipmentSubtotalUsd: 0,
+      externalRentalsSubtotalUsd: 0,
+      artistsSubtotalUsd: 440,
+      crewSubtotalUsd: 560,
+      feesSubtotalUsd: 0,
+      subtotalUsd: 1000,
+      totalUsd: 960,
+      clientApprovalStatus: "approved",
+      approvedAt: now - 60_000,
+      clientApprovalSignedName: "E2E Signer",
+      clientIsPaymentSubmitter: true,
+      publicApprovalToken: makeToken(),
+      publicApprovalTokenExpiresAt: now + 14 * 24 * 60 * 60 * 1000,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const lines = [
+      { section: "artist" as const, label: "E2E House Band", quantity: 1, rateUsd: 440 },
+      {
+        section: "crew" as const,
+        label: `Load-in — Sound (${crewName} (Lead))`,
+        quantity: 10,
+        rateUsd: 40,
+        memberCount: 2,
+        performanceHours: 5,
+      },
+      {
+        section: "crew" as const,
+        label: `Show — Sound (${crewName})`,
+        quantity: 4,
+        rateUsd: 40,
+        memberCount: 1,
+        performanceHours: 4,
+      },
+    ];
+    for (const [order, line] of lines.entries()) {
+      await ctx.db.insert("invoiceLineItems", {
+        invoiceId,
+        order,
+        ...line,
+        amountUsd: line.quantity * line.rateUsd,
+        ...(line.section === "crew" ? { crewSource: "manual" as const } : {}),
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    const invoice = await ctx.db.get(invoiceId);
+    if (!invoice) throw new Error("Seeded invoice vanished.");
+    const snapshot = await snapshotInvoice(ctx, invoice);
+    const { revisionId } = await recordInvoiceRevision(ctx, invoiceId, snapshot, {
+      kind: "approved",
+      at: now - 60_000,
+      actorName: "E2E Signer",
+    });
+    await ctx.db.patch(invoiceId, { approvedRevisionId: revisionId, approvedTotalUsd: snapshot.totalUsd });
+    return { invoiceId, invoiceNumber };
   },
 });
 
