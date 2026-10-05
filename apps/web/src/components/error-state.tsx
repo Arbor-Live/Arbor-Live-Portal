@@ -37,6 +37,10 @@ export function ErrorState({
       const signOutAndRedirect = async () => {
         try {
           const { authClient } = await import("@/lib/auth-client");
+          // The session is already gone, so only the browser side can be dropped;
+          // the server prunes the dead endpoint on its next push.
+          const { releasePushSubscription } = await import("@/lib/pwa");
+          await releasePushSubscription();
           await authClient.signOut();
         } catch {
           // best effort: the session token may already be invalid

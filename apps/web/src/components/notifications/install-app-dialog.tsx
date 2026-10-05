@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { isIos } from "@/lib/pwa";
-import { useInstallPrompt } from "./install-prompt-store";
+import { setDeferredInstallPrompt, useInstallPrompt } from "./install-prompt-store";
 
 /** "Add to Home Screen" steps: the native prompt on Android, Share-sheet steps on iOS. */
 export function InstallAppDialog() {
@@ -20,9 +20,16 @@ export function InstallAppDialog() {
 
   const install = async () => {
     if (!deferredPrompt) return;
-    await deferredPrompt.prompt();
-    await deferredPrompt.userChoice.catch(() => undefined);
-    closeDialog();
+    // The event works once for the whole page; drop it before using it.
+    setDeferredInstallPrompt(null);
+    try {
+      await deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+    } catch {
+      // Already used or no longer available; the manual steps still apply.
+    } finally {
+      closeDialog();
+    }
   };
 
   return (
