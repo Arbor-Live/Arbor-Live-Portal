@@ -3,6 +3,9 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { FormSaveBarStackProvider } from "@/components/forms";
 import { OnboardingBanner } from "@/components/onboarding/onboarding-banner";
 import { InactiveAccountBanner } from "@/components/onboarding/inactive-account-banner";
+import { AppLaunchTracker } from "@/components/notifications/app-launch-tracker";
+import { InstallAppDialog } from "@/components/notifications/install-app-dialog";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { DashboardSleepGate } from "@/components/dashboard-sleep-gate";
 import { SessionShellProvider } from "@/components/session-shell-provider";
 import { Separator } from "@/components/ui/separator";
@@ -37,7 +40,12 @@ export default async function DashboardLayout({
               <SidebarTrigger />
               <Separator orientation="vertical" className="h-4" />
               <p className="font-medium">Dashboard</p>
+              <div className="ml-auto">
+                <NotificationBell />
+              </div>
             </header>
+            <AppLaunchTracker />
+            <InstallAppDialog />
             <OnboardingBanner />
             <InactiveAccountBanner />
             {/* Stacks every FormSaveBar on the page so two forms on one tab

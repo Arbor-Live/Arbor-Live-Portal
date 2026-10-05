@@ -28,6 +28,8 @@ Where variables live:
 | `ORGANIZER_EMAIL` | no | Organizer contact in emails; defaults to `EMAIL_FROM`'s address (`email/constants.ts`) |
 | `PAYMENTS_EMAIL_FROM` | no | From address for band-payment emails; has a default (`email/constants.ts`) |
 | `BAND_PAYMENTS_CC_EMAIL` | no | CC address on band-payment emails; has a default (`email/constants.ts`) |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | yes (push) | Web Push signing keys (`pushSubscriptions.ts`, `pushDelivery.ts`). Generate once per deployment with `npx web-push generate-vapid-keys`; rotating them invalidates every device's subscription. Without them the push card says push isn't set up and nothing is sent |
+| `VAPID_SUBJECT` | no | Contact for push services, `mailto:` or `https:`; defaults to `mailto:arborlive@stanford.edu` |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`, `R2_BUCKET` | yes (uploads) | Cloudflare R2 via `@convex-dev/r2` (`inventoryR2.ts`) — see [r2-storage.md](r2-storage.md) |
 | `R2_PUBLIC_BASE_URL` | yes (uploads) | Public read domain for stored assets, no trailing slash (`inventoryR2.ts`) |
 | `IMMICH_URL`, `IMMICH_API_KEY` | yes (media) | Self-hosted Immich API (`lib/immichClient.ts`) — see [immich.md](immich.md) |

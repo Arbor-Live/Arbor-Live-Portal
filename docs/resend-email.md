@@ -10,6 +10,46 @@ The portal sends transactional email (schedules, invites, booking quotes, band-p
 - Schedule-published and crew-scheduled emails are **debounced (~45s)** and keyed by content fingerprint so rapid schedule/crew saves (and day-lead recipients) do not flood the same inbox. Crew notices coalesce to one email per person per event with their full current assignment.
 - Fully unassigning someone after they already received a crew invite sends a **crew-unscheduled** email with an ICS `METHOD:CANCEL` attachment (same UID as the invite). Pending schedule emails are dropped; if they are re-assigned before the debounce fires, the cancel email is cancelled instead. Re-sent invites reuse that UID with a bumped `SEQUENCE` (the event's `crewInviteSequence`), so calendar clients update the existing event instead of adding a duplicate.
 
+### In-app notifications
+
+Every email whose recipient has a portal account is also mirrored into their
+notification center (the header bell). `enqueueEmail` / `enqueueDebouncedEmail`
+call `recordInAppNotification` ([`lib/inAppNotifications.ts`](../packages/backend/convex/lib/inAppNotifications.ts)),
+which only covers the templates listed there. Auth emails, applicant/client
+confirmations, and newsletters stay email-only.
+
+- The row's `path` is the first same-origin link in the payload (a sign-in
+  link resolves to its `redirect`). Opening that page in a visible tab marks
+  the row read (`components/notifications/notification-auto-read.tsx`,
+  matching rules in `lib/notification-paths.ts`).
+- Debounced emails create a `pending` row that only appears once the window
+  closes; cancelling the debounced email drops it, and delivery replaces the
+  previous row with the same debounce key.
+- Each configurable template has three independent switches on the account
+  page: email (`emailOptOuts`), in-app (`inAppOptOuts`: no row, so no push
+  either) and push (`pushOptOuts`: the row still shows in the bell). Checked by
+  `isTemplateEnabledForChannel` in `enqueue.ts` and `schedulePushForNotification`.
+  Admins editing someone in the person sheet only manage email. The crew
+  scheduled/unscheduled emails carry the calendar invite, so their email can't
+  be turned off (`isEmailRequired`; old opt-outs are ignored), though their bell
+  and push can. Rows are pruned after 180 days.
+
+#### Push and the Home Screen app
+
+- Delivered rows also go out as Web Push to every device the user turned push
+  on for (Account settings → Push notifications, or the bell's footer prompt).
+  `pushDelivery.ts` sends; `public/sw.js` shows the notification, sets the app
+  badge, and opens the row's page on tap. Endpoints the push service reports
+  gone (404/410) are deleted. Needs `VAPID_*` env vars (see
+  [environment-variables.md](environment-variables.md)).
+- iOS only allows push from the Home Screen app (`app/manifest.ts`). The first
+  time someone opens the portal in a phone browser they get one
+  `app_install` notification, and the mobile sidebar shows **Add to Home
+  Screen** until they open it from the Home Screen (`appInstall.ts`,
+  `appInstalls` table). That launch marks the nudge read. Home Screen apps on
+  iOS have their own cookies, so people sign in once more there.
+- Reading a row in the app clears it from the OS tray and updates the badge.
+
 ### From-address domain
 
 Resend only delivers from a **verified sending domain**. In the Resend

@@ -7,6 +7,7 @@ import { userStatusValue } from "./lib/userStatus";
 import { eventSeriesPositionTemplateValue } from "./lib/eventSeriesPositions";
 import { artistNeedActTypeValue, artistNeedTypeValue } from "./lib/artistNeedTypes";
 import { eventGroupKindValue } from "./lib/eventGroupKind";
+import { emailTemplateValue, notificationTemplateValue } from "./lib/emailTemplateValue";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -1110,6 +1111,10 @@ export default defineSchema({
     assignableAsCrew: v.optional(v.boolean()),
     /** Email templates this user opted out of (keys from `email/constants.ts`). */
     emailOptOuts: v.optional(v.array(v.string())),
+    /** Templates this user muted in the notification center (no row, so no push either). */
+    inAppOptOuts: v.optional(v.array(v.string())),
+    /** Templates this user still sees in the notification center but not as push. */
+    pushOptOuts: v.optional(v.array(v.string())),
     calendarInviteEmail: v.optional(v.string()),
     /** Missing/legacy ⇒ stanford payroll. */
     payrollMethod: v.optional(payrollMethodValue),
@@ -1645,55 +1650,7 @@ export default defineSchema({
     .index("by_createdAt", ["createdAt"]),
 
   emailNotifications: defineTable({
-    template: v.union(
-      v.literal("event_cancelled"),
-      v.literal("schedule_published"),
-      v.literal("crew_scheduled"),
-      v.literal("crew_unscheduled"),
-      v.literal("schedule_reminder"),
-      v.literal("user_invite"),
-      v.literal("password_reset"),
-      v.literal("email_verification"),
-      v.literal("change_email_confirmation"),
-      v.literal("booking_request_received"),
-      v.literal("booking_request_admin"),
-      v.literal("booking_quote_ready"),
-      v.literal("payment_proof_reminder"),
-      v.literal("payment_proof_submitted"),
-      v.literal("paying_party_added"),
-      v.literal("quote_changes_requested"),
-      v.literal("quote_updated"),
-      v.literal("band_assigned"),
-      v.literal("band_event_onboarding_invite"),
-      v.literal("band_onboarding_reminder"),
-      v.literal("band_payment_confirmation"),
-      v.literal("band_payment_completed"),
-      v.literal("band_payment_payee_required"),
-      v.literal("onboarding_completed"),
-      v.literal("onboarding_reminder"),
-      v.literal("band_application_received"),
-      v.literal("band_application_approved"),
-      v.literal("band_application_declined"),
-      v.literal("band_application_confirmation"),
-      v.literal("crew_application_received"),
-      v.literal("crew_application_closed"),
-      v.literal("crew_application_confirmation"),
-      v.literal("crew_trainee_intro"),
-      v.literal("rental_outbound_packed"),
-      v.literal("rental_return_processed"),
-      v.literal("post_event_album"),
-      v.literal("event_comment_mention"),
-      v.literal("comment_mention"),
-      v.literal("equipment_borrow_request_admin"),
-      v.literal("equipment_borrow_request_decided"),
-      v.literal("booking_request_declined"),
-      v.literal("quote_approved"),
-      v.literal("payment_proof_rejected"),
-      v.literal("damage_report_admin"),
-      v.literal("artist_need_inquiry"),
-      v.literal("weekly_digest"),
-      v.literal("this_week_at_arbor"),
-    ),
+    template: emailTemplateValue,
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),
     cc: v.optional(v.array(v.string())),
@@ -1715,6 +1672,53 @@ export default defineSchema({
     .index("by_idempotencyKey", ["idempotencyKey"])
     .index("by_eventId", ["eventId"])
     .index("by_debounceKey_and_status", ["debounceKey", "status"]),
+
+  /**
+   * In-app notification center. One row per recipient account, mirrored from
+   * the email queue (`lib/inAppNotifications.ts`). Debounced emails start
+   * `pending` and only show once their debounce window closes.
+   */
+  notifications: defineTable({
+    userId: v.string(),
+    /** Email template it mirrors, or `app_install` for the Home Screen nudge. */
+    template: notificationTemplateValue,
+    status: v.union(v.literal("pending"), v.literal("delivered")),
+    title: v.string(),
+    body: v.optional(v.string()),
+    /** Same-origin path + query (e.g. `/dashboard/events/<id>`); visiting it marks the row read. */
+    path: v.optional(v.string()),
+    eventId: v.optional(v.id("events")),
+    /** Email debounce key, else its idempotency key: one row per key per user. */
+    dedupeKey: v.string(),
+    /** Idempotency key of the email this row mirrors, to skip replays. */
+    sourceKey: v.string(),
+    generation: v.number(),
+    createdAt: v.number(),
+    readAt: v.optional(v.number()),
+  })
+    .index("by_userId_and_status_and_createdAt", ["userId", "status", "createdAt"])
+    .index("by_userId_and_status_and_readAt", ["userId", "status", "readAt"])
+    .index("by_userId_and_dedupeKey", ["userId", "dedupeKey"])
+    .index("by_dedupeKey", ["dedupeKey"])
+    .index("by_createdAt", ["createdAt"]),
+
+  /** Web Push endpoints, one per browser/device the user turned push on for. */
+  pushSubscriptions: defineTable({
+    userId: v.string(),
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
+    userAgent: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_endpoint", ["endpoint"]),
+
+  /** Set the first time a user opens the portal from their Home Screen. */
+  appInstalls: defineTable({
+    userId: v.string(),
+    firstStandaloneAt: v.number(),
+  }).index("by_userId", ["userId"]),
 
 
   eventRequests: defineTable({

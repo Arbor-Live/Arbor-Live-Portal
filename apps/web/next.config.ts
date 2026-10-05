@@ -148,6 +148,18 @@ const nextConfig: NextConfig = {
     });
     return config;
   },
+  async headers() {
+    return [
+      {
+        // Always revalidate the service worker so push handling updates on deploy.
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+        ],
+      },
+    ];
+  },
   async redirects() {
     return [
       { source: "/public/packages", destination: "/packages", permanent: true },

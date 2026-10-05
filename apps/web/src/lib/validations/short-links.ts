@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 
 export const shortLinkExpiryModes = ["none", "manual", "event_plus_30_days"] as const;
 
@@ -67,19 +67,6 @@ export function formatShortLinkUrl(slug: string, baseUrl = "https://arbor.st") {
   const base = baseUrl.replace(/\/+$/, "");
   const path = slug.replace(/^\/+/, "");
   return `${base}/${path}`;
-}
-
-export function formatRelativeTime(ms: number | null | undefined) {
-  if (ms == null) return "—";
-  const delta = Date.now() - ms;
-  const minutes = Math.round(delta / 60_000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 14) return `${days}d ago`;
-  return formatDate(ms);
 }
 
 export function formatExpiresAt(ms: number | null | undefined) {

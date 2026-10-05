@@ -19,7 +19,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSheetParam } from "@/hooks/use-sheet-param";
 import { api } from "@/lib/convex-api";
-import { formatRelativeTime } from "@/lib/validations/short-links";
+import { formatRelativeTime } from "@/lib/format";
 import {
   copyShortLink,
   LINK_STATUS_LABELS,

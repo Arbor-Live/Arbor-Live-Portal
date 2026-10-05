@@ -5,6 +5,7 @@ import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import { useState, type ComponentProps } from "react"
 import { authClient } from "@/lib/auth-client"
+import { releasePushSubscription } from "@/lib/pwa"
 import { useMutation, useQuery } from "convex/react"
 import { api } from "@/lib/convex-api"
 import { isArtistOrganizationType } from "@/lib/artist-types"
@@ -24,6 +25,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { NavSecondary } from "@/components/nav-secondary"
+import { InstallAppSidebarButton } from "@/components/notifications/install-app-sidebar-button"
 import { NavUser } from "@/components/nav-user"
 import {
   Sidebar,
@@ -225,6 +227,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
   const shell = useSessionShell()
   const setActiveOrganization = useMutation(api.users.setActiveOrganization)
+  const unsubscribePush = useMutation(api.pushSubscriptions.unsubscribe)
   const { viewMode, setViewMode } = useViewMode()
   const viewer = shell?.viewer
   const account = shell?.account
@@ -513,7 +516,10 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             )
           })}
         </SidebarMenu>
-        <NavSecondary items={secondaryItems} className="mt-auto" />
+        <div className="mt-auto">
+          <InstallAppSidebarButton />
+          <NavSecondary items={secondaryItems} />
+        </div>
       </SidebarContent>
       <SidebarFooter className="border-t">
         <NavUser
@@ -524,6 +530,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             avatarUrl: account?.avatarUrl ?? account?.image ?? null,
           }}
           onSignOut={async () => {
+            // Stop this device getting the account's pushes before the session ends.
+            await releasePushSubscription((endpoint) => unsubscribePush({ endpoint }))
             await authClient.signOut()
             window.location.href = "/sign-in"
           }}

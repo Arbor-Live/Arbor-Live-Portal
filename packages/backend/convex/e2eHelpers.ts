@@ -14,6 +14,8 @@ import {
 import { resolveProfileMembership } from "./lib/userVerticals";
 import { resolveUserStatus } from "./lib/userStatus";
 import { assertE2eHelpersEnabled } from "./lib/e2eGuard";
+import { emailTemplateValue } from "./lib/emailTemplateValue";
+import { recordInAppNotification } from "./lib/inAppNotifications";
 import { recordInvoiceRevision, snapshotInvoice } from "./lib/invoiceRevisions";
 import { findAuthUsersByIds } from "./lib/auth";
 import {
@@ -24,8 +26,8 @@ import {
 import { deleteEventRecord, deleteInvoiceRecord } from "./lib/bookingChainDelete";
 import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
 import { listEventsLinkedToRequest } from "./lib/bookingDayLoad";
-import { inviteAcceptUrl } from "./email/constants";
-import { enqueueEmail } from "./email/enqueue";
+import { inviteAcceptUrl, SITE_URL } from "./email/constants";
+import { enqueueDebouncedEmail, enqueueEmail } from "./email/enqueue";
 import { scheduleUserInviteEmail } from "./email/invitations";
 import { ensurePostMortemFeedbackRow } from "./postMortemFeedback";
 import {
@@ -728,6 +730,207 @@ export const enqueueSmokeEmail = mutation({
     });
     if (!notificationId) throw new Error("Failed to queue smoke email.");
     return { notificationId };
+  },
+});
+
+/**
+ * Test-only: queue a mention email whose recipient account also gets an
+ * in-app notification linking to `path`. With `debounceMs`, the notification
+ * stays pending (hidden) until the window closes.
+ */
+export const enqueueInAppNotificationEmail = mutation({
+  args: {
+    to: v.string(),
+    path: v.string(),
+    title: v.optional(v.string()),
+    debounceMs: v.optional(v.number()),
+    /**
+     * Another in-app template (default: a comment mention emailed through the
+     * queue). Non-mention templates are recorded straight into the bell with
+     * date + venue, without an email.
+     */
+    template: v.optional(emailTemplateValue),
+    dateRangeLabel: v.optional(v.string()),
+    venueName: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const to = args.to.trim().toLowerCase();
+    if (!to.endsWith("@arborlive.test")) {
+      throw new Error("enqueueInAppNotificationEmail requires an @arborlive.test address.");
+    }
+    const nonce = Date.now();
+    const url = `${SITE_URL}${args.path}`;
+    const subject = args.title?.trim() || `You were mentioned: E2E ${nonce}`;
+    const idempotencyKey = `e2e_in_app:${to}:${nonce}`;
+    const debounce =
+      args.debounceMs !== undefined
+        ? { key: `e2e_in_app:${to}`, delayMs: args.debounceMs }
+        : undefined;
+
+    if (args.template && args.template !== "comment_mention") {
+      // Other templates go straight to the bell: building a full email payload
+      // per template isn't worth it for a seed. Every link field the in-app
+      // mapping reads is set, so any in-app template gets its click-through.
+      const user = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+        model: "user",
+        where: [{ field: "email", value: to }],
+      });
+      const userId = getId(user);
+      if (!userId) throw new Error("User not found.");
+      await recordInAppNotification(ctx, {
+        userId,
+        template: args.template,
+        subject,
+        idempotencyKey,
+        debounce,
+        payload: {
+          eventUrl: url,
+          reviewUrl: url,
+          invoiceUrl: url,
+          portalUrl: url,
+          reportUrl: url,
+          requestsUrl: url,
+          dashboardUrl: url,
+          dashboardUsersUrl: url,
+          onboardingUrl: url,
+          signUrl: url,
+          payeeSettingsUrl: url,
+          albumPortalUrl: url,
+          url,
+          dateRangeLabel: args.dateRangeLabel,
+          venueName: args.venueName,
+        },
+      });
+      return null;
+    }
+
+    const email = {
+      template: "comment_mention" as const,
+      to,
+      subject,
+      idempotencyKey,
+      payload: {
+        authorName: "E2E Bot",
+        subjectKindLabel: "Damage report",
+        subjectTitle: "E2E",
+        contextRows: [],
+        commentSnippet: "Can you take a look?",
+        url,
+        ctaLabel: "Open",
+      },
+    };
+    if (debounce) {
+      await enqueueDebouncedEmail(ctx, {
+        ...email,
+        debounceKey: debounce.key,
+        debounceMs: debounce.delayMs,
+      });
+    } else {
+      await enqueueEmail(ctx, email);
+    }
+    return null;
+  },
+});
+
+/** Test-only: delete a user's notification-center rows (bounded batch). */
+export const clearNotifications = mutation({
+  args: { email: v.string() },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const user = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: args.email.trim().toLowerCase() }],
+    });
+    const userId = getId(user);
+    if (!userId) throw new Error("User not found.");
+    let deleted = 0;
+    for (const status of ["pending", "delivered"] as const) {
+      const rows = await ctx.db
+        .query("notifications")
+        .withIndex("by_userId_and_status_and_createdAt", (q) =>
+          q.eq("userId", userId).eq("status", status),
+        )
+        .take(200);
+      for (const row of rows) {
+        await ctx.db.delete(row._id);
+        deleted += 1;
+      }
+    }
+    return deleted;
+  },
+});
+
+/** Test-only: forget a user's Home Screen install and nudge so the flow can rerun. */
+export const resetAppInstall = mutation({
+  args: { email: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const user = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: args.email.trim().toLowerCase() }],
+    });
+    const userId = getId(user);
+    if (!userId) throw new Error("User not found.");
+    const installs = await ctx.db
+      .query("appInstalls")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .take(10);
+    for (const row of installs) await ctx.db.delete(row._id);
+    const nudges = await ctx.db
+      .query("notifications")
+      .withIndex("by_userId_and_dedupeKey", (q) =>
+        q.eq("userId", userId).eq("dedupeKey", "app_install"),
+      )
+      .take(10);
+    for (const row of nudges) await ctx.db.delete(row._id);
+    return null;
+  },
+});
+
+/** Test-only: register a push device so delivery can be exercised without a browser. */
+export const seedPushSubscription = mutation({
+  args: { email: v.string(), endpoint: v.string(), p256dh: v.string(), auth: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const user = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: args.email.trim().toLowerCase() }],
+    });
+    const userId = getId(user);
+    if (!userId) throw new Error("User not found.");
+    await ctx.db.insert("pushSubscriptions", {
+      userId,
+      endpoint: args.endpoint,
+      p256dh: args.p256dh,
+      auth: args.auth,
+      createdAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/** Test-only: push devices registered for a user (endpoints only). */
+export const listPushEndpoints = query({
+  args: { email: v.string() },
+  returns: v.array(v.string()),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const user = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: args.email.trim().toLowerCase() }],
+    });
+    const userId = getId(user);
+    if (!userId) return [];
+    const rows = await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .take(20);
+    return rows.map((row) => row.endpoint);
   },
 });
 

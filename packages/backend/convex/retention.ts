@@ -73,3 +73,25 @@ export const pruneStatusTransitions = internalMutation({
     return deleted;
   },
 });
+
+/** The bell only shows recent rows; drop notifications after 180 days. */
+const NOTIFICATION_RETENTION_MS = 180 * 24 * 60 * 60 * 1000;
+
+export const pruneNotifications = internalMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const cutoff = Date.now() - NOTIFICATION_RETENTION_MS;
+    const rows = await ctx.db
+      .query("notifications")
+      .withIndex("by_createdAt", (q) => q.lt("createdAt", cutoff))
+      .take(BATCH);
+    for (const row of rows) {
+      await ctx.db.delete(row._id);
+    }
+    if (rows.length >= BATCH) {
+      await ctx.scheduler.runAfter(0, internal.retention.pruneNotifications, {});
+    }
+    return rows.length;
+  },
+});

@@ -198,7 +198,45 @@ export function isConfigurableEmailTemplate(template: string): template is Email
 /** The only field needed to resolve a user's opt-outs. */
 export type EmailPreferenceSource = {
   emailOptOuts?: readonly string[];
+  inAppOptOuts?: readonly string[];
+  pushOptOuts?: readonly string[];
 };
+
+/**
+ * Emails that carry the crew calendar invite (`invite.ics` / `cancel.ics`), so
+ * they always send. Their bell and push channels stay configurable, and old
+ * email opt-outs for them are ignored.
+ */
+const EMAIL_REQUIRED_TEMPLATES = new Set<string>(["crew_scheduled", "crew_unscheduled"]);
+
+export function isEmailRequired(template: string) {
+  return EMAIL_REQUIRED_TEMPLATES.has(template);
+}
+
+/** Where a notification can reach someone; each has its own opt-out list. */
+export type NotificationChannel = "email" | "inApp" | "push";
+
+export const NOTIFICATION_CHANNELS: readonly NotificationChannel[] = ["email", "inApp", "push"];
+
+export const OPT_OUT_FIELD = {
+  email: "emailOptOuts",
+  inApp: "inAppOptOuts",
+  push: "pushOptOuts",
+} as const satisfies Record<NotificationChannel, keyof EmailPreferenceSource>;
+
+/**
+ * Whether `template` may reach this user on `channel`. Only configurable
+ * templates can be turned off; the rest (auth, transactional) always go out.
+ */
+export function isTemplateEnabledForChannel(
+  profile: EmailPreferenceSource | null | undefined,
+  template: string,
+  channel: NotificationChannel,
+): boolean {
+  if (!isConfigurableEmailTemplate(template)) return true;
+  if (channel === "email" && isEmailRequired(template)) return true;
+  return !(profile?.[OPT_OUT_FIELD[channel]] ?? []).includes(template);
+}
 
 /**
  * Advisors historically received no Operations damage-report email. Seed that
@@ -219,7 +257,7 @@ export function isEmailTemplateEnabled(
   profile: EmailPreferenceSource | null | undefined,
   template: EmailTemplate,
 ): boolean {
-  return !resolveDisabledEmailTemplates(profile).has(template);
+  return isTemplateEnabledForChannel(profile, template, "email");
 }
 
 export type EmailPreferenceApplicability = {

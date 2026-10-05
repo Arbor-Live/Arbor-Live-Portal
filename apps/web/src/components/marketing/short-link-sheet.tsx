@@ -25,11 +25,10 @@ import { Switch } from "@/components/ui/switch";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
-import { pacificDateKey } from "@/lib/format";
+import { formatRelativeTime, pacificDateKey } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import {
   formatExpiresAt,
-  formatRelativeTime,
   formatShortLinkUrl,
   shortLinkExpiryModeLabels,
   shortLinkFormSchema,
