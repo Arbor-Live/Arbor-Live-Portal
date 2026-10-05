@@ -1,5 +1,4 @@
-import { Link } from "@react-email/components";
-import { BodyCopy, EmailLayout, EmailSignOff } from "./_components/email-layout";
+import { BodyCopy, EmailLayout, EmailSignOff, InlineLink } from "./_components/email-layout";
 import type { CrewTraineeIntroEmailProps } from "../src/types";
 
 function roleLabel(role: "event_manager" | "day_of_lead", collapsed: boolean) {
@@ -47,7 +46,7 @@ export function CrewTraineeIntroEmail({
         <strong>Meet at storage</strong>
         <br />
         Start at the {storageClosetLabel}.{" "}
-        <Link href={storageClosetMapsUrl}>Open in Google Maps</Link>
+        <InlineLink href={storageClosetMapsUrl}>Open in Google Maps</InlineLink>
       </BodyCopy>
 
       <BodyCopy>
@@ -59,7 +58,7 @@ export function CrewTraineeIntroEmail({
         {venueGoogleMapsUrl ? (
           <>
             <br />
-            <Link href={venueGoogleMapsUrl}>Open in Google Maps</Link>
+            <InlineLink href={venueGoogleMapsUrl}>Open in Google Maps</InlineLink>
           </>
         ) : null}
       </BodyCopy>
@@ -80,9 +79,9 @@ export function CrewTraineeIntroEmail({
           <br />
           {contact.name}
           <br />
-          <Link href={`mailto:${contact.email}`}>{contact.email}</Link>
+          <InlineLink href={`mailto:${contact.email}`}>{contact.email}</InlineLink>
           <br />
-          <Link href={`tel:${contact.phone}`}>{contact.phone}</Link>
+          <InlineLink href={`tel:${contact.phone}`}>{contact.phone}</InlineLink>
         </BodyCopy>
       ))}
 
@@ -94,7 +93,7 @@ export function CrewTraineeIntroEmail({
 
       <BodyCopy>
         Running late? Message your event contacts above, or reach Arbor Live at{" "}
-        <Link href={`mailto:${arborContactEmail}`}>{arborContactEmail}</Link>.
+        <InlineLink href={`mailto:${arborContactEmail}`}>{arborContactEmail}</InlineLink>.
       </BodyCopy>
 
       <EmailSignOff />

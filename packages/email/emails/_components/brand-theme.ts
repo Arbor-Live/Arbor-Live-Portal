@@ -1,4 +1,9 @@
-/** Dark-theme tokens aligned with the portal primary (#3d7a5c). */
+/**
+ * Email tokens, mirrored from the web app's light theme in
+ * `apps/web/src/app/globals.css` (oklch values converted to hex, since email
+ * clients don't support oklch). Warm olive neutrals, green-700 primary, and a
+ * zinc-950 masthead behind the white logo — the same pairing as the site hero.
+ */
 export const ARBOR_LOGO_URL =
   "https://di867tnz6fwga.cloudfront.net/brand-kits/726962ea-cb8d-4c17-9b25-32bc8259d916/primary/4a5add54-637f-4565-a548-e0eca2109504.png";
 
@@ -6,31 +11,67 @@ export const ARBOR_WEBSITE_URL = "https://arborlive.stanford.edu";
 export const ARBOR_CONTACT_EMAIL = "arborlive@stanford.edu";
 
 export const brand = {
-  canvas: "#050505",
-  surface: "#111111",
-  surfaceRaised: "#181818",
-  surfaceInset: "#141414",
-  text: "#f2f2f2",
-  textMuted: "#a3a3a3",
-  textSubtle: "#737373",
-  accent: "#3d7a5c",
-  accentBright: "#4a9168",
-  accentSoft: "rgba(61, 122, 92, 0.14)",
-  accentBorder: "rgba(61, 122, 92, 0.35)",
-  border: "#262626",
-  borderSubtle: "#1f1f1f",
-  warning: "#fbbf24",
-  warningSoft: "rgba(251, 191, 36, 0.12)",
-  warningBorder: "#d97706",
-  mutedAccent: "#525252",
-  mutedSoft: "rgba(82, 82, 82, 0.2)",
+  canvas: "#f4f4f0", // --muted
+  surface: "#ffffff", // --background
+  surfaceRaised: "#fbfbf9", // --sidebar
+  surfaceInset: "#f4f4f0", // --muted
+  masthead: "#09090b", // zinc-950, landing hero
+  text: "#0c0c09", // --foreground
+  textBody: "#1d1d16", // --accent-foreground
+  textMuted: "#5b5b4b", // --chart-3, AA on white for body-size copy
+  textSubtle: "#7c7c67", // --muted-foreground
+  accent: "#008236", // --primary (green-700)
+  accentForeground: "#f0fdf4", // --primary-foreground
+  accentBright: "#008236",
+  accentSoft: "#f0fdf4",
+  accentBorder: "#b9e8cb",
+  border: "#e8e8e3", // --border
+  borderSubtle: "#efefea",
+  warning: "#bb4d00", // amber-700
+  warningSoft: "#fffbeb", // amber-50
+  warningBorder: "#fe9a00", // amber-500
+  mutedAccent: "#7c7c67",
   fontFamily:
-    'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, sans-serif',
-  maxWidth: "560px",
+    'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  headingFontFamily:
+    '"Space Grotesk", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+  maxWidth: "600px",
+} as const;
+
+/**
+ * Dark palette from the web app's `.dark` theme, applied through a
+ * `prefers-color-scheme: dark` media query in `BrandHead`. Inline styles stay
+ * light, so clients without media query support (Gmail) render the light theme.
+ */
+export const brandDark = {
+  canvas: "#0c0c09", // --background
+  surface: "#1d1d16", // --card
+  surfaceRaised: "#2b2b22", // --muted
+  text: "#fbfbf9", // --foreground
+  textBody: "#e8e8e3",
+  textMuted: "#abab9c", // --muted-foreground
+  accentText: "#00c950", // --sidebar-primary (green-500)
+  accentSoft: "#032e15", // green-950
+  border: "#34342d", // white/10 over --card
+  borderRaised: "#3f3f39", // white/15 over --card
+  warning: "#ffd230", // amber-300
+  warningSoft: "#461901", // amber-950
+} as const;
+
+/** Uppercase eyebrow label, matching `--tracking-eyebrow` in the web app. */
+export const eyebrowText = {
+  color: brand.accent,
+  fontFamily: brand.headingFontFamily,
+  fontSize: "11px",
+  fontWeight: "600",
+  letterSpacing: "0.14em",
+  lineHeight: "16px",
+  margin: "0 0 12px",
+  textTransform: "uppercase",
 } as const;
 
 export const bodyText = {
-  color: brand.text,
+  color: brand.textBody,
   fontSize: "16px",
   lineHeight: "26px",
   margin: "0 0 20px",
