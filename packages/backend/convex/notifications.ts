@@ -20,8 +20,9 @@ const notificationValue = v.object({
 });
 
 /**
- * Badge count plus every unread row's path. Subscribed on every page so the
- * bell stays live and the client can mark rows read when their page is open.
+ * Badge count plus the paths of the newest unread rows (up to
+ * UNREAD_SCAN_LIMIT). Subscribed on every page so the bell stays live and the
+ * client can mark rows read when their page is open.
  */
 export const getUnreadSummary = query({
   args: {},
@@ -34,11 +35,14 @@ export const getUnreadSummary = query({
     const user = await getCurrentUserOrNull(ctx);
     if (!user) return { count: 0, hasMore: false, unread: [] };
     const userId = getUserId(user);
+    // Newest first: auto-read and the OS-tray sync must see the latest rows
+    // even when more than UNREAD_SCAN_LIMIT are unread.
     const rows = await ctx.db
       .query("notifications")
       .withIndex("by_userId_and_status_and_readAt", (q) =>
         q.eq("userId", userId).eq("status", "delivered").eq("readAt", undefined),
       )
+      .order("desc")
       .take(UNREAD_SCAN_LIMIT + 1);
     const unread = rows.slice(0, UNREAD_SCAN_LIMIT);
     return {
