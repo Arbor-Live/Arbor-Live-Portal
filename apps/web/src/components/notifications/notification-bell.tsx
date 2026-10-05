@@ -40,7 +40,9 @@ export function NotificationBell() {
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[min(26rem,calc(100vw-1rem))] gap-0 overflow-hidden p-0">
-        {open ? <NotificationList unreadCount={count} onNavigate={() => setOpen(false)} /> : null}
+        {open ? (
+          <NotificationList unreadLabel={badge} unreadCount={count} onNavigate={() => setOpen(false)} />
+        ) : null}
       </PopoverContent>
     </Popover>
   );
@@ -48,9 +50,12 @@ export function NotificationBell() {
 
 function NotificationList({
   unreadCount,
+  unreadLabel,
   onNavigate,
 }: {
   unreadCount: number;
+  /** Same text as the bell badge: "100+" once the count is capped. */
+  unreadLabel: string;
   onNavigate: () => void;
 }) {
   const router = useRouter();
@@ -85,7 +90,7 @@ function NotificationList({
         <div className="flex items-baseline gap-2">
           <p className="text-sm font-semibold">Notifications</p>
           {unreadCount > 0 ? (
-            <span className="text-xs text-muted-foreground tabular-nums">{unreadCount} new</span>
+            <span className="text-xs text-muted-foreground tabular-nums">{unreadLabel} new</span>
           ) : null}
         </div>
         {unreadCount > 0 ? (
@@ -101,9 +106,10 @@ function NotificationList({
       </div>
       <div className="max-h-[min(30rem,70vh)] overflow-y-auto overscroll-contain">
         {notifications === undefined ? (
-          <div className="divide-y" aria-label="Loading notifications">
+          <div role="status" className="divide-y">
+            <span className="sr-only">Loading notifications</span>
             {[0, 1, 2].map((key) => (
-              <div key={key} className="flex gap-3 px-4 py-3">
+              <div key={key} aria-hidden className="flex gap-3 px-4 py-3">
                 <Skeleton className="size-8 shrink-0" />
                 <div className="flex-1 space-y-1.5">
                   <Skeleton className="h-2.5 w-20" />

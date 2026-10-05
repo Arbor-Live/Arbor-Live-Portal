@@ -15,6 +15,7 @@ import { resolveProfileMembership } from "./lib/userVerticals";
 import { resolveUserStatus } from "./lib/userStatus";
 import { assertE2eHelpersEnabled } from "./lib/e2eGuard";
 import { emailTemplateValue } from "./lib/emailTemplateValue";
+import { recordInAppNotification } from "./lib/inAppNotifications";
 import { recordInvoiceRevision, snapshotInvoice } from "./lib/invoiceRevisions";
 import { findAuthUsersByIds } from "./lib/auth";
 import {
@@ -743,7 +744,11 @@ export const enqueueInAppNotificationEmail = mutation({
     path: v.string(),
     title: v.optional(v.string()),
     debounceMs: v.optional(v.number()),
-    /** Another in-app template (default: a comment mention), shown with date + venue. */
+    /**
+     * Another in-app template (default: a comment mention emailed through the
+     * queue). Non-mention templates are recorded straight into the bell with
+     * date + venue, without an email.
+     */
     template: v.optional(emailTemplateValue),
     dateRangeLabel: v.optional(v.string()),
     venueName: v.optional(v.string()),
@@ -757,38 +762,70 @@ export const enqueueInAppNotificationEmail = mutation({
     }
     const nonce = Date.now();
     const url = `${SITE_URL}${args.path}`;
+    const subject = args.title?.trim() || `You were mentioned: E2E ${nonce}`;
+    const idempotencyKey = `e2e_in_app:${to}:${nonce}`;
+    const debounce =
+      args.debounceMs !== undefined
+        ? { key: `e2e_in_app:${to}`, delayMs: args.debounceMs }
+        : undefined;
+
+    if (args.template && args.template !== "comment_mention") {
+      // Other templates go straight to the bell: building a full email payload
+      // per template isn't worth it for a seed. Every link field the in-app
+      // mapping reads is set, so any in-app template gets its click-through.
+      const user = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+        model: "user",
+        where: [{ field: "email", value: to }],
+      });
+      const userId = getId(user);
+      if (!userId) throw new Error("User not found.");
+      await recordInAppNotification(ctx, {
+        userId,
+        template: args.template,
+        subject,
+        idempotencyKey,
+        debounce,
+        payload: {
+          eventUrl: url,
+          reviewUrl: url,
+          invoiceUrl: url,
+          portalUrl: url,
+          reportUrl: url,
+          requestsUrl: url,
+          dashboardUrl: url,
+          dashboardUsersUrl: url,
+          onboardingUrl: url,
+          signUrl: url,
+          payeeSettingsUrl: url,
+          albumPortalUrl: url,
+          url,
+          dateRangeLabel: args.dateRangeLabel,
+          venueName: args.venueName,
+        },
+      });
+      return null;
+    }
+
     const email = {
-      template: args.template ?? ("comment_mention" as const),
+      template: "comment_mention" as const,
       to,
-      subject: args.title?.trim() || `You were mentioned: E2E ${nonce}`,
-      idempotencyKey: `e2e_in_app:${to}:${nonce}`,
-      payload: args.template
-        ? {
-            // Every link field the in-app mapping might read for this template.
-            eventUrl: url,
-            reviewUrl: url,
-            invoiceUrl: url,
-            portalUrl: url,
-            reportUrl: url,
-            requestsUrl: url,
-            dateRangeLabel: args.dateRangeLabel,
-            venueName: args.venueName,
-          }
-        : {
-            authorName: "E2E Bot",
-            subjectKindLabel: "Damage report",
-            subjectTitle: "E2E",
-            contextRows: [],
-            commentSnippet: "Can you take a look?",
-            url,
-            ctaLabel: "Open",
-          },
+      subject,
+      idempotencyKey,
+      payload: {
+        authorName: "E2E Bot",
+        subjectKindLabel: "Damage report",
+        subjectTitle: "E2E",
+        contextRows: [],
+        commentSnippet: "Can you take a look?",
+        url,
+        ctaLabel: "Open",
+      },
     };
-    if (args.debounceMs !== undefined) {
+    if (debounce) {
       await enqueueDebouncedEmail(ctx, {
         ...email,
-        debounceKey: `e2e_in_app:${to}`,
-        debounceMs: args.debounceMs,
+        debounceKey: debounce.key,
+        debounceMs: debounce.delayMs,
       });
     } else {
       await enqueueEmail(ctx, email);
