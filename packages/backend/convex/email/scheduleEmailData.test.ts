@@ -5,6 +5,9 @@ import {
   crewInviteDebounceKey,
   crewInviteUid,
   groupShiftsByConsecutiveBlocks,
+  legacyCrewInviteDebounceKey,
+  legacyCrewInviteUid,
+  shiftGroupAnchor,
   userCoversEntireSchedule,
 } from "./scheduleEmailData";
 
@@ -41,24 +44,26 @@ describe("crew invites, one per run of back-to-back shifts", () => {
     { _id: id("show"), label: "Show", startsAt: 11 * hour, endsAt: 14 * hour },
     { _id: id("strike"), label: "Strike", startsAt: 22 * hour, endsAt: 23 * hour },
   ];
-  const shiftOn = (block: (typeof blocks)[number]) => ({
+  const shiftOn = (block: (typeof blocks)[number], role = "Sound") => ({
     scheduleBlockId: block._id,
-    role: "Sound",
+    role,
     startsAt: block.startsAt,
     endsAt: block.endsAt,
     userId: "user1",
   });
+  const [setup, show, strike] = blocks as [
+    (typeof blocks)[number],
+    (typeof blocks)[number],
+    (typeof blocks)[number],
+  ];
+  const blockIds = (groups: ReturnType<typeof groupShiftsByConsecutiveBlocks>) =>
+    groups.map((group) => group.map((shift) => shift.scheduleBlockId));
 
   it("splits a gap into separate invites and merges back-to-back blocks", () => {
-    const groups = groupShiftsByConsecutiveBlocks(blocks.map(shiftOn), blocks);
-    expect(groups.map((group) => group.map((shift) => shift.scheduleBlockId))).toEqual([
-      ["setup", "show"],
-      ["strike"],
-    ]);
+    const groups = groupShiftsByConsecutiveBlocks(blocks.map((block) => shiftOn(block)), blocks);
+    expect(blockIds(groups)).toEqual([["setup", "show"], ["strike"]]);
     const first = buildCrewShiftGroupIcsEvent({
-      eventId,
-      assigneeKey: "user1",
-      groupIndex: 0,
+      uid: crewInviteUid(eventId, "user1", shiftGroupAnchor(groups[0]!)),
       eventTitle: "Spring Showcase",
       group: groups[0]!,
       blockLabelById: new Map(blocks.map((block) => [block._id, block.label])),
@@ -66,23 +71,35 @@ describe("crew invites, one per run of back-to-back shifts", () => {
       sequence: 2,
     });
     expect(first).toMatchObject({
+      uid: "crew-event1-user1-setup@arbor.st",
       startAt: 9 * hour,
       endAt: 14 * hour,
       title: "Spring Showcase — Setup, Show (Sound)",
     });
   });
 
-  it("keeps the pre-split UID and debounce key for the first invite", () => {
-    expect(crewInviteUid(eventId, "user1", 0)).toBe("crew-event1-user1@arbor.st");
-    expect(crewInviteDebounceKey("crew_scheduled", eventId, "user1", 0)).toBe(
-      "crew_scheduled:event1:user1",
+  it("puts overlapping shifts (two roles in one block) in one invite", () => {
+    const groups = groupShiftsByConsecutiveBlocks(
+      [shiftOn(show, "Sound"), shiftOn(show, "Lighting")],
+      blocks,
     );
+    expect(groups).toHaveLength(1);
   });
 
-  it("gives later invites their own UID and debounce key", () => {
-    expect(crewInviteUid(eventId, "user1", 1)).toBe("crew-event1-user1-2@arbor.st");
-    expect(crewInviteDebounceKey("crew_unscheduled", eventId, "application:a1", 1)).toBe(
-      "crew_unscheduled:event1:application:a1:2",
+  it("keeps a surviving run's invite when an earlier run is removed", () => {
+    const before = groupShiftsByConsecutiveBlocks([shiftOn(setup), shiftOn(strike)], blocks);
+    const after = groupShiftsByConsecutiveBlocks([shiftOn(strike)], blocks);
+    expect(before.map(shiftGroupAnchor)).toEqual(["setup", "strike"]);
+    expect(after.map(shiftGroupAnchor)).toEqual(["strike"]);
+  });
+
+  it("keys runs by their first block, apart from the pre-split merged invite", () => {
+    expect(crewInviteDebounceKey("crew_scheduled", eventId, "application:a1", "show")).toBe(
+      "crew_scheduled:event1:application:a1:show",
+    );
+    expect(legacyCrewInviteUid(eventId, "user1")).toBe("crew-event1-user1@arbor.st");
+    expect(legacyCrewInviteDebounceKey("crew_scheduled", eventId, "user1")).toBe(
+      "crew_scheduled:event1:user1",
     );
   });
 });

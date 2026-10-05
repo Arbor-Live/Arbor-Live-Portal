@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { resolveBandName } from "../lib/bandIdentity";
+import { loadActiveOrgMemberUserIds } from "../lib/orgMembership";
 import { EVENT_TIMEZONE, bandShowUrl, formatEventDateRange, subjectForTemplate } from "./constants";
 import {
   cancelPendingDebouncedEmail,
@@ -50,15 +51,21 @@ export function bandInviteDebounceKey(
 }
 
 /**
- * The lineup windows that need an email: changed and not already over (editing
- * a past show's run of show for the record shouldn't ping the band).
+ * A window that hasn't ended yet. An ended window counts as no window: editing
+ * a past show for the record pings nobody, and moving a slot into the past
+ * cancels its invite.
  */
+export function liveActSlotWindow(row: LineupRow | null, slot: ActSlot, now: number) {
+  const window = actSlotWindow(row, slot);
+  return window && window.endsAt > now ? window : null;
+}
+
+/** The lineup windows that need an email. */
 export function changedActSlots(before: LineupRow | null, after: LineupRow | null, now: number) {
   return ACT_SLOTS.filter((slot) => {
-    const previous = actSlotWindow(before, slot);
-    const next = actSlotWindow(after, slot);
-    if (previous?.startsAt === next?.startsAt && previous?.endsAt === next?.endsAt) return false;
-    return (next ?? previous)!.endsAt > now;
+    const previous = liveActSlotWindow(before, slot, now);
+    const next = liveActSlotWindow(after, slot, now);
+    return previous?.startsAt !== next?.startsAt || previous?.endsAt !== next?.endsAt;
   });
 }
 
@@ -79,19 +86,15 @@ export async function scheduleBandTimeEmails(
 ) {
   const row = after ?? before;
   if (!row) return;
-  const slots = changedActSlots(before, after, Date.now());
+  const now = Date.now();
+  const slots = changedActSlots(before, after, now);
   if (slots.length === 0) return;
   const event = await ctx.db.get(row.eventId);
   if (!event || event.status === "cancelled") return;
 
-  const memberships = await ctx.db
-    .query("userOrganizationMemberships")
-    .withIndex("by_organizationId", (q) => q.eq("organizationId", row.organizationId))
-    .take(200);
   const members = [];
-  for (const membership of memberships) {
-    if (!membership.active) continue;
-    const recipient = await getUserScheduledEmailRecipient(ctx, membership.userId);
+  for (const userId of await loadActiveOrgMemberUserIds(ctx, row.organizationId)) {
+    const recipient = await getUserScheduledEmailRecipient(ctx, userId);
     if (recipient) members.push(recipient);
   }
   if (members.length === 0) return;
@@ -109,8 +112,8 @@ export async function scheduleBandTimeEmails(
 
   for (const slot of slots) {
     const slotLabel = SLOT_LABELS[slot];
-    const next = actSlotWindow(after, slot);
-    const previous = actSlotWindow(before, slot);
+    const next = liveActSlotWindow(after, slot, now);
+    const previous = liveActSlotWindow(before, slot, now);
     const otherSlot: ActSlot = slot === "set" ? "soundcheck" : "set";
     const otherWindow = actSlotWindow(after, otherSlot);
     const otherSlotSummary = otherWindow

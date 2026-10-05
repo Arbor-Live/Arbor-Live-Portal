@@ -39,7 +39,12 @@ import {
   markInvitationAccepted,
   scheduleUserInviteEmail,
 } from "./email/invitations";
-import { buildCrewShiftGroupIcsEvent } from "./email/scheduleEmailData";
+import {
+  buildCrewShiftGroupIcsEvent,
+  crewInviteUid,
+  shiftGroupAnchor,
+  type CrewShiftLike,
+} from "./email/scheduleEmailData";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { ensureOnboardingForOrgMembership } from "./onboarding";
 import { upsertUserCompensationRate } from "./lib/crewCompensation";
@@ -612,20 +617,23 @@ export const assignTraineeToEvent = mutation({
     const callTimeLabel = formatDateTime(ready.callTime, "long", timezone);
     const dateRangeLabel = formatEventDateRange(ready.startAt, ready.endAt, timezone);
     const inviteSequence = await bumpInviteSequence(ctx, args.eventId);
+    const traineeShift: CrewShiftLike = {
+      scheduleBlockId: ready.scheduleBlockId,
+      role: "Trainee",
+      startsAt: ready.startsAt,
+      endsAt: ready.endsAt,
+      crewApplicationId: application._id,
+    };
     const icsEvent = buildCrewShiftGroupIcsEvent({
-      eventId: args.eventId,
-      assigneeKey: `application:${application._id}`,
-      groupIndex: 0,
+      // Same UID the crew diff gives this run, so later edits update this invite.
+      uid: crewInviteUid(
+        args.eventId,
+        `application:${application._id}`,
+        shiftGroupAnchor([traineeShift]),
+      ),
       eventTitle: ready.eventTitle,
       venueName: ready.venueName,
-      group: [
-        {
-          role: "Trainee",
-          startsAt: ready.startsAt,
-          endsAt: ready.endsAt,
-          crewApplicationId: application._id,
-        },
-      ],
+      group: [traineeShift],
       blockLabelById: new Map(),
       timezone,
       sequence: inviteSequence,

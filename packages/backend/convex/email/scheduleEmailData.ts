@@ -83,10 +83,10 @@ function blockWindow(
   };
 }
 
-function areScheduleWindowsConsecutive(previousEnd: number, nextStart: number) {
-  return previousEnd === nextStart;
-}
-
+/**
+ * Splits a person's shifts into runs: back-to-back or overlapping shifts (e.g.
+ * two roles in one block) share a run, and each run gets one invite.
+ */
 export function groupShiftsByConsecutiveBlocks(
   shifts: CrewShiftLike[],
   blocks: ScheduleBlockLike[],
@@ -100,16 +100,15 @@ export function groupShiftsByConsecutiveBlocks(
   });
 
   const groups: CrewShiftLike[][] = [[sorted[0]!]];
-  for (let index = 1; index < sorted.length; index += 1) {
-    const previousShift = sorted[index - 1]!;
-    const nextShift = sorted[index]!;
-    const previousWindow = blockWindow(previousShift, blockById);
-    const nextWindow = blockWindow(nextShift, blockById);
-    if (areScheduleWindowsConsecutive(previousWindow.endsAt, nextWindow.startsAt)) {
-      groups[groups.length - 1]!.push(nextShift);
+  let runEnd = blockWindow(sorted[0]!, blockById).endsAt;
+  for (const shift of sorted.slice(1)) {
+    const window = blockWindow(shift, blockById);
+    if (window.startsAt <= runEnd) {
+      groups[groups.length - 1]!.push(shift);
     } else {
-      groups.push([nextShift]);
+      groups.push([shift]);
     }
+    runEnd = Math.max(runEnd, window.endsAt);
   }
   return groups;
 }
@@ -125,23 +124,39 @@ export function crewAssigneeKey(shift: CrewShiftLike) {
 }
 
 /**
- * A person gets one invite per run of back-to-back shifts. Invite 0 keeps the
- * UID and debounce key from when everyone got a single merged invite, so those
- * calendar entries update in place instead of duplicating.
+ * A run's identity: its first block, or its start time when that shift has no
+ * block. A run keeps its invite while other runs come and go; it only gets a
+ * new one when its first block changes.
  */
-export function crewInviteUid(eventId: Id<"events">, assigneeKey: string, groupIndex: number) {
-  const suffix = groupIndex === 0 ? "" : `-${groupIndex + 1}`;
-  return `crew-${eventId}-${assigneeKey}${suffix}@arbor.st`;
+export function shiftGroupAnchor(group: CrewShiftLike[]) {
+  const first = group[0]!;
+  return first.scheduleBlockId ?? `t${first.startsAt}`;
+}
+
+export function crewInviteUid(eventId: Id<"events">, assigneeKey: string, anchor: string) {
+  return `crew-${eventId}-${assigneeKey}-${anchor}@arbor.st`;
 }
 
 export function crewInviteDebounceKey(
   template: "crew_scheduled" | "crew_unscheduled",
   eventId: Id<"events">,
   assigneeKey: string,
-  groupIndex: number,
+  anchor: string,
 ) {
-  const suffix = groupIndex === 0 ? "" : `:${groupIndex + 1}`;
-  return `${template}:${eventId}:${assigneeKey}${suffix}`;
+  return `${template}:${eventId}:${assigneeKey}:${anchor}`;
+}
+
+/** The single merged invite everyone got before invites were split per run. */
+export function legacyCrewInviteUid(eventId: Id<"events">, assigneeKey: string) {
+  return `crew-${eventId}-${assigneeKey}@arbor.st`;
+}
+
+export function legacyCrewInviteDebounceKey(
+  template: "crew_scheduled" | "crew_unscheduled",
+  eventId: Id<"events">,
+  assigneeKey: string,
+) {
+  return `${template}:${eventId}:${assigneeKey}`;
 }
 
 export function shiftGroupBlockLabels(group: CrewShiftLike[], blockLabelById: Map<string, string>) {
@@ -156,11 +171,9 @@ export function shiftGroupBlockLabels(group: CrewShiftLike[], blockLabelById: Ma
   ];
 }
 
-/** The calendar event for one run of back-to-back shifts (e.g. 9–10 + 10–12 → 9–12). */
+/** The calendar event spanning a run of shifts (e.g. 9–10 + 10–12 → 9–12). */
 export function buildCrewShiftGroupIcsEvent(args: {
-  eventId: Id<"events">;
-  assigneeKey: string;
-  groupIndex: number;
+  uid: string;
   eventTitle: string;
   venueName?: string;
   group: CrewShiftLike[];
@@ -182,7 +195,7 @@ export function buildCrewShiftGroupIcsEvent(args: {
     .join("\n");
 
   return {
-    uid: crewInviteUid(args.eventId, args.assigneeKey, args.groupIndex),
+    uid: args.uid,
     sequence: args.sequence,
     title,
     description,

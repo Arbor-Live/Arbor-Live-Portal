@@ -41,6 +41,8 @@ export type CrewUnscheduledEmailProps = EventEmailProps & {
   previousAssignmentSummaries: string[];
   /** Set when the person keeps other blocks on this event; only these were removed. */
   remainingAssignmentSummaries?: string[];
+  /** Cancels the pre-split merged invite; the per-run invites replace it. */
+  replacedBySeparateInvites?: boolean;
 };
 
 export type CrewUnscheduledEmailPayload = CrewUnscheduledEmailProps & CalendarInvitePayload;

@@ -1,3 +1,4 @@
+import type { CrewUnscheduledEmailPayload } from "@arbor/email/types";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import {
@@ -16,6 +17,10 @@ import {
   buildCrewShiftGroupIcsEvent,
   crewAssigneeKey,
   crewInviteDebounceKey,
+  crewInviteUid,
+  legacyCrewInviteDebounceKey,
+  legacyCrewInviteUid,
+  shiftGroupAnchor,
   formatAssignmentSummary,
   formatBlockTimeRange,
   formatScheduleBlockSummary,
@@ -177,32 +182,65 @@ export async function scheduleCrewScheduledEmails(
       continue;
     }
 
-    const previousGroups = groupShiftsByConsecutiveBlocks(previousAssigneeShifts, blocks);
-    const nextGroups = groupShiftsByConsecutiveBlocks(nextAssigneeShifts, blocks);
+    const byAnchor = (shifts: CrewShiftLike[]) =>
+      new Map(groupShiftsByConsecutiveBlocks(shifts, blocks).map((group) => [shiftGroupAnchor(group), group]));
+    const previousGroups = byAnchor(previousAssigneeShifts);
+    const nextGroups = byAnchor(nextAssigneeShifts);
     const coversEntireEvent =
-      nextGroups.length === 1 && userCoversEntireSchedule(nextAssigneeShifts, blocks);
+      nextGroups.size === 1 && userCoversEntireSchedule(nextAssigneeShifts, blocks);
     const remainingAssignmentSummaries = nextAssigneeShifts.map((shift) =>
       formatAssignmentSummary(shift, blockLabelById, timezone),
     );
+    const labelRuns = Math.max(previousGroups.size, nextGroups.size) > 1;
     const to = await resolveCrewAssigneeRecipient(ctx, assigneeKey);
+    if (!to) continue;
+    const base = { ...buildBasePayload(event, to.name), eventLeadName, timezone };
+    const icsEventFor = (uid: string, group: CrewShiftLike[]) =>
+      buildCrewShiftGroupIcsEvent({
+        uid,
+        eventTitle: event.title,
+        venueName: event.venueName,
+        group,
+        blockLabelById,
+        timezone,
+        sequence: inviteSequence,
+      });
 
-    for (let index = 0; index < Math.max(previousGroups.length, nextGroups.length); index += 1) {
-      const previousGroup = previousGroups[index] ?? [];
-      const nextGroup = nextGroups[index];
-      const scheduledKey = crewInviteDebounceKey("crew_scheduled", eventId, assigneeKey, index);
-      const unscheduledKey = crewInviteDebounceKey("crew_unscheduled", eventId, assigneeKey, index);
+    await retireLegacyCrewInvite(ctx, {
+      eventId,
+      assigneeKey,
+      to,
+      subjectContext: event.title,
+      payload: {
+        ...base,
+        previousAssignmentSummaries: previousAssigneeShifts.map((shift) =>
+          formatAssignmentSummary(shift, blockLabelById, timezone),
+        ),
+        remainingAssignmentSummaries,
+        replacedBySeparateInvites: nextAssigneeShifts.length > 0,
+        icsEvent: icsEventFor(
+          legacyCrewInviteUid(eventId, assigneeKey),
+          previousAssigneeShifts.length > 0 ? previousAssigneeShifts : nextAssigneeShifts,
+        ),
+      },
+    });
+
+    for (const anchor of new Set([...previousGroups.keys(), ...nextGroups.keys()])) {
+      const previousGroup = previousGroups.get(anchor) ?? [];
+      const nextGroup = nextGroups.get(anchor);
+      const scheduledKey = crewInviteDebounceKey("crew_scheduled", eventId, assigneeKey, anchor);
+      const unscheduledKey = crewInviteDebounceKey("crew_unscheduled", eventId, assigneeKey, anchor);
       const group = nextGroup ?? previousGroup;
-      const subjectContext =
-        Math.max(previousGroups.length, nextGroups.length) > 1
-          ? `${event.title} — ${shiftGroupBlockLabels(group, blockLabelById).join(", ")}`
-          : event.title;
+      const subjectContext = labelRuns
+        ? `${event.title} — ${shiftGroupBlockLabels(group, blockLabelById).join(", ")}`
+        : event.title;
       const groupFingerprint = shiftGroupFingerprint(group);
+      const icsEvent = icsEventFor(crewInviteUid(eventId, assigneeKey, anchor), group);
 
       if (nextGroup) {
         if (shiftGroupFingerprint(previousGroup) === groupFingerprint) continue;
         // Re-assignment supersedes any pending removal notice.
         await cancelPendingDebouncedEmail(ctx, unscheduledKey);
-        if (!to) continue;
         await enqueueDebouncedEmail(ctx, {
           template: "crew_scheduled",
           to: to.email,
@@ -214,25 +252,13 @@ export async function scheduleCrewScheduledEmails(
           // Burst edits coalesce via debounceKey; identical no-op saves are skipped above.
           idempotencyKey: `${scheduledKey}:${groupFingerprint}:${Date.now()}`,
           payload: {
-            ...buildBasePayload(event, to.name),
-            eventLeadName,
+            ...base,
             assignmentSummaries: nextGroup.map((shift) =>
               formatAssignmentSummary(shift, blockLabelById, timezone),
             ),
             fullScheduleSummaries: coversEntireEvent ? [] : fullScheduleSummaries,
             coversEntireEvent,
-            icsEvent: buildCrewShiftGroupIcsEvent({
-              eventId,
-              assigneeKey,
-              groupIndex: index,
-              eventTitle: event.title,
-              venueName: event.venueName,
-              group: nextGroup,
-              blockLabelById,
-              timezone,
-              sequence: inviteSequence,
-            }),
-            timezone,
+            icsEvent,
           },
         });
         continue;
@@ -240,7 +266,7 @@ export async function scheduleCrewScheduledEmails(
 
       // This run is gone: drop its pending invite; cancel it if one already went out.
       await cancelPendingDebouncedEmail(ctx, scheduledKey);
-      if (!to || !(await hasSentDebouncedEmail(ctx, scheduledKey))) continue;
+      if (!(await hasSentDebouncedEmail(ctx, scheduledKey))) continue;
       await enqueueDebouncedEmail(ctx, {
         template: "crew_unscheduled",
         to: to.email,
@@ -250,28 +276,65 @@ export async function scheduleCrewScheduledEmails(
         debounceKey: unscheduledKey,
         idempotencyKey: `${unscheduledKey}:${groupFingerprint}:${Date.now()}`,
         payload: {
-          ...buildBasePayload(event, to.name),
-          eventLeadName,
+          ...base,
           previousAssignmentSummaries: previousGroup.map((shift) =>
             formatAssignmentSummary(shift, blockLabelById, timezone),
           ),
           remainingAssignmentSummaries,
-          icsEvent: buildCrewShiftGroupIcsEvent({
-            eventId,
-            assigneeKey,
-            groupIndex: index,
-            eventTitle: event.title,
-            venueName: event.venueName,
-            group: previousGroup,
-            blockLabelById,
-            timezone,
-            sequence: inviteSequence,
-          }),
-          timezone,
+          icsEvent,
         },
       });
     }
   }
+}
+
+async function latestSentAt(ctx: MutationCtx, debounceKey: string) {
+  const rows = await ctx.db
+    .query("emailNotifications")
+    .withIndex("by_debounceKey_and_status", (q) =>
+      q.eq("debounceKey", debounceKey).eq("status", "sent"),
+    )
+    .take(50);
+  return Math.max(0, ...rows.map((row) => row.sentAt ?? row.createdAt));
+}
+
+/**
+ * Crew used to get one merged invite per event under the per-person legacy
+ * UID. The first time such a person's shifts change, cancel that invite (the
+ * per-run invites replace it) so their calendar doesn't keep a stale duplicate.
+ */
+async function retireLegacyCrewInvite(
+  ctx: MutationCtx,
+  args: {
+    eventId: Id<"events">;
+    assigneeKey: string;
+    to: { email: string; userId?: string };
+    subjectContext: string;
+    payload: CrewUnscheduledEmailPayload;
+  },
+) {
+  const scheduledKey = legacyCrewInviteDebounceKey("crew_scheduled", args.eventId, args.assigneeKey);
+  const unscheduledKey = legacyCrewInviteDebounceKey(
+    "crew_unscheduled",
+    args.eventId,
+    args.assigneeKey,
+  );
+  // A merged invite still queued from before the split must not go out now.
+  await cancelPendingDebouncedEmail(ctx, scheduledKey);
+  const invitedAt = await latestSentAt(ctx, scheduledKey);
+  if (invitedAt === 0 || invitedAt < (await latestSentAt(ctx, unscheduledKey))) return;
+  await enqueueDebouncedEmail(ctx, {
+    template: "crew_unscheduled",
+    to: args.to.email,
+    recipientUserId: args.to.userId,
+    subject: args.payload.replacedBySeparateInvites
+      ? `Calendar invite replaced: ${args.subjectContext}`
+      : subjectForTemplate("crew_unscheduled", args.subjectContext),
+    eventId: args.eventId,
+    debounceKey: unscheduledKey,
+    idempotencyKey: `${unscheduledKey}:${invitedAt}:${Date.now()}`,
+    payload: args.payload,
+  });
 }
 
 export async function scheduleScheduleReminderEmail(

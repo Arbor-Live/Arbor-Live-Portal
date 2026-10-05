@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Id } from "../_generated/dataModel";
-import { bandInviteUid, changedActSlots } from "./bandScheduleEmails";
+import { bandInviteUid, changedActSlots, liveActSlotWindow } from "./bandScheduleEmails";
 
 const hour = 60 * 60 * 1000;
 const now = 100 * hour;
@@ -31,6 +31,12 @@ describe("changedActSlots", () => {
 
   it("flags both windows when the act leaves the bill", () => {
     expect(changedActSlots(row, null, now)).toEqual(["soundcheck", "set"]);
+  });
+
+  it("cancels a window moved into the past", () => {
+    const moved = { ...row, soundcheckStartsAt: now - 3 * hour, soundcheckEndsAt: now - 2 * hour };
+    expect(changedActSlots(row, moved, now)).toEqual(["soundcheck"]);
+    expect(liveActSlotWindow(moved, "soundcheck", now)).toBeNull();
   });
 
   it("ignores windows that are already over", () => {
