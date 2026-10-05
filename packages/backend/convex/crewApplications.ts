@@ -33,7 +33,7 @@ import {
   SITE_URL,
   subjectForTemplate,
 } from "./email/constants";
-import { enqueueEmail } from "./email/enqueue";
+import { enqueueDebouncedEmail, enqueueEmail } from "./email/enqueue";
 import { bumpInviteSequence } from "./email/inviteSequence";
 import {
   markInvitationAccepted,
@@ -41,6 +41,7 @@ import {
 } from "./email/invitations";
 import {
   buildCrewShiftGroupIcsEvent,
+  crewInviteDebounceKey,
   crewInviteUid,
   shiftGroupAnchor,
   type CrewShiftLike,
@@ -624,13 +625,11 @@ export const assignTraineeToEvent = mutation({
       endsAt: ready.endsAt,
       crewApplicationId: application._id,
     };
+    const assigneeKey = `application:${application._id}`;
+    const anchor = shiftGroupAnchor([traineeShift]);
     const icsEvent = buildCrewShiftGroupIcsEvent({
       // Same UID the crew diff gives this run, so later edits update this invite.
-      uid: crewInviteUid(
-        args.eventId,
-        `application:${application._id}`,
-        shiftGroupAnchor([traineeShift]),
-      ),
+      uid: crewInviteUid(args.eventId, assigneeKey, anchor),
       eventTitle: ready.eventTitle,
       venueName: ready.venueName,
       group: [traineeShift],
@@ -669,8 +668,12 @@ export const assignTraineeToEvent = mutation({
       },
     });
 
-    await enqueueEmail(ctx, {
+    // Queued under the run's debounce key (sent right away) so a later crew
+    // edit that removes this run finds the sent invite and cancels it.
+    await enqueueDebouncedEmail(ctx, {
       template: "crew_scheduled",
+      debounceKey: crewInviteDebounceKey("crew_scheduled", args.eventId, assigneeKey, anchor),
+      debounceMs: 0,
       to: application.email,
       subject: subjectForTemplate("crew_scheduled", ready.eventTitle),
       eventId: args.eventId,
