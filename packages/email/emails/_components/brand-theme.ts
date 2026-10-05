@@ -4,10 +4,15 @@
  * clients don't support oklch). Warm olive neutrals, green-700 primary, and a
  * zinc-950 masthead behind the white logo — the same pairing as the site hero.
  */
-export const ARBOR_LOGO_URL =
-  "https://di867tnz6fwga.cloudfront.net/brand-kits/726962ea-cb8d-4c17-9b25-32bc8259d916/primary/4a5add54-637f-4565-a548-e0eca2109504.png";
-
 export const ARBOR_WEBSITE_URL = "https://arborlive.stanford.edu";
+
+/**
+ * The masthead as one 1200×208 image (logo on zinc-950, shown at 600×104) from
+ * `apps/web/public/email/masthead.png`. Clients that recolor emails for dark
+ * mode (Outlook, and any forwarded copy that lost our <style> block) never
+ * touch images, so the band stays black instead of turning mid-gray.
+ */
+export const ARBOR_MASTHEAD_URL = `${ARBOR_WEBSITE_URL}/email/masthead.png`;
 export const ARBOR_CONTACT_EMAIL = "arborlive@stanford.edu";
 
 export const brand = {

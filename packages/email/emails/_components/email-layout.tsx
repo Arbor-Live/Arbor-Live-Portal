@@ -17,7 +17,7 @@ import {
 import type { CSSProperties, ReactNode } from "react";
 import {
   ARBOR_CONTACT_EMAIL,
-  ARBOR_LOGO_URL,
+  ARBOR_MASTHEAD_URL,
   ARBOR_WEBSITE_URL,
   bodyText,
   brand,
@@ -94,27 +94,37 @@ export const DARK = {
   secondaryButton: "arbor-dm-secondary-button",
 } as const;
 
+/**
+ * Outlook (Outlook.com and the mobile apps) matches the media query but then
+ * runs its own dark-mode pass over every color, lifting already-dark colors
+ * to a muddy mid-gray. It does better inverting the light inline colors
+ * itself, so these rules skip Outlook: it prefixes class attributes with
+ * `x_` (or drops <body>), and attribute selectors aren't rewritten, so the
+ * `:not([class^="x_"])` root only matches outside Outlook.
+ */
+const darkRoot = `.${DARK.canvas}:not([class^="x_"])`;
+
 const darkModeCss = `@media (prefers-color-scheme: dark) {
-  .${DARK.canvas},
-  .${DARK.canvas} > table > tbody > tr > td { background-color: ${brandDark.canvas} !important; }
-  .${DARK.surface} { background-color: ${brandDark.surface} !important; border-color: ${brandDark.border} !important; }
-  .${DARK.raised} { background-color: ${brandDark.surfaceRaised} !important; border-left-color: ${brandDark.borderRaised} !important; border-right-color: ${brandDark.borderRaised} !important; border-bottom-color: ${brandDark.borderRaised} !important; }
-  .${DARK.text} { color: ${brandDark.text} !important; }
-  .${DARK.body} { color: ${brandDark.textBody} !important; }
-  .${DARK.muted} { color: ${brandDark.textMuted} !important; }
-  .${DARK.accent} { color: ${brandDark.accentText} !important; }
-  .${DARK.rule} { border-color: ${brandDark.borderRaised} !important; }
-  .${DARK.alert} { background-color: ${brandDark.warningSoft} !important; color: ${brandDark.warning} !important; }
-  .${DARK.note} { background-color: ${brandDark.accentSoft} !important; }
-  .${DARK.secondaryButton} { background-color: ${brandDark.surfaceRaised} !important; border-color: ${brandDark.borderRaised} !important; color: ${brandDark.text} !important; }
+  ${darkRoot},
+  ${darkRoot} > table > tbody > tr > td { background-color: ${brandDark.canvas} !important; }
+  ${darkRoot} .${DARK.surface} { background-color: ${brandDark.surface} !important; border-color: ${brandDark.border} !important; }
+  ${darkRoot} .${DARK.raised} { background-color: ${brandDark.surfaceRaised} !important; border-left-color: ${brandDark.borderRaised} !important; border-right-color: ${brandDark.borderRaised} !important; border-bottom-color: ${brandDark.borderRaised} !important; }
+  ${darkRoot} .${DARK.text} { color: ${brandDark.text} !important; }
+  ${darkRoot} .${DARK.body} { color: ${brandDark.textBody} !important; }
+  ${darkRoot} .${DARK.muted} { color: ${brandDark.textMuted} !important; }
+  ${darkRoot} .${DARK.accent} { color: ${brandDark.accentText} !important; }
+  ${darkRoot} .${DARK.rule} { border-color: ${brandDark.borderRaised} !important; }
+  ${darkRoot} .${DARK.alert} { background-color: ${brandDark.warningSoft} !important; color: ${brandDark.warning} !important; }
+  ${darkRoot} .${DARK.note} { background-color: ${brandDark.accentSoft} !important; }
+  ${darkRoot} .${DARK.secondaryButton} { background-color: ${brandDark.surfaceRaised} !important; border-color: ${brandDark.borderRaised} !important; color: ${brandDark.text} !important; }
 }`;
 
 /** Fonts and color-scheme hints shared by every Arbor email. */
 export function BrandHead() {
   return (
     <Head>
-      {/* Declaring both schemes tells Apple Mail and Outlook for Mac to apply our dark
-          palette rather than auto-inverting the light one. */}
+      {/* Declaring both schemes tells Apple Mail to apply our dark palette rather than
+          auto-inverting the light one. */}
       <meta name="color-scheme" content="light dark" />
       <meta name="supported-color-schemes" content="light dark" />
       {/* Inline padding can only be overridden with !important; clients without media
@@ -158,12 +168,16 @@ export function BrandHead() {
   );
 }
 
-/** Zinc-950 band with the white logo and a green rule, echoing the site hero. */
+/**
+ * Zinc-950 band with the white logo and a green rule, echoing the site hero.
+ * The band is an image so dark-mode recoloring can't gray it out; the cell's
+ * background color only shows while images are blocked.
+ */
 export function BrandMasthead({ accentColor = brand.accent }: { accentColor?: string }) {
   return (
     <>
-      <Section className={GUTTER_CLASS} style={mastheadStyle}>
-        <Img src={ARBOR_LOGO_URL} alt="Arbor Live" width="104" style={logoStyle} />
+      <Section style={mastheadStyle}>
+        <Img src={ARBOR_MASTHEAD_URL} alt="Arbor Live" width="600" style={logoStyle} />
       </Section>
       <Section style={{ ...accentBarStyle, backgroundColor: accentColor }} />
     </>
@@ -421,12 +435,17 @@ const containerStyle: CSSProperties = {
 
 const mastheadStyle: CSSProperties = {
   backgroundColor: brand.masthead,
-  padding: "24px 40px",
 };
 
 const logoStyle: CSSProperties = {
   display: "block",
+  width: "100%",
   height: "auto",
+  // Alt text while images are blocked, readable on the masthead color.
+  color: "#ffffff",
+  fontFamily: brand.headingFontFamily,
+  fontSize: "18px",
+  fontWeight: "600",
 };
 
 const accentBarStyle: CSSProperties = {
