@@ -993,8 +993,9 @@ export default defineSchema({
     crewCostBufferPercent: v.optional(v.number()),
     crewCostUsd: v.optional(v.number()),
     /**
-     * Revision stamped as SEQUENCE on crew calendar invites. Calendar clients
-     * only apply a re-sent invite (same UID) as an update when this increases.
+     * Revision stamped as SEQUENCE on crew and artist calendar invites (named
+     * before artists got invites). Calendar clients only apply a re-sent
+     * invite (same UID) as an update when this increases.
      */
     crewInviteSequence: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),

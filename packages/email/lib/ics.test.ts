@@ -11,26 +11,41 @@ describe("buildScheduleIcs SEQUENCE", () => {
     timezone: "America/Los_Angeles",
     organizerEmail: "crew@arbor.st",
     attendeeEmail: "member@example.com",
-    events: [
-      {
-        uid: "crew-event-1-user-1@arbor.st",
-        title: "Spring Showcase — Setup",
-        startAt: new Date("2026-05-09T16:00:00Z"),
-        endAt: new Date("2026-05-09T18:00:00Z"),
-      },
-    ],
+    event: {
+      uid: "crew-event-1-user-1@arbor.st",
+      title: "Spring Showcase — Setup",
+      startAt: new Date("2026-05-09T16:00:00Z"),
+      endAt: new Date("2026-05-09T18:00:00Z"),
+    },
   };
 
   it("emits SEQUENCE:0 when no revision is given", () => {
-    const ics = buildScheduleIcs({ ...base, events: [{ ...base.events[0]! }] });
+    const ics = buildScheduleIcs(base);
     expect(ics).toContain("SEQUENCE:0\r\n");
   });
 
   it("emits the incremented revision for a re-sent invite", () => {
     const ics = buildScheduleIcs({
       ...base,
-      events: [{ ...base.events[0]!, sequence: 3 }],
+      event: { ...base.event, sequence: 3 },
     });
     expect(ics).toContain("SEQUENCE:3\r\n");
+  });
+});
+
+describe("buildScheduleIcs", () => {
+  it("emits exactly one VEVENT per invite", () => {
+    const ics = buildScheduleIcs({
+      timezone: "America/Los_Angeles",
+      organizerEmail: "crew@arbor.st",
+      attendeeEmail: "member@example.com",
+      event: {
+        uid: "band-p1-set@arbor.st",
+        title: "Set: Spring Showcase",
+        startAt: new Date("2026-05-10T04:00:00Z"),
+        endAt: new Date("2026-05-10T05:00:00Z"),
+      },
+    });
+    expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(1);
   });
 });

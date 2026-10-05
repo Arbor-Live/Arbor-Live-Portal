@@ -425,7 +425,9 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   manage it from the event workspace **Lineup** tab (not Promo).
   Assigning an artist emails members (`band_assigned`), unlocks event media album
   access, and surfaces the show on the artist home dashboard. Optional
-  `eventBandPayments` attach payout details to the same assignment.
+  `eventBandPayments` attach payout details to the same assignment. Setting or
+  moving the act's soundcheck/set times emails each member one calendar invite
+  per window (`band_scheduled`).
 
 ## Stanford academic calendar and closures
 

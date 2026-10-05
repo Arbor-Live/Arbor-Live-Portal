@@ -34,12 +34,12 @@ import {
   subjectForTemplate,
 } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
-import { bumpCrewInviteSequence } from "./email/crewInviteSequence";
+import { bumpInviteSequence } from "./email/inviteSequence";
 import {
   markInvitationAccepted,
   scheduleUserInviteEmail,
 } from "./email/invitations";
-import { buildSingleIcsEventForUserShifts } from "./email/scheduleEmailData";
+import { buildCrewShiftGroupIcsEvent } from "./email/scheduleEmailData";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { ensureOnboardingForOrgMembership } from "./onboarding";
 import { upsertUserCompensationRate } from "./lib/crewCompensation";
@@ -611,26 +611,25 @@ export const assignTraineeToEvent = mutation({
     const timezone = EVENT_TIMEZONE;
     const callTimeLabel = formatDateTime(ready.callTime, "long", timezone);
     const dateRangeLabel = formatEventDateRange(ready.startAt, ready.endAt, timezone);
-    const inviteSequence = await bumpCrewInviteSequence(ctx, args.eventId);
-    const icsEvents = [
-      buildSingleIcsEventForUserShifts({
-        eventId: args.eventId,
-        userId: `application:${application._id}`,
-        eventTitle: ready.eventTitle,
-        venueName: ready.venueName,
-        shifts: [
-          {
-            role: "Trainee",
-            startsAt: ready.startsAt,
-            endsAt: ready.endsAt,
-            crewApplicationId: application._id,
-          },
-        ],
-        blockLabelById: new Map(),
-        timezone,
-        sequence: inviteSequence,
-      }),
-    ];
+    const inviteSequence = await bumpInviteSequence(ctx, args.eventId);
+    const icsEvent = buildCrewShiftGroupIcsEvent({
+      eventId: args.eventId,
+      assigneeKey: `application:${application._id}`,
+      groupIndex: 0,
+      eventTitle: ready.eventTitle,
+      venueName: ready.venueName,
+      group: [
+        {
+          role: "Trainee",
+          startsAt: ready.startsAt,
+          endsAt: ready.endsAt,
+          crewApplicationId: application._id,
+        },
+      ],
+      blockLabelById: new Map(),
+      timezone,
+      sequence: inviteSequence,
+    });
 
     const introIdempotencyKey = `crew_trainee_intro:${application._id}:${args.eventId}`;
     const icsIdempotencyKey = `crew_scheduled:application:${application._id}:${args.eventId}:${ready.startsAt}:${ready.endsAt}`;
@@ -679,7 +678,7 @@ export const assignTraineeToEvent = mutation({
         ],
         fullScheduleSummaries: [],
         coversEntireEvent: args.presenceMode === "entire_event",
-        icsEvents,
+        icsEvent,
         timezone,
       },
     });

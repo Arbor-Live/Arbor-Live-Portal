@@ -9,7 +9,7 @@ import {
 } from "./lib/crewCompensation";
 import { getUserOtForecast } from "./lib/otForecast";
 import { scheduleCrewScheduledEmails } from "./email/triggers";
-import { bumpCrewInviteSequence } from "./email/crewInviteSequence";
+import { bumpInviteSequence } from "./email/inviteSequence";
 import { isSectionBlockType } from "./lib/scheduleBlockTypes";
 import { isTraineeShift } from "./lib/crewShiftKinds";
 import { normalizeEventStatus } from "./lib/eventStatus";
@@ -194,7 +194,7 @@ export const upsertShifts = mutation({
     }
 
     await syncEventCrewCostUsd(ctx, args.eventId, now);
-    const inviteSequence = await bumpCrewInviteSequence(ctx, args.eventId);
+    const inviteSequence = await bumpInviteSequence(ctx, args.eventId);
     await scheduleCrewScheduledEmails(
       ctx,
       args.eventId,

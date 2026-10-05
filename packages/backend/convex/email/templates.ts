@@ -12,6 +12,8 @@ import {
   renderQuoteChangesRequestedEmail,
   renderQuoteUpdatedEmail,
   renderBandAssignedEmail,
+  renderBandScheduledEmail,
+  renderBandUnscheduledEmail,
   renderBandEventOnboardingInviteEmail,
   renderBandOnboardingReminderEmail,
   renderBandPaymentConfirmationEmail,
@@ -61,6 +63,8 @@ import type {
   QuoteChangesRequestedEmailProps,
   QuoteUpdatedEmailProps,
   BandAssignedEmailProps,
+  BandScheduledEmailProps,
+  BandUnscheduledEmailProps,
   BandEventOnboardingInviteEmailProps,
   BandOnboardingReminderEmailProps,
   BandPaymentConfirmationEmailProps,
@@ -135,6 +139,10 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderQuoteUpdatedEmail(payload as QuoteUpdatedEmailProps);
     case "band_assigned":
       return renderBandAssignedEmail(payload as BandAssignedEmailProps);
+    case "band_scheduled":
+      return renderBandScheduledEmail(payload as BandScheduledEmailProps);
+    case "band_unscheduled":
+      return renderBandUnscheduledEmail(payload as BandUnscheduledEmailProps);
     case "band_event_onboarding_invite":
       return renderBandEventOnboardingInviteEmail(
         payload as BandEventOnboardingInviteEmailProps,

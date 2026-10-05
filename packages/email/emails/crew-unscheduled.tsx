@@ -17,8 +17,10 @@ export function CrewUnscheduledEmail({
   recipientName,
   eventLeadName,
   previousAssignmentSummaries,
+  remainingAssignmentSummaries,
 }: CrewUnscheduledEmailProps) {
   const greeting = recipientName ? `Hi ${recipientName},` : "Hi!";
+  const keepsOtherBlocks = (remainingAssignmentSummaries?.length ?? 0) > 0;
 
   return (
     <EmailLayout
@@ -28,8 +30,9 @@ export function CrewUnscheduledEmail({
     >
       <BodyCopy>{greeting}</BodyCopy>
       <BodyCopy>
-        You have been removed from the crew schedule for this event. A calendar cancellation is
-        attached so you can remove the previous invite from your calendar.
+        {keepsOtherBlocks
+          ? "Part of your crew schedule for this event was removed. A calendar cancellation for those blocks is attached; your other invites for this event still stand."
+          : "You have been removed from the crew schedule for this event. A calendar cancellation is attached so you can remove the previous invite from your calendar."}
       </BodyCopy>
       <EventDetailsSection
         title="Event"
@@ -40,7 +43,13 @@ export function CrewUnscheduledEmail({
         variant="muted"
       />
       {previousAssignmentSummaries.length > 0 ? (
-        <ScheduleTimeline items={previousAssignmentSummaries} title="Previous assignments" />
+        <ScheduleTimeline
+          items={previousAssignmentSummaries}
+          title={keepsOtherBlocks ? "Removed" : "Previous assignments"}
+        />
+      ) : null}
+      {keepsOtherBlocks ? (
+        <ScheduleTimeline items={remainingAssignmentSummaries!} title="Still scheduled" />
       ) : null}
       <CtaButton href={eventUrl} label="View event details" variant="secondary" />
       <EmailSignOff />

@@ -9,6 +9,8 @@ import type {
   PayingPartyAddedEmailProps,
   QuoteChangesRequestedEmailProps,
   BandAssignedEmailProps,
+  BandScheduledEmailProps,
+  BandUnscheduledEmailProps,
   BandPaymentConfirmationEmailProps,
   BandPaymentCompletedEmailProps,
   BandPaymentPayeeRequiredEmailProps,
@@ -222,4 +224,28 @@ export const bandAssignedPreviewProps: BandAssignedEmailProps = {
   dateRangeLabel: eventDefaults.dateRangeLabel,
   roleLabel: "Headliner",
   dashboardUrl: `${ARBOR_WEBSITE_URL}/dashboard`,
+};
+
+export const bandScheduledPreviewProps: BandScheduledEmailProps = {
+  recipientName: "Jordan",
+  bandName: "The Stanford Band",
+  eventTitle: "Senior Night",
+  venueName: "Arbor Stage",
+  dateRangeLabel: eventDefaults.dateRangeLabel,
+  slotLabel: "Soundcheck",
+  timeRangeLabel: "Saturday, Apr 12, 2026 • 4:00 PM – 4:45 PM",
+  isUpdate: false,
+  otherSlotSummary: "Set • 9:00 PM – 10:00 PM",
+  showUrl: `${ARBOR_WEBSITE_URL}/dashboard?show=demo-event`,
+};
+
+export const bandUnscheduledPreviewProps: BandUnscheduledEmailProps = {
+  recipientName: "Jordan",
+  bandName: "The Stanford Band",
+  eventTitle: "Senior Night",
+  venueName: "Arbor Stage",
+  dateRangeLabel: eventDefaults.dateRangeLabel,
+  slotLabel: "Soundcheck",
+  previousTimeRangeLabel: "Saturday, Apr 12, 2026 • 4:00 PM – 4:45 PM",
+  showUrl: `${ARBOR_WEBSITE_URL}/dashboard?show=demo-event`,
 };

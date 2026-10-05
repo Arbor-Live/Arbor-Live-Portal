@@ -20,6 +20,8 @@ export const emailTemplateValue = v.union(
   v.literal("quote_changes_requested"),
   v.literal("quote_updated"),
   v.literal("band_assigned"),
+  v.literal("band_scheduled"),
+  v.literal("band_unscheduled"),
   v.literal("band_event_onboarding_invite"),
   v.literal("band_onboarding_reminder"),
   v.literal("band_payment_confirmation"),

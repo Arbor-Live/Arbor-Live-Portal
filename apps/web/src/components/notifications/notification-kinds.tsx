@@ -32,6 +32,8 @@ const TEMPLATE_ICONS: Record<string, Icon> = {
   quote_approved: ReceiptIcon,
   paying_party_added: ReceiptIcon,
   band_assigned: MicrophoneStageIcon,
+  band_scheduled: MicrophoneStageIcon,
+  band_unscheduled: MicrophoneStageIcon,
   band_event_onboarding_invite: MicrophoneStageIcon,
   band_onboarding_reminder: ListChecksIcon,
   band_payment_confirmation: SignatureIcon,

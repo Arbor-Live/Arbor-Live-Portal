@@ -7,8 +7,11 @@ The portal sends transactional email (schedules, invites, booking quotes, band-p
 - The component is registered in [`convex.config.ts`](../packages/backend/convex/convex.config.ts) and instantiated in [`email/send.ts`](../packages/backend/convex/email/send.ts) as `resendClient`, with `testMode: process.env.EMAIL_TEST_MODE === "true"`.
 - Templates are React Email components rendered to HTML in [`email/templates.ts`](../packages/backend/convex/email/templates.ts); sends are enqueued as Convex actions (see `email/enqueue.ts`, `email/triggers.ts`).
 - `From`, reply-to, and CC defaults live in [`email/constants.ts`](../packages/backend/convex/email/constants.ts) and are overridable by env var.
-- Schedule-published and crew-scheduled emails are **debounced (~45s)** and keyed by content fingerprint so rapid schedule/crew saves (and day-lead recipients) do not flood the same inbox. Crew notices coalesce to one email per person per event with their full current assignment.
-- Fully unassigning someone after they already received a crew invite sends a **crew-unscheduled** email with an ICS `METHOD:CANCEL` attachment (same UID as the invite). Pending schedule emails are dropped; if they are re-assigned before the debounce fires, the cancel email is cancelled instead. Re-sent invites reuse that UID with a bumped `SEQUENCE` (the event's `crewInviteSequence`), so calendar clients update the existing event instead of adding a duplicate.
+- Every calendar-invite email carries **exactly one** event: Gmail and Outlook only add the first `VEVENT` of an invite, so separate windows go out as separate emails.
+- Schedule-published, crew, and artist invite emails are **debounced (~45s)** and keyed by content fingerprint so rapid schedule/crew saves (and day-lead recipients) do not flood the same inbox.
+- Crew get one invite per run of back-to-back shifts (setup + show is one invite; a separate strike is another). Each invite is diffed on its own: a changed run re-sends, a run that disappears gets a **crew-unscheduled** email with an ICS `METHOD:CANCEL` (same UID). The first invite keeps the UID from when crew got a single merged invite, so existing calendar entries update in place.
+- Artists get a **band-scheduled** invite per lineup window (soundcheck and set separately) for each active band member, whenever staff set or move those times (lineup or Run of Show). Clearing a window, or taking the act off the bill, sends **band-unscheduled** with a cancel. Windows that are already over are skipped. Outside acts without an account get nothing.
+- Pending invites are dropped when superseded (a re-assignment cancels a pending removal and vice versa). Re-sent invites reuse their UID with a bumped `SEQUENCE` (the event's `crewInviteSequence`, shared by crew and artist invites), so calendar clients update the existing event instead of adding a duplicate.
 
 ### In-app notifications
 
@@ -29,9 +32,9 @@ confirmations, and newsletters stay email-only.
   page: email (`emailOptOuts`), in-app (`inAppOptOuts`: no row, so no push
   either) and push (`pushOptOuts`: the row still shows in the bell). Checked by
   `isTemplateEnabledForChannel` in `enqueue.ts` and `schedulePushForNotification`.
-  Admins editing someone in the person sheet only manage email. The crew
-  scheduled/unscheduled emails carry the calendar invite, so their email can't
-  be turned off (`isEmailRequired`; old opt-outs are ignored), though their bell
+  Admins editing someone in the person sheet only manage email. The crew and
+  artist calendar-invite emails (`crew_*` / `band_*` scheduled/unscheduled)
+  carry the `.ics`, so their email can't be turned off (`isEmailRequired`; old opt-outs are ignored), though their bell
   and push can. Rows are pruned after 180 days.
 
 #### Push and the Home Screen app
@@ -82,6 +85,11 @@ npx convex env set PAYMENTS_EMAIL_FROM "Arbor Live — Financial Manager <paymen
 Assignment: when a band is first linked to an event (`eventBandParticipations`
 insert), members receive `band_assigned` with show details and a CTA to
 `/dashboard`.
+
+Show times: soundcheck and set each send their own calendar invite
+(`band_scheduled` / `band_unscheduled`, see `email/bandScheduleEmails.ts`).
+Anything that writes or removes an act's lineup times must call
+`scheduleBandTimeEmails` with the row before and after.
 
 Band payouts use outbound-only emails:
 

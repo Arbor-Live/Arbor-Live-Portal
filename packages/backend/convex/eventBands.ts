@@ -26,6 +26,7 @@ import {
   payeeFieldsFromProfile,
 } from "./lib/bandPayments";
 import { scheduleBandAssignedEmails } from "./email/bandAssignmentEmails";
+import { scheduleBandTimeEmails } from "./email/bandScheduleEmails";
 import { returnActTimesToPosition } from "./lib/actPositions";
 import {
   deleteActBlocks,
@@ -777,6 +778,7 @@ export const updateParticipationLineup = mutation({
       else next[field] = value;
     }
     await ctx.db.replace(args.participationId, next);
+    await scheduleBandTimeEmails(ctx, existing, next);
     if (args.needId) await inheritSlotTimes(ctx, args.participationId, args.needId);
     await syncParticipationBlocks(ctx, args.participationId);
     for (const needId of new Set([previousNeedId, args.needId])) {
@@ -912,6 +914,7 @@ export async function removeParticipationFromEvent(
   if (existing) {
     await returnActTimesToPosition(ctx, existing);
     await ctx.db.delete(existing._id);
+    await scheduleBandTimeEmails(ctx, existing, null);
     await deleteActBlocks(ctx, { participationId: existing._id });
     if (existing.needId) await syncNeedBlocks(ctx, existing.needId);
   }
@@ -985,6 +988,7 @@ export const upsertParticipations = mutation({
       if (!keepOrgIds.has(row.organizationId)) {
         await returnActTimesToPosition(ctx, row);
         await ctx.db.delete(row._id);
+        await scheduleBandTimeEmails(ctx, row, null);
         await deleteActBlocks(ctx, { participationId: row._id });
         if (row.needId) await syncNeedBlocks(ctx, row.needId);
         const payment = await ctx.db

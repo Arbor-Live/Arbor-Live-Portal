@@ -116,6 +116,7 @@ describe("isTemplateEnabledForChannel", () => {
       pushOptOuts: ["crew_scheduled"],
     };
     expect(isEmailRequired("crew_scheduled")).toBe(true);
+    expect(isEmailRequired("band_scheduled")).toBe(true);
     expect(isEmailRequired("schedule_published")).toBe(false);
     expect(isTemplateEnabledForChannel(muted, "crew_scheduled", "email")).toBe(true);
     expect(isTemplateEnabledForChannel(muted, "crew_unscheduled", "email")).toBe(true);

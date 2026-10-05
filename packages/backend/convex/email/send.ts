@@ -8,10 +8,7 @@ import { components, internal } from "../_generated/api";
 import { internalAction } from "../_generated/server";
 import { renderInvoicePdfBuffer } from "@arbor/invoice-document/pdf";
 import { buildScheduleIcs } from "@arbor/email/ics";
-import type {
-  CrewScheduledEmailPayload,
-  CrewUnscheduledEmailPayload,
-} from "@arbor/email/types";
+import type { CalendarInvitePayload, ScheduleIcsEventPayload } from "@arbor/email/types";
 import { EMAIL_FROM, ORGANIZER_EMAIL, PAYMENTS_EMAIL_FROM } from "./constants";
 import { renderEmailHtml } from "./templates";
 
@@ -42,6 +39,46 @@ type BookingQuoteReadyPayload = {
   invoiceId: Id<"invoices">;
   invoiceNumber: string;
 };
+
+const CALENDAR_INVITE_METHODS: Partial<Record<string, "REQUEST" | "CANCEL">> = {
+  crew_scheduled: "REQUEST",
+  crew_unscheduled: "CANCEL",
+  band_scheduled: "REQUEST",
+  band_unscheduled: "CANCEL",
+};
+
+/** The `.ics` attachment for calendar-invite templates; null for every other template. */
+function buildCalendarInvite(notification: { template: string; to: string; payload: unknown }) {
+  const method = CALENDAR_INVITE_METHODS[notification.template];
+  if (!method) return null;
+  // Rows queued before invites went one per email carry a one-item `icsEvents`.
+  const payload = notification.payload as Partial<CalendarInvitePayload> & {
+    icsEvents?: ScheduleIcsEventPayload[];
+    timezone: string;
+  };
+  const event = payload.icsEvent ?? payload.icsEvents?.[0];
+  if (!event) throw new Error("Calendar invite payload is missing its event.");
+  const content = buildScheduleIcs({
+    timezone: payload.timezone,
+    organizerEmail: ORGANIZER_EMAIL,
+    attendeeEmail: notification.to,
+    method,
+    event: {
+      uid: event.uid,
+      title: event.title,
+      description: event.description,
+      location: event.location,
+      startAt: new Date(event.startAt),
+      endAt: new Date(event.endAt),
+      sequence: event.sequence,
+    },
+  });
+  return {
+    filename: method === "CANCEL" ? "cancel.ics" : "invite.ics",
+    content: Buffer.from(content, "utf-8"),
+    contentType: `text/calendar; charset=utf-8; method=${method}`,
+  };
+}
 
 function formatSendError(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -128,29 +165,8 @@ export const sendQueuedEmail = internalAction({
             throw new Error("Invoice not found for quote email attachment.");
           }
           await renderInvoicePdfBuffer(document);
-        } else if (
-          notification.template === "crew_scheduled" ||
-          notification.template === "crew_unscheduled"
-        ) {
-          const payload = notification.payload as
-            | CrewScheduledEmailPayload
-            | CrewUnscheduledEmailPayload;
-          const icsMethod = notification.template === "crew_unscheduled" ? "CANCEL" : "REQUEST";
-          buildScheduleIcs({
-            timezone: payload.timezone,
-            organizerEmail: ORGANIZER_EMAIL,
-            attendeeEmail: notification.to,
-            method: icsMethod,
-            events: payload.icsEvents.map((event) => ({
-              uid: event.uid,
-              title: event.title,
-              description: event.description,
-              location: event.location,
-              startAt: new Date(event.startAt),
-              endAt: new Date(event.endAt),
-              sequence: event.sequence,
-            })),
-          });
+        } else {
+          buildCalendarInvite(notification);
         }
 
         await ctx.runMutation(internal.email.enqueue.markSent, {
@@ -195,42 +211,9 @@ export const sendQueuedEmail = internalAction({
         return null;
       }
 
-      if (
-        notification.template === "crew_scheduled" ||
-        notification.template === "crew_unscheduled"
-      ) {
-        const payload = notification.payload as
-          | CrewScheduledEmailPayload
-          | CrewUnscheduledEmailPayload;
-        const icsMethod = notification.template === "crew_unscheduled" ? "CANCEL" : "REQUEST";
-        const icsContent = buildScheduleIcs({
-          timezone: payload.timezone,
-          organizerEmail: ORGANIZER_EMAIL,
-          attendeeEmail: notification.to,
-          method: icsMethod,
-          events: payload.icsEvents.map((event) => ({
-            uid: event.uid,
-            title: event.title,
-            description: event.description,
-            location: event.location,
-            startAt: new Date(event.startAt),
-            endAt: new Date(event.endAt),
-            sequence: event.sequence,
-          })),
-        });
-
-        const resendId = await sendEmailWithAttachments(
-          ctx,
-          notification,
-          html,
-          [
-            {
-              filename: icsMethod === "CANCEL" ? "cancel.ics" : "invite.ics",
-              content: Buffer.from(icsContent, "utf-8"),
-              contentType: `text/calendar; charset=utf-8; method=${icsMethod}`,
-            },
-          ],
-        );
+      const calendarInvite = buildCalendarInvite(notification);
+      if (calendarInvite) {
+        const resendId = await sendEmailWithAttachments(ctx, notification, html, [calendarInvite]);
 
         await ctx.runMutation(internal.email.enqueue.markSent, {
           notificationId: args.notificationId,
