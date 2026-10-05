@@ -1,4 +1,5 @@
 import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import { pdfEyebrow, pdfFonts, pdfTheme } from "@arbor/invoice-document/brand";
 import {
   BriefPlotPages,
   PatchFaceplate,
@@ -13,16 +14,16 @@ import type {
   EventBriefShift,
 } from "./brief-types";
 
-const ink = "#0f172a";
-const muted = "#64748b";
-const hairline = "#e2e8f0";
+const ink = pdfTheme.text;
+const muted = pdfTheme.textMuted;
+const hairline = pdfTheme.border;
 
 const styles = StyleSheet.create({
   page: {
     paddingTop: 30,
     paddingHorizontal: 32,
     paddingBottom: 46,
-    fontFamily: "Helvetica",
+    fontFamily: pdfFonts.body,
     fontSize: 9,
     color: ink,
   },
@@ -31,13 +32,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: hairline,
+    borderBottomWidth: 2,
+    borderBottomColor: pdfTheme.primary,
     paddingBottom: 8,
     marginBottom: 10,
   },
   headerLeft: { flexGrow: 1, flexShrink: 1, flexBasis: 0, paddingRight: 12 },
-  title: { fontSize: 17, fontWeight: 700 },
+  title: { fontFamily: pdfFonts.heading, fontSize: 18, fontWeight: 600, letterSpacing: -0.45 },
   subtitle: { fontSize: 9.5, color: muted, marginTop: 2 },
   headerMeta: { alignItems: "flex-end", gap: 1, flexShrink: 0 },
   metaLine: { fontSize: 8.5, color: muted },
@@ -45,13 +46,19 @@ const styles = StyleSheet.create({
   qrImage: { width: 58, height: 58 },
   qrCaption: { fontSize: 6.5, color: muted },
   section: { marginBottom: 14 },
-  sectionTitle: { fontSize: 11, fontWeight: 700, marginBottom: 5 },
+  sectionTitle: {
+    fontFamily: pdfFonts.heading,
+    fontSize: 11.5,
+    fontWeight: 600,
+    letterSpacing: -0.25,
+    marginBottom: 5,
+  },
   facts: { flexDirection: "row", flexWrap: "wrap", gap: 18, marginBottom: 12 },
-  factLabel: { fontSize: 7, color: muted, letterSpacing: 0.8 },
+  factLabel: { ...pdfEyebrow, fontSize: 6.5 },
   factValue: { fontSize: 10, fontWeight: 700 },
   tableHeader: {
     flexDirection: "row",
-    backgroundColor: "#f1f5f9",
+    backgroundColor: pdfTheme.mutedBg,
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: hairline,
@@ -64,7 +71,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3.5,
   },
   cell: { fontSize: 8.5, paddingHorizontal: 4 },
-  headerCell: { fontSize: 7.5, fontWeight: 700, paddingHorizontal: 4, color: muted },
+  headerCell: { ...pdfEyebrow, fontSize: 6.5, paddingHorizontal: 4 },
   notesBody: { fontSize: 9, lineHeight: 1.4 },
   instructionTitle: { fontSize: 9.5, fontWeight: 700, marginBottom: 2, marginTop: 4 },
   emptyNote: { fontSize: 8.5, color: muted, fontStyle: "italic" },
@@ -73,15 +80,16 @@ const styles = StyleSheet.create({
   rosSectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f1f5f9",
+    backgroundColor: pdfTheme.mutedBg,
     paddingVertical: 4,
     paddingHorizontal: 6,
     gap: 6,
   },
   rosTime: { width: 92, fontSize: 8.5, fontWeight: 700 },
   rosChip: {
+    fontFamily: pdfFonts.heading,
     fontSize: 6.5,
-    fontWeight: 700,
+    fontWeight: 600,
     letterSpacing: 0.6,
     borderWidth: 0.75,
     paddingVertical: 1,
@@ -111,11 +119,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     gap: 1.5,
   },
-  rosCrewTitle: { fontSize: 6.5, fontWeight: 700, color: muted, letterSpacing: 0.8 },
+  rosCrewTitle: { ...pdfEyebrow, fontSize: 6 },
   rosCrewRow: { flexDirection: "row", gap: 6 },
   rosCrewRole: { width: 110, fontSize: 8 },
   rosCrewPerson: { width: 140, fontSize: 8, fontWeight: 700 },
-  rosCrewOpen: { width: 140, fontSize: 8, fontWeight: 700, color: "#b45309" },
+  rosCrewOpen: { width: 140, fontSize: 8, fontWeight: 700, color: pdfTheme.discount },
   rosCrewTime: { flexGrow: 1, fontSize: 8, color: muted },
 });
 

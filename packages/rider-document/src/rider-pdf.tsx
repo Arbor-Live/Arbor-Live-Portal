@@ -14,6 +14,7 @@ import {
   View,
 } from "@react-pdf/renderer";
 import { ArborLogoPdf } from "@arbor/invoice-document";
+import { pdfEyebrow, pdfFonts, pdfTheme } from "@arbor/invoice-document/brand";
 import { glyphNode, type GlyphComponents } from "./glyph";
 import {
   computePlotLayout,
@@ -48,16 +49,16 @@ const PDF_GLYPH_COMPONENTS: GlyphComponents = {
   G,
 };
 
-const ink = "#0f172a";
-const muted = "#64748b";
-const hairline = "#e2e8f0";
+const ink = pdfTheme.text;
+const muted = pdfTheme.textMuted;
+const hairline = pdfTheme.border;
 
 const styles = StyleSheet.create({
   page: {
     paddingTop: 30,
     paddingHorizontal: 32,
     paddingBottom: 46,
-    fontFamily: "Helvetica",
+    fontFamily: pdfFonts.body,
     fontSize: 9,
     color: ink,
   },
@@ -66,19 +67,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: hairline,
+    borderBottomWidth: 2,
+    borderBottomColor: pdfTheme.primary,
     paddingBottom: 8,
     marginBottom: 10,
   },
   headerLeft: { flexGrow: 1, flexShrink: 1, flexBasis: 0, paddingRight: 12 },
-  title: { fontSize: 17, fontWeight: 700 },
+  title: { fontFamily: pdfFonts.heading, fontSize: 18, fontWeight: 600, letterSpacing: -0.45 },
   subtitle: { fontSize: 9.5, color: muted, marginTop: 2 },
   headerMeta: { alignItems: "flex-end", gap: 1, flexShrink: 0 },
   metaLine: { fontSize: 8.5, color: muted },
   sectionTitle: {
-    fontSize: 11,
-    fontWeight: 700,
+    fontFamily: pdfFonts.heading,
+    fontSize: 11.5,
+    fontWeight: 600,
+    letterSpacing: -0.25,
     marginBottom: 5,
   },
   section: { marginBottom: 14 },
@@ -113,7 +116,7 @@ const styles = StyleSheet.create({
   legendText: { fontSize: 7.5, color: muted },
   tableHeader: {
     flexDirection: "row",
-    backgroundColor: "#f1f5f9",
+    backgroundColor: pdfTheme.mutedBg,
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: hairline,
@@ -126,7 +129,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3.5,
   },
   cell: { fontSize: 8.5, paddingHorizontal: 4 },
-  headerCell: { fontSize: 7.5, fontWeight: 700, paddingHorizontal: 4, color: muted },
+  headerCell: { ...pdfEyebrow, fontSize: 6.5, paddingHorizontal: 4 },
   notesBody: { fontSize: 9, lineHeight: 1.4 },
   emptyNote: { fontSize: 8.5, color: muted, fontStyle: "italic" },
   changeoverTitle: { fontSize: 9.5, fontWeight: 700, marginBottom: 3, marginTop: 2 },
@@ -144,7 +147,7 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   footerBrand: { flexDirection: "row", alignItems: "center", gap: 5 },
-  footerText: { fontSize: 6.5, color: "#94a3b8" },
+  footerText: { fontSize: 6.5, color: pdfTheme.textSubtle },
   summaryRow: { flexDirection: "row", gap: 18, marginBottom: 10 },
   summaryLabel: { fontSize: 7, color: muted, letterSpacing: 0.8 },
   summaryValue: { fontSize: 12, fontWeight: 700 },
@@ -378,7 +381,7 @@ function Header({ data }: { data: RiderDocumentData }) {
   );
 }
 
-const INPUT_COLUMNS = [24, 118, 44, 104, 62, 28, 62, 70, 98];
+const INPUT_COLUMNS = [32, 106, 50, 104, 62, 28, 62, 70, 98];
 const MONITOR_COLUMNS = [34, 150, 66, 44, 246];
 const BACKLINE_COLUMNS = [200, 40, 100, 200];
 
