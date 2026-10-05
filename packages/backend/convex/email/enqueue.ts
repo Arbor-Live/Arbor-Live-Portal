@@ -158,6 +158,18 @@ export async function enqueueDebouncedEmail(
   },
 ) {
   const debounceMs = args.debounceMs ?? EMAIL_DEBOUNCE_MS;
+
+  // A replay of content already queued or sent is a no-op. Check before
+  // touching the notification center, or replaying an older key after a newer
+  // update was delivered would resurface the stale content there.
+  const exactMatch = await ctx.db
+    .query("emailNotifications")
+    .withIndex("by_idempotencyKey", (q) => q.eq("idempotencyKey", args.idempotencyKey))
+    .unique();
+  if (exactMatch && exactMatch.status !== "failed") {
+    return exactMatch._id;
+  }
+
   const shouldSend = await prepareRecipient(ctx, args, {
     key: args.debounceKey,
     delayMs: debounceMs,
@@ -166,14 +178,6 @@ export async function enqueueDebouncedEmail(
 
   const now = Date.now();
   const readyAt = now + debounceMs;
-
-  const exactMatch = await ctx.db
-    .query("emailNotifications")
-    .withIndex("by_idempotencyKey", (q) => q.eq("idempotencyKey", args.idempotencyKey))
-    .unique();
-  if (exactMatch && exactMatch.status !== "failed") {
-    return exactMatch._id;
-  }
 
   const pending = await ctx.db
     .query("emailNotifications")

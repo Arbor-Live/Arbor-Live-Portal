@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import { getCurrentUserOrNull, getUserId, requireAuth } from "./lib/auth";
 import { emailTemplateValue } from "./lib/emailTemplateValue";
 import {
@@ -91,21 +92,43 @@ export const markRead = mutation({
   },
 });
 
+const MARK_ALL_READ_BATCH = 500;
+
+/** Mark one batch read; schedules the next batch while unread rows remain. */
+async function markUnreadBatch(ctx: MutationCtx, userId: string, readAt: number) {
+  const rows = await ctx.db
+    .query("notifications")
+    .withIndex("by_userId_and_status_and_readAt", (q) =>
+      q.eq("userId", userId).eq("status", "delivered").eq("readAt", undefined),
+    )
+    .take(MARK_ALL_READ_BATCH);
+  for (const row of rows) {
+    await ctx.db.patch(row._id, { readAt });
+  }
+  if (rows.length === MARK_ALL_READ_BATCH) {
+    await ctx.scheduler.runAfter(0, internal.notifications.markAllReadContinue, {
+      userId,
+      readAt,
+    });
+  }
+}
+
 export const markAllRead = mutation({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
     const userId = getUserId(await requireAuth(ctx));
-    const now = Date.now();
-    const rows = await ctx.db
-      .query("notifications")
-      .withIndex("by_userId_and_status_and_readAt", (q) =>
-        q.eq("userId", userId).eq("status", "delivered").eq("readAt", undefined),
-      )
-      .take(500);
-    for (const row of rows) {
-      await ctx.db.patch(row._id, { readAt: now });
-    }
+    await markUnreadBatch(ctx, userId, Date.now());
+    return null;
+  },
+});
+
+/** Continuation for `markAllRead` past the first batch. */
+export const markAllReadContinue = internalMutation({
+  args: { userId: v.string(), readAt: v.number() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await markUnreadBatch(ctx, args.userId, args.readAt);
     return null;
   },
 });
