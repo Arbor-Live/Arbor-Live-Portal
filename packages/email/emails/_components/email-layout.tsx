@@ -6,7 +6,6 @@ import {
   Font,
   Head,
   Heading,
-  Hr,
   Html,
   Img,
   Link,
@@ -16,7 +15,16 @@ import {
   Text,
 } from "@react-email/components";
 import type { CSSProperties, ReactNode } from "react";
-import { ARBOR_CONTACT_EMAIL, ARBOR_LOGO_URL, ARBOR_WEBSITE_URL, bodyText, brand, mutedText } from "./brand-theme";
+import {
+  ARBOR_CONTACT_EMAIL,
+  ARBOR_LOGO_URL,
+  ARBOR_WEBSITE_URL,
+  bodyText,
+  brand,
+  brandDark,
+  eyebrowText,
+  mutedText,
+} from "./brand-theme";
 
 type EmailTone = "default" | "muted";
 
@@ -37,88 +45,170 @@ export function EmailLayout({
   const accentColor = tone === "muted" ? brand.mutedAccent : brand.accent;
 
   return (
-    <Html>
-      <Head>
-        <Font
-          fontFamily="Inter"
-          fallbackFontFamily={["Helvetica", "Arial", "sans-serif"]}
-          webFont={{
-            url: "https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hiJ-Ek-_EeA.woff2",
-            format: "woff2",
-          }}
-          fontWeight={400}
-          fontStyle="normal"
-        />
-        <Font
-          fontFamily="Inter"
-          fallbackFontFamily={["Helvetica", "Arial", "sans-serif"]}
-          webFont={{
-            url: "https://fonts.gstatic.com/s/inter/v18/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuI6fAZ9hiA.woff2",
-            format: "woff2",
-          }}
-          fontWeight={600}
-          fontStyle="normal"
-        />
-        <Font
-          fontFamily="Inter"
-          fallbackFontFamily={["Helvetica", "Arial", "sans-serif"]}
-          webFont={{
-            url: "https://fonts.gstatic.com/s/inter/v18/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYAZ9hiA.woff2",
-            format: "woff2",
-          }}
-          fontWeight={700}
-          fontStyle="normal"
-        />
-      </Head>
+    <Html lang="en">
+      <BrandHead />
       <Preview>{preview}</Preview>
-      <Body style={outerBodyStyle}>
-        <Container style={containerStyle}>
-          <Section style={{ ...accentBarStyle, backgroundColor: accentColor }} />
+      <Body className={DARK.canvas} style={outerBodyStyle}>
+        <Container className={DARK.surface} style={containerStyle}>
+          <BrandMasthead accentColor={accentColor} />
 
-          <Section style={logoSectionStyle}>
-            <Img src={ARBOR_LOGO_URL} alt="Arbor Live" width="168" style={logoStyle} />
-          </Section>
-
-          <Section style={contentSectionStyle}>
-            <Heading style={headingStyle}>{heading}</Heading>
+          <Section className={GUTTER_CLASS} style={contentSectionStyle}>
+            <Heading className={DARK.text} style={headingStyle}>{heading}</Heading>
             {children}
           </Section>
-
-          <Hr style={hrStyle} />
-
-          <Section style={footerSectionStyle}>
-            <Text style={footerTaglineStyle}>
-              Stanford&apos;s student-run live event production company
-            </Text>
-            <Text style={footerLineStyle}>
-              <Link href={ARBOR_WEBSITE_URL} style={footerLinkStyle}>
-                arborlive.stanford.edu
-              </Link>
-              {" · "}
-              <Link href={`mailto:${ARBOR_CONTACT_EMAIL}`} style={footerLinkStyle}>
-                Contact
-              </Link>
-              {" · "}© {year} Arbor Live
-            </Text>
-          </Section>
         </Container>
+
+        <BrandFooter
+          tagline="Stanford's student-run live event production company"
+          links={[
+            { href: ARBOR_WEBSITE_URL, label: "arborlive.stanford.edu" },
+            { href: `mailto:${ARBOR_CONTACT_EMAIL}`, label: "Contact" },
+          ]}
+          suffix={`© ${year} Arbor Live`}
+        />
       </Body>
     </Html>
   );
 }
 
+/** Add to sections that sit on the 40px page gutter so it narrows on phones. */
+export const GUTTER_CLASS = "arbor-gutter";
+
+/**
+ * Class hooks for the dark palette. Inline styles carry the light theme, and
+ * the `prefers-color-scheme: dark` rules below override them with !important.
+ * React Email's <Body> repeats its background on an inner cell without the
+ * class, hence the descendant selector on the canvas rule.
+ */
+export const DARK = {
+  canvas: "arbor-dm-canvas",
+  surface: "arbor-dm-surface",
+  raised: "arbor-dm-raised",
+  text: "arbor-dm-text",
+  body: "arbor-dm-body",
+  muted: "arbor-dm-muted",
+  accent: "arbor-dm-accent",
+  rule: "arbor-dm-rule",
+  alert: "arbor-dm-alert",
+  note: "arbor-dm-note",
+  secondaryButton: "arbor-dm-secondary-button",
+} as const;
+
+const darkModeCss = `@media (prefers-color-scheme: dark) {
+  .${DARK.canvas},
+  .${DARK.canvas} > table > tbody > tr > td { background-color: ${brandDark.canvas} !important; }
+  .${DARK.surface} { background-color: ${brandDark.surface} !important; border-color: ${brandDark.border} !important; }
+  .${DARK.raised} { background-color: ${brandDark.surfaceRaised} !important; border-left-color: ${brandDark.borderRaised} !important; border-right-color: ${brandDark.borderRaised} !important; border-bottom-color: ${brandDark.borderRaised} !important; }
+  .${DARK.text} { color: ${brandDark.text} !important; }
+  .${DARK.body} { color: ${brandDark.textBody} !important; }
+  .${DARK.muted} { color: ${brandDark.textMuted} !important; }
+  .${DARK.accent} { color: ${brandDark.accentText} !important; }
+  .${DARK.rule} { border-color: ${brandDark.borderRaised} !important; }
+  .${DARK.alert} { background-color: ${brandDark.warningSoft} !important; color: ${brandDark.warning} !important; }
+  .${DARK.note} { background-color: ${brandDark.accentSoft} !important; }
+  .${DARK.secondaryButton} { background-color: ${brandDark.surfaceRaised} !important; border-color: ${brandDark.borderRaised} !important; color: ${brandDark.text} !important; }
+}`;
+
+/** Fonts and color-scheme hints shared by every Arbor email. */
+export function BrandHead() {
+  return (
+    <Head>
+      {/* Declaring both schemes tells Apple Mail and Outlook for Mac to apply our dark
+          palette rather than auto-inverting the light one. */}
+      <meta name="color-scheme" content="light dark" />
+      <meta name="supported-color-schemes" content="light dark" />
+      {/* Inline padding can only be overridden with !important; clients without media
+          query support keep the desktop padding. */}
+      <style>{`@media only screen and (max-width: 480px) { .${GUTTER_CLASS} { padding-left: 20px !important; padding-right: 20px !important; } }`}</style>
+      <style>{darkModeCss}</style>
+      {/* Space Grotesk is a variable font; one file covers the heading weights. Each <Font>
+          also emits a global `* { font-family }` rule and the last one wins, so it is
+          declared before Inter; headings opt in through inline styles. */}
+      <Font
+        fontFamily="Space Grotesk"
+        fallbackFontFamily={["Helvetica", "Arial", "sans-serif"]}
+        webFont={{
+          url: "https://fonts.gstatic.com/s/spacegrotesk/v22/V8mDoQDjQSkFtoMM3T6r8E7mPbF4C_k3HqU.woff2",
+          format: "woff2",
+        }}
+        fontWeight={600}
+        fontStyle="normal"
+      />
+      <Font
+        fontFamily="Inter"
+        fallbackFontFamily={["Helvetica", "Arial", "sans-serif"]}
+        webFont={{
+          url: "https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hiJ-Ek-_EeA.woff2",
+          format: "woff2",
+        }}
+        fontWeight={400}
+        fontStyle="normal"
+      />
+      <Font
+        fontFamily="Inter"
+        fallbackFontFamily={["Helvetica", "Arial", "sans-serif"]}
+        webFont={{
+          url: "https://fonts.gstatic.com/s/inter/v18/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuI6fAZ9hiA.woff2",
+          format: "woff2",
+        }}
+        fontWeight={600}
+        fontStyle="normal"
+      />
+    </Head>
+  );
+}
+
+/** Zinc-950 band with the white logo and a green rule, echoing the site hero. */
+export function BrandMasthead({ accentColor = brand.accent }: { accentColor?: string }) {
+  return (
+    <>
+      <Section className={GUTTER_CLASS} style={mastheadStyle}>
+        <Img src={ARBOR_LOGO_URL} alt="Arbor Live" width="104" style={logoStyle} />
+      </Section>
+      <Section style={{ ...accentBarStyle, backgroundColor: accentColor }} />
+    </>
+  );
+}
+
+export function BrandFooter({
+  tagline,
+  links,
+  suffix,
+}: {
+  tagline: string;
+  links: { href: string; label: string }[];
+  suffix?: string;
+}) {
+  return (
+    <Section className={GUTTER_CLASS} style={footerSectionStyle}>
+      <Text className={DARK.muted} style={footerTaglineStyle}>{tagline}</Text>
+      <Text className={DARK.muted} style={footerLineStyle}>
+        {links.map((link, index) => (
+          <span key={link.href}>
+            {index > 0 ? " · " : null}
+            <Link className={DARK.text} href={link.href} style={footerLinkStyle}>
+              {link.label}
+            </Link>
+          </span>
+        ))}
+        {suffix ? ` · ${suffix}` : null}
+      </Text>
+    </Section>
+  );
+}
+
 export function BodyCopy({ children }: { children: ReactNode }) {
-  return <Text style={bodyText}>{children}</Text>;
+  return <Text className={DARK.body} style={bodyText}>{children}</Text>;
 }
 
 export function MutedCopy({ children }: { children: ReactNode }) {
-  return <Text style={mutedText}>{children}</Text>;
+  return <Text className={DARK.muted} style={mutedText}>{children}</Text>;
 }
 
 export function AlertBanner({ children }: { children: ReactNode }) {
   return (
-    <Section style={alertBannerStyle}>
-      <Text style={alertBannerTextStyle}>{children}</Text>
+    <Section className={DARK.alert} style={alertBannerStyle}>
+      <Text className={DARK.alert} style={alertBannerTextStyle}>{children}</Text>
     </Section>
   );
 }
@@ -133,12 +223,14 @@ export function DetailRow({
   emphasis?: boolean;
 }) {
   return (
-    <Row style={detailRowStyle}>
+    <Row className={DARK.rule} style={detailRowStyle}>
       <Column style={detailLabelColumnStyle}>
-        <Text style={detailLabelStyle}>{label}</Text>
+        <Text className={DARK.muted} style={detailLabelStyle}>{label}</Text>
       </Column>
       <Column>
-        <Text style={emphasis ? detailValueEmphasisStyle : detailValueStyle}>{value}</Text>
+        <Text className={DARK.text} style={emphasis ? detailValueEmphasisStyle : detailValueStyle}>
+          {value}
+        </Text>
       </Column>
     </Row>
   );
@@ -154,8 +246,12 @@ export function DataCard({
   variant?: "default" | "muted";
 }) {
   return (
-    <Section style={variant === "muted" ? mutedCardStyle : dataCardStyle}>
-      <Heading as="h2" style={variant === "muted" ? mutedCardTitleStyle : cardTitleStyle}>
+    <Section className={DARK.raised} style={variant === "muted" ? mutedCardStyle : dataCardStyle}>
+      <Heading
+        as="h2"
+        className={variant === "muted" ? DARK.muted : DARK.accent}
+        style={variant === "muted" ? mutedCardTitleStyle : cardTitleStyle}
+      >
         {title}
       </Heading>
       {children}
@@ -174,9 +270,9 @@ export function InfoCard({
   children: ReactNode;
 }) {
   return (
-    <Section style={dataCardStyle}>
+    <Section className={DARK.raised} style={dataCardStyle}>
       {title ? (
-        <Heading as="h2" style={cardTitleStyle}>
+        <Heading as="h2" className={DARK.accent} style={cardTitleStyle}>
           {title}
         </Heading>
       ) : null}
@@ -222,14 +318,15 @@ export function ScheduleTimeline({ items, title = "Schedule" }: { items: string[
         return (
           <Row
             key={`${item}-${index}`}
+            className={DARK.rule}
             style={index < items.length - 1 ? timelineRowStyle : timelineRowLastStyle}
           >
             <Column style={timelineMarkerColumnStyle}>
-              <Text style={timelineMarkerStyle}>●</Text>
+              <Text className={DARK.accent} style={timelineMarkerStyle}>■</Text>
             </Column>
             <Column>
-              <Text style={timelineLabelStyle}>{label}</Text>
-              {time ? <Text style={timelineTimeStyle}>{time}</Text> : null}
+              <Text className={DARK.text} style={timelineLabelStyle}>{label}</Text>
+              {time ? <Text className={DARK.muted} style={timelineTimeStyle}>{time}</Text> : null}
             </Column>
           </Row>
         );
@@ -246,21 +343,27 @@ export function ContactNote({
   managerEmail?: string;
 }) {
   return (
-    <Section style={contactNoteStyle}>
-      <Text style={contactNoteLabelStyle}>Questions?</Text>
-      <Text style={contactNoteTextStyle}>
+    <Section className={DARK.note} style={contactNoteStyle}>
+      <Text className={DARK.accent} style={contactNoteLabelStyle}>Questions?</Text>
+      <Text className={DARK.body} style={contactNoteTextStyle}>
         Reply to this email or contact {managerName}
         {managerEmail ? (
           <>
             {" at "}
-            <Link href={`mailto:${managerEmail}`} style={inlineLinkStyle}>
-              {managerEmail}
-            </Link>
+            <InlineLink href={`mailto:${managerEmail}`}>{managerEmail}</InlineLink>
           </>
         ) : null}
         .
       </Text>
     </Section>
+  );
+}
+
+export function InlineLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link className={DARK.accent} href={href} style={inlineLinkStyle}>
+      {children}
+    </Link>
   );
 }
 
@@ -278,8 +381,12 @@ export function CtaButton({
   return (
     <Section style={ctaSectionStyle}>
       <Row>
-        <Column align="center">
-          <Button href={href} style={buttonStyle}>
+        <Column align="left">
+          <Button
+            href={href}
+            className={variant === "secondary" ? DARK.secondaryButton : undefined}
+            style={buttonStyle}
+          >
             {label}
           </Button>
         </Column>
@@ -290,7 +397,7 @@ export function CtaButton({
 
 export function EmailSignOff() {
   return (
-    <Text style={signOffStyle}>
+    <Text className={DARK.muted} style={signOffStyle}>
       Best regards,
       <br />
       The Arbor Live Team
@@ -302,83 +409,74 @@ const outerBodyStyle: CSSProperties = {
   backgroundColor: brand.canvas,
   fontFamily: brand.fontFamily,
   margin: "0",
-  padding: "32px 16px",
+  padding: "32px 12px",
 };
 
 const containerStyle: CSSProperties = {
   backgroundColor: brand.surface,
   border: `1px solid ${brand.border}`,
-  borderRadius: "12px",
   margin: "0 auto",
   maxWidth: brand.maxWidth,
 };
 
-const accentBarStyle: CSSProperties = {
-  height: "3px",
-  lineHeight: "3px",
-  fontSize: "3px",
-};
-
-const logoSectionStyle: CSSProperties = {
-  padding: "28px 32px 12px",
-  textAlign: "center",
+const mastheadStyle: CSSProperties = {
+  backgroundColor: brand.masthead,
+  padding: "24px 40px",
 };
 
 const logoStyle: CSSProperties = {
-  display: "inline-block",
+  display: "block",
   height: "auto",
-  margin: "0 auto",
+};
+
+const accentBarStyle: CSSProperties = {
+  height: "4px",
+  lineHeight: "4px",
+  fontSize: "4px",
 };
 
 const contentSectionStyle: CSSProperties = {
-  padding: "8px 32px 28px",
+  padding: "36px 40px 32px",
 };
 
 const headingStyle: CSSProperties = {
   color: brand.text,
-  fontSize: "24px",
-  fontWeight: "700",
-  letterSpacing: "-0.02em",
-  lineHeight: "1.2",
-  margin: "0 0 20px",
-  textAlign: "center",
+  fontFamily: brand.headingFontFamily,
+  fontSize: "28px",
+  fontWeight: "600",
+  letterSpacing: "-0.0325em",
+  lineHeight: "1.15",
+  margin: "0 0 24px",
 };
 
 const dataCardStyle: CSSProperties = {
-  backgroundColor: brand.surfaceInset,
-  border: `1px solid ${brand.accentBorder}`,
-  borderRadius: "10px",
+  backgroundColor: brand.surfaceRaised,
+  border: `1px solid ${brand.border}`,
+  borderTop: `2px solid ${brand.accent}`,
   margin: "0 0 24px",
-  padding: "20px",
+  padding: "20px 22px 14px",
 };
 
 const mutedCardStyle: CSSProperties = {
   ...dataCardStyle,
-  backgroundColor: brand.surfaceRaised,
-  border: `1px solid ${brand.border}`,
+  borderTop: `2px solid ${brand.mutedAccent}`,
 };
 
 const cardTitleStyle: CSSProperties = {
-  color: brand.accentBright,
-  fontSize: "13px",
-  fontWeight: "600",
-  letterSpacing: "0.06em",
-  lineHeight: "1.2",
-  margin: "0 0 16px",
-  textTransform: "uppercase",
+  ...eyebrowText,
 };
 
 const mutedCardTitleStyle: CSSProperties = {
   ...cardTitleStyle,
-  color: brand.textMuted,
+  color: brand.textSubtle,
 };
 
 const detailRowStyle: CSSProperties = {
-  marginBottom: "10px",
+  borderTop: `1px solid ${brand.border}`,
 };
 
 const detailLabelColumnStyle: CSSProperties = {
-  width: "38%",
+  width: "36%",
   verticalAlign: "top",
 };
 
@@ -387,6 +485,7 @@ const detailLabelStyle: CSSProperties = {
   fontSize: "14px",
   lineHeight: "22px",
   margin: "0",
+  padding: "8px 12px 8px 0",
 };
 
 const detailValueStyle: CSSProperties = {
@@ -394,20 +493,21 @@ const detailValueStyle: CSSProperties = {
   fontSize: "14px",
   lineHeight: "22px",
   margin: "0",
+  padding: "8px 0",
 };
 
 const detailValueEmphasisStyle: CSSProperties = {
   ...detailValueStyle,
-  color: brand.text,
-  fontSize: "18px",
-  fontWeight: "700",
-  lineHeight: "24px",
+  fontFamily: brand.headingFontFamily,
+  fontSize: "20px",
+  fontWeight: "600",
+  letterSpacing: "-0.02em",
+  lineHeight: "26px",
 };
 
 const alertBannerStyle: CSSProperties = {
   backgroundColor: brand.warningSoft,
   borderLeft: `3px solid ${brand.warningBorder}`,
-  borderRadius: "8px",
   margin: "0 0 24px",
   padding: "14px 16px",
 };
@@ -421,31 +521,33 @@ const alertBannerTextStyle: CSSProperties = {
 };
 
 const timelineRowStyle: CSSProperties = {
-  borderBottom: `1px solid ${brand.borderSubtle}`,
-  marginBottom: "12px",
-  paddingBottom: "12px",
+  borderBottom: `1px solid ${brand.border}`,
+  marginBottom: "10px",
+  paddingBottom: "10px",
 };
 
 const timelineRowLastStyle: CSSProperties = {
-  marginBottom: "0",
+  marginBottom: "6px",
 };
 
 const timelineMarkerColumnStyle: CSSProperties = {
-  width: "24px",
+  width: "20px",
   verticalAlign: "top",
 };
 
 const timelineMarkerStyle: CSSProperties = {
   color: brand.accent,
-  fontSize: "10px",
-  lineHeight: "22px",
+  fontSize: "8px",
+  lineHeight: "20px",
   margin: "0",
 };
 
 const timelineLabelStyle: CSSProperties = {
   color: brand.text,
-  fontSize: "14px",
+  fontFamily: brand.headingFontFamily,
+  fontSize: "15px",
   fontWeight: "600",
+  letterSpacing: "-0.015em",
   lineHeight: "20px",
   margin: "0 0 2px",
 };
@@ -459,86 +561,77 @@ const timelineTimeStyle: CSSProperties = {
 
 const contactNoteStyle: CSSProperties = {
   backgroundColor: brand.accentSoft,
-  borderRadius: "8px",
+  borderLeft: `3px solid ${brand.accent}`,
   margin: "0 0 24px",
   padding: "14px 16px",
 };
 
 const contactNoteLabelStyle: CSSProperties = {
-  color: brand.accentBright,
-  fontSize: "12px",
-  fontWeight: "600",
-  letterSpacing: "0.04em",
-  lineHeight: "18px",
+  ...eyebrowText,
   margin: "0 0 4px",
-  textTransform: "uppercase",
 };
 
 const contactNoteTextStyle: CSSProperties = {
-  color: brand.textMuted,
+  color: brand.textBody,
   fontSize: "14px",
   lineHeight: "22px",
   margin: "0",
 };
 
 const inlineLinkStyle: CSSProperties = {
-  color: brand.accentBright,
+  color: brand.accent,
   textDecoration: "underline",
 };
 
 const ctaSectionStyle: CSSProperties = {
-  margin: "4px 0 24px",
+  margin: "8px 0 28px",
 };
 
 const primaryButtonStyle: CSSProperties = {
   backgroundColor: brand.accent,
-  borderRadius: "8px",
-  color: "#ffffff",
+  border: `1px solid ${brand.accent}`,
+  color: brand.accentForeground,
   display: "inline-block",
+  fontFamily: brand.headingFontFamily,
   fontSize: "15px",
   fontWeight: "600",
+  letterSpacing: "-0.015em",
   lineHeight: "1.2",
-  padding: "14px 28px",
+  padding: "14px 24px",
   textAlign: "center",
   textDecoration: "none",
 };
 
 const secondaryButtonStyle: CSSProperties = {
   ...primaryButtonStyle,
-  backgroundColor: brand.surfaceRaised,
+  backgroundColor: brand.surface,
   border: `1px solid ${brand.border}`,
   color: brand.text,
 };
 
-const hrStyle: CSSProperties = {
-  borderColor: brand.borderSubtle,
-  borderTop: `1px solid ${brand.borderSubtle}`,
-  margin: "0",
-};
-
 const footerSectionStyle: CSSProperties = {
-  padding: "20px 32px 28px",
+  margin: "0 auto",
+  maxWidth: brand.maxWidth,
+  padding: "20px 40px 8px",
 };
 
 const footerTaglineStyle: CSSProperties = {
   color: brand.textSubtle,
   fontSize: "12px",
   lineHeight: "20px",
-  margin: "0 0 8px",
-  textAlign: "center",
+  margin: "0 0 4px",
 };
 
 const footerLineStyle: CSSProperties = {
-  color: brand.textMuted,
+  color: brand.textSubtle,
   fontSize: "12px",
   lineHeight: "20px",
   margin: "0",
-  textAlign: "center",
 };
 
 const footerLinkStyle: CSSProperties = {
-  color: brand.accentBright,
-  textDecoration: "none",
+  color: brand.textMuted,
+  textDecoration: "underline",
 };
 
 const signOffStyle: CSSProperties = {

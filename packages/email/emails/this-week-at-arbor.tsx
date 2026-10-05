@@ -2,9 +2,7 @@ import {
   Body,
   Container,
   Column,
-  Head,
   Heading,
-  Hr,
   Html,
   Img,
   Link,
@@ -13,9 +11,9 @@ import {
   Section,
   Text,
 } from "@react-email/components";
-import { Font } from "@react-email/components";
 import type { CSSProperties } from "react";
-import { brand, ARBOR_LOGO_URL } from "./_components/brand-theme";
+import { BrandFooter, BrandHead, BrandMasthead, DARK, GUTTER_CLASS } from "./_components/email-layout";
+import { brand, eyebrowText } from "./_components/brand-theme";
 import type { ThisWeekAtArborEmailProps, ThisWeekEvent } from "../src/types";
 
 /**
@@ -34,57 +32,34 @@ export function ThisWeekAtArborEmail({
   const count = events.length;
 
   return (
-    <Html>
-      <Head>
-        <Font
-          fontFamily="Inter"
-          fallbackFontFamily={["Helvetica", "Arial", "sans-serif"]}
-          webFont={{
-            url: "https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hiJ-Ek-_EeA.woff2",
-            format: "woff2",
-          }}
-          fontWeight={400}
-          fontStyle="normal"
-        />
-        <Font
-          fontFamily="Inter"
-          fallbackFontFamily={["Helvetica", "Arial", "sans-serif"]}
-          webFont={{
-            url: "https://fonts.gstatic.com/s/inter/v18/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuI6fAZ9hiA.woff2",
-            format: "woff2",
-          }}
-          fontWeight={600}
-          fontStyle="normal"
-        />
-      </Head>
+    <Html lang="en">
+      <BrandHead />
       <Preview>
         {count === 1
           ? `One show this week at Arbor Live`
           : `${count} shows this week at Arbor Live`}
       </Preview>
-      <Body style={bodyStyle}>
-        <Container style={containerStyle}>
-          <Section style={mastheadStyle}>
-            <Img src={ARBOR_LOGO_URL} alt="Arbor Live" width="132" style={logoStyle} />
-          </Section>
+      <Body className={DARK.canvas} style={bodyStyle}>
+        <Container className={DARK.surface} style={containerStyle}>
+          <BrandMasthead />
 
-          <Section style={heroStyle}>
-            <Text style={kickerStyle}>This week at Arbor</Text>
-            <Heading style={weekLabelStyle}>{weekLabel}</Heading>
-            <Text style={introStyle}>
+          <Section className={GUTTER_CLASS} style={heroStyle}>
+            <Text className={DARK.accent} style={kickerStyle}>This week at Arbor</Text>
+            <Heading className={DARK.text} style={weekLabelStyle}>{weekLabel}</Heading>
+            <Text className={DARK.muted} style={introStyle}>
               {greeting} here&apos;s what&apos;s happening on campus this week.
             </Text>
           </Section>
 
-          <Section style={listStyle}>
+          <Section className={GUTTER_CLASS} style={listStyle}>
             {events.map((event, index) => (
               <EventCard key={`${event.eventUrl}-${index}`} event={event} />
             ))}
           </Section>
 
-          <Section style={ctaSectionStyle}>
+          <Section className={GUTTER_CLASS} style={ctaSectionStyle}>
             <Row>
-              <Column align="center">
+              <Column align="left">
                 <Link href={allEventsUrl} style={ctaLinkStyle}>
                   See all upcoming events →
                 </Link>
@@ -92,23 +67,15 @@ export function ThisWeekAtArborEmail({
             </Row>
           </Section>
 
-          <Hr style={hrStyle} />
-
-          <Section style={footerStyle}>
-            <Text style={footerTaglineStyle}>
-              You&apos;re getting this because you signed up for This Week at Arbor.
-            </Text>
-            <Text style={footerLineStyle}>
-              <Link href={allEventsUrl} style={footerLinkStyle}>
-                arborlive.stanford.edu
-              </Link>
-              {" · "}
-              <Link href={unsubscribeUrl} style={footerLinkStyle}>
-                Unsubscribe
-              </Link>
-            </Text>
-          </Section>
         </Container>
+
+        <BrandFooter
+          tagline="You're getting this because you signed up for This Week at Arbor."
+          links={[
+            { href: allEventsUrl, label: "arborlive.stanford.edu" },
+            { href: unsubscribeUrl, label: "Unsubscribe" },
+          ]}
+        />
       </Body>
     </Html>
   );
@@ -116,34 +83,34 @@ export function ThisWeekAtArborEmail({
 
 function EventCard({ event }: { event: ThisWeekEvent }) {
   return (
-    <Section style={cardStyle}>
+    <Section className={DARK.surface} style={cardStyle}>
       {event.posterImageUrl ? (
         <Img
           src={event.posterImageUrl}
           alt={`${event.title} poster`}
-          width="496"
+          width="518"
           style={posterStyle}
         />
       ) : null}
       <Section style={cardBodyStyle}>
-        <Text style={whenStyle}>{event.whenLabel}</Text>
-        <Heading as="h2" style={eventTitleStyle}>
+        <Text className={DARK.accent} style={whenStyle}>{event.whenLabel}</Text>
+        <Heading as="h2" className={DARK.text} style={eventTitleStyle}>
           {event.title}
         </Heading>
         {event.venueName || event.hostLabel ? (
-          <Text style={metaStyle}>
+          <Text className={DARK.muted} style={metaStyle}>
             {[event.venueName, event.hostLabel].filter(Boolean).join(" · ")}
           </Text>
         ) : null}
-        {event.caption ? <Text style={captionStyle}>{event.caption}</Text> : null}
+        {event.caption ? <Text className={DARK.body} style={captionStyle}>{event.caption}</Text> : null}
         <Text style={actionsStyle}>
-          <Link href={event.eventUrl} style={primaryLinkStyle}>
+          <Link className={DARK.accent} href={event.eventUrl} style={primaryLinkStyle}>
             Details &amp; tickets
           </Link>
           {event.openMicSignupUrl ? (
             <>
               {"  ·  "}
-              <Link href={event.openMicSignupUrl} style={accentLinkStyle}>
+              <Link className={DARK.text} href={event.openMicSignupUrl} style={accentLinkStyle}>
                 Sign up for Open Mic
               </Link>
             </>
@@ -185,70 +152,50 @@ const bodyStyle: CSSProperties = {
   backgroundColor: brand.canvas,
   fontFamily: brand.fontFamily,
   margin: "0",
-  padding: "32px 16px",
+  padding: "32px 12px",
 };
 
 const containerStyle: CSSProperties = {
   backgroundColor: brand.surface,
   border: `1px solid ${brand.border}`,
-  borderRadius: "12px",
   margin: "0 auto",
   maxWidth: brand.maxWidth,
 };
 
-const mastheadStyle: CSSProperties = {
-  borderBottom: `1px solid ${brand.borderSubtle}`,
-  padding: "24px 32px",
-  textAlign: "center",
-};
-
-const logoStyle: CSSProperties = {
-  display: "inline-block",
-  height: "auto",
-  margin: "0 auto",
-};
-
 const heroStyle: CSSProperties = {
-  padding: "28px 32px 8px",
-  textAlign: "center",
+  padding: "36px 40px 8px",
 };
 
 const kickerStyle: CSSProperties = {
-  color: brand.accentBright,
-  fontSize: "12px",
-  fontWeight: "600",
-  letterSpacing: "0.12em",
-  lineHeight: "18px",
-  margin: "0 0 8px",
-  textTransform: "uppercase",
+  ...eyebrowText,
+  margin: "0 0 10px",
 };
 
 const weekLabelStyle: CSSProperties = {
   color: brand.text,
-  fontSize: "30px",
-  fontWeight: "700",
-  letterSpacing: "-0.03em",
-  lineHeight: "1.15",
-  margin: "0 0 12px",
+  fontFamily: brand.headingFontFamily,
+  fontSize: "36px",
+  fontWeight: "600",
+  letterSpacing: "-0.0325em",
+  lineHeight: "1.1",
+  margin: "0 0 14px",
 };
 
 const introStyle: CSSProperties = {
   color: brand.textMuted,
-  fontSize: "15px",
-  lineHeight: "24px",
+  fontSize: "16px",
+  lineHeight: "26px",
   margin: "0",
 };
 
 const listStyle: CSSProperties = {
-  padding: "20px 24px 8px",
+  padding: "24px 40px 4px",
 };
 
 const cardStyle: CSSProperties = {
-  backgroundColor: brand.surfaceInset,
+  backgroundColor: brand.surface,
   border: `1px solid ${brand.border}`,
-  borderRadius: "12px",
-  margin: "0 0 16px",
-  overflow: "hidden",
+  margin: "0 0 20px",
 };
 
 const posterStyle: CSSProperties = {
@@ -262,21 +209,17 @@ const cardBodyStyle: CSSProperties = {
 };
 
 const whenStyle: CSSProperties = {
-  color: brand.accentBright,
-  fontSize: "13px",
-  fontWeight: "600",
-  letterSpacing: "0.04em",
-  lineHeight: "20px",
-  margin: "0 0 6px",
-  textTransform: "uppercase",
+  ...eyebrowText,
+  margin: "0 0 8px",
 };
 
 const eventTitleStyle: CSSProperties = {
   color: brand.text,
-  fontSize: "20px",
-  fontWeight: "700",
-  letterSpacing: "-0.02em",
-  lineHeight: "1.25",
+  fontFamily: brand.headingFontFamily,
+  fontSize: "22px",
+  fontWeight: "600",
+  letterSpacing: "-0.0325em",
+  lineHeight: "1.2",
   margin: "0 0 6px",
 };
 
@@ -288,7 +231,7 @@ const metaStyle: CSSProperties = {
 };
 
 const captionStyle: CSSProperties = {
-  color: brand.textMuted,
+  color: brand.textBody,
   fontSize: "14px",
   lineHeight: "22px",
   margin: "0 0 14px",
@@ -302,7 +245,7 @@ const actionsStyle: CSSProperties = {
 };
 
 const primaryLinkStyle: CSSProperties = {
-  color: brand.accentBright,
+  color: brand.accent,
   textDecoration: "underline",
 };
 
@@ -312,48 +255,18 @@ const accentLinkStyle: CSSProperties = {
 };
 
 const ctaSectionStyle: CSSProperties = {
-  padding: "8px 24px 24px",
+  padding: "4px 40px 36px",
 };
 
 const ctaLinkStyle: CSSProperties = {
   backgroundColor: brand.accent,
-  borderRadius: "8px",
-  color: "#ffffff",
+  color: brand.accentForeground,
   display: "inline-block",
+  fontFamily: brand.headingFontFamily,
   fontSize: "15px",
   fontWeight: "600",
+  letterSpacing: "-0.015em",
   lineHeight: "1.2",
-  padding: "14px 28px",
-  textDecoration: "none",
-};
-
-const hrStyle: CSSProperties = {
-  borderColor: brand.borderSubtle,
-  borderTop: `1px solid ${brand.borderSubtle}`,
-  margin: "0",
-};
-
-const footerStyle: CSSProperties = {
-  padding: "20px 32px 28px",
-};
-
-const footerTaglineStyle: CSSProperties = {
-  color: brand.textSubtle,
-  fontSize: "12px",
-  lineHeight: "20px",
-  margin: "0 0 8px",
-  textAlign: "center",
-};
-
-const footerLineStyle: CSSProperties = {
-  color: brand.textMuted,
-  fontSize: "12px",
-  lineHeight: "20px",
-  margin: "0",
-  textAlign: "center",
-};
-
-const footerLinkStyle: CSSProperties = {
-  color: brand.accentBright,
+  padding: "14px 24px",
   textDecoration: "none",
 };
