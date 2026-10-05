@@ -17,7 +17,7 @@ import {
 import type { CSSProperties, ReactNode } from "react";
 import {
   ARBOR_CONTACT_EMAIL,
-  ARBOR_LOGO_URL,
+  ARBOR_MASTHEAD_URL,
   ARBOR_WEBSITE_URL,
   bodyText,
   brand,
@@ -158,12 +158,16 @@ export function BrandHead() {
   );
 }
 
-/** Zinc-950 band with the white logo and a green rule, echoing the site hero. */
+/**
+ * Zinc-950 band with the white logo and a green rule, echoing the site hero.
+ * The band is an image so dark-mode recoloring can't gray it out; the cell's
+ * background color only shows while images are blocked.
+ */
 export function BrandMasthead({ accentColor = brand.accent }: { accentColor?: string }) {
   return (
     <>
-      <Section className={GUTTER_CLASS} style={mastheadStyle}>
-        <Img src={ARBOR_LOGO_URL} alt="Arbor Live" width="104" style={logoStyle} />
+      <Section style={mastheadStyle}>
+        <Img src={ARBOR_MASTHEAD_URL} alt="Arbor Live" width="600" style={logoStyle} />
       </Section>
       <Section style={{ ...accentBarStyle, backgroundColor: accentColor }} />
     </>
@@ -421,12 +425,17 @@ const containerStyle: CSSProperties = {
 
 const mastheadStyle: CSSProperties = {
   backgroundColor: brand.masthead,
-  padding: "24px 40px",
 };
 
 const logoStyle: CSSProperties = {
   display: "block",
+  width: "100%",
   height: "auto",
+  // Alt text while images are blocked, readable on the masthead color.
+  color: "#ffffff",
+  fontFamily: brand.headingFontFamily,
+  fontSize: "18px",
+  fontWeight: "600",
 };
 
 const accentBarStyle: CSSProperties = {
