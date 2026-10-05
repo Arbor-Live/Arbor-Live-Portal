@@ -1,61 +1,83 @@
 import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import { currency } from "./format";
 import { ArborLogoPdf } from "./arbor-logo-pdf";
+import { pdfEyebrow, pdfFonts } from "./pdf-brand";
 import { invoiceTheme } from "./theme";
 import type { BandPaymentAgreementDocumentData } from "./band-payment-agreement-types";
 
 const styles = StyleSheet.create({
   page: {
-    padding: 36,
-    fontFamily: invoiceTheme.fontFamilyPdf,
-    fontSize: 10,
+    paddingHorizontal: 36,
+    paddingTop: 30,
+    paddingBottom: 30,
+    fontFamily: pdfFonts.body,
+    fontSize: 9.5,
     color: invoiceTheme.text,
   },
   stack: {
-    gap: 14,
+    gap: 11,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: invoiceTheme.border,
+    paddingBottom: 10,
+    borderBottomWidth: 3,
+    borderBottomColor: invoiceTheme.primary,
+  },
+  status: {
+    ...pdfEyebrow,
+    color: invoiceTheme.primary,
+    borderWidth: 1,
+    borderColor: invoiceTheme.primary,
+    paddingVertical: 2.5,
+    paddingHorizontal: 6,
+  },
+  titleBlock: {
+    marginTop: -4,
+  },
+  documentKind: {
+    ...pdfEyebrow,
+    color: invoiceTheme.primary,
+    marginBottom: 4,
   },
   brandTitle: {
-    fontSize: 16,
-    fontWeight: 700,
-    marginBottom: 4,
+    fontFamily: pdfFonts.heading,
+    fontSize: 21,
+    fontWeight: 600,
+    letterSpacing: -0.5,
+    marginBottom: 2,
   },
   muted: {
     color: invoiceTheme.textMuted,
-    fontSize: 9,
+    fontSize: 8.5,
   },
-  card: {
-    borderWidth: 1,
-    borderColor: invoiceTheme.border,
-    borderRadius: 8,
-  },
+  card: {},
   cardTitle: {
-    fontSize: 12,
-    fontWeight: 700,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: invoiceTheme.border,
-    backgroundColor: invoiceTheme.mutedHeaderBg,
+    fontFamily: pdfFonts.heading,
+    fontSize: 13,
+    fontWeight: 600,
+    letterSpacing: -0.3,
+    paddingBottom: 5,
+    borderBottomWidth: 1.5,
+    borderBottomColor: invoiceTheme.text,
   },
   cardBody: {
-    padding: 12,
-    gap: 6,
+    paddingTop: 4,
+  },
+  intro: {
+    lineHeight: "13pt",
+    paddingVertical: 4,
   },
   row: {
     flexDirection: "row",
     gap: 8,
+    paddingVertical: 2.5,
+    borderBottomWidth: 1,
+    borderBottomColor: invoiceTheme.border,
   },
   label: {
-    fontWeight: 700,
+    color: invoiceTheme.textMuted,
     width: 140,
   },
   value: {
@@ -64,33 +86,50 @@ const styles = StyleSheet.create({
   personBlock: {
     flexDirection: "row",
     gap: 8,
+    paddingVertical: 2.5,
+    borderBottomWidth: 1,
+    borderBottomColor: invoiceTheme.border,
   },
   personValue: {
     flex: 1,
     gap: 2,
   },
   personName: {
-    fontSize: 10,
+    fontSize: 9.5,
   },
   personEmail: {
-    fontSize: 9,
+    fontSize: 8.5,
     color: invoiceTheme.textMuted,
-    fontStyle: "italic",
   },
   emphasis: {
-    fontSize: 12,
-    fontWeight: 700,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    backgroundColor: invoiceTheme.primary,
+    color: invoiceTheme.primaryForeground,
+  },
+  emphasisLabel: {
+    ...pdfEyebrow,
+    color: invoiceTheme.primaryForeground,
+  },
+  emphasisValue: {
+    fontFamily: pdfFonts.heading,
+    fontSize: 16,
+    fontWeight: 600,
+    letterSpacing: -0.3,
   },
   signatureBlock: {
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: invoiceTheme.border,
-    gap: 6,
+    marginTop: 4,
   },
   signatureLine: {
-    fontSize: 12,
-    fontWeight: 700,
+    fontFamily: pdfFonts.heading,
+    fontSize: 14,
+    fontWeight: 600,
+    letterSpacing: -0.3,
+    paddingVertical: 4,
   },
 });
 
@@ -164,14 +203,13 @@ export function BandPaymentAgreementPdf({
       <Page size="LETTER" style={styles.page}>
         <View style={styles.stack}>
           <View style={styles.header}>
-            <View>
-              <ArborLogoPdf />
-              <Text style={styles.brandTitle}>Band Payment Agreement</Text>
-              <Text style={styles.muted}>Payment ID {data.confirmationToken}</Text>
-            </View>
-            <View>
-              <Text style={styles.muted}>Status: {data.status === "paid" ? "Paid" : "Signed"}</Text>
-            </View>
+            <ArborLogoPdf width={96} />
+            <Text style={styles.status}>{data.status === "paid" ? "Paid" : "Signed"}</Text>
+          </View>
+          <View style={styles.titleBlock}>
+            <Text style={styles.documentKind}>Agreement</Text>
+            <Text style={styles.brandTitle}>Band Payment Agreement</Text>
+            <Text style={styles.muted}>Payment ID {data.confirmationToken}</Text>
           </View>
 
           <View style={styles.card}>
@@ -196,14 +234,17 @@ export function BandPaymentAgreementPdf({
               ) : null}
               <Detail label="Total" value={currency(data.totalUsd)} />
               <Detail label="Designated payee" value={data.designatedPayeeName} />
-              <Text style={styles.emphasis}>Agreed total: {currency(data.totalUsd)}</Text>
+              <View style={styles.emphasis}>
+                <Text style={styles.emphasisLabel}>Agreed total</Text>
+                <Text style={styles.emphasisValue}>{currency(data.totalUsd)}</Text>
+              </View>
             </View>
           </View>
 
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Arbor Live — authorization</Text>
             <View style={styles.cardBody}>
-              <Text>
+              <Text style={styles.intro}>
                 An Arbor Live staff member authorized this payment amount and sent it to the
                 designated payee for e-signature agreement.
               </Text>
@@ -236,7 +277,7 @@ export function BandPaymentAgreementPdf({
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Band — payment agreement</Text>
             <View style={styles.cardBody}>
-              <Text>
+              <Text style={styles.intro}>
                 The designated payee agrees that the payment details and total above are accurate,
                 and authorizes Arbor Live to proceed with payout processing.
               </Text>
@@ -263,7 +304,7 @@ export function BandPaymentAgreementPdf({
           </View>
 
           {data.servicePaymentNumber || data.paidAtLabel ? (
-            <View style={styles.card}>
+            <View style={styles.card} wrap={false}>
               <Text style={styles.cardTitle}>Payout</Text>
               <View style={styles.cardBody}>
                 {data.servicePaymentNumber ? (

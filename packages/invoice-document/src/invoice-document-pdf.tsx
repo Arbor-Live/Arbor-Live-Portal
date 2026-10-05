@@ -20,38 +20,28 @@ import {
   type CrewLine,
 } from "./crew-sections";
 import { currency, groupInvoiceSections } from "./format";
+import { pdfEyebrow as eyebrow, pdfFonts } from "./pdf-brand";
 import { invoiceTheme } from "./theme";
 import type { InvoiceDocumentData, InvoiceLineItem } from "./types";
 
 const styles = StyleSheet.create({
   page: {
-    padding: 36,
-    fontFamily: invoiceTheme.fontFamilyPdf,
-    fontSize: 10,
+    padding: 40,
+    fontFamily: pdfFonts.body,
+    fontSize: 9.5,
     color: invoiceTheme.text,
   },
   stack: {
-    gap: 12,
+    gap: 22,
   },
-  card: {
-    borderWidth: 1,
-    borderColor: invoiceTheme.border,
-    borderRadius: 8,
-  },
+  card: {},
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: invoiceTheme.primarySoft,
-    borderBottomWidth: 1,
-    borderBottomColor: invoiceTheme.border,
-  },
-  headerLeft: {
-    flexDirection: "column",
-    gap: 8,
-    maxWidth: 220,
+    alignItems: "flex-start",
+    paddingBottom: 14,
+    borderBottomWidth: 3,
+    borderBottomColor: invoiceTheme.primary,
   },
   logo: {
     width: 110,
@@ -60,93 +50,148 @@ const styles = StyleSheet.create({
   },
   headerText: {
     textAlign: "right",
-    fontSize: 10,
+    fontSize: 8.5,
+    lineHeight: 1.5,
+    color: invoiceTheme.textMuted,
   },
-  brandTitle: {
-    fontSize: 16,
-    fontWeight: 700,
+  titleBlock: {
+    marginTop: 18,
+  },
+  documentKind: {
+    ...eyebrow,
+    color: invoiceTheme.primary,
     marginBottom: 4,
   },
   invoiceNumber: {
-    fontSize: 14,
-    fontWeight: 700,
+    fontFamily: pdfFonts.heading,
+    fontSize: 24,
+    fontWeight: 600,
+    letterSpacing: -0.6,
   },
   detailsGrid: {
     flexDirection: "row",
-    gap: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    gap: 28,
+    marginTop: 18,
   },
   detailsColumn: {
     flex: 1,
   },
   sectionLabel: {
-    fontWeight: 700,
-    marginBottom: 6,
+    ...eyebrow,
+    paddingBottom: 5,
+    marginBottom: 2,
+    borderBottomWidth: 1,
+    borderBottomColor: invoiceTheme.border,
+  },
+  detailRow: {
+    flexDirection: "row",
+    paddingVertical: 3,
+  },
+  detailRowLabel: {
+    width: 84,
+    color: invoiceTheme.textMuted,
+  },
+  detailRowValue: {
+    flex: 1,
   },
   detailLine: {
-    marginBottom: 4,
+    marginTop: 6,
+    fontSize: 8.5,
+    lineHeight: 1.4,
+    color: invoiceTheme.textMuted,
   },
   detailLabel: {
-    fontWeight: 700,
+    fontWeight: 600,
   },
   link: {
     color: invoiceTheme.primary,
     textDecoration: "underline",
   },
   cardTitle: {
-    fontSize: 14,
-    fontWeight: 700,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: invoiceTheme.border,
-    backgroundColor: invoiceTheme.mutedHeaderBg,
+    fontFamily: pdfFonts.heading,
+    fontSize: 13,
+    fontWeight: 600,
+    letterSpacing: -0.3,
+    paddingBottom: 6,
+    borderBottomWidth: 1.5,
+    borderBottomColor: invoiceTheme.text,
   },
   cardBody: {
-    padding: 14,
+    paddingTop: 8,
+    gap: 3,
   },
   tableHeader: {
     flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: invoiceTheme.border,
-    backgroundColor: invoiceTheme.mutedHeaderBg,
     paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingHorizontal: 2,
   },
   tableRow: {
     flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: invoiceTheme.border,
     paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingHorizontal: 2,
   },
   tableLastRow: {
     borderBottomWidth: 0,
   },
   th: {
-    fontWeight: 700,
-    fontSize: 9,
+    ...eyebrow,
   },
   td: {
     fontSize: 9,
   },
-  totalsGrid: {
-    padding: 14,
-    gap: 4,
+  detailNote: {
+    fontSize: 7.5,
+    color: invoiceTheme.textMuted,
+    marginTop: 2,
+  },
+  totals: {
+    alignSelf: "flex-end",
+    width: 250,
+    paddingTop: 4,
+  },
+  totalsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 3,
+    paddingHorizontal: 2,
+  },
+  totalsLabel: {
+    color: invoiceTheme.textMuted,
+  },
+  subtotalRow: {
+    marginTop: 4,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: invoiceTheme.border,
+    fontWeight: 600,
   },
   discount: {
     color: invoiceTheme.discount,
-    fontWeight: 700,
+    fontWeight: 600,
   },
   totalHighlight: {
-    marginTop: 4,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: invoiceTheme.primaryBorder,
-    backgroundColor: invoiceTheme.primaryHighlightBg,
-    fontSize: 12,
-    fontWeight: 700,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    backgroundColor: invoiceTheme.primary,
+    color: invoiceTheme.primaryForeground,
+  },
+  totalHighlightLabel: {
+    ...eyebrow,
+    color: invoiceTheme.primaryForeground,
+  },
+  totalHighlightValue: {
+    fontFamily: pdfFonts.heading,
+    fontSize: 16,
+    fontWeight: 600,
+    letterSpacing: -0.3,
   },
   divider: {
     borderBottomWidth: 1,
@@ -156,26 +201,22 @@ const styles = StyleSheet.create({
   crewDay: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 8,
+    paddingHorizontal: 2,
     paddingTop: 8,
     paddingBottom: 3,
     borderBottomWidth: 1,
     borderBottomColor: invoiceTheme.border,
-    fontSize: 8,
-    fontWeight: 700,
-    color: invoiceTheme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    ...eyebrow,
   },
   crewSectionRow: {
     flexDirection: "row",
-    paddingHorizontal: 8,
+    paddingHorizontal: 2,
     paddingTop: 6,
     paddingBottom: 2,
   },
   crewSectionTitle: {
     fontSize: 9.5,
-    fontWeight: 700,
+    fontWeight: 600,
   },
   crewMuted: {
     fontSize: 8,
@@ -183,8 +224,8 @@ const styles = StyleSheet.create({
   },
   crewPersonRow: {
     flexDirection: "row",
-    marginLeft: 18,
-    paddingRight: 8,
+    marginLeft: 10,
+    paddingRight: 2,
     paddingLeft: 8,
     paddingVertical: 2.5,
     borderLeftWidth: 1,
@@ -196,19 +237,21 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   crewLead: {
-    fontSize: 7,
-    fontWeight: 700,
+    fontFamily: pdfFonts.heading,
+    fontSize: 6.5,
+    fontWeight: 600,
+    letterSpacing: 0.6,
     color: invoiceTheme.primary,
   },
   crewTotal: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 8,
+    paddingHorizontal: 2,
     paddingVertical: 7,
     borderTopWidth: 1.5,
     borderTopColor: invoiceTheme.text,
     fontSize: 10,
-    fontWeight: 700,
+    fontWeight: 600,
   },
 });
 
@@ -225,23 +268,18 @@ export function InvoiceDocumentPdf({ data, logoSrc }: InvoiceDocumentPdfProps) {
     <Document>
       <Page size="LETTER" style={styles.page}>
         <View style={styles.stack}>
-          <View style={styles.card}>
+          <View>
             <View style={styles.header}>
-              <View style={styles.headerLeft}>
-                {logoSrc ? (
-                  <Image src={logoSrc} style={styles.logo} />
-                ) : (
-                  <ArborLogoPdf width={132} />
-                )}
-                <Text style={styles.invoiceNumber}>
-                  {invoice.isFinal ? "Invoice" : "Estimate"} {invoice.invoiceNumber}
-                </Text>
-              </View>
+              {logoSrc ? <Image src={logoSrc} style={styles.logo} /> : <ArborLogoPdf width={118} />}
               <View style={styles.headerText}>
                 <Text>Office of Student Engagement</Text>
                 <Text>arborlive@stanford.edu</Text>
                 <Text>arborlive.stanford.edu</Text>
               </View>
+            </View>
+            <View style={styles.titleBlock}>
+              <Text style={styles.documentKind}>{invoice.isFinal ? "Invoice" : "Estimate"}</Text>
+              <Text style={styles.invoiceNumber}>{invoice.invoiceNumber}</Text>
             </View>
             <View style={styles.detailsGrid}>
               <View style={styles.detailsColumn}>
@@ -307,21 +345,32 @@ export function InvoiceDocumentPdf({ data, logoSrc }: InvoiceDocumentPdfProps) {
 
           <View style={styles.card} wrap={false}>
             <Text style={styles.cardTitle}>Totals</Text>
-            <View style={styles.totalsGrid}>
-              <Text>Equipment: {currency(invoice.equipmentSubtotalUsd)}</Text>
-              <Text>External rentals: {currency(invoice.externalRentalsSubtotalUsd)}</Text>
-              <Text>Artists: {currency(invoice.artistsSubtotalUsd)}</Text>
-              <Text>Crew: {currency(invoice.crewSubtotalUsd)}</Text>
-              <Text>Fees: {currency(invoice.feesSubtotalUsd)}</Text>
-              <Text style={styles.detailLabel}>Subtotal: {currency(invoice.subtotalUsd)}</Text>
-              <Text style={styles.discount}>Discount: -{currency(invoice.discountAmountUsd)}</Text>
-              <Text style={styles.totalHighlight}>Total: {currency(invoice.totalUsd)}</Text>
+            <View style={styles.totals}>
+              <TotalsRow label="Equipment" value={currency(invoice.equipmentSubtotalUsd)} />
+              <TotalsRow label="External rentals" value={currency(invoice.externalRentalsSubtotalUsd)} />
+              <TotalsRow label="Artists" value={currency(invoice.artistsSubtotalUsd)} />
+              <TotalsRow label="Crew" value={currency(invoice.crewSubtotalUsd)} />
+              <TotalsRow label="Fees" value={currency(invoice.feesSubtotalUsd)} />
+              <View style={[styles.totalsRow, styles.subtotalRow]}>
+                <Text>Subtotal</Text>
+                <Text>{currency(invoice.subtotalUsd)}</Text>
+              </View>
+              <View style={[styles.totalsRow, styles.discount]}>
+                <Text>Discount</Text>
+                <Text>-{currency(invoice.discountAmountUsd)}</Text>
+              </View>
+              <View style={styles.totalHighlight}>
+                <Text style={styles.totalHighlightLabel}>Total</Text>
+                <Text style={styles.totalHighlightValue}>{currency(invoice.totalUsd)}</Text>
+              </View>
             </View>
           </View>
 
           {invoice.notes?.trim() ? (
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Notes</Text>
+              <Text style={styles.cardTitle} minPresenceAhead={40}>
+                Notes
+              </Text>
               <View style={styles.cardBody}>
                 <Text>{invoice.notes.trim()}</Text>
               </View>
@@ -335,10 +384,19 @@ export function InvoiceDocumentPdf({ data, logoSrc }: InvoiceDocumentPdfProps) {
 
 function DetailLine({ label, value }: { label: string; value: string }) {
   return (
-    <Text style={styles.detailLine}>
-      <Text style={styles.detailLabel}>{label}: </Text>
-      {value}
-    </Text>
+    <View style={styles.detailRow}>
+      <Text style={styles.detailRowLabel}>{label}</Text>
+      <Text style={styles.detailRowValue}>{value}</Text>
+    </View>
+  );
+}
+
+function TotalsRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.totalsRow}>
+      <Text style={styles.totalsLabel}>{label}</Text>
+      <Text>{value}</Text>
+    </View>
   );
 }
 
@@ -382,7 +440,7 @@ function ArtistsSectionTable({ rows }: { rows: InvoiceLineItem[] }) {
           <View style={[styles.td, { flex: itemFlex }]}>
             <Text>{row.label}</Text>
             {row.detailNote ? (
-              <Text style={{ fontSize: 7, color: "#64748b", marginTop: 2 }}>{row.detailNote}</Text>
+              <Text style={styles.detailNote}>{row.detailNote}</Text>
             ) : null}
           </View>
           <Text style={[styles.td, { flex: hoursFlex, textAlign: "right" }]}>
@@ -396,7 +454,7 @@ function ArtistsSectionTable({ rows }: { rows: InvoiceLineItem[] }) {
           <Text style={[styles.td, { flex: rateFlex, textAlign: "right" }]}>
             {currency(row.rateUsd)}
           </Text>
-          <Text style={[styles.td, { flex: amountFlex, textAlign: "right", fontWeight: 700 }]}>
+          <Text style={[styles.td, { flex: amountFlex, textAlign: "right", fontWeight: 600 }]}>
             {currency(row.amountUsd)}
           </Text>
         </View>
@@ -447,17 +505,17 @@ function SectionTable({
           <View style={[styles.td, { flex: itemFlex }]}>
             <Text>{row.label}</Text>
             {row.detailNote ? (
-              <Text style={{ fontSize: 7, color: "#64748b", marginTop: 2 }}>{row.detailNote}</Text>
+              <Text style={styles.detailNote}>{row.detailNote}</Text>
             ) : null}
           </View>
           <View style={[styles.td, { flex: qtyFlex, alignItems: "flex-end" }]}>
             <Text style={{ textAlign: "right" }}>{row.quantity}</Text>
             {row.quantityDetail ? (
-              <Text style={{ fontSize: 7, color: "#64748b", textAlign: "right" }}>{row.quantityDetail}</Text>
+              <Text style={[styles.detailNote, { textAlign: "right" }]}>{row.quantityDetail}</Text>
             ) : null}
           </View>
           <Text style={[styles.td, { flex: rateFlex, textAlign: "right" }]}>{currency(row.rateUsd)}</Text>
-          <Text style={[styles.td, { flex: amountFlex, textAlign: "right", fontWeight: 700 }]}>
+          <Text style={[styles.td, { flex: amountFlex, textAlign: "right", fontWeight: 600 }]}>
             {currency(row.amountUsd)}
           </Text>
         </View>
