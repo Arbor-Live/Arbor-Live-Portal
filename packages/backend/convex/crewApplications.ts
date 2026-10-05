@@ -641,18 +641,23 @@ export const assignTraineeToEvent = mutation({
 
     // The calendar invite goes through the crew diff like any other shift
     // change, so moving the trainee to another block cancels the old invite.
+    // Diff all of the trainee's shifts on this event (they may share a run),
+    // with only the edited one changed.
+    const previousForEvent = existingShifts.filter((shift) => shift.eventId === args.eventId);
+    const assignedShift = {
+      scheduleBlockId: ready.scheduleBlockId,
+      role: "Trainee",
+      startsAt: ready.startsAt,
+      endsAt: ready.endsAt,
+      crewApplicationId: application._id,
+    };
     await scheduleCrewScheduledEmails(
       ctx,
       args.eventId,
-      existingForEvent ? [existingForEvent] : [],
+      previousForEvent,
       [
-        {
-          scheduleBlockId: ready.scheduleBlockId,
-          role: "Trainee",
-          startsAt: ready.startsAt,
-          endsAt: ready.endsAt,
-          crewApplicationId: application._id,
-        },
+        ...previousForEvent.filter((shift) => shift._id !== existingForEvent?._id),
+        assignedShift,
       ],
       await bumpInviteSequence(ctx, args.eventId),
     );
