@@ -639,7 +639,7 @@ export const assignTraineeToEvent = mutation({
     });
 
     const introIdempotencyKey = `crew_trainee_intro:${application._id}:${args.eventId}`;
-    const icsIdempotencyKey = `crew_scheduled:application:${application._id}:${args.eventId}:${ready.startsAt}:${ready.endsAt}`;
+    const icsIdempotencyKey = `crew_scheduled:application:${application._id}:${args.eventId}:${anchor}:${ready.startsAt}:${ready.endsAt}`;
 
     await enqueueEmail(ctx, {
       template: "crew_trainee_intro",
