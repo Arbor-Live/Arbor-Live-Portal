@@ -30,16 +30,15 @@ import {
   crewApplicationsAdminUrl,
   EVENT_TIMEZONE,
   formatEventDateRange,
-  SITE_URL,
   subjectForTemplate,
 } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
-import { bumpCrewInviteSequence } from "./email/crewInviteSequence";
+import { bumpInviteSequence } from "./email/inviteSequence";
 import {
   markInvitationAccepted,
   scheduleUserInviteEmail,
 } from "./email/invitations";
-import { buildSingleIcsEventForUserShifts } from "./email/scheduleEmailData";
+import { scheduleCrewScheduledEmails } from "./email/triggers";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { ensureOnboardingForOrgMembership } from "./onboarding";
 import { upsertUserCompensationRate } from "./lib/crewCompensation";
@@ -611,29 +610,7 @@ export const assignTraineeToEvent = mutation({
     const timezone = EVENT_TIMEZONE;
     const callTimeLabel = formatDateTime(ready.callTime, "long", timezone);
     const dateRangeLabel = formatEventDateRange(ready.startAt, ready.endAt, timezone);
-    const inviteSequence = await bumpCrewInviteSequence(ctx, args.eventId);
-    const icsEvents = [
-      buildSingleIcsEventForUserShifts({
-        eventId: args.eventId,
-        userId: `application:${application._id}`,
-        eventTitle: ready.eventTitle,
-        venueName: ready.venueName,
-        shifts: [
-          {
-            role: "Trainee",
-            startsAt: ready.startsAt,
-            endsAt: ready.endsAt,
-            crewApplicationId: application._id,
-          },
-        ],
-        blockLabelById: new Map(),
-        timezone,
-        sequence: inviteSequence,
-      }),
-    ];
-
     const introIdempotencyKey = `crew_trainee_intro:${application._id}:${args.eventId}`;
-    const icsIdempotencyKey = `crew_scheduled:application:${application._id}:${args.eventId}:${ready.startsAt}:${ready.endsAt}`;
 
     await enqueueEmail(ctx, {
       template: "crew_trainee_intro",
@@ -662,27 +639,28 @@ export const assignTraineeToEvent = mutation({
       },
     });
 
-    await enqueueEmail(ctx, {
-      template: "crew_scheduled",
-      to: application.email,
-      subject: subjectForTemplate("crew_scheduled", ready.eventTitle),
-      eventId: args.eventId,
-      idempotencyKey: icsIdempotencyKey,
-      payload: {
-        eventTitle: ready.eventTitle,
-        venueName: ready.venueName,
-        dateRangeLabel,
-        eventUrl: `${SITE_URL}/`,
-        recipientName: application.name.split(" ")[0] ?? application.name,
-        assignmentSummaries: [
-          `Trainee • ${formatDateTime(ready.startsAt, "long", timezone)} – ${formatDateTime(ready.endsAt, "timeOnly", timezone)}`,
-        ],
-        fullScheduleSummaries: [],
-        coversEntireEvent: args.presenceMode === "entire_event",
-        icsEvents,
-        timezone,
-      },
-    });
+    // The calendar invite goes through the crew diff like any other shift
+    // change, so moving the trainee to another block cancels the old invite.
+    // Diff all of the trainee's shifts on this event (they may share a run),
+    // with only the edited one changed.
+    const previousForEvent = existingShifts.filter((shift) => shift.eventId === args.eventId);
+    const assignedShift = {
+      scheduleBlockId: ready.scheduleBlockId,
+      role: "Trainee",
+      startsAt: ready.startsAt,
+      endsAt: ready.endsAt,
+      crewApplicationId: application._id,
+    };
+    await scheduleCrewScheduledEmails(
+      ctx,
+      args.eventId,
+      previousForEvent,
+      [
+        ...previousForEvent.filter((shift) => shift._id !== existingForEvent?._id),
+        assignedShift,
+      ],
+      await bumpInviteSequence(ctx, args.eventId),
+    );
 
     return { shiftId };
   },

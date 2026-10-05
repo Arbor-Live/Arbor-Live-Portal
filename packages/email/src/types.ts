@@ -17,7 +17,7 @@ export type CrewScheduledEmailProps = EventEmailProps & {
   coversEntireEvent: boolean;
 };
 
-export type CrewScheduledIcsEventPayload = {
+export type ScheduleIcsEventPayload = {
   uid: string;
   title: string;
   description?: string;
@@ -28,20 +28,55 @@ export type CrewScheduledIcsEventPayload = {
   sequence?: number;
 };
 
-export type CrewScheduledEmailPayload = CrewScheduledEmailProps & {
-  icsEvents: CrewScheduledIcsEventPayload[];
+/** Every calendar-invite email carries exactly one event (see `lib/ics.ts`). */
+export type CalendarInvitePayload = {
+  icsEvent: ScheduleIcsEventPayload;
   timezone: string;
 };
+
+export type CrewScheduledEmailPayload = CrewScheduledEmailProps & CalendarInvitePayload;
 
 export type CrewUnscheduledEmailProps = EventEmailProps & {
   eventLeadName?: string;
   previousAssignmentSummaries: string[];
+  /** Set when the person keeps other blocks on this event; only these were removed. */
+  remainingAssignmentSummaries?: string[];
+  /** Cancels the pre-split merged invite; the per-run invites replace it. */
+  replacedBySeparateInvites?: boolean;
 };
 
-export type CrewUnscheduledEmailPayload = CrewUnscheduledEmailProps & {
-  icsEvents: CrewScheduledIcsEventPayload[];
-  timezone: string;
+export type CrewUnscheduledEmailPayload = CrewUnscheduledEmailProps & CalendarInvitePayload;
+
+export type BandScheduledEmailProps = {
+  recipientName?: string;
+  bandName: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  /** "Soundcheck" or "Set". */
+  slotLabel: string;
+  timeRangeLabel: string;
+  /** True when this re-sends an invite the member already received. */
+  isUpdate: boolean;
+  /** The act's other lineup window, e.g. "Set • 9:00 PM – 10:00 PM". */
+  otherSlotSummary?: string;
+  showUrl: string;
 };
+
+export type BandScheduledEmailPayload = BandScheduledEmailProps & CalendarInvitePayload;
+
+export type BandUnscheduledEmailProps = {
+  recipientName?: string;
+  bandName: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  slotLabel: string;
+  previousTimeRangeLabel: string;
+  showUrl: string;
+};
+
+export type BandUnscheduledEmailPayload = BandUnscheduledEmailProps & CalendarInvitePayload;
 
 export type ScheduleReminderEmailProps = EventEmailProps & {
   daysUntilEvent: number;

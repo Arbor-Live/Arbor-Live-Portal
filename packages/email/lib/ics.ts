@@ -18,8 +18,12 @@ export type ScheduleIcsInput = {
   timezone: string;
   organizerEmail: string;
   attendeeEmail: string;
-  events: IcsEventInput[];
-  /** Defaults to REQUEST. Use CANCEL with the same event UIDs to revoke invites. */
+  /**
+   * One event per invite: Gmail and Outlook only add the first VEVENT of an
+   * iMIP message, so separate windows go out as separate emails.
+   */
+  event: IcsEventInput;
+  /** Defaults to REQUEST. Use CANCEL with the same event UID to revoke an invite. */
   method?: IcsMethod;
 };
 
@@ -125,10 +129,6 @@ function buildVeventLines(event: IcsEventInput, input: ScheduleIcsInput, now: Da
 }
 
 export function buildScheduleIcs(input: ScheduleIcsInput): string {
-  if (input.events.length === 0) {
-    throw new Error("At least one calendar event is required.");
-  }
-
   const method = input.method ?? "REQUEST";
   const now = new Date();
   const lines = [
@@ -137,7 +137,7 @@ export function buildScheduleIcs(input: ScheduleIcsInput): string {
     "PRODID:-//Arbor Live//Schedule//EN",
     "CALSCALE:GREGORIAN",
     `METHOD:${method}`,
-    ...input.events.flatMap((event) => buildVeventLines(event, input, now)),
+    ...buildVeventLines(input.event, input, now),
     "END:VCALENDAR",
   ];
 
@@ -154,15 +154,13 @@ export function buildEventIcs(input: EventIcsInput): string {
     timezone: input.timezone,
     organizerEmail: input.organizerEmail,
     attendeeEmail,
-    events: [
-      {
-        uid: input.uid,
-        title: input.title,
-        description: input.description,
-        location: input.location,
-        startAt: input.startAt,
-        endAt: input.endAt,
-      },
-    ],
+    event: {
+      uid: input.uid,
+      title: input.title,
+      description: input.description,
+      location: input.location,
+      startAt: input.startAt,
+      endAt: input.endAt,
+    },
   });
 }

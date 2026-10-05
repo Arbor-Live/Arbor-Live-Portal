@@ -1,6 +1,7 @@
 import { pacificDayIndexFromAnchor } from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { scheduleBandTimeEmails } from "../email/bandScheduleEmails";
 import { resolveBandName } from "./bandIdentity";
 import type { ActBlockType } from "./scheduleBlockTypes";
 
@@ -10,7 +11,9 @@ import type { ActBlockType } from "./scheduleBlockTypes";
  * editor owns these blocks (`eventSchedule.upsertBlocks` with `editsActBlocks`)
  * and writes their times back to the lineup fields via `writeBackActTimes`, which
  * the band dashboard still reads. Lineup-side writers call
- * `syncParticipationBlocks` / `syncNeedBlocks` to go the other way.
+ * `syncParticipationBlocks` / `syncNeedBlocks` to go the other way. Every write
+ * to (or removal of) a platform act's times also calls `scheduleBandTimeEmails`,
+ * which sends the band's calendar invites.
  */
 
 export type ActRef =
@@ -257,7 +260,10 @@ export async function writeBackActTimes(ctx: MutationCtx, act: ActRef) {
   };
   if ("participationId" in act) {
     const row = await ctx.db.get(act.participationId);
-    if (row) await ctx.db.replace(row._id, apply(row));
+    if (!row) return;
+    const next = apply(row);
+    await ctx.db.replace(row._id, next);
+    await scheduleBandTimeEmails(ctx, row, next);
     return;
   }
   const slot = await ctx.db.get(act.needId);
@@ -289,6 +295,7 @@ export async function inheritSlotTimes(
     next.soundcheckEndsAt = slot.soundcheckEndsAt;
   }
   await ctx.db.replace(row._id, next);
+  await scheduleBandTimeEmails(ctx, row, next);
 }
 
 export async function deleteActBlocks(ctx: MutationCtx, act: ActRef) {

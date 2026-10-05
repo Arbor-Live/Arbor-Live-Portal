@@ -1,3 +1,4 @@
+import type { CrewUnscheduledEmailPayload } from "@arbor/email/types";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import {
@@ -13,10 +14,18 @@ import {
   getUserScheduledEmailRecipient,
 } from "./recipients";
 import {
-  buildSingleIcsEventForUserShifts,
+  buildCrewShiftGroupIcsEvent,
+  crewAssigneeKey,
+  crewInviteDebounceKey,
+  crewInviteUid,
+  legacyCrewInviteDebounceKey,
+  legacyCrewInviteUid,
+  shiftGroupAnchor,
   formatAssignmentSummary,
   formatBlockTimeRange,
   formatScheduleBlockSummary,
+  groupShiftsByConsecutiveBlocks,
+  shiftGroupBlockLabels,
   shiftGroupFingerprint,
   userCoversEntireSchedule,
   type CrewShiftLike,
@@ -121,6 +130,21 @@ export async function scheduleSchedulePublishedEmails(
   }
 }
 
+async function resolveCrewAssigneeRecipient(ctx: MutationCtx, assigneeKey: string) {
+  if (assigneeKey.startsWith("application:")) {
+    const applicationId = assigneeKey.slice("application:".length) as Id<"crewApplications">;
+    const application = await ctx.db.get(applicationId);
+    if (!application?.email) return null;
+    return { email: application.email, name: application.name, userId: undefined };
+  }
+  return getUserScheduledEmailRecipient(ctx, assigneeKey);
+}
+
+/**
+ * Crew invites go out one per email (Gmail and Outlook only add the first event
+ * of an invite), one per run of back-to-back shifts. Each invite is diffed on
+ * its own: changed runs re-send, runs that disappeared get a cancellation.
+ */
 export async function scheduleCrewScheduledEmails(
   ctx: MutationCtx,
   eventId: Id<"events">,
@@ -132,22 +156,6 @@ export async function scheduleCrewScheduledEmails(
   if (!event) return;
 
   const timezone = event.timezone || EVENT_TIMEZONE;
-  const previousUserIds = [
-    ...new Set(
-      previousShifts
-        .map((shift) => shift.userId?.trim())
-        .filter((value): value is string => Boolean(value)),
-    ),
-  ];
-  const assignedUserIds = [
-    ...new Set(
-      nextShifts
-        .map((shift) => shift.userId?.trim())
-        .filter((value): value is string => Boolean(value)),
-    ),
-  ];
-  const assignedUserIdSet = new Set(assignedUserIds);
-
   const blocks = await ctx.db
     .query("eventScheduleBlocks")
     .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
@@ -158,238 +166,175 @@ export async function scheduleCrewScheduledEmails(
     ? (await getUserScheduledEmailRecipient(ctx, event.dayOfLeadUserId))?.name
     : undefined;
 
-  // Fully unassigned: drop pending schedule emails; send cancel if they already got an invite.
-  for (const userId of previousUserIds) {
-    if (assignedUserIdSet.has(userId)) continue;
+  const shiftsFor = (shifts: CrewShiftLike[], assigneeKey: string) =>
+    shifts.filter((shift) => crewAssigneeKey(shift) === assigneeKey);
+  const assigneeKeys = new Set(
+    [...previousShifts, ...nextShifts]
+      .map(crewAssigneeKey)
+      .filter((value): value is string => Boolean(value)),
+  );
 
-    const scheduleDebounceKey = `crew_scheduled:${eventId}:${userId}`;
-    await cancelPendingDebouncedEmail(ctx, scheduleDebounceKey);
+  for (const assigneeKey of assigneeKeys) {
+    const previousAssigneeShifts = shiftsFor(previousShifts, assigneeKey);
+    const nextAssigneeShifts = shiftsFor(nextShifts, assigneeKey);
+    // No assignment change for this person (debounce still coalesces bursts via debounceKey).
+    if (shiftGroupFingerprint(previousAssigneeShifts) === shiftGroupFingerprint(nextAssigneeShifts)) {
+      continue;
+    }
 
-    const previousUserShifts = previousShifts.filter((shift) => shift.userId === userId);
-    if (previousUserShifts.length === 0) continue;
-
-    const hadInvite = await hasSentDebouncedEmail(ctx, scheduleDebounceKey);
-    if (!hadInvite) continue;
-
-    const recipient = await getUserScheduledEmailRecipient(ctx, userId);
-    if (!recipient) continue;
-
-    const previousAssignmentSummaries = previousUserShifts.map((shift) =>
+    const byAnchor = (shifts: CrewShiftLike[]) =>
+      new Map(groupShiftsByConsecutiveBlocks(shifts, blocks).map((group) => [shiftGroupAnchor(group), group]));
+    const previousGroups = byAnchor(previousAssigneeShifts);
+    const nextGroups = byAnchor(nextAssigneeShifts);
+    const coversEntireEvent =
+      nextGroups.size === 1 && userCoversEntireSchedule(nextAssigneeShifts, blocks);
+    const remainingAssignmentSummaries = nextAssigneeShifts.map((shift) =>
       formatAssignmentSummary(shift, blockLabelById, timezone),
     );
-    const icsEvents = [
-      buildSingleIcsEventForUserShifts({
-        eventId,
-        userId,
+    const labelRuns = Math.max(previousGroups.size, nextGroups.size) > 1;
+    const to = await resolveCrewAssigneeRecipient(ctx, assigneeKey);
+    if (!to) continue;
+    const base = { ...buildBasePayload(event, to.name), eventLeadName, timezone };
+    const icsEventFor = (uid: string, group: CrewShiftLike[]) =>
+      buildCrewShiftGroupIcsEvent({
+        uid,
         eventTitle: event.title,
         venueName: event.venueName,
-        shifts: previousUserShifts,
+        group,
         blockLabelById,
         timezone,
         sequence: inviteSequence,
-      }),
-    ];
-    const previousFingerprint = shiftGroupFingerprint(previousUserShifts);
+      });
 
-    await enqueueDebouncedEmail(ctx, {
-      template: "crew_unscheduled",
-      to: recipient.email,
-      recipientUserId: userId,
-      subject: subjectForTemplate("crew_unscheduled", event.title),
+    await retireLegacyCrewInvite(ctx, {
       eventId,
-      debounceKey: `crew_unscheduled:${eventId}:${userId}`,
-      idempotencyKey: `crew_unscheduled:${eventId}:${userId}:${previousFingerprint}:${Date.now()}`,
+      assigneeKey,
+      to,
+      subjectContext: event.title,
       payload: {
-        ...buildBasePayload(event, recipient.name),
-        eventLeadName,
-        previousAssignmentSummaries,
-        icsEvents,
-        timezone,
+        ...base,
+        previousAssignmentSummaries: previousAssigneeShifts.map((shift) =>
+          formatAssignmentSummary(shift, blockLabelById, timezone),
+        ),
+        remainingAssignmentSummaries,
+        replacedBySeparateInvites: nextAssigneeShifts.length > 0,
+        icsEvent: icsEventFor(
+          legacyCrewInviteUid(eventId, assigneeKey),
+          previousAssigneeShifts.length > 0 ? previousAssigneeShifts : nextAssigneeShifts,
+        ),
       },
     });
-  }
 
-  const previousApplicationIds = [
-    ...new Set(
-      previousShifts
-        .filter((shift) => !shift.userId?.trim() && shift.crewApplicationId)
-        .map((shift) => shift.crewApplicationId!)
-        .filter(Boolean),
-    ),
-  ];
-  const assignedApplicationIds = [
-    ...new Set(
-      nextShifts
-        .filter((shift) => !shift.userId?.trim() && shift.crewApplicationId)
-        .map((shift) => shift.crewApplicationId!)
-        .filter(Boolean),
-    ),
-  ];
-  const assignedApplicationIdSet = new Set(assignedApplicationIds);
+    for (const anchor of new Set([...previousGroups.keys(), ...nextGroups.keys()])) {
+      const previousGroup = previousGroups.get(anchor) ?? [];
+      const nextGroup = nextGroups.get(anchor);
+      const scheduledKey = crewInviteDebounceKey("crew_scheduled", eventId, assigneeKey, anchor);
+      const unscheduledKey = crewInviteDebounceKey("crew_unscheduled", eventId, assigneeKey, anchor);
+      const group = nextGroup ?? previousGroup;
+      const subjectContext = labelRuns
+        ? `${event.title} — ${shiftGroupBlockLabels(group, blockLabelById).join(", ")}`
+        : event.title;
+      const groupFingerprint = shiftGroupFingerprint(group);
+      const icsEvent = icsEventFor(crewInviteUid(eventId, assigneeKey, anchor), group);
 
-  for (const applicationId of previousApplicationIds) {
-    if (assignedApplicationIdSet.has(applicationId)) continue;
+      if (nextGroup) {
+        if (shiftGroupFingerprint(previousGroup) === groupFingerprint) continue;
+        // Re-assignment supersedes any pending removal notice.
+        await cancelPendingDebouncedEmail(ctx, unscheduledKey);
+        await enqueueDebouncedEmail(ctx, {
+          template: "crew_scheduled",
+          to: to.email,
+          recipientUserId: to.userId,
+          subject: subjectForTemplate("crew_scheduled", subjectContext),
+          eventId,
+          debounceKey: scheduledKey,
+          // Include a nonce so re-assigning the same shifts after a change still notifies.
+          // Burst edits coalesce via debounceKey; identical no-op saves are skipped above.
+          idempotencyKey: `${scheduledKey}:${groupFingerprint}:${Date.now()}`,
+          payload: {
+            ...base,
+            assignmentSummaries: nextGroup.map((shift) =>
+              formatAssignmentSummary(shift, blockLabelById, timezone),
+            ),
+            fullScheduleSummaries: coversEntireEvent ? [] : fullScheduleSummaries,
+            coversEntireEvent,
+            icsEvent,
+          },
+        });
+        continue;
+      }
 
-    const scheduleDebounceKey = `crew_scheduled:${eventId}:application:${applicationId}`;
-    await cancelPendingDebouncedEmail(ctx, scheduleDebounceKey);
-
-    const previousAppShifts = previousShifts.filter(
-      (shift) => shift.crewApplicationId === applicationId && !shift.userId?.trim(),
-    );
-    if (previousAppShifts.length === 0) continue;
-
-    const hadInvite = await hasSentDebouncedEmail(ctx, scheduleDebounceKey);
-    if (!hadInvite) continue;
-
-    const application = await ctx.db.get(applicationId);
-    if (!application?.email) continue;
-
-    const previousAssignmentSummaries = previousAppShifts.map((shift) =>
-      formatAssignmentSummary(shift, blockLabelById, timezone),
-    );
-    const icsEvents = [
-      buildSingleIcsEventForUserShifts({
+      // This run is gone: drop its pending invite; cancel it if one already went out.
+      await cancelPendingDebouncedEmail(ctx, scheduledKey);
+      if (!(await hasSentDebouncedEmail(ctx, scheduledKey))) continue;
+      await enqueueDebouncedEmail(ctx, {
+        template: "crew_unscheduled",
+        to: to.email,
+        recipientUserId: to.userId,
+        subject: subjectForTemplate("crew_unscheduled", subjectContext),
         eventId,
-        userId: `application:${applicationId}`,
-        eventTitle: event.title,
-        venueName: event.venueName,
-        shifts: previousAppShifts,
-        blockLabelById,
-        timezone,
-        sequence: inviteSequence,
-      }),
-    ];
-    const previousFingerprint = shiftGroupFingerprint(previousAppShifts);
-
-    await enqueueDebouncedEmail(ctx, {
-      template: "crew_unscheduled",
-      to: application.email,
-      subject: subjectForTemplate("crew_unscheduled", event.title),
-      eventId,
-      debounceKey: `crew_unscheduled:${eventId}:application:${applicationId}`,
-      idempotencyKey: `crew_unscheduled:${eventId}:application:${applicationId}:${previousFingerprint}:${Date.now()}`,
-      payload: {
-        ...buildBasePayload(event, application.name),
-        eventLeadName,
-        previousAssignmentSummaries,
-        icsEvents,
-        timezone,
-      },
-    });
+        debounceKey: unscheduledKey,
+        idempotencyKey: `${unscheduledKey}:${groupFingerprint}:${Date.now()}`,
+        payload: {
+          ...base,
+          previousAssignmentSummaries: previousGroup.map((shift) =>
+            formatAssignmentSummary(shift, blockLabelById, timezone),
+          ),
+          remainingAssignmentSummaries,
+          icsEvent,
+        },
+      });
+    }
   }
+}
 
-  const subject = subjectForTemplate("crew_scheduled", event.title);
+async function latestSentAt(ctx: MutationCtx, debounceKey: string) {
+  const rows = await ctx.db
+    .query("emailNotifications")
+    .withIndex("by_debounceKey_and_status", (q) =>
+      q.eq("debounceKey", debounceKey).eq("status", "sent"),
+    )
+    .take(50);
+  return Math.max(0, ...rows.map((row) => row.sentAt ?? row.createdAt));
+}
 
-  for (const userId of assignedUserIds) {
-    // Re-assignment supersedes any pending removal notice.
-    await cancelPendingDebouncedEmail(ctx, `crew_unscheduled:${eventId}:${userId}`);
-
-    const recipient = await getUserScheduledEmailRecipient(ctx, userId);
-    if (!recipient) continue;
-
-    const previousUserShifts = previousShifts.filter((shift) => shift.userId === userId);
-    const nextUserShifts = nextShifts.filter((shift) => shift.userId === userId);
-    if (nextUserShifts.length === 0) continue;
-
-    const previousFingerprint = shiftGroupFingerprint(previousUserShifts);
-    const nextFingerprint = shiftGroupFingerprint(nextUserShifts);
-    // No assignment change for this user (debounce still coalesces bursts via debounceKey).
-    if (previousFingerprint === nextFingerprint) continue;
-
-    const coversEntireEvent = userCoversEntireSchedule(nextUserShifts, blocks);
-    const assignmentSummaries = nextUserShifts.map((shift) =>
-      formatAssignmentSummary(shift, blockLabelById, timezone),
-    );
-    // One VEVENT spanning earliest start → latest end so clients that only
-    // honor a single invite still cover gaps (e.g. 9–10 + 11–12 → 9–12).
-    const icsEvents = [
-      buildSingleIcsEventForUserShifts({
-        eventId,
-        userId,
-        eventTitle: event.title,
-        venueName: event.venueName,
-        shifts: nextUserShifts,
-        blockLabelById,
-        timezone,
-        sequence: inviteSequence,
-      }),
-    ];
-
-    await enqueueDebouncedEmail(ctx, {
-      template: "crew_scheduled",
-      to: recipient.email,
-      recipientUserId: userId,
-      subject,
-      eventId,
-      debounceKey: `crew_scheduled:${eventId}:${userId}`,
-      // Include a nonce so re-assigning the same shifts after a change still notifies.
-      // Burst edits coalesce via debounceKey; identical no-op saves are skipped above.
-      idempotencyKey: `crew_scheduled:${eventId}:${userId}:${nextFingerprint}:${Date.now()}`,
-      payload: {
-        ...buildBasePayload(event, recipient.name),
-        eventLeadName,
-        assignmentSummaries,
-        fullScheduleSummaries: coversEntireEvent ? [] : fullScheduleSummaries,
-        coversEntireEvent,
-        icsEvents,
-        timezone,
-      },
-    });
-  }
-
-  for (const applicationId of assignedApplicationIds) {
-    await cancelPendingDebouncedEmail(ctx, `crew_unscheduled:${eventId}:application:${applicationId}`);
-
-    const application = await ctx.db.get(applicationId);
-    if (!application?.email) continue;
-
-    const previousAppShifts = previousShifts.filter(
-      (shift) => shift.crewApplicationId === applicationId && !shift.userId?.trim(),
-    );
-    const nextAppShifts = nextShifts.filter(
-      (shift) => shift.crewApplicationId === applicationId && !shift.userId?.trim(),
-    );
-    if (nextAppShifts.length === 0) continue;
-
-    const previousFingerprint = shiftGroupFingerprint(previousAppShifts);
-    const nextFingerprint = shiftGroupFingerprint(nextAppShifts);
-    if (previousFingerprint === nextFingerprint) continue;
-
-    const coversEntireEvent = userCoversEntireSchedule(nextAppShifts, blocks);
-    const assignmentSummaries = nextAppShifts.map((shift) =>
-      formatAssignmentSummary(shift, blockLabelById, timezone),
-    );
-    const icsEvents = [
-      buildSingleIcsEventForUserShifts({
-        eventId,
-        userId: `application:${applicationId}`,
-        eventTitle: event.title,
-        venueName: event.venueName,
-        shifts: nextAppShifts,
-        blockLabelById,
-        timezone,
-        sequence: inviteSequence,
-      }),
-    ];
-
-    await enqueueDebouncedEmail(ctx, {
-      template: "crew_scheduled",
-      to: application.email,
-      subject,
-      eventId,
-      debounceKey: `crew_scheduled:${eventId}:application:${applicationId}`,
-      idempotencyKey: `crew_scheduled:${eventId}:application:${applicationId}:${nextFingerprint}:${Date.now()}`,
-      payload: {
-        ...buildBasePayload(event, application.name),
-        eventLeadName,
-        assignmentSummaries,
-        fullScheduleSummaries: coversEntireEvent ? [] : fullScheduleSummaries,
-        coversEntireEvent,
-        icsEvents,
-        timezone,
-      },
-    });
-  }
+/**
+ * Crew used to get one merged invite per event under the per-person legacy
+ * UID. The first time such a person's shifts change, cancel that invite (the
+ * per-run invites replace it) so their calendar doesn't keep a stale duplicate.
+ */
+async function retireLegacyCrewInvite(
+  ctx: MutationCtx,
+  args: {
+    eventId: Id<"events">;
+    assigneeKey: string;
+    to: { email: string; userId?: string };
+    subjectContext: string;
+    payload: CrewUnscheduledEmailPayload;
+  },
+) {
+  const scheduledKey = legacyCrewInviteDebounceKey("crew_scheduled", args.eventId, args.assigneeKey);
+  const unscheduledKey = legacyCrewInviteDebounceKey(
+    "crew_unscheduled",
+    args.eventId,
+    args.assigneeKey,
+  );
+  // A merged invite still queued from before the split must not go out now.
+  await cancelPendingDebouncedEmail(ctx, scheduledKey);
+  const invitedAt = await latestSentAt(ctx, scheduledKey);
+  if (invitedAt === 0 || invitedAt < (await latestSentAt(ctx, unscheduledKey))) return;
+  await enqueueDebouncedEmail(ctx, {
+    template: "crew_unscheduled",
+    to: args.to.email,
+    recipientUserId: args.to.userId,
+    subject: args.payload.replacedBySeparateInvites
+      ? `Calendar invite replaced: ${args.subjectContext}`
+      : subjectForTemplate("crew_unscheduled", args.subjectContext),
+    eventId: args.eventId,
+    debounceKey: unscheduledKey,
+    idempotencyKey: `${unscheduledKey}:${invitedAt}:${Date.now()}`,
+    payload: args.payload,
+  });
 }
 
 export async function scheduleScheduleReminderEmail(

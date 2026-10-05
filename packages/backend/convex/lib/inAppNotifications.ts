@@ -27,6 +27,8 @@ const IN_APP_TEMPLATES: Partial<Record<EmailTemplate, { linkFields: readonly str
   quote_approved: { linkFields: ["invoiceUrl"] },
   paying_party_added: { linkFields: [] },
   band_assigned: { linkFields: ["dashboardUrl"] },
+  band_scheduled: { linkFields: ["showUrl"] },
+  band_unscheduled: { linkFields: ["showUrl"] },
   band_event_onboarding_invite: { linkFields: ["portalUrl"] },
   band_onboarding_reminder: { linkFields: ["onboardingUrl"] },
   band_payment_confirmation: { linkFields: ["signUrl"] },
@@ -96,13 +98,18 @@ function clip(text: string, max = 140) {
 }
 
 /** Second line under the subject: the comment for mentions, else when/where. */
-function buildBody(payload: Record<string, unknown>) {
+export function buildBody(payload: Record<string, unknown>) {
   const snippet = payloadString(payload, "commentSnippet");
   if (snippet) {
     const author = payloadString(payload, "authorName");
     return clip(author ? `${author}: ${snippet}` : snippet);
   }
-  const when = payloadString(payload, "dateRangeLabel") ?? payloadString(payload, "eventDateLabel");
+  // An act's soundcheck/set notice is about that window, not the whole event.
+  const when =
+    payloadString(payload, "timeRangeLabel") ??
+    payloadString(payload, "previousTimeRangeLabel") ??
+    payloadString(payload, "dateRangeLabel") ??
+    payloadString(payload, "eventDateLabel");
   const where = payloadString(payload, "venueName");
   const parts = [when, where].filter(Boolean);
   return parts.length ? clip(parts.join(" · ")) : undefined;

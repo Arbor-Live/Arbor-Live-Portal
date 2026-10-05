@@ -83,10 +83,10 @@ function blockWindow(
   };
 }
 
-function areScheduleWindowsConsecutive(previousEnd: number, nextStart: number) {
-  return previousEnd === nextStart;
-}
-
+/**
+ * Splits a person's shifts into runs: back-to-back or overlapping shifts (e.g.
+ * two roles in one block) share a run, and each run gets one invite.
+ */
 export function groupShiftsByConsecutiveBlocks(
   shifts: CrewShiftLike[],
   blocks: ScheduleBlockLike[],
@@ -100,24 +100,80 @@ export function groupShiftsByConsecutiveBlocks(
   });
 
   const groups: CrewShiftLike[][] = [[sorted[0]!]];
-  for (let index = 1; index < sorted.length; index += 1) {
-    const previousShift = sorted[index - 1]!;
-    const nextShift = sorted[index]!;
-    const previousWindow = blockWindow(previousShift, blockById);
-    const nextWindow = blockWindow(nextShift, blockById);
-    if (areScheduleWindowsConsecutive(previousWindow.endsAt, nextWindow.startsAt)) {
-      groups[groups.length - 1]!.push(nextShift);
+  let runEnd = blockWindow(sorted[0]!, blockById).endsAt;
+  for (const shift of sorted.slice(1)) {
+    const window = blockWindow(shift, blockById);
+    if (window.startsAt <= runEnd) {
+      groups[groups.length - 1]!.push(shift);
     } else {
-      groups.push([nextShift]);
+      groups.push([shift]);
     }
+    runEnd = Math.max(runEnd, window.endsAt);
   }
   return groups;
 }
 
-export function buildMergedIcsEventForShiftGroup(args: {
-  eventId: Id<"events">;
-  userId: string;
-  groupIndex: number;
+/**
+ * Who a crew invite goes to: a user id, or `application:<id>` for a trainee
+ * without an account. Part of the invite UID and debounce key.
+ */
+export function crewAssigneeKey(shift: CrewShiftLike) {
+  const userId = shift.userId?.trim();
+  if (userId) return userId;
+  return shift.crewApplicationId ? `application:${shift.crewApplicationId}` : undefined;
+}
+
+/**
+ * A run's identity: its first block, or its start time when that shift has no
+ * block. A run keeps its invite while other runs come and go; it only gets a
+ * new one when its first block changes.
+ */
+export function shiftGroupAnchor(group: CrewShiftLike[]) {
+  const first = group[0]!;
+  return first.scheduleBlockId ?? `t${first.startsAt}`;
+}
+
+export function crewInviteUid(eventId: Id<"events">, assigneeKey: string, anchor: string) {
+  return `crew-${eventId}-${assigneeKey}-${anchor}@arbor.st`;
+}
+
+export function crewInviteDebounceKey(
+  template: "crew_scheduled" | "crew_unscheduled",
+  eventId: Id<"events">,
+  assigneeKey: string,
+  anchor: string,
+) {
+  return `${template}:${eventId}:${assigneeKey}:${anchor}`;
+}
+
+/** The single merged invite everyone got before invites were split per run. */
+export function legacyCrewInviteUid(eventId: Id<"events">, assigneeKey: string) {
+  return `crew-${eventId}-${assigneeKey}@arbor.st`;
+}
+
+export function legacyCrewInviteDebounceKey(
+  template: "crew_scheduled" | "crew_unscheduled",
+  eventId: Id<"events">,
+  assigneeKey: string,
+) {
+  return `${template}:${eventId}:${assigneeKey}`;
+}
+
+export function shiftGroupBlockLabels(group: CrewShiftLike[], blockLabelById: Map<string, string>) {
+  return [
+    ...new Set(
+      group.map((shift) =>
+        shift.scheduleBlockId
+          ? blockLabelById.get(shift.scheduleBlockId) ?? "Assigned block"
+          : "Assigned block",
+      ),
+    ),
+  ];
+}
+
+/** The calendar event spanning a run of shifts (e.g. 9–10 + 10–12 → 9–12). */
+export function buildCrewShiftGroupIcsEvent(args: {
+  uid: string;
   eventTitle: string;
   venueName?: string;
   group: CrewShiftLike[];
@@ -128,15 +184,7 @@ export function buildMergedIcsEventForShiftGroup(args: {
 }) {
   const startsAt = Math.min(...args.group.map((shift) => shift.startsAt));
   const endsAt = Math.max(...args.group.map((shift) => shift.endsAt));
-  const blockLabels = [
-    ...new Set(
-      args.group.map((shift) =>
-        shift.scheduleBlockId
-          ? args.blockLabelById.get(shift.scheduleBlockId) ?? "Assigned block"
-          : "Assigned block",
-      ),
-    ),
-  ];
+  const blockLabels = shiftGroupBlockLabels(args.group, args.blockLabelById);
   const roles = [...new Set(args.group.map((shift) => shift.role.trim()).filter(Boolean))];
   const title =
     roles.length > 0
@@ -147,9 +195,7 @@ export function buildMergedIcsEventForShiftGroup(args: {
     .join("\n");
 
   return {
-    // One VEVENT per person/event so calendar clients that only read the first
-    // invite still get a span covering all assigned windows (e.g. 9–10 + 11–12 → 9–12).
-    uid: `crew-${args.eventId}-${args.userId}@arbor.st`,
+    uid: args.uid,
     sequence: args.sequence,
     title,
     description,
@@ -157,28 +203,4 @@ export function buildMergedIcsEventForShiftGroup(args: {
     startAt: startsAt,
     endAt: endsAt,
   };
-}
-
-/** Single calendar invite spanning every assigned shift for a user on an event. */
-export function buildSingleIcsEventForUserShifts(args: {
-  eventId: Id<"events">;
-  userId: string;
-  eventTitle: string;
-  venueName?: string;
-  shifts: CrewShiftLike[];
-  blockLabelById: Map<string, string>;
-  timezone: string;
-  sequence: number;
-}) {
-  return buildMergedIcsEventForShiftGroup({
-    eventId: args.eventId,
-    userId: args.userId,
-    groupIndex: 0,
-    eventTitle: args.eventTitle,
-    venueName: args.venueName,
-    group: args.shifts,
-    blockLabelById: args.blockLabelById,
-    timezone: args.timezone,
-    sequence: args.sequence,
-  });
 }

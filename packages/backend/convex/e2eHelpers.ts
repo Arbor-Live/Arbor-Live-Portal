@@ -798,6 +798,7 @@ export const enqueueInAppNotificationEmail = mutation({
           signUrl: url,
           payeeSettingsUrl: url,
           albumPortalUrl: url,
+          showUrl: url,
           url,
           dateRangeLabel: args.dateRangeLabel,
           venueName: args.venueName,

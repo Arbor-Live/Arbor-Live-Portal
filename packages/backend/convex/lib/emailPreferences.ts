@@ -168,6 +168,18 @@ export const EMAIL_PREFERENCE_DEFINITIONS: readonly EmailPreferenceDefinition[] 
     group: "Artist payouts",
   },
   {
+    template: "band_scheduled",
+    label: "Soundcheck and set time invites",
+    audience: "artist",
+    group: "Artist payouts",
+  },
+  {
+    template: "band_unscheduled",
+    label: "Soundcheck and set time removals",
+    audience: "artist",
+    group: "Artist payouts",
+  },
+  {
     template: "band_payment_completed",
     label: "Payments submitted",
     audience: "artist",
@@ -203,11 +215,16 @@ export type EmailPreferenceSource = {
 };
 
 /**
- * Emails that carry the crew calendar invite (`invite.ics` / `cancel.ics`), so
- * they always send. Their bell and push channels stay configurable, and old
+ * Emails that carry a calendar invite (`invite.ics` / `cancel.ics`) for crew
+ * shifts or an act's soundcheck/set, so they always send. Their bell and push channels stay configurable, and old
  * email opt-outs for them are ignored.
  */
-const EMAIL_REQUIRED_TEMPLATES = new Set<string>(["crew_scheduled", "crew_unscheduled"]);
+const EMAIL_REQUIRED_TEMPLATES = new Set<string>([
+  "crew_scheduled",
+  "crew_unscheduled",
+  "band_scheduled",
+  "band_unscheduled",
+]);
 
 export function isEmailRequired(template: string) {
   return EMAIL_REQUIRED_TEMPLATES.has(template);

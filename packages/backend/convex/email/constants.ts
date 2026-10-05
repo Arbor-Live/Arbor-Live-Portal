@@ -49,6 +49,8 @@ export type EmailTemplate =
   | "quote_changes_requested"
   | "quote_updated"
   | "band_assigned"
+  | "band_scheduled"
+  | "band_unscheduled"
   | "band_event_onboarding_invite"
   | "band_onboarding_reminder"
   | "band_payment_confirmation"
@@ -154,6 +156,11 @@ export function bandDashboardUrl() {
   return `${SITE_URL}/dashboard`;
 }
 
+/** Opens the show sheet on the artist home dashboard. */
+export function bandShowUrl(eventId: string) {
+  return `${SITE_URL}/dashboard?show=${encodeURIComponent(eventId)}`;
+}
+
 export function bandPaymentHistoryUrl() {
   return `${SITE_URL}/dashboard/artists/payments`;
 }
@@ -200,6 +207,10 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `Your quote was updated: ${context}`;
     case "band_assigned":
       return `You're on the bill: ${context}`;
+    case "band_scheduled":
+      return `Show time: ${context}`;
+    case "band_unscheduled":
+      return `Show time removed: ${context}`;
     case "band_event_onboarding_invite":
       return `Finish onboarding for: ${context}`;
     case "band_onboarding_reminder":

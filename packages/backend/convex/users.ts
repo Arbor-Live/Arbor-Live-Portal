@@ -97,6 +97,7 @@ import { loadAllAdminProfiles } from "./lib/userProfiles";
 import type { StanfordPosition } from "./lib/stanfordPosition";
 import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
 import { returnActTimesToPosition } from "./lib/actPositions";
+import { scheduleBandTimeEmails } from "./email/bandScheduleEmails";
 
 const invitationStatusValue = v.union(
   v.literal("pending"),
@@ -1352,6 +1353,7 @@ export const deleteArchivedBandOrganizationAdmin = mutation({
         const row = await ctx.db.get(id);
         if (row) await returnActTimesToPosition(ctx, row);
         await ctx.db.delete(id);
+        if (row) await scheduleBandTimeEmails(ctx, row, null);
         // The act's run-of-show blocks go with it; its position gets its own times back.
         await deleteActBlocks(ctx, { participationId: id });
         if (row?.needId) await syncNeedBlocks(ctx, row.needId);

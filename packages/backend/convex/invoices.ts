@@ -72,6 +72,7 @@ import {
 } from "./lib/invoiceProfit";
 import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
 import { ensureActPosition, returnActTimesToPosition } from "./lib/actPositions";
+import { scheduleBandTimeEmails } from "./email/bandScheduleEmails";
 import {
   type AdoptablePosition,
   pickPositionForLine,
@@ -890,6 +891,7 @@ async function replaceLineItems(
       }
       await returnActTimesToPosition(ctx, filled);
       await ctx.db.delete(filled._id);
+      await scheduleBandTimeEmails(ctx, filled, null);
       await deleteActBlocks(ctx, { participationId: filled._id });
     }
     const inquiries = await ctx.db
