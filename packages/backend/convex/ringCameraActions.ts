@@ -24,6 +24,7 @@ const BACKFILL_DAYS = 30;
 const SYNC_OVERLAP_MS = 2 * 60 * 60 * 1000;
 /** Thumbnails fetched per sync, newest first; a backfill leaves older clips without one. */
 const THUMBNAILS_PER_SYNC = 100;
+const THUMBNAIL_CONCURRENCY = 10;
 const UPSERT_BATCH = 200;
 /** Refresh the access token this long before Ring expires it. */
 const TOKEN_MARGIN_MS = 2 * 60 * 1000;
@@ -74,6 +75,11 @@ async function withRing<T>(ctx: ActionCtx, call: RingCall<T>): Promise<T> {
     }
   } catch (error) {
     if (error instanceof RingAuthError) {
+      // A concurrent action may have rotated the token first, which invalidates the one used here.
+      const latest = await ctx.runQuery(internal.ringCamera.getConnection, {});
+      if (latest?.accessToken && latest.refreshToken !== connection.refreshToken) {
+        return await call(latest.accessToken, latest.hardwareId);
+      }
       await ctx.runMutation(internal.ringCamera.markError, { message: error.message, needsReconnect: true });
     }
     throw error;
@@ -131,11 +137,17 @@ async function syncClips(ctx: ActionCtx) {
   );
 
   const rows = [];
-  for (const clip of clips) {
-    const { thumbnailUrl, ...row } = clip;
-    const thumbnailStorageId =
-      thumbnailUrl && withThumbnail.has(clip.dingId) ? await storeThumbnail(ctx, thumbnailUrl) : undefined;
-    rows.push({ ...row, thumbnailStorageId });
+  for (let index = 0; index < clips.length; index += THUMBNAIL_CONCURRENCY) {
+    rows.push(
+      ...(await Promise.all(
+        clips.slice(index, index + THUMBNAIL_CONCURRENCY).map(async (clip) => {
+          const { thumbnailUrl, ...row } = clip;
+          const thumbnailStorageId =
+            thumbnailUrl && withThumbnail.has(clip.dingId) ? await storeThumbnail(ctx, thumbnailUrl) : undefined;
+          return { ...row, thumbnailStorageId };
+        }),
+      )),
+    );
   }
   for (let index = 0; index < rows.length; index += UPSERT_BATCH) {
     await ctx.runMutation(internal.ringCamera.upsertClips, { clips: rows.slice(index, index + UPSERT_BATCH) });

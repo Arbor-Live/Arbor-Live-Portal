@@ -139,7 +139,8 @@ export async function refreshRingAuth(
   });
   const body = await readJson(response);
   if (!response.ok) {
-    if (response.status === 400 || response.status === 401 || response.status === 412) {
+    // Only `invalid_grant` (or an auth status) proves the token is dead; other 400s are retried.
+    if (field(body, "error") === "invalid_grant" || response.status === 401 || response.status === 412) {
       throw new RingAuthError("Ring rejected the saved sign-in. Reconnect with a new refresh token.");
     }
     throw new RingRequestError(`Ring sign-in failed (${response.status}).`, response.status);

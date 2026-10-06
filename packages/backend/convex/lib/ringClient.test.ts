@@ -5,6 +5,7 @@ import {
   parseRingRefreshToken,
   refreshRingAuth,
   RingAuthError,
+  RingRequestError,
   ringClipKind,
   searchRingClips,
   wrapRingRefreshToken,
@@ -63,9 +64,18 @@ describe("refreshRingAuth", () => {
   });
 
   it("asks for a reconnect when Ring rejects the token", async () => {
-    const { fetchImpl } = recordingFetch(json({ error: "invalid_grant" }, 401));
+    const { fetchImpl } = recordingFetch(json({ error: "invalid_grant" }, 400));
     await expect(refreshRingAuth(fetchImpl, { refreshToken: "x", hardwareId: "h" }, 0)).rejects.toBeInstanceOf(
       RingAuthError,
+    );
+  });
+});
+
+describe("refreshRingAuth errors", () => {
+  it("retries other 400s instead of asking for a reconnect", async () => {
+    const { fetchImpl } = recordingFetch(json({ error: "invalid_request" }, 400));
+    await expect(refreshRingAuth(fetchImpl, { refreshToken: "x", hardwareId: "h" }, 0)).rejects.toBeInstanceOf(
+      RingRequestError,
     );
   });
 });

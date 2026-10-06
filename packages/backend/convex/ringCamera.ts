@@ -138,7 +138,13 @@ export const saveConnection = internalMutation({
     // A different camera starts its sync over; the same one carries on.
     const syncedThrough =
       existing?.camera?.deviceId === args.camera.deviceId ? existing.syncedThrough : undefined;
-    const row = { ...args, status: "connected" as const, syncedThrough, createdAt: now, updatedAt: now };
+    const row = {
+      ...args,
+      status: "connected" as const,
+      syncedThrough,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
     if (existing) await ctx.db.replace("ringConnection", existing._id, row);
     else await ctx.db.insert("ringConnection", row);
     return null;
