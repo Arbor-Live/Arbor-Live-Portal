@@ -44,13 +44,13 @@ export function CrewOnboardingSettings() {
           label="Notify on completion"
           recipients={alertRecipients}
           onChange={setLocalAlert}
-          disabled={!ready}
+          disabled={!ready || saving}
         />
         <AlertRecipientList
           label="Stanford payroll (HR / FWS)"
           recipients={stanfordPayrollRecipients}
           onChange={setLocalPayroll}
-          disabled={!ready}
+          disabled={!ready || saving}
         />
         <Button
           type="button"

@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Mirrors the backend validator: no commas, dot + letters-only TLD. */
+const EMAIL_RE = /^[^\s@,]+@[^\s@,]+\.[A-Za-z]{2,}$/;
 
 /** Editable email list for a settings-managed alert; external addresses allowed. */
 export function AlertRecipientList({
@@ -59,6 +60,7 @@ export function AlertRecipientList({
         <input
           type="email"
           placeholder="name@example.com"
+          aria-label={`Add email address to ${label}`}
           className="flex h-9 w-full rounded-md border bg-background px-3 py-1 text-sm"
           value={draft}
           disabled={disabled}

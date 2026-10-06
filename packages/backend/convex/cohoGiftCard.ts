@@ -10,9 +10,9 @@ import {
 } from "./_generated/server";
 import {
   getUserId,
-  requireAdmin,
   requireArborInternalContext,
   requireAuth,
+  requirePortalAdmin,
 } from "./lib/auth";
 import { scheduleCohoGiftCardLowBalanceEmails } from "./email/cohoGiftCardEmails";
 import { normalizeAlertRecipients } from "./lib/alertRecipients";
@@ -178,7 +178,7 @@ export const getCohoGiftCardSettings = query({
   args: {},
   returns: cohoGiftCardSettingsValue,
   handler: async (ctx) => {
-    await requireAdmin(ctx);
+    await requirePortalAdmin(ctx);
     await requireArborInternalContext(ctx);
     const [settings, card] = await Promise.all([
       readCohoGiftCardSettings(ctx),
@@ -202,7 +202,7 @@ export const updateCohoGiftCardSettings = mutation({
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requirePortalAdmin(ctx);
     await requireArborInternalContext(ctx);
 
     if (!Number.isFinite(args.lowBalanceThresholdUsd) || args.lowBalanceThresholdUsd < 0) {
@@ -226,21 +226,27 @@ export const updateCohoGiftCardSettings = mutation({
  * number (the QR payload) only — never the token, history, or linked cards.
  */
 export const getMyCohoGiftCard = query({
-  args: { now: v.number() },
+  /**
+   * `refreshTick` is unused server-side: it only changes on an interval so the
+   * subscription re-runs as time passes. Eligibility uses server time so a
+   * caller can't spoof "working now" with a chosen timestamp.
+   */
+  args: { refreshTick: v.number() },
   returns: v.union(myCohoGiftCardValue, v.null()),
-  handler: async (ctx, args) => {
+  handler: async (ctx) => {
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const userId = getUserId(user);
+    const now = Date.now();
 
     const shifts = await ctx.db
       .query("eventCrewShifts")
       .withIndex("by_userId_and_startsAt", (q) =>
-        q.eq("userId", userId).gte("startsAt", args.now - CREW_SHIFT_LOOKAHEAD_MS),
+        q.eq("userId", userId).gte("startsAt", now - CREW_SHIFT_LOOKAHEAD_MS),
       )
       .take(CREW_SHIFT_SCAN_CAP);
     const isWorking = shifts.some(
-      (shift) => shift.endsAt >= args.now && shift.startsAt <= args.now + CREW_SHIFT_LOOKAHEAD_MS,
+      (shift) => shift.endsAt >= now && shift.startsAt <= now + CREW_SHIFT_LOOKAHEAD_MS,
     );
     if (!isWorking) return null;
 

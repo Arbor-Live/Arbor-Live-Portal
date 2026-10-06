@@ -13,6 +13,11 @@ describe("normalizeAlertRecipients", () => {
     expect(() => normalizeAlertRecipients(["nope"])).toThrow(/not a valid email/);
   });
 
+  it("rejects addresses with trailing punctuation", () => {
+    expect(() => normalizeAlertRecipients(["alice@example.com,"])).toThrow(/not a valid email/);
+    expect(() => normalizeAlertRecipients(["alice@example.com."])).toThrow(/not a valid email/);
+  });
+
   it("rejects oversized lists with a named limit", () => {
     const many = Array.from({ length: 26 }, (_, index) => `user${index}@example.com`);
     expect(() => normalizeAlertRecipients(many)).toThrow(/Too many recipients \(max 25, got 26\)/);

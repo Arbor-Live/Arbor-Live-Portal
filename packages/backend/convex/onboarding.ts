@@ -18,6 +18,7 @@ import {
   requireAdmin,
   requireArborInternalContext,
   requireAuth,
+  requirePortalAdmin,
   type AuthUser,
 } from "./lib/auth";
 import { normalizeAlertRecipients } from "./lib/alertRecipients";
@@ -421,7 +422,7 @@ export const getCrewOnboardingSettings = query({
   args: {},
   returns: crewOnboardingSettingsValue,
   handler: async (ctx) => {
-    await requireAdmin(ctx);
+    await requirePortalAdmin(ctx);
     await requireArborInternalContext(ctx);
     const row = await ctx.db.query("crewOnboardingSettings").first();
     return {
@@ -438,7 +439,7 @@ export const updateCrewOnboardingSettings = mutation({
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requirePortalAdmin(ctx);
     await requireArborInternalContext(ctx);
     const alertRecipients = normalizeAlertRecipients(args.alertRecipients);
     const stanfordPayrollRecipients = normalizeAlertRecipients(args.stanfordPayrollRecipients);

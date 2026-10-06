@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "convex/react";
 import { QrCodeIcon } from "@phosphor-icons/react";
 import { QRCodeSVG } from "qrcode.react";
@@ -8,8 +8,13 @@ import { api } from "@/lib/convex-api";
 import { DashboardWidget } from "@/components/dashboard/dashboard-widget";
 
 export function CohoGiftCardWidget() {
-  const [now] = useState(() => Date.now());
-  const card = useQuery(api.cohoGiftCard.getMyCohoGiftCard, { now });
+  // Tick so eligibility re-evaluates as a shift starts or ends while mounted.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const card = useQuery(api.cohoGiftCard.getMyCohoGiftCard, { refreshTick: now });
 
   // Hidden unless the viewer is working now or soon — the query returns null.
   if (!card) return null;

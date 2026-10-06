@@ -73,7 +73,7 @@ export function CohoGiftCardSettings() {
             step={1}
             className="flex h-9 w-full rounded-md border bg-background px-3 py-1 text-sm"
             value={threshold}
-            disabled={!ready}
+            disabled={!ready || saving}
             onChange={(event) => setLocalThreshold(event.target.value)}
           />
         </div>
@@ -82,7 +82,7 @@ export function CohoGiftCardSettings() {
           label="Alert recipients"
           recipients={recipients}
           onChange={setLocalRecipients}
-          disabled={!ready}
+          disabled={!ready || saving}
         />
 
         <Button type="button" size="sm" disabled={!ready || saving} onClick={() => void handleSave()}>

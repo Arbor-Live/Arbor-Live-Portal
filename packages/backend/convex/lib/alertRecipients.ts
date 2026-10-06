@@ -1,7 +1,8 @@
 /** Cap a recipient list so a bad paste can't fan out to hundreds of addresses. */
 export const MAX_ALERT_RECIPIENTS = 25;
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Reject commas/trailing punctuation and require a dot + letters-only TLD. */
+const EMAIL_RE = /^[^\s@,]+@[^\s@,]+\.[A-Za-z]{2,}$/;
 
 /**
  * Trim, lowercase, and dedupe a settings-managed recipient list, rejecting
