@@ -341,6 +341,8 @@ labels (`TAB_ICONS` in `event-workspace-nav.tsx`, `MOMENT_ICONS` in
 | Undo · redo | `ArrowCounterClockwiseIcon` · `ArrowClockwiseIcon` |
 | Zoom out · zoom in | `MagnifyingGlassMinusIcon` · `MagnifyingGlassPlusIcon` |
 | Rotate left · right | `ArrowArcLeftIcon` · `ArrowArcRightIcon` |
+| Security camera (nav, clip placeholder) · battery | `VideoCameraIcon` · `BatteryMediumIcon` (meta line) |
+| Camera clip types | `RING_CLIP_KIND_ICONS` in `lib/ring-clips.ts`: motion `PersonSimpleWalkIcon`, doorbell `BellRingingIcon`, live view `BroadcastIcon` |
 | Stage plot symbols | Drawn from `packages/rider-document/src/glyphs.ts` (Phosphor paths in to-scale outlines), never hand-picked per page; render with `RiderSymbolGlyph` |
 
 If a concept isn't in the table, search the codebase for how it's already
