@@ -1,7 +1,7 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
   internalQuery,
@@ -41,6 +41,21 @@ async function requireCameraAdmin(ctx: QueryCtx | MutationCtx) {
 
 async function getConnectionRow(ctx: QueryCtx | MutationCtx) {
   return await ctx.db.query("ringConnection").first();
+}
+
+/**
+ * A sync belongs to the connection row and camera it started with. Reconnecting
+ * the same camera keeps both; disconnecting or switching cameras (another Ring
+ * account) makes its results stale.
+ */
+const syncOriginValue = v.object({ connectionId: v.id("ringConnection"), deviceId: v.number() });
+
+async function isCurrentSync(
+  ctx: MutationCtx,
+  origin: { connectionId: Id<"ringConnection">; deviceId: number },
+) {
+  const connection = await getConnectionRow(ctx);
+  return connection?._id === origin.connectionId && connection.camera?.deviceId === origin.deviceId;
 }
 
 async function toClipRow(ctx: QueryCtx, clip: Doc<"ringClips">) {
@@ -147,6 +162,13 @@ export const saveConnection = internalMutation({
     };
     if (existing) await ctx.db.replace("ringConnection", existing._id, row);
     else await ctx.db.insert("ringConnection", row);
+    // Clips from another camera (a different Ring account) don't belong on this page.
+    if (syncedThrough === undefined) {
+      await ctx.scheduler.runAfter(0, internal.ringCamera.removeOtherCameraClips, {
+        deviceId: args.camera.deviceId,
+        cursor: null,
+      });
+    }
     return null;
   },
 });
@@ -191,11 +213,18 @@ export const markError = internalMutation({
 });
 
 export const recordSync = internalMutation({
-  args: { camera: cameraValue, syncedThrough: v.number() },
+  args: { origin: syncOriginValue, camera: cameraValue, syncedThrough: v.number() },
   handler: async (ctx, args) => {
     const connection = await getConnectionRow(ctx);
-    if (!connection) return null;
+    if (!connection || !(await isCurrentSync(ctx, args.origin))) return null;
     const now = Date.now();
+    // The saved camera left the account and the sync fell back to another one.
+    if (args.camera.deviceId !== args.origin.deviceId) {
+      await ctx.scheduler.runAfter(0, internal.ringCamera.removeOtherCameraClips, {
+        deviceId: args.camera.deviceId,
+        cursor: null,
+      });
+    }
     await ctx.db.patch("ringConnection", connection._id, {
       camera: args.camera,
       syncedThrough: args.syncedThrough,
@@ -226,7 +255,7 @@ export const knownDingIds = internalQuery({
 
 export const upsertClips = internalMutation({
   args: {
-    connectionId: v.id("ringConnection"),
+    origin: syncOriginValue,
     clips: v.array(
       v.object({
         dingId: v.string(),
@@ -241,9 +270,9 @@ export const upsertClips = internalMutation({
     ),
   },
   handler: async (ctx, args) => {
-    // Ring was disconnected while this sync ran: drop the batch and its thumbnails.
-    const connection = await getConnectionRow(ctx);
-    if (connection?._id !== args.connectionId) {
+    // Ring was disconnected or switched to another camera while this sync ran:
+    // drop the batch and its thumbnails.
+    if (!(await isCurrentSync(ctx, args.origin))) {
       for (const clip of args.clips) {
         if (clip.thumbnailStorageId) await ctx.storage.delete(clip.thumbnailStorageId);
       }
@@ -296,6 +325,29 @@ export const pruneOldClips = internalMutation({
     }
     if (old.length === PRUNE_BATCH) {
       await ctx.scheduler.runAfter(0, internal.ringCamera.pruneOldClips, args);
+    }
+    return null;
+  },
+});
+
+/** Delete clips recorded by any camera other than `deviceId`, a page at a time. */
+export const removeOtherCameraClips = internalMutation({
+  args: { deviceId: v.number(), cursor: v.union(v.string(), v.null()) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("ringClips")
+      .withIndex("by_createdAt")
+      .paginate({ numItems: PRUNE_BATCH, cursor: args.cursor });
+    for (const clip of page.page) {
+      if (clip.deviceId === args.deviceId) continue;
+      if (clip.thumbnailStorageId) await ctx.storage.delete(clip.thumbnailStorageId);
+      await ctx.db.delete("ringClips", clip._id);
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.ringCamera.removeOtherCameraClips, {
+        deviceId: args.deviceId,
+        cursor: page.continueCursor,
+      });
     }
     return null;
   },

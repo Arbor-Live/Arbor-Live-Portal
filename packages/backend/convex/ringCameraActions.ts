@@ -102,7 +102,8 @@ async function storeThumbnail(ctx: ActionCtx, url: string): Promise<Id<"_storage
 
 async function syncClips(ctx: ActionCtx) {
   const connection = await ctx.runQuery(internal.ringCamera.getConnection, {});
-  if (!connection || connection.status === "error") return { added: 0 };
+  if (!connection?.camera || connection.status === "error") return { added: 0 };
+  const origin = { connectionId: connection._id, deviceId: connection.camera.deviceId };
   const now = Date.now();
   const from = connection.syncedThrough ? connection.syncedThrough - SYNC_OVERLAP_MS : now - BACKFILL_DAYS * DAY_MS;
 
@@ -151,11 +152,11 @@ async function syncClips(ctx: ActionCtx) {
   }
   for (let index = 0; index < rows.length; index += UPSERT_BATCH) {
     await ctx.runMutation(internal.ringCamera.upsertClips, {
-      connectionId: connection._id,
+      origin,
       clips: rows.slice(index, index + UPSERT_BATCH),
     });
   }
-  await ctx.runMutation(internal.ringCamera.recordSync, { camera, syncedThrough: now });
+  await ctx.runMutation(internal.ringCamera.recordSync, { origin, camera, syncedThrough: now });
   await ctx.runMutation(internal.ringCamera.pruneOldClips, { before: now - RING_CLIP_RETENTION_MS });
   return { added: fresh.length };
 }
