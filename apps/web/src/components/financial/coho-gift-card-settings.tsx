@@ -101,7 +101,7 @@ export function CohoGiftCardSettings() {
           <div className="space-y-2 rounded-md border p-3">
             <p className="text-sm font-medium">Add card</p>
             <Input
-              placeholder="Label (e.g. CoHo main)"
+              placeholder="Card name (e.g. CoHo main)"
               value={newLabel}
               disabled={!ready || addingCard}
               onChange={(event) => setNewLabel(event.target.value)}
