@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
-import { requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
+import { requireAdminOrOperations, requireArborInternalContext, requireAuth } from "./lib/auth";
 import {
   contactSortKey,
   formatContactFullName,
@@ -71,7 +71,7 @@ export const listForAdmin = query({
   },
   returns: v.array(contactFields),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireAdminOrOperations(ctx);
     await requireArborInternalContext(ctx);
     const base = args.groupId
       ? await ctx.db

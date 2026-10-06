@@ -72,6 +72,7 @@ export function EventWorkspaceHeader() {
     updateDraft,
     readOnly,
     isAdmin,
+    canSeeBilling,
     seriesMeta,
     linkedInvoice,
     userSelectOptions,
@@ -182,7 +183,7 @@ export function EventWorkspaceHeader() {
               </span>
             </Link>
           ) : null}
-          {isAdmin && linkedInvoice ? (
+          {canSeeBilling && linkedInvoice ? (
             <Link
               href={`/dashboard/financial-hub/invoices/${linkedInvoice._id}`}
               className="inline-flex h-7 items-center gap-1.5 border px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"

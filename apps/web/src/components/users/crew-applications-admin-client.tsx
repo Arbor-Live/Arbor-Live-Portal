@@ -24,6 +24,7 @@ import { notify } from "@/lib/notify";
 import { assignableCrewSelectOptions } from "@/lib/user-select-description";
 import { USER_DISCIPLINE_OPTIONS, USER_VERTICAL_OPTIONS } from "@/lib/validations/users";
 import {
+  ACTION_PROGRESS,
   OPEN_PROGRESS,
   PROGRESS_DESCRIPTIONS,
   PROGRESS_LABELS,
@@ -73,6 +74,7 @@ export function CrewApplicationsAdminClient() {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [pending, setPending] = useState(false);
+  const [now] = useState(() => Date.now());
 
   const applied = activeFilters(filters);
   const statuses = statusesForProgressFilter(applied.progress);
@@ -134,21 +136,21 @@ export function CrewApplicationsAdminClient() {
         return false;
       }
       return (
-        matchesFilter(applied.progress, applicationProgress(row)) &&
+        matchesFilter(applied.progress, applicationProgress(row, now)) &&
         matchesFilter(applied.owner, row.assigneeUserId ?? NO_OWNER) &&
         matchesFilter(applied.vertical, row.vertical) &&
         matchesFilter(applied.specialty, row.discipline ?? [])
       );
     });
-  }, [allRows, applied.owner, applied.progress, applied.specialty, applied.vertical, search]);
+  }, [allRows, applied.owner, applied.progress, applied.specialty, applied.vertical, now, search]);
 
   const groups = useMemo(
     () =>
       PROGRESS_ORDER.map((progress) => ({
         progress,
-        rows: rows.filter((row) => applicationProgress(row) === progress),
+        rows: rows.filter((row) => applicationProgress(row, now) === progress),
       })).filter((group) => group.rows.length > 0),
-    [rows],
+    [now, rows],
   );
 
   const panelRow = panel ? allRows.find((row) => row._id === panel) : undefined;
@@ -162,7 +164,8 @@ export function CrewApplicationsAdminClient() {
     setApplicationParam(null);
   }, [applications, panel, panelRow]);
 
-  const notContacted = rows.filter((row) => applicationProgress(row) === "new").length;
+  const notContacted = rows.filter((row) => applicationProgress(row, now) === "new").length;
+  const decisionsNeeded = rows.filter((row) => applicationProgress(row, now) === "decision_needed").length;
   const noOwner = rows.filter((row) => row.status === "submitted" && !row.assigneeUserId).length;
   const filterCount = (search.trim() ? 1 : 0) + Object.keys(applied).length;
 
@@ -254,7 +257,8 @@ export function CrewApplicationsAdminClient() {
             testId="crew-applications-summary"
             order="Grouped by progress, newest first in each group. Open an applicant to reach out, assign an owner or decide."
           >
-            {plural(rows.length, "application")} · {notContacted} not contacted · {noOwner} without an owner
+            {plural(rows.length, "application")} · {notContacted} not contacted ·{" "}
+            {plural(decisionsNeeded, "decision")} needed · {noOwner} without an owner
           </ListSummary>
 
           {groups.length === 0 ? (
@@ -287,7 +291,7 @@ export function CrewApplicationsAdminClient() {
                   className="border"
                   title={PROGRESS_LABELS[group.progress]}
                   count={group.rows.length}
-                  tone={group.progress === "new" ? "amber" : "neutral"}
+                  tone={ACTION_PROGRESS.has(group.progress) ? "amber" : "neutral"}
                   description={PROGRESS_DESCRIPTIONS[group.progress]}
                   testId={`crew-applications-group-${group.progress}`}
                 >
@@ -298,7 +302,7 @@ export function CrewApplicationsAdminClient() {
                       onOpen={() => openPanel(row._id)}
                       actions={
                         <div className="flex items-center gap-1">
-                          {applicationProgress(row) === "new" ? (
+                          {applicationProgress(row, now) === "new" ? (
                             <Button
                               type="button"
                               variant="outline"

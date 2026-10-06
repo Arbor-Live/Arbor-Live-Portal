@@ -6,10 +6,18 @@ export type OutreachStage = "contacted" | "meeting_booked" | "met";
 /**
  * Where an applicant is, start to finish: nobody has reached out yet, a
  * Calendly link was sent, the intro meeting is booked, they met, then a
- * training event, then membership (or turned away). Submitted applications
- * carry the outreach step; the later steps are the application status.
+ * training event, a decision once training is over, then membership (or
+ * turned away). Submitted applications carry the outreach step; the later
+ * steps are the application status, with "decision needed" derived from when
+ * the trainee's training shift ends.
  */
-export type CrewApplicationProgress = "new" | OutreachStage | "trainee" | "converted" | "closed";
+export type CrewApplicationProgress =
+  | "new"
+  | OutreachStage
+  | "trainee"
+  | "decision_needed"
+  | "converted"
+  | "closed";
 
 /** Workflow order: the order groups appear on the page. */
 export const PROGRESS_ORDER: CrewApplicationProgress[] = [
@@ -18,6 +26,7 @@ export const PROGRESS_ORDER: CrewApplicationProgress[] = [
   "meeting_booked",
   "met",
   "trainee",
+  "decision_needed",
   "converted",
   "closed",
 ];
@@ -28,6 +37,7 @@ export const PROGRESS_LABELS: Record<CrewApplicationProgress, string> = {
   meeting_booked: "Meeting booked",
   met: "Met",
   trainee: "Trainee",
+  decision_needed: "Decision needed",
   converted: "Member",
   closed: "Turned away",
 };
@@ -38,6 +48,7 @@ export const PROGRESS_TONES: Record<CrewApplicationProgress, Tone> = {
   meeting_booked: "blue",
   met: "blue",
   trainee: "emerald",
+  decision_needed: "amber",
   converted: "emerald",
   closed: "neutral",
 };
@@ -49,6 +60,7 @@ export const PROGRESS_DESCRIPTIONS: Record<CrewApplicationProgress, string> = {
   meeting_booked: "Intro meeting on the calendar.",
   met: "Met them. Assign a training event next.",
   trainee: "Scheduled for a training event.",
+  decision_needed: "Training is over. Invite them as a member or turn them away.",
   converted: "Invited to the portal as members.",
   closed: "Turned away.",
 };
@@ -59,6 +71,7 @@ const STATUS_BY_PROGRESS: Record<CrewApplicationProgress, CrewApplicationStatus>
   meeting_booked: "submitted",
   met: "submitted",
   trainee: "trainee",
+  decision_needed: "trainee",
   converted: "converted",
   closed: "closed",
 };
@@ -72,13 +85,31 @@ export const OUTREACH_STEPS: Array<{ value: OutreachStage | "new"; label: string
 ];
 
 /** The open steps; the page starts filtered to these. */
-export const OPEN_PROGRESS: CrewApplicationProgress[] = ["new", "contacted", "meeting_booked", "met", "trainee"];
+export const OPEN_PROGRESS: CrewApplicationProgress[] = [
+  "new",
+  "contacted",
+  "meeting_booked",
+  "met",
+  "trainee",
+  "decision_needed",
+];
 
-export function applicationProgress(row: {
-  status: CrewApplicationStatus;
-  outreachStage?: OutreachStage;
-}): CrewApplicationProgress {
+/** Steps waiting on staff; their group headers are highlighted. */
+export const ACTION_PROGRESS: ReadonlySet<CrewApplicationProgress> = new Set(["new", "decision_needed"]);
+
+/** A trainee moves to "Decision needed" on their own once their last training shift ends. */
+export function applicationProgress(
+  row: {
+    status: CrewApplicationStatus;
+    outreachStage?: OutreachStage;
+    trainingEndsAt?: number;
+  },
+  now: number,
+): CrewApplicationProgress {
   if (row.status === "submitted") return row.outreachStage ?? "new";
+  if (row.status === "trainee" && row.trainingEndsAt !== undefined && row.trainingEndsAt <= now) {
+    return "decision_needed";
+  }
   return row.status;
 }
 

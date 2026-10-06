@@ -8,6 +8,7 @@ import {
   requireAdmin,
   requireArborInternalContext,
   requireAuth,
+  requireOperationsAccess,
 } from "./lib/auth";
 import { canEditEventForUser, requireEventEditAccess } from "./lib/eventAccess";
 import {
@@ -368,7 +369,7 @@ export const get = query({
       .query("eventCrewShifts")
       .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.id))
       .take(500);
-    const canEdit = canEditEventForUser(user, event);
+    const canEdit = await canEditEventForUser(ctx, user, event);
 
     const linkedInvoices = await loadLinkedInvoiceSummaries(ctx, event);
 
@@ -578,8 +579,7 @@ export const create = mutation({
     openMicNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
-    await requireArborInternalContext(ctx);
+    await requireOperationsAccess(ctx);
     if (args.endAt <= args.startAt) throw new Error("Event end time must be after start time.");
     const now = Date.now();
     const spansMultipleDays = pacificDateKey(args.startAt) !== pacificDateKey(args.endAt);

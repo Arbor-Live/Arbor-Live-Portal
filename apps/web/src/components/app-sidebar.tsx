@@ -57,12 +57,13 @@ import {
 type NavSubItem = {
   title: string
   url: string
+  /** Portal admins only. */
   adminOnly?: boolean
   /** Arbor staff only: hidden from artists viewing their own act. */
   staffOnly?: boolean
   /** The act workspace: artists and admins, not other Arbor staff. */
   actWorkspace?: boolean
-  /** Operations team and admins only (not crew). */
+  /** Operations team and admins (not crew). */
   opsOnly?: boolean
   /** Label for Arbor staff when it differs from the artist's own ("Edit artist profile" vs "Profile"). */
   staffTitle?: string
@@ -72,7 +73,10 @@ type NavItem = {
   title: string
   url: string
   icon: typeof CalendarDotsIcon
+  /** Portal admins only. */
   adminOnly?: boolean
+  /** Operations team and admins (not crew). */
+  opsOnly?: boolean
   bandOnly?: boolean
   marketingOnly?: boolean
 }
@@ -80,7 +84,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { title: "Home", url: "/dashboard", icon: HouseIcon },
   { title: "Events", url: "/dashboard/events", icon: CalendarDotsIcon },
-  { title: "Ops Center", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, adminOnly: true },
+  { title: "Ops Center", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, opsOnly: true },
   { title: "Users", url: "/dashboard/users", icon: UsersIcon, adminOnly: true },
   {
     title: "Artists",
@@ -112,22 +116,22 @@ const financialHubSubItems: NavSubItem[] = [
   { title: "Invoices", url: "/dashboard/financial-hub/invoices" },
   { title: "Artist payouts", url: "/dashboard/financial-hub/artist-payouts" },
   { title: "GrantED ledger", url: "/dashboard/financial-hub/granted" },
-  { title: "Crew timecards", url: "/dashboard/timecards" },
+  { title: "Crew timecards", url: "/dashboard/timecards", adminOnly: true },
   { title: "My Timecards", url: "/dashboard/timecards/mine" },
   { title: "Billing hosts", url: "/dashboard/financial-hub/organizations" },
   { title: "Create Invoice", url: "/dashboard/financial-hub/invoices/new" },
-  { title: "Settings", url: "/dashboard/financial-hub/settings" },
+  { title: "Settings", url: "/dashboard/financial-hub/settings", adminOnly: true },
 ]
 
 const eventsSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/events" },
-  { title: "Venues", url: "/dashboard/events/venues", adminOnly: true },
+  { title: "Venues", url: "/dashboard/events/venues", opsOnly: true },
   { title: "Open Mic", url: "/dashboard/events/open-mic" },
-  { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", adminOnly: true },
+  { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", opsOnly: true },
   { title: "My Availability", url: "/dashboard/events/my-availability" },
   { title: "My Post-event work", url: "/dashboard/events/post-event" },
   { title: "My Timecards", url: "/dashboard/timecards/mine" },
-  { title: "Create Event", url: "/dashboard/events/new", adminOnly: true },
+  { title: "Create Event", url: "/dashboard/events/new", opsOnly: true },
 ]
 
 const usersSubItems: NavSubItem[] = [
@@ -151,7 +155,7 @@ const marketingSubItems: NavSubItem[] = [
 const bandsSubItems: NavSubItem[] = [
   { title: "Open positions", url: "/dashboard/artists/positions", staffOnly: true, opsOnly: true },
   { title: "Directory", url: "/dashboard/artists/directory", staffOnly: true },
-  { title: "Artist applications", url: "/dashboard/users/artist-applications", adminOnly: true },
+  { title: "Artist applications", url: "/dashboard/users/artist-applications", opsOnly: true },
   { title: "Organizations", url: "/dashboard/users/organizations", adminOnly: true },
   { title: "Profile", staffTitle: "Edit artist profile", url: "/dashboard/artists", actWorkspace: true },
   { title: "Team", url: "/dashboard/artists/team", actWorkspace: true },
@@ -174,7 +178,9 @@ function visibleSubItems(
 ) {
   if (!subItems) return undefined
   return subItems.filter(
-    (subItem) => access.isAdmin || access.hasOperationsAccess || !subItem.adminOnly,
+    (subItem) =>
+      access.isAdmin ||
+      (!subItem.adminOnly && (!subItem.opsOnly || access.hasOperationsAccess)),
   )
 }
 
@@ -210,7 +216,8 @@ function canAccessNavItem(
   // it stays admin-only (see the sub-item filter).
   if (item.url === "/dashboard/artists") return true
   if (access.isAdmin) return true
-  if (item.adminOnly && !access.hasOperationsAccess) return false
+  if (item.adminOnly) return false
+  if (item.opsOnly && !access.hasOperationsAccess) return false
   if (item.marketingOnly && !access.hasMarketingAccess) return false
   return true
 }
@@ -253,7 +260,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   // Unconfirmed-crew badge fans out events × shifts — only subscribe on routes
   // where that count is actionable (scheduling board / home), not every page.
   const includeUnconfirmedCrew =
-    effectiveIsAdmin &&
+    effectiveHasOperationsAccess &&
     (pathname === "/dashboard" || pathname.startsWith("/dashboard/events/crew-scheduling"))
   // Post-event work counts fan out over the user's ended events — subscribe
   // only where the chip is actionable (home + event routes), not every page.
@@ -269,6 +276,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
           rangeEnd: adminSchedulingRange.rangeEnd,
           includeArborInternal: activeOrganization?.organizationType === "arbor_internal",
           includeAdmin: effectiveIsAdmin,
+          includeOperations: effectiveHasOperationsAccess,
           includeBand: isArtistOrganizationType(activeOrganization?.organizationType),
           includeUnconfirmedCrew,
           includeMyEventActions,
@@ -420,15 +428,14 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                     subItem.url === "/dashboard/artists/team")
                 ) &&
                 !(isBandContext && subItem.staffOnly) &&
-                // The act workspace and artist admin pages are for portal admins,
-                // not every staff member who sees the section for the directory.
+                // The act workspace is for portal admins, not every staff member
+                // who sees the section for the directory.
                 !(
                   !isBandContext &&
                   !effectiveIsAdmin &&
                   item.url === "/dashboard/artists" &&
-                  (subItem.actWorkspace || subItem.adminOnly)
-                ) &&
-                !(subItem.opsOnly && !effectiveIsAdmin && !effectiveHasOperationsAccess),
+                  subItem.actWorkspace
+                ),
             )
               .map((subItem) =>
                 !isBandContext && subItem.staffTitle ? { ...subItem, title: subItem.staffTitle } : subItem,

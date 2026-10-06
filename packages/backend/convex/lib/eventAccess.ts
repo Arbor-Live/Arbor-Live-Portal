@@ -1,6 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { getUserId, isAdmin, requireAuth, type AuthUser } from "./auth";
+import { getUserId, hasOperationsAccess, requireAuth, type AuthUser } from "./auth";
 
 export function isEventLead(
   userId: string,
@@ -11,14 +11,18 @@ export function isEventLead(
   return false;
 }
 
-export function canEditEventForUser(
+/**
+ * Who may edit an event: admins and the Operations team edit every event
+ * (details, Run of Show, crew, lineup); anyone else only events they lead.
+ */
+export async function canEditEventForUser(
+  ctx: QueryCtx | MutationCtx,
   user: AuthUser,
   event: Pick<Doc<"events">, "dayOfLeadUserId" | "eventManagerUserId">,
-): boolean {
-  if (isAdmin(user)) return true;
+): Promise<boolean> {
   const userId = getUserId(user);
-  if (!userId) return false;
-  return isEventLead(userId, event);
+  if (userId && isEventLead(userId, event)) return true;
+  return await hasOperationsAccess(ctx, user);
 }
 
 export async function canEditEvent(
@@ -26,7 +30,7 @@ export async function canEditEvent(
   event: Doc<"events">,
 ): Promise<boolean> {
   const user = await requireAuth(ctx);
-  return canEditEventForUser(user, event);
+  return await canEditEventForUser(ctx, user, event);
 }
 
 export async function requireEventEditAccess(ctx: QueryCtx | MutationCtx, eventId: Id<"events">) {

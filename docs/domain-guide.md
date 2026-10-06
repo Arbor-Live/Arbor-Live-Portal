@@ -13,7 +13,7 @@ canonical description of the domain itself.
   `invoiceGroups` + `invoiceContacts`, not Better Auth orgs. Contacts are
   per-org billing memberships; shared person identity lives in `invoicePeople`
   (keyed by email). Alternate names are stored in `invoiceGroupAliases`;
-  admins can merge duplicate hosts in Ops Center → **Billing hosts**
+  admins and the Operations team can merge duplicate hosts in Ops Center → **Billing hosts**
   (`/dashboard/financial-hub/organizations`).
 - The **Users** page (`/dashboard/users`) has three route-based tabs:
   **People** (`?user=<id>` opens a person's panel), **Invitations**
@@ -21,6 +21,16 @@ canonical description of the domain itself.
   `?org=<id>`) for Arbor Live and the artist orgs. **Add person** in the header
   either sends an invite or creates the account with a temporary password.
   `/dashboard/users/access` redirects to People.
+- Staff roles inside Arbor Live: **admins** (everything); the **Operations
+  team** (`Operations` vertical) runs events end to end and books acts. They
+  edit every event (details, Run of Show, crew, lineup), create events and
+  venues, and work the Ops Center: booking requests, invoices, artist payouts,
+  billing hosts, artist applications and Insights. Admin-only: users, crew
+  applications and rates, crew timecards, invoice/booking settings, inventory
+  setup, deleting events. Everyone else edits only events they lead. Gates:
+  `requireOperationsAccess` / `requireAdminOrOperations` (`lib/auth.ts`),
+  `canEditEventForUser` (`lib/eventAccess.ts`); the sidebar marks items
+  `opsOnly` or `adminOnly`.
 - Staff-only functionality is guarded by `requireArborInternalContext`; band
   portal surfaces (linked events, media albums, payout status) use
   `requireBandContext` plus `lib/eventBandAccess.ts`.
@@ -105,7 +115,10 @@ canonical description of the domain itself.
   venue with an address, and one event lead or manager with a name, email and
   phone; an incomplete second contact is skipped. The panel checks
   `traineeEventReadiness` as soon as an event is picked and fixes gaps in a
-  dialog: venue + address, event lead, a missing phone), or
+  dialog: venue + address, event lead, a missing phone). Once the trainee's
+  last training shift ends (on an event that wasn't cancelled) they show as
+  **Decision needed** (`lib/crewTraineeTraining.ts`; derived, the status stays
+  `trainee`) and count toward the sidebar badge until converted or closed), or
   `converted` (invite into Arbor Live via the normal member invite path →
   `/accept-invite` → crew onboarding). Crew applicants pick a vertical
   (`Operations` / `Crew` / `Trivia` / `Marketing`); Crew and Marketing also pick
@@ -185,7 +198,7 @@ canonical description of the domain itself.
   (`Classroom`, `Theater`, `Conference Room`, `Common Space`, `Other`); Outdoor
   (`Backyard`, `Park`, `Fountain`, `Common Space`, `Other`). Nicknames support
   aliases (e.g. Llaga/Yaga).
-- Admin-only management under Events → Venues. Events, series, and booking
+- Admins and the Operations team manage venues under Events → Venues. Events, series, and booking
   requests store `venueId` plus a denormalized `venueName` (the venue path) for
   display/emails. - Venue records also hold capacity, address, Google Maps URL,
   circuits, contacts, Lexical notes, documentation links, and R2 file uploads.

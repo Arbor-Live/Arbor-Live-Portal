@@ -11,7 +11,7 @@ import {
   normalizePayrollMethod,
   resolveUserCompensationHourlyRateUsd,
 } from "./lib/crewCompensation";
-import { resolveProfileMembership } from "./lib/userVerticals";
+import { resolveProfileMembership, userVerticalValue } from "./lib/userVerticals";
 import { resolveUserStatus } from "./lib/userStatus";
 import { assertE2eHelpersEnabled } from "./lib/e2eGuard";
 import { emailTemplateValue } from "./lib/emailTemplateValue";
@@ -2286,6 +2286,8 @@ export const ensureCrewUser = mutation({
     password: v.string(),
     name: v.optional(v.string()),
     username: v.optional(v.string()),
+    /** `["Operations"]` makes an Operations-team member; defaults to Crew (Sound). */
+    verticals: v.optional(v.array(userVerticalValue)),
   },
   returns: v.object({
     ok: v.literal(true),
@@ -2298,6 +2300,8 @@ export const ensureCrewUser = mutation({
     assertE2eHelpersEnabled();
     const email = args.email.trim().toLowerCase();
     const name = (args.name ?? "E2E Crew").trim() || "E2E Crew";
+    const verticals = args.verticals ?? ["Crew"];
+    const disciplines: Array<"Sound"> = verticals.includes("Crew") ? ["Sound"] : [];
     if (!email) throw new Error("Email is required.");
     if (args.password.length < 8) throw new Error("Password must be at least 8 characters.");
 
@@ -2457,8 +2461,8 @@ export const ensureCrewUser = mutation({
     if (existingUserProfile) {
       await ctx.db.patch(existingUserProfile._id, {
         status: "active",
-        verticals: ["Crew"],
-        disciplines: ["Sound"],
+        verticals,
+        disciplines,
         defaultOrganizationId: organizationId,
         ...(assignedUsername ? { username: assignedUsername } : {}),
         updatedAt: now,
@@ -2470,8 +2474,8 @@ export const ensureCrewUser = mutation({
       await ctx.db.insert("userAdminProfiles", {
         userId,
         status: "active",
-        verticals: ["Crew"],
-        disciplines: ["Sound"],
+        verticals,
+        disciplines,
         defaultOrganizationId: organizationId,
         username: assignedUsername,
         createdAt: now,
@@ -4288,6 +4292,68 @@ export const seedSubmittedCrewApplication = mutation({
       email,
       queuePath: "/dashboard/users/crew-applications",
     };
+  },
+});
+
+/**
+ * Test-only: a trainee assigned to a crewed event. With `trainingEnded` the
+ * event (and their trainee shift) was two days ago, so the queue shows them
+ * under "Decision needed"; otherwise it's two weeks out.
+ */
+export const seedTraineeApplication = mutation({
+  args: { name: v.string(), trainingEnded: v.boolean() },
+  returns: v.object({ applicationId: v.id("crewApplications"), eventId: v.id("events") }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const hour = 60 * 60 * 1000;
+    const startAt = args.trainingEnded ? now - 48 * hour : now + 14 * 24 * hour;
+    const endAt = startAt + 4 * hour;
+    const eventId = await ctx.db.insert("events", {
+      title: `E2E Training Event ${now}`,
+      status: "ready",
+      visibility: "internal",
+      publicToken: makeToken(),
+      startAt,
+      endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      eventType: "Crewed Event",
+      teamsInterested: ["Sound"],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const applicationId = await ctx.db.insert("crewApplications", {
+      status: "trainee",
+      name: args.name,
+      email: `e2e.trainee.${now}@stanford.edu`,
+      phone: "6505550199",
+      heardAboutUs: "E2E test suite",
+      vertical: "Crew",
+      discipline: "Sound",
+      stanfordPosition: "undergrad",
+      submittedAt: now - 30 * 24 * hour,
+      reviewedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("eventCrewShifts", {
+      eventId,
+      role: "Trainee",
+      personName: args.name,
+      crewApplicationId: applicationId,
+      callTime: startAt,
+      startsAt: startAt,
+      endsAt: endAt,
+      hours: 4,
+      postedToExpense: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { applicationId, eventId };
   },
 });
 

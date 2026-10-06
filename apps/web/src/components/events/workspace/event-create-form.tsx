@@ -67,7 +67,6 @@ export function EventCreateForm() {
   const shell = useSessionShell();
   const viewer = useSessionViewer();
   const account = shell?.account;
-  const isAdmin = viewer?.isAdmin ?? false;
   const createEvent = useMutation(api.events.create);
   const createEventSeries = useMutation(api.eventSeries.create);
   const managerList = useQuery(api.invoices.listManagers, {});
@@ -253,7 +252,7 @@ export function EventCreateForm() {
             <VenuePicker
               value={draft.venueId}
               onChange={(venueId) => update({ venueId })}
-              allowCreate={isAdmin}
+              allowCreate
             />
           </Field>
           <Field label="Host" icon={BuildingsIcon}>

@@ -14,6 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { ListRow } from "@/components/list-row";
+import { useSessionViewer } from "@/components/session-shell-provider";
 import { StatusPill, type Tone } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -145,7 +146,12 @@ export function FinancialHubAttention() {
   const proof = useQuery(api.paymentProof.listByQueue, { queue: "proof_no_receipt" });
   const payouts = useQuery(api.bandPayments.listPipeline, {});
   const payoutCounts = useQuery(api.bandPayments.getQueueCounts, {});
-  const timecards = useQuery(api.timecards.listCrewTimecardOverview, { now: nowMs, periodIndex: 0 });
+  // Crew payroll is admin-only; the Operations team sees the other panels.
+  const isAdmin = useSessionViewer()?.isAdmin ?? false;
+  const timecards = useQuery(
+    api.timecards.listCrewTimecardOverview,
+    isAdmin ? { now: nowMs, periodIndex: 0 } : "skip",
+  );
 
   const requestSections = useMemo<AttentionSectionData[]>(() => {
     const all = requests ?? [];
@@ -383,13 +389,15 @@ export function FinancialHubAttention() {
         sections={payoutSections}
         testId="attention-artist-payouts"
       />
-      <AttentionPanel
-        icon={ClockIcon}
-        title="Crew timecards"
-        loading={timecards === undefined}
-        sections={[timecardSection]}
-        testId="attention-timecards"
-      />
+      {isAdmin ? (
+        <AttentionPanel
+          icon={ClockIcon}
+          title="Crew timecards"
+          loading={timecards === undefined}
+          sections={[timecardSection]}
+          testId="attention-timecards"
+        />
+      ) : null}
     </div>
   );
 }

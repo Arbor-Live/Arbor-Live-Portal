@@ -37,6 +37,12 @@ export function AdminOnlyGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** Renders its children for admins only, nothing for anyone else (an admin-only button on a shared page). */
+export function AdminOnlyContent({ children }: { children: React.ReactNode }) {
+  const viewer = useSessionViewer();
+  return viewer?.isAdmin ? <>{children}</> : null;
+}
+
 /**
  * Blocks Arbor staff outside the Operations team (crew), the way
  * `AdminOnlyGuard` blocks non-admins. Admins always pass. Convex enforces the

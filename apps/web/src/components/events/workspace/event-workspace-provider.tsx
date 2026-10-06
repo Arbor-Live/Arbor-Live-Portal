@@ -67,7 +67,9 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
   const viewer = useSessionViewer();
   const account = shell?.account;
   const isAdmin = viewer?.isAdmin ?? false;
-  const canSeeBilling = isAdmin || (viewer?.verticals.includes("Operations") ?? false);
+  // The Operations team runs events end to end: billing, lineup, open mic.
+  const hasOperationsAccess = isAdmin || (viewer?.verticals.includes("Operations") ?? false);
+  const canSeeBilling = hasOperationsAccess;
 
   const eventData = useQuery(api.events.get, { id: eventId, detail: "full" });
   const siblingDays = useQuery(api.events.listSiblingDays, { eventId });
@@ -405,6 +407,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
       if (keys.length > 0) {
         const patch = buildEventUpdatePatch(draftSnapshot, keys, {
           isAdmin,
+          hasOperationsAccess,
           effectivePrimaryHostGroupId,
         });
         await updateEvent({ id: eventId, ...patch, editScope });
@@ -553,6 +556,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     eventData,
     siblingDays,
     isAdmin,
+    hasOperationsAccess,
     canSeeBilling,
     canEdit,
     readOnly,
