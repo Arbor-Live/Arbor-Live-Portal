@@ -475,6 +475,42 @@ export default defineSchema({
     updatedAt: v.number(),
   }),
 
+  /**
+   * The CoHo gift cards crew use for meals. `secureToken` is a bearer secret:
+   * it is write-only (never returned to clients) and read only by the refresh
+   * action. Cards are added and removed in Ops Center settings.
+   */
+  cohoGiftCards: defineTable({
+    label: v.string(),
+    secureToken: v.string(),
+    cardNumber: v.optional(v.string()),
+    balanceUsd: v.optional(v.number()),
+    lastCheckedAt: v.optional(v.number()),
+    /** Set when this card's low-balance alert sent; cleared once it recovers. */
+    lowBalanceNotifiedAt: v.optional(v.number()),
+    /** Last refresh failure, for admin visibility; cleared on the next success. */
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }),
+
+  /** Singleton row: Ops Center settings for the CoHo gift card alerts. */
+  cohoGiftCardSettings: defineTable({
+    /** Low-balance alert recipients; external addresses are allowed. */
+    alertRecipients: v.array(v.string()),
+    lowBalanceThresholdUsd: v.number(),
+    updatedAt: v.number(),
+  }),
+
+  /** Singleton row: Ops Center settings for who is notified when crew finish onboarding. */
+  crewOnboardingSettings: defineTable({
+    /** Always notified; external addresses are allowed. */
+    alertRecipients: v.array(v.string()),
+    /** Notified only for Stanford-payroll hires (HR / Federal Work-Study). */
+    stanfordPayrollRecipients: v.array(v.string()),
+    updatedAt: v.number(),
+  }),
+
   inventoryItems: defineTable({
     /** Tag / identifier. Optional: an asset may be tracked by serial alone. */
     assetId: v.optional(v.string()),

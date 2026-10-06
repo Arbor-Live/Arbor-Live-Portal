@@ -33,6 +33,13 @@ crons.daily(
   internal.bandPayments.promoteEndedPayments,
 );
 
+crons.interval(
+  "refresh CoHo gift card balances",
+  { hours: 6 },
+  internal.cohoGiftCard.refreshCohoGiftCards,
+  {},
+);
+
 crons.cron(
   "weekly jobs",
   "0 17 * * 1",

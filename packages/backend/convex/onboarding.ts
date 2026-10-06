@@ -17,9 +17,12 @@ import {
   getUserId,
   listPortalAdminEmails,
   requireAdmin,
+  requireArborInternalContext,
   requireAuth,
+  requirePortalAdmin,
   type AuthUser,
 } from "./lib/auth";
+import { normalizeAlertRecipients } from "./lib/alertRecipients";
 import {
   FWS_JOB_INFO,
   ONBOARDING_FWS_EMAILS,
@@ -354,16 +357,18 @@ async function scheduleOnboardingCompletedEmails(
     i9Acknowledged?: boolean;
   },
 ) {
+  const onboardingSettings = await ctx.db.query("crewOnboardingSettings").first();
   const recipients = new Set<string>();
+  // Every portal admin gets this (their own opt-out still applies in enqueue).
   for (const email of await listPortalAdminEmails(ctx)) {
-    recipients.add(email);
+    recipients.add(email.toLowerCase());
   }
-  for (const email of ONBOARDING_LEADERSHIP_EMAILS) {
+  for (const email of onboardingSettings?.alertRecipients ?? ONBOARDING_LEADERSHIP_EMAILS) {
     recipients.add(email.toLowerCase());
   }
   // Stanford HR / FWS leadership only deals with Stanford-payroll hires.
   if (args.payrollMethod !== "external") {
-    for (const email of ONBOARDING_FWS_EMAILS) {
+    for (const email of onboardingSettings?.stanfordPayrollRecipients ?? ONBOARDING_FWS_EMAILS) {
       recipients.add(email.toLowerCase());
     }
   }
@@ -408,6 +413,63 @@ async function scheduleOnboardingCompletedEmails(
     });
   }
 }
+
+const crewOnboardingSettingsValue = v.object({
+  alertRecipients: v.array(v.string()),
+  stanfordPayrollRecipients: v.array(v.string()),
+  /** Portal admins who always receive this, so the picker can block adding them. */
+  adminRecipients: v.array(v.string()),
+});
+
+/**
+ * Ops Center → Settings: who is notified when crew finish onboarding. Falls
+ * back to the built-in lists until an admin saves an override.
+ */
+export const getCrewOnboardingSettings = query({
+  args: {},
+  returns: crewOnboardingSettingsValue,
+  handler: async (ctx) => {
+    await requirePortalAdmin(ctx);
+    await requireArborInternalContext(ctx);
+    const row = await ctx.db.query("crewOnboardingSettings").first();
+    return {
+      alertRecipients: row?.alertRecipients ?? [...ONBOARDING_LEADERSHIP_EMAILS],
+      stanfordPayrollRecipients: row?.stanfordPayrollRecipients ?? [...ONBOARDING_FWS_EMAILS],
+      adminRecipients: await listPortalAdminEmails(ctx),
+    };
+  },
+});
+
+export const updateCrewOnboardingSettings = mutation({
+  args: {
+    alertRecipients: v.array(v.string()),
+    stanfordPayrollRecipients: v.array(v.string()),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    await requirePortalAdmin(ctx);
+    await requireArborInternalContext(ctx);
+    const alertRecipients = normalizeAlertRecipients(args.alertRecipients);
+    const stanfordPayrollRecipients = normalizeAlertRecipients(args.stanfordPayrollRecipients);
+
+    const existing = await ctx.db.query("crewOnboardingSettings").first();
+    const now = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        alertRecipients,
+        stanfordPayrollRecipients,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("crewOnboardingSettings", {
+        alertRecipients,
+        stanfordPayrollRecipients,
+        updatedAt: now,
+      });
+    }
+    return { ok: true as const };
+  },
+});
 
 const crewOnboardingReturn = v.object({
   status: onboardingStatusValue,

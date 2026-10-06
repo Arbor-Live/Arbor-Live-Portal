@@ -168,6 +168,13 @@ export type DamageReportAdminEmailProps = {
   reportUrl: string;
 };
 
+export type CohoGiftCardLowBalanceEmailProps = {
+  cardLabel?: string;
+  balanceUsd: number;
+  thresholdUsd: number;
+  dashboardUrl: string;
+};
+
 export type BookingQuoteReadyEmailProps = {
   recipientName?: string;
   requestNumber: string;

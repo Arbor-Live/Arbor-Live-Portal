@@ -491,6 +491,19 @@ export async function isPortalAdmin(ctx: AuthCtx, userId: string): Promise<boole
 }
 
 /**
+ * Staff access: authenticated *and* a membership-derived portal admin. Prefer
+ * this over `requireAdmin`, whose Better Auth role cache is also carried by
+ * band/DJ org admins.
+ */
+export async function requirePortalAdmin(ctx: AuthCtx): Promise<AuthUser> {
+  const user = await requireAuth(ctx);
+  if (!(await isPortalAdmin(ctx, getUserId(user)))) {
+    throw new Error("Admin access required.");
+  }
+  return user;
+}
+
+/**
  * Every Arbor Live (portal) admin. This is the one audited gate for admin-wide
  * email: band/DJ org admins also carry Better Auth `role: "admin"`, so a bare
  * role check would leak staff email (and any student info in it) to them.
