@@ -88,4 +88,11 @@ crons.cron(
   {},
 );
 
+crons.interval(
+  "sync ring camera clips",
+  { minutes: 5 },
+  internal.ringCameraActions.sync,
+  {},
+);
+
 export default crons;

@@ -7606,3 +7606,73 @@ export const getLatestBorrowRequestByPurpose = query({
     };
   },
 });
+
+/**
+ * A connected Ring camera with recorded clips spread over the last few days.
+ * The token is fake, so playing a clip shows the "couldn't load" state.
+ * Pass storage ids (from `generateRingThumbnailUploadUrl`) to give clips thumbnails.
+ */
+export const seedRingCamera = mutation({
+  args: {
+    clipCount: v.optional(v.number()),
+    thumbnailStorageIds: v.optional(v.array(v.id("_storage"))),
+  },
+  returns: v.object({ clipIds: v.array(v.id("ringClips")) }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    for (const clip of await ctx.db.query("ringClips").take(500)) {
+      await ctx.db.delete("ringClips", clip._id);
+    }
+    const existing = await ctx.db.query("ringConnection").first();
+    if (existing) await ctx.db.delete("ringConnection", existing._id);
+    await ctx.db.insert("ringConnection", {
+      refreshToken: "e2e-fake-refresh-token",
+      hardwareId: "e2e-hardware-id",
+      status: "connected",
+      camera: {
+        deviceId: 4242,
+        name: "Loading dock",
+        locationId: "e2e-location",
+        model: "stickup_cam_v4",
+        batteryPercent: 78,
+        online: true,
+      },
+      syncedThrough: now,
+      lastSyncedAt: now - 2 * 60 * 1000,
+      connectedByUserId: "e2e",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const kinds = ["motion", "motion", "ding", "motion", "live", "motion", "other"] as const;
+    const thumbnails = args.thumbnailStorageIds ?? [];
+    const clipIds: Id<"ringClips">[] = [];
+    const count = args.clipCount ?? 18;
+    for (let index = 0; index < count; index += 1) {
+      const kind = kinds[index % kinds.length];
+      clipIds.push(
+        await ctx.db.insert("ringClips", {
+          dingId: `e2e-ding-${index}`,
+          deviceId: 4242,
+          kind,
+          rawKind: kind === "live" ? "on_demand" : kind === "other" ? "alarm" : kind,
+          // Roughly every five hours, newest first.
+          createdAt: now - (index * 5 + 0.5) * 60 * 60 * 1000,
+          durationSec: index === 0 ? undefined : 18 + ((index * 7) % 40),
+          personDetected: kind === "ding" || index % 3 === 0,
+          thumbnailStorageId: thumbnails.length ? thumbnails[index % thumbnails.length] : undefined,
+        }),
+      );
+    }
+    return { clipIds };
+  },
+});
+
+export const generateRingThumbnailUploadUrl = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx) => {
+    assertE2eHelpersEnabled();
+    return await ctx.storage.generateUploadUrl();
+  },
+});

@@ -53,6 +53,7 @@ import {
   MegaphoneIcon,
   MusicNotesIcon,
   ImagesIcon,
+  VideoCameraIcon,
 } from "@phosphor-icons/react"
 
 type NavSubItem = {
@@ -96,6 +97,7 @@ const navItems: NavItem[] = [
   { title: "Media", url: "/dashboard/media", icon: ImagesIcon, bandOnly: true },
   { title: "Inventory", url: "/dashboard/inventory", icon: PackageIcon },
   { title: "Marketing", url: "/dashboard/marketing", icon: MegaphoneIcon, marketingOnly: true },
+  { title: "Camera", url: "/dashboard/camera", icon: VideoCameraIcon, adminOnly: true },
 ]
 
 const inventorySubItems: NavSubItem[] = [

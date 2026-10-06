@@ -2457,4 +2457,49 @@ export default defineSchema({
     .index("by_eventId", ["eventId"])
     .index("by_printerId_and_status", ["printerId", "status"])
     .index("by_status_and_createdAt", ["status", "createdAt"]),
+
+  /**
+   * The Ring account behind the admin camera page (one row). Holds the
+   * rotating refresh token, so only internal functions may read it.
+   */
+  ringConnection: defineTable({
+    /** `ring-auth-cli` format (base64 `{ rt, hid }`); replaced on every refresh. */
+    refreshToken: v.string(),
+    hardwareId: v.string(),
+    accessToken: v.optional(v.string()),
+    accessTokenExpiresAt: v.optional(v.number()),
+    status: v.union(v.literal("connected"), v.literal("error")),
+    lastError: v.optional(v.string()),
+    camera: v.optional(
+      v.object({
+        deviceId: v.number(),
+        name: v.string(),
+        locationId: v.string(),
+        model: v.string(),
+        batteryPercent: v.optional(v.number()),
+        online: v.optional(v.boolean()),
+      }),
+    ),
+    /** Clips are synced up to here; the next sync re-reads a short overlap. */
+    syncedThrough: v.optional(v.number()),
+    lastSyncedAt: v.optional(v.number()),
+    connectedByUserId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }),
+
+  /** Recorded Ring clips (metadata + a stored thumbnail). The video stays at Ring. */
+  ringClips: defineTable({
+    dingId: v.string(),
+    deviceId: v.number(),
+    kind: v.union(v.literal("motion"), v.literal("ding"), v.literal("live"), v.literal("other")),
+    rawKind: v.string(),
+    createdAt: v.number(),
+    durationSec: v.optional(v.number()),
+    personDetected: v.boolean(),
+    thumbnailStorageId: v.optional(v.id("_storage")),
+  })
+    .index("by_dingId", ["dingId"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_kind_and_createdAt", ["kind", "createdAt"]),
 });
