@@ -150,7 +150,10 @@ async function syncClips(ctx: ActionCtx) {
     );
   }
   for (let index = 0; index < rows.length; index += UPSERT_BATCH) {
-    await ctx.runMutation(internal.ringCamera.upsertClips, { clips: rows.slice(index, index + UPSERT_BATCH) });
+    await ctx.runMutation(internal.ringCamera.upsertClips, {
+      connectionId: connection._id,
+      clips: rows.slice(index, index + UPSERT_BATCH),
+    });
   }
   await ctx.runMutation(internal.ringCamera.recordSync, { camera, syncedThrough: now });
   await ctx.runMutation(internal.ringCamera.pruneOldClips, { before: now - RING_CLIP_RETENTION_MS });

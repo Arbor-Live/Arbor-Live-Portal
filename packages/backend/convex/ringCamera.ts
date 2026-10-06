@@ -226,6 +226,7 @@ export const knownDingIds = internalQuery({
 
 export const upsertClips = internalMutation({
   args: {
+    connectionId: v.id("ringConnection"),
     clips: v.array(
       v.object({
         dingId: v.string(),
@@ -240,6 +241,14 @@ export const upsertClips = internalMutation({
     ),
   },
   handler: async (ctx, args) => {
+    // Ring was disconnected while this sync ran: drop the batch and its thumbnails.
+    const connection = await getConnectionRow(ctx);
+    if (connection?._id !== args.connectionId) {
+      for (const clip of args.clips) {
+        if (clip.thumbnailStorageId) await ctx.storage.delete(clip.thumbnailStorageId);
+      }
+      return null;
+    }
     for (const clip of args.clips) {
       const existing = await ctx.db
         .query("ringClips")
