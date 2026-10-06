@@ -82,7 +82,12 @@ function decodeBase64(text: string) {
  * `rt`. A bare token gets a fresh hardware id, which Ring then binds to it.
  */
 export function parseRingRefreshToken(raw: string, newHardwareId: () => string): RingCredentials {
-  const token = raw.trim().replace(/^"|"$/g, "");
+  // The CLI prints `"refreshToken": "<token>"`; accept that whole line too.
+  const token = raw
+    .trim()
+    .replace(/^"?refreshToken"?\s*:\s*/, "")
+    .replace(/,$/, "")
+    .replace(/^"|"$/g, "");
   if (!token) throw new Error("Paste the refresh token from ring-auth-cli.");
   try {
     const parsed: unknown = JSON.parse(decodeBase64(token));

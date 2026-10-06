@@ -34,6 +34,14 @@ describe("parseRingRefreshToken", () => {
     });
   });
 
+  it("accepts the whole line ring-auth-cli prints", () => {
+    const wrapped = wrapRingRefreshToken({ refreshToken: "rt-1", hardwareId: "hid-1" });
+    expect(parseRingRefreshToken(`"refreshToken": "${wrapped}"`, () => "unused")).toEqual({
+      refreshToken: "rt-1",
+      hardwareId: "hid-1",
+    });
+  });
+
   it("accepts a bare token with a new hardware id", () => {
     expect(parseRingRefreshToken("plain-token", () => "new-hid")).toEqual({
       refreshToken: "plain-token",

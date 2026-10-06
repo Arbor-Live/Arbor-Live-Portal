@@ -12,7 +12,7 @@ import {
   XIcon,
 } from "@phosphor-icons/react";
 import { ClipSheet, type ClipRow } from "@/components/camera/clip-sheet";
-import { RingConnectForm } from "@/components/camera/ring-connect-form";
+import { RingAuthCommand, RingConnectForm } from "@/components/camera/ring-connect-form";
 import { EmptyState, ListSummary, RowFlag, RowGroup, RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 import { MetaItem, PageHeader, StatusPill } from "@/components/page-header";
@@ -249,7 +249,14 @@ function ConnectedCamera({ overview }: { overview: Overview }) {
           <WarningCircleIcon />
           <AlertTitle>Ring signed the portal out</AlertTitle>
           <AlertDescription>
-            <p>Ring stopped accepting the saved sign-in. Reconnect to keep loading clips.</p>
+            <p>Ring stopped accepting the saved sign-in. To renew it:</p>
+            <ol className="list-decimal space-y-1 pl-5">
+              <li>
+                In a terminal on your computer, run <RingAuthCommand /> and sign in with the Ring account (it asks
+                for the two-factor code).
+              </li>
+              <li>Choose Reconnect Ring and paste the new token it prints.</li>
+            </ol>
             <Button size="sm" variant="outline" className="mt-2" onClick={() => setReconnectOpen(true)}>
               Reconnect Ring
             </Button>
@@ -405,7 +412,9 @@ function ConnectedCamera({ overview }: { overview: Overview }) {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Reconnect Ring</DialogTitle>
-            <DialogDescription>Use this when Ring signs the portal out, or to switch Ring accounts.</DialogDescription>
+            <DialogDescription>
+              Ring signs the portal out now and then. Paste a new token here to renew it, or to switch Ring accounts.
+            </DialogDescription>
           </DialogHeader>
           <RingConnectForm idPrefix="ring-reconnect" onConnected={() => setReconnectOpen(false)} />
         </DialogContent>

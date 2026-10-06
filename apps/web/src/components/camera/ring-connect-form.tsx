@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAction } from "convex/react";
+import { CopyIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +11,34 @@ import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 
 export const RING_AUTH_COMMAND = "npx -p ring-client-api ring-auth-cli";
+
+async function copyCommand() {
+  try {
+    await navigator.clipboard.writeText(RING_AUTH_COMMAND);
+    notify.success("Command copied.");
+  } catch {
+    notify.error("Could not copy to the clipboard.");
+  }
+}
+
+/** The `ring-auth-cli` command that prints a new refresh token, with a copy button. */
+export function RingAuthCommand() {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 align-middle">
+      <code className="truncate rounded-md bg-muted px-1.5 py-0.5 text-xs text-foreground">{RING_AUTH_COMMAND}</code>
+      <Button
+        type="button"
+        size="icon-xs"
+        variant="ghost"
+        aria-label="Copy the Ring sign-in command"
+        title="Copy command"
+        onClick={() => void copyCommand()}
+      >
+        <CopyIcon />
+      </Button>
+    </span>
+  );
+}
 
 /** Paste a `ring-auth-cli` refresh token. Calls `onConnected` once Ring accepts it. */
 export function RingConnectForm({ idPrefix, onConnected }: { idPrefix: string; onConnected?: () => void }) {
@@ -38,9 +67,8 @@ export function RingConnectForm({ idPrefix, onConnected }: { idPrefix: string; o
     <form className="space-y-4" onSubmit={(event) => void submit(event)}>
       <ol className="list-decimal space-y-2 pl-5 text-sm">
         <li>
-          On your computer, run{" "}
-          <code className="rounded-md bg-muted px-1.5 py-0.5 text-xs">{RING_AUTH_COMMAND}</code> and sign in with
-          the Ring account. It asks for the two-factor code Ring sends you.
+          In a terminal on your computer, run <RingAuthCommand /> and sign in with the Ring account. It asks for
+          the two-factor code Ring sends you. It needs Node.js installed.
         </li>
         <li>Paste the refresh token it prints below.</li>
       </ol>
