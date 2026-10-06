@@ -9,6 +9,8 @@ import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { CohoGiftCardSettings } from "@/components/financial/coho-gift-card-settings";
+import { CrewOnboardingSettings } from "@/components/financial/crew-onboarding-settings";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   feeDefinitionSchema,
@@ -163,6 +165,10 @@ export function FinancialHubSettings() {
           </Button>
         </CardContent>
       </Card>
+
+      <CohoGiftCardSettings />
+
+      <CrewOnboardingSettings />
 
       <FormSaveBar
         tier="C"

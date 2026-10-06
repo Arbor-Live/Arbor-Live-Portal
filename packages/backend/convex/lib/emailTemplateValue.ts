@@ -48,6 +48,7 @@ export const emailTemplateValue = v.union(
   v.literal("quote_approved"),
   v.literal("payment_proof_rejected"),
   v.literal("damage_report_admin"),
+  v.literal("coho_gift_card_low_balance"),
   v.literal("artist_need_inquiry"),
   v.literal("weekly_digest"),
   v.literal("this_week_at_arbor"),

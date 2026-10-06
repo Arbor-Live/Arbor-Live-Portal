@@ -13,7 +13,7 @@ export default function FinancialHubSettingsPage() {
       <PageHeader
         back={{ href: "/dashboard/financial-hub", label: "Ops Center" }}
         title="Ops Center settings"
-        description="Fee definitions, terms templates, and crew cost defaults used across quotes and invoices."
+        description="Fee definitions, terms templates, crew cost defaults, and the CoHo gift card alert."
       />
       <ArborOnlyGuard>
         <AdminOnlyGuard>

@@ -475,6 +475,38 @@ export default defineSchema({
     updatedAt: v.number(),
   }),
 
+  /**
+   * Singleton row: the shared CoHo gift card crew use for meals. The Toast
+   * `secureToken` is a bearer secret and lives in the deployment env only —
+   * never in this row and never sent to clients.
+   */
+  cohoGiftCard: defineTable({
+    cardNumber: v.string(),
+    balanceUsd: v.number(),
+    lastCheckedAt: v.number(),
+    /** Set when the alert sent; cleared once the balance recovers above threshold. */
+    lowBalanceNotifiedAt: v.optional(v.number()),
+    /** Last refresh failure, for admin visibility; cleared on the next success. */
+    lastError: v.optional(v.string()),
+  }),
+
+  /** Singleton row: Ops Center settings for the shared CoHo gift card alert. */
+  cohoGiftCardSettings: defineTable({
+    /** Low-balance alert recipients; external addresses are allowed. */
+    alertRecipients: v.array(v.string()),
+    lowBalanceThresholdUsd: v.number(),
+    updatedAt: v.number(),
+  }),
+
+  /** Singleton row: Ops Center settings for who is notified when crew finish onboarding. */
+  crewOnboardingSettings: defineTable({
+    /** Always notified; external addresses are allowed. */
+    alertRecipients: v.array(v.string()),
+    /** Notified only for Stanford-payroll hires (HR / Federal Work-Study). */
+    stanfordPayrollRecipients: v.array(v.string()),
+    updatedAt: v.number(),
+  }),
+
   inventoryItems: defineTable({
     /** Tag / identifier. Optional: an asset may be tracked by serial alone. */
     assetId: v.optional(v.string()),

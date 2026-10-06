@@ -29,6 +29,7 @@ import type * as bandRiderPdfDownload from "../bandRiderPdfDownload.js";
 import type * as bandRiders from "../bandRiders.js";
 import type * as bootstrap from "../bootstrap.js";
 import type * as capabilityDefinitions from "../capabilityDefinitions.js";
+import type * as cohoGiftCard from "../cohoGiftCard.js";
 import type * as comments from "../comments.js";
 import type * as crewApplications from "../crewApplications.js";
 import type * as crewPortal from "../crewPortal.js";
@@ -46,6 +47,7 @@ import type * as email_bandOnboardingReminders from "../email/bandOnboardingRemi
 import type * as email_bandPaymentEmails from "../email/bandPaymentEmails.js";
 import type * as email_bandScheduleEmails from "../email/bandScheduleEmails.js";
 import type * as email_bookingRequestEmails from "../email/bookingRequestEmails.js";
+import type * as email_cohoGiftCardEmails from "../email/cohoGiftCardEmails.js";
 import type * as email_constants from "../email/constants.js";
 import type * as email_damageReportEmails from "../email/damageReportEmails.js";
 import type * as email_enqueue from "../email/enqueue.js";
@@ -117,6 +119,7 @@ import type * as invoiceSettings from "../invoiceSettings.js";
 import type * as invoiceTerms from "../invoiceTerms.js";
 import type * as invoices from "../invoices.js";
 import type * as lib_actPositions from "../lib/actPositions.js";
+import type * as lib_alertRecipients from "../lib/alertRecipients.js";
 import type * as lib_analyticsBookings from "../lib/analyticsBookings.js";
 import type * as lib_analyticsQuery from "../lib/analyticsQuery.js";
 import type * as lib_analyticsTime from "../lib/analyticsTime.js";
@@ -312,6 +315,7 @@ declare const fullApi: ApiFromModules<{
   bandRiders: typeof bandRiders;
   bootstrap: typeof bootstrap;
   capabilityDefinitions: typeof capabilityDefinitions;
+  cohoGiftCard: typeof cohoGiftCard;
   comments: typeof comments;
   crewApplications: typeof crewApplications;
   crewPortal: typeof crewPortal;
@@ -329,6 +333,7 @@ declare const fullApi: ApiFromModules<{
   "email/bandPaymentEmails": typeof email_bandPaymentEmails;
   "email/bandScheduleEmails": typeof email_bandScheduleEmails;
   "email/bookingRequestEmails": typeof email_bookingRequestEmails;
+  "email/cohoGiftCardEmails": typeof email_cohoGiftCardEmails;
   "email/constants": typeof email_constants;
   "email/damageReportEmails": typeof email_damageReportEmails;
   "email/enqueue": typeof email_enqueue;
@@ -400,6 +405,7 @@ declare const fullApi: ApiFromModules<{
   invoiceTerms: typeof invoiceTerms;
   invoices: typeof invoices;
   "lib/actPositions": typeof lib_actPositions;
+  "lib/alertRecipients": typeof lib_alertRecipients;
   "lib/analyticsBookings": typeof lib_analyticsBookings;
   "lib/analyticsQuery": typeof lib_analyticsQuery;
   "lib/analyticsTime": typeof lib_analyticsTime;
