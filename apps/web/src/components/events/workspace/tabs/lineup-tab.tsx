@@ -92,13 +92,13 @@ function OpenMicCard() {
 }
 
 export function LineupTab() {
-  const { eventId, canEdit, isAdmin } = useEventWorkspace();
+  const { eventId, canEdit, hasOperationsAccess } = useEventWorkspace();
   return (
     <div className="space-y-4">
       <EventArtistBillSection eventId={eventId} canEdit={canEdit} />
       <OutreachCard eventId={eventId} canEdit={canEdit} />
       <EventBandRidersSection eventId={eventId} />
-      {isAdmin ? <OpenMicCard /> : null}
+      {hasOperationsAccess ? <OpenMicCard /> : null}
     </div>
   );
 }

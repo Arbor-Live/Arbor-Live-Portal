@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
+import { requireAdminOrOperations, requireArborInternalContext, requireAuth } from "./lib/auth";
 import {
   contactRichnessScore,
   ensureAlias,
@@ -52,7 +52,7 @@ export const listForAdmin = query({
     }),
   ),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireAdminOrOperations(ctx);
     await requireArborInternalContext(ctx);
     const groups = await ctx.db.query("invoiceGroups").take(500);
     const contacts = await ctx.db.query("invoiceContacts").take(2000);
@@ -91,7 +91,7 @@ export const listAliases = query({
   args: { groupId: v.id("invoiceGroups") },
   returns: v.array(aliasRowValue),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireAdminOrOperations(ctx);
     await requireArborInternalContext(ctx);
     const rows = await listAliasesForGroup(ctx, args.groupId);
     return rows
@@ -126,7 +126,7 @@ export const getMergePreview = query({
     ),
   }),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireAdminOrOperations(ctx);
     await requireArborInternalContext(ctx);
     const survivor = await ctx.db.get(args.survivorId);
     if (!survivor) throw new Error("Survivor host not found.");
@@ -299,7 +299,7 @@ export const addAlias = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireAdminOrOperations(ctx);
     await requireArborInternalContext(ctx);
     const group = await ctx.db.get(args.groupId);
     if (!group) throw new Error("Host organization not found.");
@@ -312,7 +312,7 @@ export const removeAlias = mutation({
   args: { aliasId: v.id("invoiceGroupAliases") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireAdminOrOperations(ctx);
     await requireArborInternalContext(ctx);
     const alias = await ctx.db.get(args.aliasId);
     if (!alias) throw new Error("Alias not found.");
@@ -332,7 +332,7 @@ export const merge = mutation({
     archivedVictimIds: v.array(v.id("invoiceGroups")),
   }),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireAdminOrOperations(ctx);
     await requireArborInternalContext(ctx);
     const now = Date.now();
     const survivor = await ctx.db.get(args.survivorId);

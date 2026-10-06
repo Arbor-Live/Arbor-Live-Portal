@@ -4,7 +4,7 @@ import type { Doc } from "./_generated/dataModel";
 import {
   getUserId,
   listAdminEmailsForVertical,
-  requireAdmin,
+  requireAdminOrOperations,
 } from "./lib/auth";
 import {
   bandApplicationsAdminUrl,
@@ -224,7 +224,7 @@ export const listAdmin = query({
     }),
   ),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireAdminOrOperations(ctx);
     const rows = args.status
       ? await ctx.db
           .query("bandApplications")
@@ -269,7 +269,7 @@ export const countPendingSubmitted = query({
   args: {},
   returns: v.number(),
   handler: async (ctx) => {
-    await requireAdmin(ctx);
+    await requireAdminOrOperations(ctx);
     const rows = await ctx.db
       .query("bandApplications")
       .withIndex("by_status", (q) => q.eq("status", "submitted"))
@@ -282,7 +282,7 @@ export const approve = mutation({
   args: { applicationId: v.id("bandApplications") },
   returns: v.object({ organizationId: v.string() }),
   handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
+    const admin = await requireAdminOrOperations(ctx);
     const adminId = getUserId(admin);
     if (!adminId) throw new Error("Unable to resolve admin user.");
 
@@ -432,7 +432,7 @@ export const decline = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
+    const admin = await requireAdminOrOperations(ctx);
     const adminId = getUserId(admin);
     const application = await ctx.db.get(args.applicationId);
     if (!application) throw new Error("Application not found.");

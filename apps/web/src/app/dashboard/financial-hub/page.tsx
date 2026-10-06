@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr";
-import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
+import { AdminOnlyContent, ArborOnlyGuard, OperationsOrAdminGuard } from "@/components/org-context-guard";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,17 +19,19 @@ export default function FinancialHubPage() {
   return (
     <div className="space-y-4">
       <ArborOnlyGuard>
-        <AdminOnlyGuard>
+        <OperationsOrAdminGuard>
           <PageHeader
             title="Ops Center"
             description="What needs attention across booking requests, quotes, invoices, and artist payouts."
             actions={
-              <Button asChild variant="outline" size="sm">
-                <Link href="/dashboard/financial-hub/settings">
-                  <SlidersHorizontalIcon />
-                  Settings
-                </Link>
-              </Button>
+              <AdminOnlyContent>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/dashboard/financial-hub/settings">
+                    <SlidersHorizontalIcon />
+                    Settings
+                  </Link>
+                </Button>
+              </AdminOnlyContent>
             }
           />
           <FinancialHubAttention />
@@ -53,7 +55,7 @@ export default function FinancialHubPage() {
               </CardContent>
             </Card>
           </div>
-        </AdminOnlyGuard>
+        </OperationsOrAdminGuard>
       </ArborOnlyGuard>
     </div>
   );

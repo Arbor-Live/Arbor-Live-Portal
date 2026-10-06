@@ -4,21 +4,31 @@ import { e2eEnv } from "../helpers/env";
 import { runConvex } from "../helpers/convex";
 
 /**
- * Routes the sidebar itself marks `adminOnly: true`
+ * Routes the sidebar itself marks `adminOnly` / `opsOnly`
  * (`apps/web/src/components/app-sidebar.tsx`) — the app's own statement of
- * which areas are admin-limited.
+ * which areas are limited, and to whom.
  */
 const adminRoutes = [
   { path: "/dashboard/users", label: "users" },
   { path: "/dashboard/users/crew-applications", label: "crew applications" },
+  { path: "/dashboard/financial-hub/settings", label: "ops center settings" },
+  { path: "/dashboard/inventory/types", label: "inventory types" },
+  { path: "/dashboard/inventory/import", label: "inventory import" },
+] as const;
+
+/** Admins and the Operations team (`OperationsOrAdminGuard`). */
+const operationsRoutes = [
   { path: "/dashboard/users/artist-applications", label: "band applications" },
   { path: "/dashboard/financial-hub", label: "financial hub" },
   { path: "/dashboard/financial-hub/insights", label: "insights" },
   { path: "/dashboard/events/crew-scheduling", label: "crew scheduling" },
   { path: "/dashboard/events/venues", label: "venues" },
-  { path: "/dashboard/inventory/types", label: "inventory types" },
-  { path: "/dashboard/inventory/import", label: "inventory import" },
 ] as const;
+
+const restrictedRoutes = [
+  ...adminRoutes.map((route) => ({ ...route, refusal: "Admin access required" })),
+  ...operationsRoutes.map((route) => ({ ...route, refusal: "Operations access required" })),
+];
 
 /**
  * The e2e crew user is a real `arbor_internal` member but not an admin, so they
@@ -36,11 +46,11 @@ test.describe("admin route guards", () => {
     });
   });
 
-  for (const { path, label } of adminRoutes) {
+  for (const { path, label, refusal } of restrictedRoutes) {
     test(`non-admin crew is refused on ${label}`, async ({ page }) => {
       await page.goto(path);
 
-      await expect(page.getByText("Admin access required").first()).toBeVisible({
+      await expect(page.getByText(refusal).first()).toBeVisible({
         timeout: 30_000,
       });
 
@@ -90,10 +100,10 @@ test.describe("admin route guards", () => {
 test.describe("admin route access for admins", () => {
   // Control: the same routes must still work for a real admin, otherwise the
   // guard above could be passing by breaking the page for everyone.
-  for (const { path, label } of adminRoutes) {
+  for (const { path, label } of restrictedRoutes) {
     test(`admin still reaches ${label}`, async ({ page }) => {
       await page.goto(path);
-      await expect(page.getByText("Admin access required")).toHaveCount(0, {
+      await expect(page.getByText(/(Admin|Operations) access required/)).toHaveCount(0, {
         timeout: 30_000,
       });
     });

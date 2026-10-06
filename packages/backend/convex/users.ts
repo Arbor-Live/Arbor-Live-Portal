@@ -14,6 +14,7 @@ import {
   isAdmin,
   isPortalAdmin,
   requireAdmin,
+  requireAdminOrOperations,
   requireArborInternalContext,
   requireAuth,
   requireBandContext,
@@ -652,10 +653,11 @@ export const listOrganizationsAdmin = query({
   },
 });
 
+/** Every artist org with payee details; Operations books and pays acts, so they read it too. */
 export const listBandOrganizationsAdmin = query({
   args: { includeArchived: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireAdminOrOperations(ctx);
     const organizations = await getAllOrganizations(ctx);
     const profiles = await ctx.db.query("organizationProfiles").withIndex("by_organizationType").take(1000);
     const profileByOrgId = new Map(profiles.map((profile) => [profile.organizationId, profile]));

@@ -5,6 +5,7 @@ import {
   type ActiveOrganizationContext,
   getActiveOrganizationContextOrNull,
   getUserId,
+  hasOperationsAccess,
   requireAdmin,
   requireAuth,
 } from "./lib/auth";
@@ -23,6 +24,7 @@ import {
   resolveProfileMembership,
 } from "./lib/userVerticals";
 import { countPendingPostEventWork, listMyPostEventWork } from "./lib/myEventActions";
+import { isTraineeDecisionNeeded, loadTrainingEndsAt } from "./lib/crewTraineeTraining";
 import { resolveUserStatus } from "./lib/userStatus";
 
 /** Cap events scanned for the unconfirmed-crew badge (full board uses its own query). */
@@ -50,6 +52,8 @@ export const getNavBadges = query({
     rangeEnd: v.number(),
     includeArborInternal: v.boolean(),
     includeAdmin: v.boolean(),
+    /** Operations team counts (artist applications); implied by `includeAdmin`. */
+    includeOperations: v.optional(v.boolean()),
     includeBand: v.boolean(),
     includeUnconfirmedCrew: v.optional(v.boolean()),
     includeMyEventActions: v.optional(v.boolean()),
@@ -86,6 +90,11 @@ export const getNavBadges = query({
     if (includeAdmin) {
       await requireAdmin(ctx);
     }
+    const includeOperations =
+      includeAdmin ||
+      (Boolean(args.includeOperations) &&
+        includeArborInternal &&
+        (await hasOperationsAccess(ctx, user)));
 
     const [
       pendingAvailability,
@@ -103,12 +112,12 @@ export const getNavBadges = query({
       includeArborInternal
         ? countMyPendingAvailability(ctx, getUserId(user), args.now)
         : Promise.resolve(0),
-      includeArborInternal && includeAdmin && includeUnconfirmedCrew
+      includeArborInternal && includeOperations && includeUnconfirmedCrew
         ? countUnconfirmedCrew(ctx, args.rangeStart, args.rangeEnd)
         : Promise.resolve(0),
       includeArborInternal ? countOpenBookingRequests(ctx) : Promise.resolve(0),
-      includeAdmin ? countSubmittedBandApplications(ctx) : Promise.resolve(0),
-      includeAdmin ? countSubmittedCrewApplications(ctx) : Promise.resolve(0),
+      includeOperations ? countSubmittedBandApplications(ctx) : Promise.resolve(0),
+      includeAdmin ? countCrewApplicationActions(ctx, args.now) : Promise.resolve(0),
       includeArborInternal ? countPendingDamageReports(ctx) : Promise.resolve(0),
       includeBand && orgContext
         ? countPendingBandPaymentActions(ctx, orgContext)
@@ -223,13 +232,29 @@ async function countSubmittedBandApplications(ctx: QueryCtx) {
   return rows.length;
 }
 
-/** Submitted applicants nobody has reached out to yet. */
-async function countSubmittedCrewApplications(ctx: QueryCtx) {
-  const rows = await ctx.db
-    .query("crewApplications")
-    .withIndex("by_status", (q) => q.eq("status", "submitted"))
-    .take(BADGE_STATUS_TAKE);
-  return rows.filter((row) => !row.outreachStage).length;
+/**
+ * Applicants waiting on staff: submitted ones nobody has reached out to yet,
+ * plus trainees whose training is over (Decision needed).
+ */
+async function countCrewApplicationActions(ctx: QueryCtx, now: number) {
+  const [submitted, trainees] = await Promise.all([
+    ctx.db
+      .query("crewApplications")
+      .withIndex("by_status", (q) => q.eq("status", "submitted"))
+      .take(BADGE_STATUS_TAKE),
+    ctx.db
+      .query("crewApplications")
+      .withIndex("by_status", (q) => q.eq("status", "trainee"))
+      .take(BADGE_STATUS_TAKE),
+  ]);
+  const decisionsNeeded = await Promise.all(
+    trainees.map(async (row) =>
+      isTraineeDecisionNeeded(row, await loadTrainingEndsAt(ctx, row._id), now),
+    ),
+  );
+  return (
+    submitted.filter((row) => !row.outreachStage).length + decisionsNeeded.filter(Boolean).length
+  );
 }
 
 async function countPendingEquipmentBorrowRequests(ctx: QueryCtx) {

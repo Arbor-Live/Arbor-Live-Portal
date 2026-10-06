@@ -454,6 +454,33 @@ export async function requireAnyVerticalOrAdmin(
   return user;
 }
 
+/** Admins, or members of the Operations team (who book acts, run events and invoices). */
+export async function hasOperationsAccess(ctx: AuthCtx, user: AuthUser): Promise<boolean> {
+  if (isAdmin(user)) return true;
+  const profile = await getUserAdminProfile(ctx, getUserId(user));
+  return hasVertical(resolveProfileMembership(profile ?? {}).verticals, "Operations");
+}
+
+/**
+ * Operations work in Arbor Live's context: events, booking acts, invoices and
+ * billing hosts. Admins and the Operations team; not crew.
+ */
+export async function requireOperationsAccess(ctx: AuthCtx): Promise<AuthUser> {
+  const user = await requireVerticalOrAdmin(ctx, "Operations");
+  await requireArborInternalContext(ctx);
+  return user;
+}
+
+/**
+ * Drop-in for `requireAdmin` on work the Operations team shares: admins pass
+ * exactly as before, Operations members only in Arbor Live's context.
+ */
+export async function requireAdminOrOperations(ctx: AuthCtx): Promise<AuthUser> {
+  const user = await requireAuth(ctx);
+  if (isAdmin(user)) return user;
+  return await requireOperationsAccess(ctx);
+}
+
 /**
  * True when an admin is an Arbor Live (portal) admin rather than an artist-org
  * admin. Band/DJ admins share Better Auth `role: "admin"`, so the role alone

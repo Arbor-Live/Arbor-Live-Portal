@@ -215,4 +215,24 @@ test.describe("crew application triage", () => {
     );
     expect(state.traineeShiftEventIds).toContain(seededEvent.eventId);
   });
+
+  test("a trainee moves to Decision needed once their training is over", async ({ page }) => {
+    const stamp = Date.now();
+    const done = `E2E Trained ${stamp}`;
+    const upcoming = `E2E Training Soon ${stamp}`;
+    runConvex("e2eHelpers:seedTraineeApplication", { name: done, trainingEnded: true });
+    runConvex("e2eHelpers:seedTraineeApplication", { name: upcoming, trainingEnded: false });
+
+    await page.goto("/dashboard/users/crew-applications");
+    await expect(page.getByTestId("crew-applications-page")).toBeVisible({ timeout: 25_000 });
+    const decisionGroup = page.getByTestId("crew-applications-group-decision_needed");
+    await expect(decisionGroup).toContainText(done, { timeout: 25_000 });
+    await expect(decisionGroup).not.toContainText(upcoming);
+    await expect(page.getByTestId("crew-applications-group-trainee")).toContainText(upcoming);
+
+    await decisionGroup.getByRole("button", { name: new RegExp(done) }).first().click();
+    const sheet = page.getByTestId("crew-application-sheet");
+    await expect(sheet.getByText("Decision needed").first()).toBeVisible({ timeout: 20_000 });
+    await expect(sheet.getByTestId("crew-application-training-ends")).toContainText("Training ended");
+  });
 });

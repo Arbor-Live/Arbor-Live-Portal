@@ -42,6 +42,7 @@ import { scheduleCrewScheduledEmails } from "./email/triggers";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { ensureOnboardingForOrgMembership } from "./onboarding";
 import { upsertUserCompensationRate } from "./lib/crewCompensation";
+import { loadTrainingEndsAt } from "./lib/crewTraineeTraining";
 import { clearUserBan } from "./lib/userAccess";
 import {
   ensureUserProfileDefaults,
@@ -305,6 +306,8 @@ export const listAdmin = query({
       outreachStage: v.optional(outreachStageValue),
       outreachUpdatedAt: v.optional(v.number()),
       outreachUpdatedByName: v.optional(v.string()),
+      /** Trainees only: when their last training shift ends ("Decision needed" after that). */
+      trainingEndsAt: v.optional(v.number()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -332,6 +335,13 @@ export const listAdmin = query({
       [row.assigneeUserId, row.outreachUpdatedByUserId].filter((id): id is string => Boolean(id)),
     );
     const userByKey = await findAuthUsersByIds(ctx, userIds);
+    const trainingEndsAtById = new Map(
+      await Promise.all(
+        rows
+          .filter((row) => row.status === "trainee")
+          .map(async (row) => [row._id, await loadTrainingEndsAt(ctx, row._id)] as const),
+      ),
+    );
 
     return rows
       .map((row) => ({
@@ -355,6 +365,7 @@ export const listAdmin = query({
         outreachStage: row.outreachStage,
         outreachUpdatedAt: row.outreachUpdatedAt,
         outreachUpdatedByName: authUserDisplayName(userByKey, row.outreachUpdatedByUserId),
+        trainingEndsAt: trainingEndsAtById.get(row._id),
       }));
   },
 });

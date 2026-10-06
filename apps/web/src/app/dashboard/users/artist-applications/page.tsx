@@ -1,4 +1,4 @@
-import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
+import { ArborOnlyGuard, OperationsOrAdminGuard } from "@/components/org-context-guard";
 import { BandApplicationsAdminClient } from "@/components/users/band-applications-admin-client";
 import type { Metadata } from "next";
 
@@ -9,9 +9,9 @@ export const metadata: Metadata = {
 export default function BandApplicationsPage() {
   return (
     <ArborOnlyGuard>
-      <AdminOnlyGuard>
+      <OperationsOrAdminGuard>
         <BandApplicationsAdminClient />
-      </AdminOnlyGuard>
+      </OperationsOrAdminGuard>
     </ArborOnlyGuard>
   );
 }

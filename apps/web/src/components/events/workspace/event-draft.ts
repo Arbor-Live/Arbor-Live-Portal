@@ -271,7 +271,7 @@ function parseUsd(value: string) {
 export function buildEventUpdatePatch(
   draft: EventDraft,
   changedKeys: EventDraftKey[],
-  options: { isAdmin: boolean; effectivePrimaryHostGroupId: string },
+  options: { isAdmin: boolean; hasOperationsAccess: boolean; effectivePrimaryHostGroupId: string },
 ) {
   const changed = new Set(changedKeys);
   const patch: {
@@ -352,6 +352,8 @@ export function buildEventUpdatePatch(
     if (changed.has("crewCostBufferPercent") && draft.crewCostBufferPercent.trim() !== "") {
       patch.crewCostBufferPercent = Number(draft.crewCostBufferPercent);
     }
+  }
+  if (options.hasOperationsAccess) {
     if (changed.has("openMicEnabled")) patch.openMicEnabled = draft.openMicEnabled;
     if (changed.has("openMicNotes")) patch.openMicNotes = draft.openMicNotes;
   }

@@ -125,7 +125,8 @@ export function VenuePicker({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canCreate = allowCreate && (viewer?.isAdmin ?? false);
+  const canCreate =
+    allowCreate && Boolean(viewer?.isAdmin || viewer?.verticals.includes("Operations"));
   const selected = selectedRows?.[0] ?? null;
 
   const options = useMemo(() => {

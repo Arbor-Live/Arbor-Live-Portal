@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import type { QueryCtx } from "../_generated/server";
-import { requireAdmin, requireArborInternalContext } from "./auth";
+import { requireOperationsAccess } from "./auth";
 
 export const EVENT_SCAN_LIMIT = 1000;
 export const INVOICE_SCAN_LIMIT = 2000;
@@ -14,9 +14,9 @@ export const analyticsRangeArgs = {
   endMs: v.number(),
 };
 
+/** Insights: admins and the Operations team, in Arbor Live's context. */
 export async function requireAnalyticsAccess(ctx: QueryCtx) {
-  await requireAdmin(ctx);
-  await requireArborInternalContext(ctx);
+  await requireOperationsAccess(ctx);
 }
 
 export function assertValidRange(startMs: number, endMs: number) {

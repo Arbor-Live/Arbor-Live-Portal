@@ -44,7 +44,6 @@ export function OverviewTab() {
     updateDraft,
     readOnly,
     canEdit,
-    isAdmin,
     linkedInvoice,
     userSelectOptions,
   } = useEventWorkspace();
@@ -83,7 +82,7 @@ export function OverviewTab() {
                 <VenuePicker
                   value={draft.venueId}
                   onChange={(venueId) => updateDraft({ venueId })}
-                  allowCreate={isAdmin}
+                  allowCreate
                 />
               </Field>
               <Field label="Event Type" icon={ShapesIcon}>

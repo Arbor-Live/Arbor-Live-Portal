@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useNow } from "@/lib/use-now";
 import { useQuery } from "convex/react";
 import { CheckIcon } from "@phosphor-icons/react";
 import { StatusPill } from "@/components/page-header";
@@ -61,6 +62,8 @@ export type CrewApplicationRow = {
   outreachStage?: OutreachStage;
   outreachUpdatedAt?: number;
   outreachUpdatedByName?: string;
+  /** Trainees only: when their last training shift ends. */
+  trainingEndsAt?: number;
 };
 
 export type TraineeAssignArgs = {
@@ -523,7 +526,8 @@ export function CrewApplicationSheetBody({
   onTurnAway: () => void;
   onDelete: () => void;
 }) {
-  const progress = applicationProgress(application);
+  const now = useNow(60_000);
+  const progress = applicationProgress(application, now);
   const canDecide = application.status === "submitted" || application.status === "trainee";
   // A trainee has already been through training once; membership is the usual next step.
   const [mode, setMode] = useState<DecideMode>(application.status === "trainee" ? "convert" : "trainee");
@@ -612,6 +616,13 @@ export function CrewApplicationSheetBody({
 
       {canDecide ? (
         <SheetSection title="Decide">
+          {application.status === "trainee" && application.trainingEndsAt !== undefined ? (
+            <p className="text-sm text-muted-foreground" data-testid="crew-application-training-ends">
+              {progress === "decision_needed"
+                ? `Training ended ${formatDateTime(application.trainingEndsAt)}. Invite them as a member or turn them away.`
+                : `Training ends ${formatDateTime(application.trainingEndsAt)}.`}
+            </p>
+          ) : null}
           <ToggleGroup
             type="single"
             variant="outline"

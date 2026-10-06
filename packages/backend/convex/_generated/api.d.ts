@@ -143,6 +143,7 @@ import type * as lib_crewHourThresholds from "../lib/crewHourThresholds.js";
 import type * as lib_crewShiftKinds from "../lib/crewShiftKinds.js";
 import type * as lib_crewTeams from "../lib/crewTeams.js";
 import type * as lib_crewTraineeIntro from "../lib/crewTraineeIntro.js";
+import type * as lib_crewTraineeTraining from "../lib/crewTraineeTraining.js";
 import type * as lib_crewedEvents from "../lib/crewedEvents.js";
 import type * as lib_e2eGuard from "../lib/e2eGuard.js";
 import type * as lib_emailPreferenceViewer from "../lib/emailPreferenceViewer.js";
@@ -426,6 +427,7 @@ declare const fullApi: ApiFromModules<{
   "lib/crewShiftKinds": typeof lib_crewShiftKinds;
   "lib/crewTeams": typeof lib_crewTeams;
   "lib/crewTraineeIntro": typeof lib_crewTraineeIntro;
+  "lib/crewTraineeTraining": typeof lib_crewTraineeTraining;
   "lib/crewedEvents": typeof lib_crewedEvents;
   "lib/e2eGuard": typeof lib_e2eGuard;
   "lib/emailPreferenceViewer": typeof lib_emailPreferenceViewer;

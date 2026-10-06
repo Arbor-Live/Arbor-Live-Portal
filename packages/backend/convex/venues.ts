@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
-import { requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
+import { requireArborInternalContext, requireAuth, requireOperationsAccess } from "./lib/auth";
 import {
   assertValidVenueType,
   DEFAULT_CIRCUIT_AMPERAGE,
@@ -108,11 +108,6 @@ const venueFieldsArgs = {
   contactEmail: v.optional(v.string()),
   contactPhone: v.optional(v.string()),
 };
-
-async function requireAdminVenueAccess(ctx: MutationCtx) {
-  await requireAdmin(ctx);
-  await requireArborInternalContext(ctx);
-}
 
 export const list = query({
   args: {},
@@ -337,7 +332,7 @@ export const getOptionsByIds = query({
 export const create = mutation({
   args: venueFieldsArgs,
   handler: async (ctx, args) => {
-    await requireAdminVenueAccess(ctx);
+    await requireOperationsAccess(ctx);
     const name = normalizeVenueName(args.name);
     if (!name) throw new Error("Venue name is required.");
     const kind = args.kind as VenueKind;
@@ -381,7 +376,7 @@ export const update = mutation({
     parentId: v.optional(v.union(v.id("venues"), v.null())),
   },
   handler: async (ctx, args) => {
-    await requireAdminVenueAccess(ctx);
+    await requireOperationsAccess(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Venue not found.");
 
@@ -461,7 +456,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("venues") },
   handler: async (ctx, args) => {
-    await requireAdminVenueAccess(ctx);
+    await requireOperationsAccess(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Venue not found.");
 
@@ -505,7 +500,7 @@ export const setLocation = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAdminVenueAccess(ctx);
+    await requireOperationsAccess(ctx);
     const venue = await ctx.db.get(args.id);
     if (!venue) throw new Error("Venue not found.");
     await ctx.db.patch(args.id, {
@@ -529,7 +524,7 @@ export const createQuick = mutation({
   },
   returns: v.id("venues"),
   handler: async (ctx, args) => {
-    await requireAdminVenueAccess(ctx);
+    await requireOperationsAccess(ctx);
     const name = normalizeVenueName(args.name);
     if (!name) throw new Error("Venue name is required.");
     const kind = args.kind as VenueKind;
