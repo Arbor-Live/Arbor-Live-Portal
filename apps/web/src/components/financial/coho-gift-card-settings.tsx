@@ -5,6 +5,8 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { AlertRecipientList } from "@/components/financial/alert-recipient-list";
 import { formatDateTime } from "@/lib/format";
 import { notify } from "@/lib/notify";
@@ -63,15 +65,12 @@ export function CohoGiftCardSettings() {
         </div>
 
         <div className="space-y-1">
-          <label className="text-sm font-medium" htmlFor="coho-threshold">
-            Alert below
-          </label>
-          <input
+          <Label htmlFor="coho-threshold">Alert below</Label>
+          <Input
             id="coho-threshold"
             type="number"
             min={0}
             step={1}
-            className="flex h-9 w-full rounded-md border bg-background px-3 py-1 text-sm"
             value={threshold}
             disabled={!ready || saving}
             onChange={(event) => setLocalThreshold(event.target.value)}

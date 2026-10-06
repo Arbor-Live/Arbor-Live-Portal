@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { notify } from "@/lib/notify";
 
 /** Mirrors the backend validator: no commas, dot + letters-only TLD. */
@@ -64,11 +65,10 @@ export function AlertRecipientList({
         ))
       )}
       <div className="flex gap-2">
-        <input
+        <Input
           type="email"
           placeholder="name@example.com"
           aria-label={`Add email address to ${label}`}
-          className="flex h-9 w-full rounded-md border bg-background px-3 py-1 text-sm"
           value={draft}
           disabled={disabled}
           onChange={(event) => setDraft(event.target.value)}
