@@ -476,21 +476,25 @@ export default defineSchema({
   }),
 
   /**
-   * Singleton row: the shared CoHo gift card crew use for meals. The Toast
-   * `secureToken` is a bearer secret and lives in the deployment env only —
-   * never in this row and never sent to clients.
+   * The CoHo gift cards crew use for meals. `secureToken` is a bearer secret:
+   * it is write-only (never returned to clients) and read only by the refresh
+   * action. Cards are added and removed in Ops Center settings.
    */
-  cohoGiftCard: defineTable({
-    cardNumber: v.string(),
-    balanceUsd: v.number(),
-    lastCheckedAt: v.number(),
-    /** Set when the alert sent; cleared once the balance recovers above threshold. */
+  cohoGiftCards: defineTable({
+    label: v.string(),
+    secureToken: v.string(),
+    cardNumber: v.optional(v.string()),
+    balanceUsd: v.optional(v.number()),
+    lastCheckedAt: v.optional(v.number()),
+    /** Set when this card's low-balance alert sent; cleared once it recovers. */
     lowBalanceNotifiedAt: v.optional(v.number()),
     /** Last refresh failure, for admin visibility; cleared on the next success. */
     lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
   }),
 
-  /** Singleton row: Ops Center settings for the shared CoHo gift card alert. */
+  /** Singleton row: Ops Center settings for the CoHo gift card alerts. */
   cohoGiftCardSettings: defineTable({
     /** Low-balance alert recipients; external addresses are allowed. */
     alertRecipients: v.array(v.string()),

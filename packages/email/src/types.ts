@@ -169,6 +169,7 @@ export type DamageReportAdminEmailProps = {
 };
 
 export type CohoGiftCardLowBalanceEmailProps = {
+  cardLabel?: string;
   balanceUsd: number;
   thresholdUsd: number;
   dashboardUrl: string;

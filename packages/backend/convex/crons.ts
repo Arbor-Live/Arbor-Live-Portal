@@ -34,9 +34,9 @@ crons.daily(
 );
 
 crons.interval(
-  "refresh CoHo gift card balance",
+  "refresh CoHo gift card balances",
   { hours: 6 },
-  internal.cohoGiftCard.refreshCohoGiftCard,
+  internal.cohoGiftCard.refreshCohoGiftCards,
   {},
 );
 
