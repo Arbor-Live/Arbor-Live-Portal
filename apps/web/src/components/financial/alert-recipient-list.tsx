@@ -11,11 +11,14 @@ const EMAIL_RE = /^[^\s@,]+@[^\s@,]+\.[A-Za-z]{2,}$/;
 export function AlertRecipientList({
   label,
   recipients,
+  reservedEmails,
   onChange,
   disabled,
 }: {
   label: string;
   recipients: string[];
+  /** Emails already covered elsewhere; the picker refuses to add them. */
+  reservedEmails?: readonly string[];
   onChange: (next: string[]) => void;
   disabled?: boolean;
 }) {
@@ -26,6 +29,10 @@ export function AlertRecipientList({
     if (!email) return;
     if (!EMAIL_RE.test(email)) {
       notify.error(`"${email}" is not a valid email address.`);
+      return;
+    }
+    if (reservedEmails?.includes(email)) {
+      notify.error("That person already receives this notification.");
       return;
     }
     if (!recipients.includes(email)) onChange([...recipients, email]);

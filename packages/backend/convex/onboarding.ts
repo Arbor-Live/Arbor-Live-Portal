@@ -15,6 +15,7 @@ import {
   findAuthOrganizationById,
   getActiveOrganizationContextOrNull,
   getUserId,
+  listPortalAdminEmails,
   requireAdmin,
   requireArborInternalContext,
   requireAuth,
@@ -358,6 +359,10 @@ async function scheduleOnboardingCompletedEmails(
 ) {
   const onboardingSettings = await ctx.db.query("crewOnboardingSettings").first();
   const recipients = new Set<string>();
+  // Every portal admin gets this (their own opt-out still applies in enqueue).
+  for (const email of await listPortalAdminEmails(ctx)) {
+    recipients.add(email.toLowerCase());
+  }
   for (const email of onboardingSettings?.alertRecipients ?? ONBOARDING_LEADERSHIP_EMAILS) {
     recipients.add(email.toLowerCase());
   }
@@ -412,6 +417,8 @@ async function scheduleOnboardingCompletedEmails(
 const crewOnboardingSettingsValue = v.object({
   alertRecipients: v.array(v.string()),
   stanfordPayrollRecipients: v.array(v.string()),
+  /** Portal admins who always receive this, so the picker can block adding them. */
+  adminRecipients: v.array(v.string()),
 });
 
 /**
@@ -428,6 +435,7 @@ export const getCrewOnboardingSettings = query({
     return {
       alertRecipients: row?.alertRecipients ?? [...ONBOARDING_LEADERSHIP_EMAILS],
       stanfordPayrollRecipients: row?.stanfordPayrollRecipients ?? [...ONBOARDING_FWS_EMAILS],
+      adminRecipients: await listPortalAdminEmails(ctx),
     };
   },
 });

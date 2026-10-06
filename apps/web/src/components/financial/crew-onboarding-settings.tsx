@@ -43,12 +43,14 @@ export function CrewOnboardingSettings() {
         <AlertRecipientList
           label="Notify on completion"
           recipients={alertRecipients}
+          reservedEmails={settings?.adminRecipients}
           onChange={setLocalAlert}
           disabled={!ready || saving}
         />
         <AlertRecipientList
           label="Stanford payroll (HR / FWS)"
           recipients={stanfordPayrollRecipients}
+          reservedEmails={settings?.adminRecipients}
           onChange={setLocalPayroll}
           disabled={!ready || saving}
         />
