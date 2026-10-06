@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useNow } from "@/lib/use-now";
 import { useQuery } from "convex/react";
 import { CheckIcon } from "@phosphor-icons/react";
 import { StatusPill } from "@/components/page-header";
@@ -525,7 +526,7 @@ export function CrewApplicationSheetBody({
   onTurnAway: () => void;
   onDelete: () => void;
 }) {
-  const [now] = useState(() => Date.now());
+  const now = useNow(60_000);
   const progress = applicationProgress(application, now);
   const canDecide = application.status === "submitted" || application.status === "trainee";
   // A trainee has already been through training once; membership is the usual next step.

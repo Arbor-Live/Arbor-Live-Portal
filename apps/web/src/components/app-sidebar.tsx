@@ -7,6 +7,7 @@ import { useState, type ComponentProps } from "react"
 import { authClient } from "@/lib/auth-client"
 import { releasePushSubscription } from "@/lib/pwa"
 import { useMutation, useQuery } from "convex/react"
+import { useNow } from "@/lib/use-now"
 import { api } from "@/lib/convex-api"
 import { isArtistOrganizationType } from "@/lib/artist-types"
 import { useSessionShell } from "@/components/session-shell-provider"
@@ -229,7 +230,8 @@ const secondaryItems = [
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const router = useRouter()
-  const [now] = useState(() => Date.now())
+  // Refreshed so time-based badges (a trainee's training just ended) catch up.
+  const now = useNow(5 * 60_000)
   const [adminSchedulingRange] = useState(() => getDefaultAdminSchedulingRange())
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
   const shell = useSessionShell()

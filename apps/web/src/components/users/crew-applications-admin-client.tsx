@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
+import { useNow } from "@/lib/use-now";
 import {
   activeFilters,
   FilterBar,
@@ -74,7 +75,8 @@ export function CrewApplicationsAdminClient() {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [pending, setPending] = useState(false);
-  const [now] = useState(() => Date.now());
+  // Ticks so a trainee moves to Decision needed while the page is open.
+  const now = useNow(60_000);
 
   const applied = activeFilters(filters);
   const statuses = statusesForProgressFilter(applied.progress);
