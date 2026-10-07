@@ -5,9 +5,12 @@ import { loadAdminProfilesByStatus } from "./userProfiles";
 
 type Profile = Doc<"userAdminProfiles">;
 
-function row(userId: string, status: string): Profile {
-  return { userId, status, createdAt: 0, updatedAt: 0 } as unknown as Profile;
+function row(userId: string, status: string | undefined, extra: Record<string, unknown> = {}): Profile {
+  return { userId, status, createdAt: 0, updatedAt: 0, ...extra } as unknown as Profile;
 }
+
+/** Key for rows with no stored `status` (looked up with `eq("status", undefined)`). */
+const UNSET = "__unset__";
 
 /** Rows keyed by stored `status`; only `userAdminProfiles.by_status` is read. */
 function fakeCtx(rowsByStatus: Record<string, Profile[]>): QueryCtx {
@@ -17,14 +20,14 @@ function fakeCtx(rowsByStatus: Record<string, Profile[]>): QueryCtx {
         return {
           withIndex(
             index: string,
-            apply: (q: { eq: (field: string, value: string) => string }) => string,
+            apply: (q: { eq: (field: string, value: string | undefined) => string }) => string,
           ) {
             expect(table).toBe("userAdminProfiles");
             expect(index).toBe("by_status");
             const status = apply({
               eq: (field, value) => {
                 expect(field).toBe("status");
-                return value;
+                return value ?? UNSET;
               },
             });
             return {
@@ -57,6 +60,17 @@ describe("loadAdminProfilesByStatus", () => {
     expect(rows).toHaveLength(502);
     expect(rows.some((profile) => profile.userId === "a500")).toBe(true);
     expect(rows.some((profile) => profile.userId === "i1")).toBe(true);
+  });
+
+  it("classifies legacy rows with no stored status like resolveUserStatus", async () => {
+    const ctx = fakeCtx({
+      active: [row("a", "active")],
+      [UNSET]: [row("legacy-active", undefined), row("legacy-alumni", undefined, { active: false })],
+    });
+    const active = await loadAdminProfilesByStatus(ctx, ["active"]);
+    expect(active.map((profile) => profile.userId).sort()).toEqual(["a", "legacy-active"]);
+    const alumni = await loadAdminProfilesByStatus(ctx, ["alumni"]);
+    expect(alumni.map((profile) => profile.userId)).toEqual(["legacy-alumni"]);
   });
 
   it("refuses to return a partial roster past the read cap", async () => {

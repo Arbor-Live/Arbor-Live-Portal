@@ -1,6 +1,6 @@
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import type { UserStatus } from "./userStatus";
+import { resolveUserStatus, type UserStatus } from "./userStatus";
 
 /**
  * Fail loudly rather than silently truncating once the roster is implausibly
@@ -33,10 +33,9 @@ export async function loadAllAdminProfiles(
  * the `by_status` index instead of scanning the whole table. One bounded read
  * per status, with the same loud cap as `loadAllAdminProfiles`.
  *
- * Only rows with a stored `status` can match: every insert sets it, and
- * `backfillUserProfileStatus` fills in older rows (a row with no `status`
- * predates that migration — run `migrations:runAll` before trusting this on an
- * old deployment).
+ * Rows with no stored `status` predate `backfillUserProfileStatus`; they are
+ * read too and classified with `resolveUserStatus`, exactly as the rest of the
+ * app does, so a deployment that hasn't run the migration loses no one.
  */
 export async function loadAdminProfilesByStatus(
   ctx: QueryCtx | MutationCtx,
@@ -55,5 +54,16 @@ export async function loadAdminProfilesByStatus(
     }
     rows.push(...matching);
   }
+  const wanted = new Set<UserStatus>(statuses);
+  const unset = await ctx.db
+    .query("userAdminProfiles")
+    .withIndex("by_status", (q) => q.eq("status", undefined))
+    .take(MAX_ADMIN_PROFILES + 1);
+  if (unset.length > MAX_ADMIN_PROFILES) {
+    throw new Error(
+      `userAdminProfiles without a status exceeded ${MAX_ADMIN_PROFILES} rows; refusing to return a partial list.`,
+    );
+  }
+  rows.push(...unset.filter((row) => wanted.has(resolveUserStatus(row))));
   return rows;
 }
