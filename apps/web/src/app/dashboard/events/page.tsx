@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { EventsMainPageClient } from "@/components/events/events-main-page-client";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { PageHeader } from "@/components/page-header";
@@ -15,7 +16,10 @@ export default function EventsPage() {
         description="Track your event calendar and monitor upcoming event states in one place."
       />
       <ArborOnlyGuard>
-        <EventsMainPageClient />
+        {/* The view lives in search params, which need a Suspense boundary. */}
+        <Suspense fallback={<p className="text-sm text-muted-foreground">Loading events…</p>}>
+          <EventsMainPageClient />
+        </Suspense>
       </ArborOnlyGuard>
     </div>
   );

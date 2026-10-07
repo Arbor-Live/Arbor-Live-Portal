@@ -46,11 +46,10 @@ export function DashboardHomeClient() {
     );
   }
 
-  if (viewer.isAdmin) {
-    return <Skeleton className="h-48 w-full" />;
-  }
-
-  if (!viewer.isCrewOnly) {
+  // Everything left is on its way out: admins previewing a non-Arbor org and
+  // non-crew staff are redirected to /dashboard/events by the effect above, so
+  // hold the same loading shell until it runs.
+  if (viewer.isAdmin || !viewer.isCrewOnly) {
     return <Skeleton className="h-48 w-full" />;
   }
 

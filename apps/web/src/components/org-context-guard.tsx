@@ -1,7 +1,8 @@
 "use client";
 
 import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/list-page";
+import { Skeleton } from "@/components/ui/skeleton";
 import { isArtistOrganizationType } from "@/lib/artist-types";
 
 /**
@@ -19,18 +20,14 @@ export function AdminOnlyGuard({ children }: { children: React.ReactNode }) {
   const shell = useSessionShell();
   const viewer = useSessionViewer();
 
-  // Shell still loading — render nothing rather than flashing a denial.
-  if (shell === undefined) return null;
+  // Shell still loading — hold the page shell rather than flashing a denial.
+  if (shell === undefined) return <Skeleton className="h-48 w-full" />;
   if (!viewer?.isAdmin) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Admin access required</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          This section is limited to Arbor Live admins. Ask an admin if you need access.
-        </CardContent>
-      </Card>
+      <EmptyState>
+        Admin access required. This section is limited to Arbor Live admins. Ask an admin if you
+        need access.
+      </EmptyState>
     );
   }
 
@@ -52,18 +49,13 @@ export function OperationsOrAdminGuard({ children }: { children: React.ReactNode
   const shell = useSessionShell();
   const viewer = useSessionViewer();
 
-  if (shell === undefined) return null;
+  if (shell === undefined) return <Skeleton className="h-48 w-full" />;
   if (!viewer?.isAdmin && !viewer?.verticals.includes("Operations")) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Operations access required</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          This section is limited to the Operations team and Arbor Live admins. Ask an admin if you need
-          access.
-        </CardContent>
-      </Card>
+      <EmptyState>
+        Operations access required. This section is limited to the Operations team and Arbor Live
+        admins. Ask an admin if you need access.
+      </EmptyState>
     );
   }
 
@@ -74,29 +66,20 @@ export function ArborOnlyGuard({ children }: { children: React.ReactNode }) {
   const shell = useSessionShell();
   const activeOrg = shell === undefined ? undefined : (shell?.activeOrganization ?? null);
 
-  if (activeOrg === undefined) return null;
+  if (activeOrg === undefined) return <Skeleton className="h-48 w-full" />;
   if (!activeOrg) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>No Active Organization</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Select an active organization from the sidebar to continue.
-        </CardContent>
-      </Card>
+      <EmptyState>
+        No Active Organization. Select an active organization from the sidebar to continue.
+      </EmptyState>
     );
   }
   if (activeOrg.organizationType !== "arbor_internal") {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Arbor Internal Only</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          This section is only available while your active organization is Arbor Live.
-        </CardContent>
-      </Card>
+      <EmptyState>
+        Arbor Internal Only. This section is only available while your active organization is Arbor
+        Live.
+      </EmptyState>
     );
   }
 
@@ -106,29 +89,20 @@ export function ArborOnlyGuard({ children }: { children: React.ReactNode }) {
 export function BandOnlyGuard({ children }: { children: React.ReactNode }) {
   const shell = useSessionShell();
   const activeOrg = shell === undefined ? undefined : (shell?.activeOrganization ?? null);
-  if (activeOrg === undefined) return null;
+  if (activeOrg === undefined) return <Skeleton className="h-48 w-full" />;
   if (!activeOrg) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>No Active Organization</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Select an active organization from the sidebar to continue.
-        </CardContent>
-      </Card>
+      <EmptyState>
+        No Active Organization. Select an active organization from the sidebar to continue.
+      </EmptyState>
     );
   }
   if (!isArtistOrganizationType(activeOrg.organizationType)) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Artist Organization Only</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Switch to an artist organization in the sidebar to access this section.
-        </CardContent>
-      </Card>
+      <EmptyState>
+        Artist Organization Only. Switch to an artist organization in the sidebar to access this
+        section.
+      </EmptyState>
     );
   }
   return <>{children}</>;
@@ -142,20 +116,15 @@ export function BandOrAdminGuard({ children }: { children: React.ReactNode }) {
   const viewer = useSessionViewer();
   const activeOrg = shell === undefined ? undefined : (shell?.activeOrganization ?? null);
 
-  if (shell === undefined) return null;
+  if (shell === undefined) return <Skeleton className="h-48 w-full" />;
   if (viewer?.isAdmin) return <>{children}</>;
 
-  if (activeOrg === undefined) return null;
+  if (activeOrg === undefined) return <Skeleton className="h-48 w-full" />;
   if (!activeOrg) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>No Active Organization</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Select an active organization from the sidebar to continue.
-        </CardContent>
-      </Card>
+      <EmptyState>
+        No Active Organization. Select an active organization from the sidebar to continue.
+      </EmptyState>
     );
   }
   if (isArtistOrganizationType(activeOrg.organizationType)) {
@@ -163,13 +132,8 @@ export function BandOrAdminGuard({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Admin access required</CardTitle>
-      </CardHeader>
-      <CardContent className="text-sm text-muted-foreground">
-        This section is limited to artist organizations and Arbor Live admins.
-      </CardContent>
-    </Card>
+    <EmptyState>
+      Admin access required. This section is limited to artist organizations and Arbor Live admins.
+    </EmptyState>
   );
 }

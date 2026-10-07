@@ -75,7 +75,7 @@ export function PageHeader({
 }) {
   const actionBar =
     actions || menu ? (
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         {actions}
         {menu ? (
           <DropdownMenu>
@@ -98,7 +98,7 @@ export function PageHeader({
       {/* With a back link, actions share its row; without one they sit beside
           the title, so they never float above empty space. */}
       {back ? (
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 gap-y-2">
           <Button asChild variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
             <Link href={back.href}>
               <ArrowLeftIcon />
@@ -150,14 +150,19 @@ export function EditablePageTitle({
   placeholder?: string;
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">) {
   return (
-    <input
-      {...props}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      aria-label={label}
-      placeholder={placeholder}
-      className="-mx-1.5 w-full border border-transparent bg-transparent px-1.5 py-0.5 text-2xl font-semibold tracking-tight outline-none hover:border-border focus:border-ring"
-    />
+    // The page's only `h1`, so pages with a renameable title keep a heading
+    // landmark. The input carries the title styling; the wrapper only resets
+    // the default `h1` margin so the visual is unchanged.
+    <h1 className="m-0">
+      <input
+        {...props}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-label={label}
+        placeholder={placeholder}
+        className="-mx-1.5 w-full border border-transparent bg-transparent px-1.5 py-0.5 text-2xl font-semibold tracking-tight outline-none hover:border-border focus:border-ring"
+      />
+    </h1>
   );
 }
 

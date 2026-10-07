@@ -40,7 +40,7 @@ test.describe("Stanford calendar periods", () => {
       { timeout: 30_000 },
     );
 
-    await page.getByRole("button", { name: "Calendar", exact: true }).click();
+    await page.getByRole("radio", { name: "Calendar", exact: true }).click();
     await expect(page.getByTestId("calendar-quarter-week").first()).toHaveText(
       /^(Wk \d+|Finals|.*break|Thanksgiving)$/,
       { timeout: 30_000 },

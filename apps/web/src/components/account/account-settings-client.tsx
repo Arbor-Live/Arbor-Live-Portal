@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { Separator } from "@/components/ui/separator";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
@@ -56,6 +57,7 @@ function authErrorMessage(error: { message?: unknown }, fallback: string) {
 }
 
 export function AccountSettingsClient() {
+  const { confirm } = useAppDialog();
   const account = useQuery(api.account.getMyAccount, {});
   const generateAvatarUploadUrl = useMutation(api.account.generateAvatarUploadUrl);
   const setMyAvatar = useMutation(api.account.setMyAvatar);
@@ -221,6 +223,12 @@ export function AccountSettingsClient() {
   }
 
   async function onRemoveAvatar() {
+    const ok = await confirm({
+      title: "Remove your photo?",
+      destructive: true,
+      confirmLabel: "Remove photo",
+    });
+    if (!ok) return;
     setAvatarBusy(true);
     setAvatarMessage(null);
     setAvatarError(null);
@@ -256,6 +264,13 @@ export function AccountSettingsClient() {
   });
 
   async function onDeletePasskey(id: string) {
+    const ok = await confirm({
+      title: "Remove this passkey?",
+      description: "You'll need your password or another passkey to sign in.",
+      destructive: true,
+      confirmLabel: "Remove passkey",
+    });
+    if (!ok) return;
     setPasskeyMessage(null);
     setPasskeyError(null);
     setPasskeyBusy(true);

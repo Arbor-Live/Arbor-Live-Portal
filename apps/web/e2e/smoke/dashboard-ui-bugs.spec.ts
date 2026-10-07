@@ -11,7 +11,7 @@ test.describe("dashboard UI fixes", () => {
       timeout: 30_000,
     });
 
-    // "My Timecards" (/dashboard/timecards/mine) wins over "Crew timecards"
+    // "My timecards" (/dashboard/timecards/mine) wins over "Crew timecards"
     // (/dashboard/timecards); the parent must not also read active.
     const mine = page.locator('a[href="/dashboard/timecards/mine"]').first();
     await expect(mine).toHaveAttribute("data-active", "true", { timeout: 30_000 });

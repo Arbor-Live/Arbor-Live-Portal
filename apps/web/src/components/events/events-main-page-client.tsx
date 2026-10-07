@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSyncExternalStore, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { EventsBoardView } from "@/components/events/events-board-view";
@@ -15,6 +16,7 @@ import {
   type FilterState,
 } from "@/components/filter-bar";
 import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   ACADEMIC_PERIOD_LABELS,
   academicPeriod,
@@ -40,10 +42,42 @@ const EventsCalendarView = dynamic(
   },
 );
 
-type EventsView = "calendar" | "board" | "upcoming";
+const EVENTS_VIEWS = ["calendar", "board", "upcoming"] as const;
+
+type EventsView = (typeof EVENTS_VIEWS)[number];
+
+function isEventsView(value: string | null): value is EventsView {
+  return EVENTS_VIEWS.includes(value as EventsView);
+}
+
+const WIDE_SCREEN_QUERY = "(min-width: 768px)";
+
+function subscribeToWideScreen(callback: () => void) {
+  const mediaQuery = window.matchMedia(WIDE_SCREEN_QUERY);
+  mediaQuery.addEventListener("change", callback);
+  return () => mediaQuery.removeEventListener("change", callback);
+}
+
+function isWideScreen() {
+  return window.matchMedia(WIDE_SCREEN_QUERY).matches;
+}
 
 export function EventsMainPageClient() {
-  const [view, setView] = useState<EventsView>("board");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const viewParam = searchParams.get("view");
+  // `?view=` wins. Without it the default is board on wide screens and upcoming
+  // on phones; the server renders board (the wide snapshot) so hydration is
+  // consistent, and the client picks up the real viewport from there.
+  const wideScreen = useSyncExternalStore(subscribeToWideScreen, isWideScreen, () => true);
+  const view: EventsView = isEventsView(viewParam) ? viewParam : wideScreen ? "board" : "upcoming";
+
+  function selectView(next: EventsView) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("view", next);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
   // Cancelled events are hidden to start with, as a chip so they're one click away.
   const [filters, setFilters] = useState<FilterState>({
     status: { operator: "is_not", values: ["cancelled"] },
@@ -131,15 +165,20 @@ export function EventsMainPageClient() {
         onChange={setFilters}
       >
         <div className="ml-auto flex flex-wrap gap-2">
-          <Button type="button" variant={view === "calendar" ? "default" : "outline"} onClick={() => setView("calendar")}>
-            Calendar
-          </Button>
-          <Button type="button" variant={view === "board" ? "default" : "outline"} onClick={() => setView("board")}>
-            Board
-          </Button>
-          <Button type="button" variant={view === "upcoming" ? "default" : "outline"} onClick={() => setView("upcoming")}>
-            Upcoming
-          </Button>
+          <ToggleGroup
+            type="single"
+            size="lg"
+            variant="outline"
+            value={view}
+            onValueChange={(next) => {
+              if (isEventsView(next)) selectView(next);
+            }}
+            aria-label="Events view"
+          >
+            <ToggleGroupItem value="calendar">Calendar</ToggleGroupItem>
+            <ToggleGroupItem value="board">Board</ToggleGroupItem>
+            <ToggleGroupItem value="upcoming">Upcoming</ToggleGroupItem>
+          </ToggleGroup>
           <Button asChild>
             <Link href="/dashboard/events/new">Create Event</Link>
           </Button>

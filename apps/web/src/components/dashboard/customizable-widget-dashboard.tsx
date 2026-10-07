@@ -7,6 +7,7 @@ import { api } from "@/lib/convex-api";
 import { EmptyState } from "@/components/list-page";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { SortableList } from "@/components/ui/sortable-list";
 import { Switch } from "@/components/ui/switch";
@@ -64,6 +65,7 @@ export function CustomizableWidgetDashboard({
   });
   const savePreference = useMutation(api.dashboardPreferences.saveMyDashboardPreference);
   const resetPreference = useMutation(api.dashboardPreferences.resetMyDashboardPreference);
+  const { confirm } = useAppDialog();
   const [isCustomizing, setIsCustomizing] = useState(false);
   const normalizedPreference = useMemo(
     () => normalizePreference(widgets, preference),
@@ -105,9 +107,15 @@ export function CustomizableWidgetDashboard({
   }
 
   async function handleResetLayout() {
+    const ok = await confirm({
+      title: "Reset Home to the default widgets?",
+      confirmLabel: "Reset layout",
+    });
+    if (!ok) return;
     try {
       await resetPreference({ dashboardKey });
       setIsCustomizing(false);
+      notify.success("Layout reset.");
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
     }
