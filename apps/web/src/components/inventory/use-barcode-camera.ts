@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { IScannerControls } from "@zxing/browser";
 import type { DecodeHintType as DecodeHint } from "@zxing/library";
 import {
@@ -148,8 +148,9 @@ async function createNativeDetector(Detector: BarcodeDetectorCtor) {
  *
  * Uses the native `BarcodeDetector` where available and `@zxing/browser`
  * everywhere else (Safari / iOS), so the same component works on an iPhone.
- * Opens on the phone's ultra wide (0.5×) lens when it has one; `lenses` /
- * `selectLens` switch lenses, and a lens picked by hand is remembered.
+ * Opens on the phone's ultra wide (0.5×) lens when it has one, and remembers
+ * that lens so later opens start on it; `lenses` / `selectLens` switch lenses,
+ * and a lens picked by hand replaces the remembered one.
  */
 /**
  * What happened to a read. `void` counts as accepted.
@@ -233,11 +234,11 @@ export function useBarcodeCamera(
     };
   }, [sessionId]);
 
-  function closeCamera() {
+  const closeCamera = useCallback(() => {
     releaseBarcodeCameraSession(sessionId);
     setCameraOn(false);
     setCameraError(null);
-  }
+  }, [sessionId]);
 
   function toggleCamera() {
     if (cameraOn) {
@@ -289,8 +290,9 @@ export function useBarcodeCamera(
     /** De-dupe and forward a raw scan to the caller. */
     async function handleRaw(value: string) {
       const raw = value.trim();
+      // A detect that resolves after the camera closed must not reach the caller.
       // One read at a time: ZXing fires per frame without waiting for the last read.
-      if (!raw || inFlightRef.current) return;
+      if (cancelled || !raw || inFlightRef.current) return;
       const now = Date.now();
       if (raw === lastScanRef.current.value && now - lastScanRef.current.at <= 2000) {
         // Still in view: slide the window so it can't re-fire while held up.
@@ -412,7 +414,8 @@ export function useBarcodeCamera(
         if (cancelled) return;
         setLenses(available);
         // The 1× lens can't focus on a label held close, so default to the
-        // ultra wide (0.5×) when the phone has one. A lens picked by hand wins.
+        // ultra wide (0.5×) when the phone has one. Remember it so the next open
+        // starts there instead of switching again. A lens picked by hand wins.
         const closeUp = available.find((lens) => lens.label === CLOSE_UP_LENS_LABEL);
         if (!requestedLensId && closeUp && closeUp.deviceId !== activeId) {
           writeStoredLens(closeUp.deviceId);

@@ -68,10 +68,14 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
   const focusAssetLocalIdRef = useRef<string | null>(null);
   const serialInputRefs = useRef(new Map<string, HTMLInputElement>());
   const assetInputRefs = useRef(new Map<string, HTMLInputElement>());
+  const stepRef = useRef(step);
   const tagsRef = useRef(tags);
   useEffect(() => {
     tagsRef.current = tags;
   }, [tags]);
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
 
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: true });
   const types = useQuery(api.inventoryTypes.listOptions, {});
@@ -231,6 +235,8 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
    * scanned back to back, and never moves focus (no keyboard popping up).
    */
   const labelCamera = useBarcodeCamera((raw): ScanOutcome => {
+    // A read that lands after leaving the tags step must not edit the batch.
+    if (stepRef.current !== 2) return "rejected";
     const existing = new Set(
       (itemSummaries ?? []).flatMap((item) => (item.assetId ? [item.assetId.toLowerCase()] : [])),
     );
@@ -244,6 +250,11 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
     setTags(result.tags);
     return "accepted";
   });
+
+  const closeLabelCamera = labelCamera.closeCamera;
+  useEffect(() => {
+    if (step !== 2) closeLabelCamera();
+  }, [step, closeLabelCamera]);
 
   async function createNewType() {
     if (!typeDraft.name.trim() || !typeDraft.model.trim() || !effectiveTypeDraftCategory) {
