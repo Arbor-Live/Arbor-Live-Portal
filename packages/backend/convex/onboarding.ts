@@ -977,8 +977,12 @@ export const waiveCrewOnboarding = mutation({
   },
 });
 
-/** One row per user; far above the roster, low enough to stay inside read limits. */
-const MAX_ONBOARDING_ROWS = 5_000;
+/**
+ * One row per user, several times the roster. Rows carry ~25 fields, so this
+ * also keeps the read (with the admin profiles it's joined to) well under
+ * Convex's 16 MiB per-query limit.
+ */
+const MAX_ONBOARDING_ROWS = 2_000;
 
 /**
  * Every onboarding row, or a thrown error rather than a partial list. A single

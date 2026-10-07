@@ -2720,7 +2720,7 @@ export const updateUserAdmin = mutation({
     // The global role caches memberships, so derive it rather than taking
     // `args.role` at its word: "admin" sticks only with an Arbor Live admin
     // membership behind it.
-    if (args.organizationMemberships) {
+    if (args.organizationMemberships?.length) {
       await syncGlobalRoleFromMemberships(ctx, args.userId);
     } else if (args.role) {
       const role =
