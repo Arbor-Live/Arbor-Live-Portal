@@ -1,6 +1,20 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { test, expect } from "@playwright/test";
 import { crewAuthFile } from "../helpers/auth";
 import { runConvex } from "../helpers/convex";
+
+/** Ring's thumbnails are one H.264 keyframe, not an image; this one is a generated test pattern. */
+async function uploadKeyframeThumbnail() {
+  const { uploadUrl } = runConvex("e2eHelpers:generateRingThumbnailUploadUrl") as { uploadUrl: string };
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: { "Content-Type": "image/h264" },
+    body: readFileSync(path.join(__dirname, "ring-thumbnail.h264")),
+  });
+  const { storageId } = (await response.json()) as { storageId: string };
+  return storageId;
+}
 
 test.describe("ring camera page", () => {
   test("lists clips by day, filters by type, and steps through them in the player", async ({ page }) => {
@@ -34,6 +48,17 @@ test.describe("ring camera page", () => {
     await page.reload();
     await expect(page.getByTestId("ring-clip-sheet")).toBeVisible({ timeout: 30_000 });
     await expect(page).toHaveURL(new RegExp(`clip=${clipIds[1]}`));
+  });
+
+  test("decodes Ring's video-frame thumbnails into images", async ({ page }) => {
+    test.setTimeout(120_000);
+    const storageId = await uploadKeyframeThumbnail();
+    runConvex("e2eHelpers:seedRingCamera", { clipCount: 3, thumbnailStorageIds: [storageId] });
+
+    await page.goto("/dashboard/camera");
+    const thumbnail = page.getByTestId("ring-clip-row").first().getByTestId("ring-clip-thumbnail");
+    await expect(thumbnail).toHaveAttribute("src", /^blob:/, { timeout: 30_000 });
+    await expect.poll(() => thumbnail.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(320);
   });
 
   test.describe("as crew", () => {

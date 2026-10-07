@@ -12,7 +12,6 @@ import {
   RingRequestError,
   searchRingClips,
   type RingCamera,
-  type RingClip,
 } from "./lib/ringClient";
 import { appError } from "./lib/errors";
 import { RING_CLIP_RETENTION_MS } from "./ringCamera";
@@ -110,17 +109,7 @@ async function syncClips(ctx: ActionCtx) {
   const { camera, clips } = await withRing(ctx, async (accessToken, hardwareId) => {
     const camera = pickCamera(await listRingCameras(fetch, accessToken, hardwareId), connection.camera?.deviceId);
     if (!camera) throw new RingRequestError("This Ring account has no cameras.", 404);
-    // One day per request, so a long backfill never hits a page limit.
-    const clips: RingClip[] = [];
-    for (let start = from; start < now; start += DAY_MS) {
-      clips.push(
-        ...(await searchRingClips(fetch, accessToken, hardwareId, {
-          deviceId: camera.deviceId,
-          from: start,
-          to: Math.min(start + DAY_MS, now),
-        })),
-      );
-    }
+    const clips = await searchRingClips(fetch, accessToken, hardwareId, { deviceId: camera.deviceId, since: from });
     return { camera, clips };
   });
 
