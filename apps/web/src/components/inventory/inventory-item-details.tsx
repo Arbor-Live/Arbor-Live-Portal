@@ -7,12 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  assetSearchVariants,
   looksLikeAssetTag,
   looksLikeSerialNumber,
   normalizeAssetScanInput,
 } from "@/lib/asset-scan";
 import { SearchableSelect } from "./searchable-select";
 import { ScanInput } from "./scan-input";
+import { BarcodeCameraView } from "./barcode-camera-view";
 import { useBarcodeCamera, type ScanOutcome } from "./use-barcode-camera";
 
 export type ItemDetailsValues = {
@@ -88,10 +90,7 @@ export function InventoryItemDetails({
   siteBase,
   disabled,
 }: InventoryItemDetailsProps) {
-  const { cameraOn, toggleCamera, cameraError, videoRef, supported } = useBarcodeCamera(
-    (raw) => onScanContainedIn?.(raw),
-    { closeOnDetect: true },
-  );
+  const containerCamera = useBarcodeCamera((raw) => onScanContainedIn?.(raw));
 
   const assetLooksLikeSerial = looksLikeSerialNumber(values.assetId);
   const serialLooksLikeAssetTag = looksLikeAssetTag(values.serialNumber);
@@ -214,18 +213,22 @@ export function InventoryItemDetails({
               value={values.containedInAssetId ?? ""}
               onChange={(containedInAssetId) => onChange({ containedInAssetId })}
               options={[{ value: "", label: "Not contained" }, ...containerOptions]}
-              placeholder="Search container assets..."
+              placeholder="Search, or paste ALE-0041 / arbor.st/e/…"
               emptyLabel="Not contained"
+              queryVariants={assetSearchVariants}
+              onCreate={onScanContainedIn ? (query) => void onScanContainedIn(query) : undefined}
+              createLabel="Look up"
             />
           </div>
-          {onScanContainedIn && supported ? (
+          {onScanContainedIn && containerCamera.supported ? (
             <Button
               type="button"
               variant="outline"
               size="icon"
-              aria-label="Scan a container barcode"
+              aria-label={containerCamera.cameraOn ? "Hide camera" : "Scan a container barcode"}
+              aria-pressed={containerCamera.cameraOn}
               disabled={disabled}
-              onClick={toggleCamera}
+              onClick={containerCamera.toggleCamera}
               className="shrink-0"
             >
               <CameraIcon className="size-4" />
@@ -237,15 +240,7 @@ export function InventoryItemDetails({
         ) : null}
       </div>
 
-      {cameraError ? <p className="text-xs text-destructive">{cameraError}</p> : null}
-      {cameraOn ? (
-        <video
-          ref={videoRef}
-          className="aspect-video w-full rounded-md bg-black object-cover"
-          muted
-          playsInline
-        />
-      ) : null}
+      <BarcodeCameraView camera={containerCamera} idleHint="Scan the container this sits in." />
 
       <div className="space-y-1.5">
         <Label htmlFor={`${idPrefix}-status`}>Status</Label>

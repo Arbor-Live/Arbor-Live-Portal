@@ -5,6 +5,7 @@ import { CameraIcon, KeyboardIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BarcodeCameraView } from "./barcode-camera-view";
 import { useBarcodeCamera, type ScanOutcome } from "./use-barcode-camera";
 
 type AssetScannerProps = {
@@ -13,12 +14,6 @@ type AssetScannerProps = {
   disabled?: boolean;
   placeholder?: string;
   autoFocus?: boolean;
-  /**
-   * Keep the camera open after each read, for scanning a batch of assets in a
-   * row (checking gear out or back in). Off by default: a single lookup closes
-   * the camera once it has a code.
-   */
-  keepCameraOpen?: boolean;
 };
 
 export function AssetScanner({
@@ -26,12 +21,12 @@ export function AssetScanner({
   disabled,
   placeholder = "Scan or type ALE-0041 / arbor.st/e/…",
   autoFocus,
-  keepCameraOpen = false,
 }: AssetScannerProps) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
-  const { cameraOn, toggleCamera, cameraError, videoRef, supported, lastDetected } =
-    useBarcodeCamera(handleSubmit, { closeOnDetect: !keepCameraOpen });
+  // The camera stays open between reads, so a run of assets scans back to back.
+  const camera = useBarcodeCamera(handleSubmit);
+  const { cameraOn, toggleCamera, supported } = camera;
 
   async function handleSubmit(raw: string): Promise<ScanOutcome> {
     const trimmed = raw.trim();
@@ -79,22 +74,11 @@ export function AssetScanner({
           {cameraOn ? "Hide camera" : supported ? "Use camera" : "Camera unavailable"}
         </Button>
       </div>
-      {cameraError ? <p className="text-sm text-destructive">{cameraError}</p> : null}
-      {cameraOn ? (
-        <video
-          ref={videoRef}
-          className="aspect-video w-full rounded-md bg-black object-cover"
-          muted
-          playsInline
-        />
-      ) : null}
-      {cameraOn && keepCameraOpen ? (
-        <p className="text-xs text-muted-foreground" aria-live="polite" data-testid="asset-scanner-last">
-          {lastDetected
-            ? `Read ${lastDetected}. Keep scanning, or hide the camera when you're done.`
-            : "The camera stays open, so you can scan one asset after another."}
-        </p>
-      ) : null}
+      <BarcodeCameraView
+        camera={camera}
+        idleHint="The camera stays open, so you can scan one asset after another."
+        testId="asset-scanner-last"
+      />
     </div>
   );
 }
