@@ -37,6 +37,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { usePublishStatusToasts } from "@/hooks/use-publish-status-toasts";
 import { formatDateTime } from "@/lib/format";
 import { formatEventVisibilityLabel, type EventVisibility } from "@/lib/event-visibility";
@@ -70,10 +71,13 @@ function plural(count: number, noun: string) {
   return `${count} ${count === 1 ? noun : `${noun}s`}`;
 }
 
+const DEBOUNCE_MS = 200;
+
 export function MarketingDesignBoard() {
   const searchParams = useSearchParams();
   const [now] = useState(() => Date.now());
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, DEBOUNCE_MS);
   // Designers land on their own work; clear the chip to see everything.
   const [filters, setFilters] = useState<FilterState>({ designer: { operator: "is", values: ["me"] } });
   const [panelEventId, setPanelEventId] = useState<Id<"events"> | null>(
@@ -83,7 +87,7 @@ export function MarketingDesignBoard() {
   const applied = activeFilters(filters);
   const events = useQuery(api.marketingDesigns.listUpcomingPosterWork, {
     now,
-    search: search.trim() || undefined,
+    search: debouncedSearch.trim() || undefined,
     assignee: applied.designer,
     posterStatus: applied.poster,
   });

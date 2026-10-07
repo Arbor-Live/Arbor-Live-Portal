@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSheetParam } from "@/hooks/use-sheet-param";
 import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { notify } from "@/lib/notify";
 import { AssetScanner } from "./asset-scanner";
 import { inventoryItemLabel, toCategoryOptions } from "./constants";
@@ -33,6 +34,8 @@ const TAG_OPTIONS = [
   { value: "serial_only", label: "Serial only" },
 ];
 
+const DEBOUNCE_MS = 200;
+
 function plural(count: number, noun: string) {
   return `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
 }
@@ -45,6 +48,7 @@ export function ItemsManager() {
   const { confirm } = useAppDialog();
   const siteBase = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, DEBOUNCE_MS);
   const [filters, setFilters] = useState<FilterState>({});
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [selectedId, setSelectedId] = useSheetParam("item");
@@ -58,7 +62,7 @@ export function ItemsManager() {
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: true });
   const { results: items, status, loadMore } = usePaginatedQuery(
     api.inventoryItems.list,
-    { search: search || undefined, ...activeFilters(filters) },
+    { search: debouncedSearch || undefined, ...activeFilters(filters) },
     { initialNumItems: 100 },
   );
   const itemSummaries = useQuery(api.inventoryItems.listSummaries, {});

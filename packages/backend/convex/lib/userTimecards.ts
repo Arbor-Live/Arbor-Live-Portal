@@ -1,5 +1,5 @@
 import { pacificDateKey, pacificStartOfDayMs, payPeriodStatus, recentPayPeriods } from "@arbor/format";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { computeUserDayHours } from "./stanfordHours";
 
@@ -70,7 +70,7 @@ export async function buildTimecardPeriodForUser(
   now: number,
 ): Promise<TimecardPeriod> {
   const shifts = await loadShiftsForUserInRange(ctx, userId, period.startMs, period.endMs);
-  const eventOtPremium = new Map<Id<"events">, boolean>();
+  const eventById = new Map<Id<"events">, Doc<"events"> | null>();
   const dayEventShifts = new Map<string, Map<Id<"events">, Array<{ hours: number }>>>();
 
   for (const shift of shifts) {
@@ -80,9 +80,8 @@ export async function buildTimecardPeriodForUser(
     if (!eventMap.has(shift.eventId)) eventMap.set(shift.eventId, []);
     eventMap.get(shift.eventId)!.push({ hours: shift.hours });
 
-    if (!eventOtPremium.has(shift.eventId)) {
-      const event = await ctx.db.get(shift.eventId);
-      eventOtPremium.set(shift.eventId, event?.otPremium === true);
+    if (!eventById.has(shift.eventId)) {
+      eventById.set(shift.eventId, await ctx.db.get(shift.eventId));
     }
   }
 
@@ -95,9 +94,9 @@ export async function buildTimecardPeriodForUser(
     let totalInput = 0;
 
     for (const [eventId, eventShifts] of eventMap.entries()) {
-      const event = await ctx.db.get(eventId);
+      const event = eventById.get(eventId) ?? null;
       const hours = computeUserDayHours(eventShifts, {
-        otPremium: eventOtPremium.get(eventId),
+        otPremium: event?.otPremium === true,
       });
       events.push({
         eventId,

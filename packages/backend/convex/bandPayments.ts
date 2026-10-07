@@ -36,6 +36,7 @@ import {
   shouldPromoteBandPaymentToQueue,
   type BandPaymentPricingMode,
   type BandPaymentStatus,
+  type BandPayeeFields,
 } from "./lib/bandPayments";
 import { resolveBandName } from "./lib/bandIdentity";
 import {
@@ -324,17 +325,61 @@ function computeNextStatus(args: {
   return queueStatusForEndedEvent({ onboardingComplete, payeeComplete });
 }
 
+/**
+ * Rows in one list usually share events and bands; those docs are read once per
+ * query run instead of once per payment.
+ */
+type BandPaymentCache = {
+  events: Map<Id<"events">, Promise<Doc<"events"> | null>>;
+  orgs: Map<string, Promise<BandPaymentOrgDetails>>;
+};
+
+type BandPaymentOrgDetails = {
+  orgPayee: BandPayeeFields;
+  onboarding: Doc<"organizationOnboarding"> | null;
+  bandName: string;
+};
+
+function createBandPaymentCache(): BandPaymentCache {
+  return { events: new Map(), orgs: new Map() };
+}
+
+/** Shares one in-flight load per key, so repeated ids don't repeat the read. */
+function readOnce<K, V>(cache: Map<K, Promise<V>>, key: K, load: () => Promise<V>): Promise<V> {
+  const pending = cache.get(key);
+  if (pending) return pending;
+  const started = load();
+  cache.set(key, started);
+  return started;
+}
+
+async function loadBandPaymentOrgDetails(
+  ctx: QueryCtx | MutationCtx,
+  organizationId: string,
+): Promise<BandPaymentOrgDetails> {
+  const [orgPayee, onboarding, bandName] = await Promise.all([
+    getOrganizationProfilePayee(ctx, organizationId),
+    ctx.db
+      .query("organizationOnboarding")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+      .unique(),
+    resolveBandName(ctx, organizationId),
+  ]);
+  return { orgPayee, onboarding, bandName };
+}
+
 async function buildBandPaymentRow(
   ctx: QueryCtx | MutationCtx,
   payment: Doc<"eventBandPayments">,
   event: Doc<"events">,
   nowMs: number,
+  cache: BandPaymentCache,
 ) {
-  const effectivePayee = await getEffectivePayeeForPayment(ctx, payment);
-  const onboarding = await ctx.db
-    .query("organizationOnboarding")
-    .withIndex("by_organizationId", (q) => q.eq("organizationId", payment.organizationId))
-    .unique();
+  const org = await readOnce(cache.orgs, payment.organizationId, () =>
+    loadBandPaymentOrgDetails(ctx, payment.organizationId),
+  );
+  const effectivePayee = resolvePayeeSnapshot(org.orgPayee, payeeFieldsFromProfile(payment));
+  const onboarding = org.onboarding;
   const onboardingStatus = onboarding?.status ?? null;
   const onboardingIncompleteSteps =
     payment.status === "pending_onboarding"
@@ -351,7 +396,7 @@ async function buildBandPaymentRow(
     _id: payment._id,
     eventId: payment.eventId,
     organizationId: payment.organizationId,
-    bandName: await resolveBandName(ctx, payment.organizationId),
+    bandName: org.bandName,
     eventTitle: event.title,
     eventStartAt: event.startAt,
     venueName: event.venueName,
@@ -496,10 +541,11 @@ export const listByEvent = query({
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(50);
     const nowMs = Date.now();
+    const cache = createBandPaymentCache();
     const rows = [];
     for (const payment of payments) {
       if (payment.status === "cancelled") continue;
-      rows.push(await buildBandPaymentRow(ctx, payment, event, nowMs));
+      rows.push(await buildBandPaymentRow(ctx, payment, event, nowMs, cache));
     }
     return rows.sort((a, b) => a.bandName.localeCompare(b.bandName));
   },
@@ -834,12 +880,15 @@ export const listByQueue = query({
         .take(200);
       payments.push(...rows);
     }
+    const cache = createBandPaymentCache();
     const rows = [];
     for (const payment of payments) {
       if (!paymentMatchesQueue(payment, args.queue)) continue;
-      const event = await ctx.db.get(payment.eventId);
+      const event = await readOnce(cache.events, payment.eventId, () =>
+        ctx.db.get(payment.eventId),
+      );
       if (!event) continue;
-      rows.push(await buildBandPaymentRow(ctx, payment, event, nowMs));
+      rows.push(await buildBandPaymentRow(ctx, payment, event, nowMs, cache));
     }
     return rows.sort((a, b) => {
       // Upcoming: soonest events first; other queues: most recent first.
@@ -855,15 +904,14 @@ export const listByQueue = query({
 
 async function buildPipelineRows(ctx: QueryCtx, payments: Doc<"eventBandPayments">[]) {
   const nowMs = Date.now();
-  const events = new Map<Id<"events">, Doc<"events"> | null>();
+  const cache = createBandPaymentCache();
   const rows = [];
   for (const payment of payments) {
-    if (!events.has(payment.eventId)) {
-      events.set(payment.eventId, await ctx.db.get(payment.eventId));
-    }
-    const event = events.get(payment.eventId);
+    const event = await readOnce(cache.events, payment.eventId, () =>
+      ctx.db.get(payment.eventId),
+    );
     if (!event) continue;
-    rows.push(await buildBandPaymentRow(ctx, payment, event, nowMs));
+    rows.push(await buildBandPaymentRow(ctx, payment, event, nowMs, cache));
   }
   return rows;
 }
@@ -956,6 +1004,9 @@ export const syncStalePayeePayments = mutation({
   },
 });
 
+/** Far past any band's payout history (rows are per played event). */
+const MAX_ORG_PAYMENTS = 5_000;
+
 /** Staff: re-evaluate queue status for one org after onboarding/payee changes. */
 export const refreshPendingPaymentsForOrganization = mutation({
   args: { organizationId: v.string() },
@@ -964,34 +1015,35 @@ export const refreshPendingPaymentsForOrganization = mutation({
     await requireArborInternalContext(ctx);
     const now = Date.now();
     let updated = 0;
-    let cursor: string | null = null;
-    for (;;) {
-      const page = await ctx.db
-        .query("eventBandPayments")
-        .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
-        .paginate({ cursor, numItems: 200 });
-      for (const payment of page.page) {
-        if (
-          payment.status !== "pending_payee" &&
-          payment.status !== "pending_onboarding" &&
-          payment.status !== "draft"
-        ) {
-          continue;
-        }
-        const synced = await syncPayeeFromOrganizationForPayment(ctx, payment, now);
-        if (
-          synced.status !== payment.status ||
-          synced.designatedPayeeName !== payment.designatedPayeeName ||
-          synced.designatedPayeeEmail !== payment.designatedPayeeEmail ||
-          synced.designatedPayeeUserId !== payment.designatedPayeeUserId ||
-          synced.designatedPayeeMailingAddress !== payment.designatedPayeeMailingAddress ||
-          synced.designatedPayeePayoutMethod !== payment.designatedPayeePayoutMethod
-        ) {
-          updated += 1;
-        }
+    // Bounded read, not a cursor loop: a mutation may only run one paginated query.
+    const payments = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .take(MAX_ORG_PAYMENTS + 1);
+    if (payments.length > MAX_ORG_PAYMENTS) {
+      throw new Error(
+        `eventBandPayments for ${args.organizationId} exceeded ${MAX_ORG_PAYMENTS} rows; refusing to process a partial list.`,
+      );
+    }
+    for (const payment of payments) {
+      if (
+        payment.status !== "pending_payee" &&
+        payment.status !== "pending_onboarding" &&
+        payment.status !== "draft"
+      ) {
+        continue;
       }
-      if (page.isDone) break;
-      cursor = page.continueCursor;
+      const synced = await syncPayeeFromOrganizationForPayment(ctx, payment, now);
+      if (
+        synced.status !== payment.status ||
+        synced.designatedPayeeName !== payment.designatedPayeeName ||
+        synced.designatedPayeeEmail !== payment.designatedPayeeEmail ||
+        synced.designatedPayeeUserId !== payment.designatedPayeeUserId ||
+        synced.designatedPayeeMailingAddress !== payment.designatedPayeeMailingAddress ||
+        synced.designatedPayeePayoutMethod !== payment.designatedPayeePayoutMethod
+      ) {
+        updated += 1;
+      }
     }
     return { updated };
   },
@@ -1694,10 +1746,13 @@ export const listForActiveBand = query({
       .query("eventBandPayments")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", bandContext.organizationId))
       .take(200);
+    const cache = createBandPaymentCache();
     const rows = [];
     for (const payment of payments) {
       if (payment.status === "cancelled" || payment.status === "draft") continue;
-      const event = await ctx.db.get(payment.eventId);
+      const event = await readOnce(cache.events, payment.eventId, () =>
+        ctx.db.get(payment.eventId),
+      );
       if (!event) continue;
       const canSign =
         payment.status === "awaiting_confirmation" &&

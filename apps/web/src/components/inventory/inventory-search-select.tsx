@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import {
   SearchableSelect,
   type SearchableSelectOption,
@@ -10,15 +11,6 @@ import {
 
 const MIN_QUERY_CHARS = 2;
 const DEBOUNCE_MS = 200;
-
-function useDebouncedValue<T>(value: T, delayMs: number) {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebounced(value), delayMs);
-    return () => window.clearTimeout(timer);
-  }, [value, delayMs]);
-  return debounced;
-}
 
 export type InventoryTypeOption = {
   _id: Id<"inventoryTypes">;

@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { toCategoryOptions } from "./constants";
 import {
   formatUnitCount,
@@ -40,6 +41,8 @@ const UNITS_OPTIONS = [
   { value: "has", label: "Has units" },
   { value: "none", label: "No units yet" },
 ];
+
+const DEBOUNCE_MS = 200;
 
 /** `?type=<id>` opens that type's panel; `?type=new` opens an empty one. */
 const TYPE_PARAM = "type";
@@ -73,6 +76,7 @@ export function TypesManager() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<TypeSettingsTab>("categories");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, DEBOUNCE_MS);
   const [filters, setFilters] = useState<FilterState>({});
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [bulkPending, setBulkPending] = useState(false);
@@ -86,7 +90,7 @@ export function TypesManager() {
   const { results, status, loadMore } = usePaginatedQuery(
     api.inventoryTypes.list,
     {
-      search: search.trim() || undefined,
+      search: debouncedSearch.trim() || undefined,
       category: applied.category,
       capability: applied.capability,
       manufacturer: applied.manufacturer,

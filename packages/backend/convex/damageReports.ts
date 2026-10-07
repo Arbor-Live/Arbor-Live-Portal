@@ -130,12 +130,34 @@ async function enrichReports(
     rows.map((row) => row.reportedByUserId),
   );
 
+  // Reports on the same type/event share one read instead of one per row.
+  const typeIds = Array.from(
+    new Set(
+      rows
+        .map((row) => row.typeId)
+        .filter((id): id is Id<"inventoryTypes"> => Boolean(id)),
+    ),
+  );
+  const eventIds = Array.from(
+    new Set(
+      rows
+        .map((row) => row.eventId)
+        .filter((id): id is Id<"events"> => Boolean(id)),
+    ),
+  );
+  const [types, events] = await Promise.all([
+    Promise.all(typeIds.map((id) => ctx.db.get(id))),
+    Promise.all(eventIds.map((id) => ctx.db.get(id))),
+  ]);
+  const typeById = new Map(typeIds.map((id, index) => [id, types[index] ?? null]));
+  const eventById = new Map(eventIds.map((id, index) => [id, events[index] ?? null]));
+
   return await Promise.all(
     [...rows]
       .sort((a, b) => b.reportedAt - a.reportedAt)
       .map(async (row) => {
-        const type = row.typeId ? await ctx.db.get(row.typeId) : null;
-        const event = row.eventId ? await ctx.db.get(row.eventId) : null;
+        const type = row.typeId ? (typeById.get(row.typeId) ?? null) : null;
+        const event = row.eventId ? (eventById.get(row.eventId) ?? null) : null;
         const photoUrl = row.photoR2Key
           ? await resolveStoredR2AssetUrl(formatStoredR2Asset(row.photoR2Key))
           : undefined;

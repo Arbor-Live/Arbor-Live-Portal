@@ -1,9 +1,8 @@
 import type { Doc } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { eventMatchesUserTeams, isCrewedEventType } from "./crewTeams";
-import { loadAllAdminProfiles } from "./userProfiles";
+import { loadAdminProfilesByStatus } from "./userProfiles";
 import { resolveParticipationFlags } from "./userParticipation";
-import { resolveUserStatus } from "./userStatus";
 import {
   getDisciplinesForEventMatching,
   hasCrewSpecialty,
@@ -39,11 +38,11 @@ export async function listCrewedEventsInRange(
 
 /** Active, crew-assignable profiles with a crew specialty. */
 export async function getActiveCrewProfiles(ctx: QueryCtx) {
-  // Filter by `resolveUserStatus` (not the `by_status` index) so a profile
-  // written before the status backfill still counts as active.
-  const profiles = await loadAllAdminProfiles(ctx);
+  // `status` is set on every insert and backfilled for older rows
+  // (`backfillUserProfileStatus`), so the `by_status` index is the whole live
+  // roster — see `loadAdminProfilesByStatus` for the one caveat.
+  const profiles = await loadAdminProfilesByStatus(ctx, ["active"]);
   return profiles.filter((profile) => {
-    if (resolveUserStatus(profile) !== "active") return false;
     if (!resolveParticipationFlags(profile).assignableAsCrew) return false;
     return hasCrewSpecialty(resolveProfileMembership(profile).disciplines);
   });
