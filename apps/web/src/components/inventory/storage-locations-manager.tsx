@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSheetParam } from "@/hooks/use-sheet-param";
 import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { plural } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import {
   buildTree,
@@ -38,9 +39,6 @@ const CONTENTS_OPTIONS = [
   { value: "none", label: "Nothing inside" },
 ];
 
-function plural(count: number, noun: string) {
-  return `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
-}
 
 async function attempt(action: () => Promise<unknown>, success: string) {
   try {

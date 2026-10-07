@@ -1161,7 +1161,8 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     .index("by_defaultOrganizationId", ["defaultOrganizationId"])
-    .index("by_username", ["username"]),
+    .index("by_username", ["username"])
+    .index("by_status", ["status"]),
 
   userOrganizationMemberships: defineTable({
     userId: v.string(),

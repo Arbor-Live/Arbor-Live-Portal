@@ -28,7 +28,7 @@ import {
   severityTone,
   type DamageStatus,
 } from "@/lib/damage-status";
-import { formatDate } from "@/lib/format";
+import { formatDate, plural } from "@/lib/format";
 
 const SEVERITY_OPTIONS = [1, 2, 3, 4, 5].map((level) => ({ value: String(level), label: `${level} of 5` }));
 
@@ -43,10 +43,6 @@ function statusesFor(filter: FilterState[string] | undefined): DamageStatus[] | 
   const picked = filter.values as DamageStatus[];
   if (filter.operator === "is") return picked;
   return DAMAGE_STATUS_OPTIONS.map((option) => option.value).filter((status) => !picked.includes(status));
-}
-
-function plural(count: number, noun: string) {
-  return `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 export function DamageQueueManager() {

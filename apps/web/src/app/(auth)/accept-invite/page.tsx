@@ -81,7 +81,7 @@ export default function AcceptInvitePage() {
               <AlertDescription>Invalid invitation link.</AlertDescription>
             </Alert>
           ) : invite === undefined ? (
-            <p className="text-sm text-muted-foreground">Loading invitation...</p>
+            <p className="text-sm text-muted-foreground">Loading invitation…</p>
           ) : invite === null ? (
             <Alert variant="destructive">
               <AlertDescription>This invitation is invalid or has already been used.</AlertDescription>

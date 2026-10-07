@@ -1,5 +1,7 @@
 /** Canonical external links + copy for crew/band onboarding. */
 
+import { v } from "convex/values";
+
 export const ONBOARDING_LINKS = {
   whatsappInvite: "https://chat.whatsapp.com/EAfCFXRAgS4JuB8Qy4pEgF?mode=r_c",
   whatsappGroupName: "Arbor Live",
@@ -40,6 +42,42 @@ export const FWS_JOB_INFO = {
   hrAdminName: "Stefanie Ky",
   hrAdminEmail: "sky3@stanford.edu",
 } as const;
+
+/** Return validator for `ONBOARDING_LINKS`; `onboardingLinks.test.ts` keeps the keys in step. */
+export const onboardingLinksValue = v.object({
+  whatsappInvite: v.string(),
+  whatsappGroupName: v.string(),
+  instagramArbor: v.string(),
+  instagramArborHandle: v.string(),
+  instagramTrivia: v.string(),
+  instagramTriviaHandle: v.string(),
+  fwsInfo: v.string(),
+  soberMonitorsGuide: v.string(),
+  soberMonitorsTest: v.string(),
+  onboardingDoc: v.string(),
+  narcanVideo: v.string(),
+  narcanVideoEmbed: v.string(),
+  i9Appointment: v.string(),
+  i9AcceptableDocuments: v.string(),
+  starsPortal: v.string(),
+  sequoiaTimecardHelp: v.string(),
+  cartTrainingCode: v.string(),
+  liftingTrainingCode: v.string(),
+  liftingTrainingUrl: v.string(),
+});
+
+/** Return validator for `FWS_JOB_INFO`. */
+export const fwsJobInfoValue = v.object({
+  hiringDepartment: v.string(),
+  jobTitle: v.string(),
+  briefDescription: v.string(),
+  hourlyWage: v.string(),
+  projectTaskAward: v.string(),
+  supervisorName: v.string(),
+  supervisorEmail: v.string(),
+  hrAdminName: v.string(),
+  hrAdminEmail: v.string(),
+});
 
 export const CONTRACTOR_PAY_INFO = {
   w9Email: "arborlive@stanford.edu",

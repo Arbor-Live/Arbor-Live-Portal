@@ -41,8 +41,9 @@ test.describe("crew scheduling board", () => {
 
     // Seeded events have sections but no slots yet — clear the filter to list
     // every crewed event in range.
-    await page.getByText("Needs crew only").click();
-    await expect(page.locator('input[type="checkbox"]').first()).not.toBeChecked();
+    const needsCrewOnly = page.getByRole("checkbox", { name: "Needs crew only" });
+    await needsCrewOnly.click();
+    await expect(needsCrewOnly).not.toBeChecked();
 
     const card = page.getByTestId("crew-board-event").filter({ hasText: seeded.title }).first();
     await expect(card).toBeVisible({ timeout: 30_000 });

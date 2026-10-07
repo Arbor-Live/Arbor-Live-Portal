@@ -1,5 +1,3 @@
-import { formatUsdOptional } from "@/lib/format";
-
 export const DEFAULT_INVENTORY_CATEGORIES = [
   { value: "sound", label: "Sound" },
   { value: "lighting", label: "Lighting" },
@@ -35,10 +33,6 @@ export function toCategoryOptions(
   return categories
     .filter((category) => category.active)
     .map((category) => ({ value: category.key, label: category.label }));
-}
-
-export function formatCurrency(amount?: number) {
-  return formatUsdOptional(amount);
 }
 
 /** Tag if present, else serial — untagged items still need a name in lists/pickers. */

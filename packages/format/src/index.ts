@@ -49,6 +49,16 @@ export function formatUsdOptional(value?: number | null) {
   return formatUsd(value);
 }
 
+/** "1 event" / "3 events", or "2 boxes" when the plural form is irregular. */
+export function plural(count: number, singular: string, pluralForm = `${singular}s`) {
+  return `${count.toLocaleString("en-US")} ${count === 1 ? singular : pluralForm}`;
+}
+
+/** Hours on shift, e.g. "8.00 h". */
+export function formatHours(value: number) {
+  return `${value.toFixed(2)} h`;
+}
+
 /**
  * Portal-local date and time. The portal timezone is assumed everywhere,
  * including external emails, so no zone abbreviation is appended.

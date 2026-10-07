@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, type Infer } from "convex/values";
 import { formatDate } from "@arbor/format";
 import { components, internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
@@ -25,9 +25,11 @@ import {
 import { normalizeAlertRecipients } from "./lib/alertRecipients";
 import {
   FWS_JOB_INFO,
+  fwsJobInfoValue,
   ONBOARDING_FWS_EMAILS,
   ONBOARDING_LEADERSHIP_EMAILS,
   ONBOARDING_LINKS,
+  onboardingLinksValue,
 } from "./lib/onboardingLinks";
 import {
   formatCompensationRateLabel,
@@ -497,8 +499,8 @@ const crewOnboardingReturn = v.object({
   agreedToOnboardingDocAt: v.optional(v.number()),
   signatureLegalName: v.optional(v.string()),
   completedAt: v.optional(v.number()),
-  links: v.any(),
-  fwsJobInfo: v.any(),
+  links: onboardingLinksValue,
+  fwsJobInfo: fwsJobInfoValue,
   profile: v.object({
     name: v.string(),
     email: v.string(),
@@ -592,7 +594,7 @@ export const getMyStatus = query({
 export const getMyCrewOnboarding = query({
   args: {},
   returns: v.union(crewOnboardingReturn, v.null()),
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<Infer<typeof crewOnboardingReturn> | null> => {
     const user = await requireAuth(ctx);
     const userId = getUserId(user);
 

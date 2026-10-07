@@ -9,6 +9,7 @@ import { WarningIcon } from "@phosphor-icons/react";
 import { EventStateBadges } from "@/components/events/event-state-badges";
 import { TypeChip } from "@/components/events/workspace/run-of-show/run-of-show-styles";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DatePickerField } from "@/components/ui/date-picker";
 import { AcademicPeriodPicks } from "@/components/academic-period-picks";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -80,7 +81,7 @@ function PendingCrewSidebar({ rows }: { rows: PendingCrewRow[] | undefined }) {
         ) : null}
       </div>
       {!rows ? (
-        <p className="pt-3 text-xs text-muted-foreground">Loading...</p>
+        <p className="pt-3 text-xs text-muted-foreground">Loading…</p>
       ) : entries.length === 0 ? (
         <p className="pt-3 text-xs text-muted-foreground">Everyone has answered.</p>
       ) : (
@@ -356,18 +357,16 @@ export function CrewSchedulingDashboard() {
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border px-3 py-2">
         <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={needsCrewOnly}
-            onChange={(e) => setNeedsCrewOnly(e.target.checked)}
+            onCheckedChange={(checked) => setNeedsCrewOnly(checked === true)}
           />
           Needs crew only
         </label>
         <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={showPendingCrew}
-            onChange={(e) => setShowPendingCrew(e.target.checked)}
+            onCheckedChange={(checked) => setShowPendingCrew(checked === true)}
           />
           Show who hasn&apos;t answered
         </label>
@@ -379,7 +378,7 @@ export function CrewSchedulingDashboard() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
         <div className="min-w-0 space-y-3">
           {!range ? null : !rows ? (
-            <p className="text-sm text-muted-foreground">Loading crew scheduling...</p>
+            <p className="text-sm text-muted-foreground">Loading crew scheduling…</p>
           ) : null}
 
           {range && rows && rows.length === 0 ? (

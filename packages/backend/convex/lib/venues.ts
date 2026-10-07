@@ -276,15 +276,15 @@ export async function syncDenormalizedVenueName(
   venueId: Id<"venues">,
   venueName: string,
 ): Promise<void> {
+  // Each table's sync runs as its own nested mutation: a function may only run
+  // one paginated query, and `syncVenueNamePage` paginates (its cursor chain
+  // lives in `syncVenueNameBatch`).
   for (const table of ["events", "eventSeries", "eventRequests"] as const) {
-    const result = await syncVenueNamePage(ctx, venueId, venueName, table, null);
-    if (!result.isDone) {
-      await ctx.scheduler.runAfter(0, internal.lib.venues.syncVenueNameBatch, {
-        venueId,
-        venueName,
-        table,
-        cursor: result.continueCursor,
-      });
-    }
+    await ctx.runMutation(internal.lib.venues.syncVenueNameBatch, {
+      venueId,
+      venueName,
+      table,
+      cursor: null,
+    });
   }
 }

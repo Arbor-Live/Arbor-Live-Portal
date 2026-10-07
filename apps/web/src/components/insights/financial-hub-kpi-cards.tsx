@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Sparkline } from "@/components/insights/sparkline";
 import { formatUsd } from "@/lib/format";
 import { insightsRangeFromDateInputs, trailingTwelveMonthDateInputs } from "@/lib/insights-range";
@@ -21,7 +22,7 @@ export function FinancialHubRevenueCard() {
   );
 
   if (summary === undefined) {
-    return <p className="text-sm text-muted-foreground">Loading revenue…</p>;
+    return <Skeleton className="h-16 w-full" />;
   }
 
   return (
@@ -56,7 +57,7 @@ export function FinancialHubExpensesCard() {
   );
 
   if (summary === undefined) {
-    return <p className="text-sm text-muted-foreground">Loading expenses…</p>;
+    return <Skeleton className="h-16 w-full" />;
   }
 
   return (

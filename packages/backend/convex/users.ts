@@ -287,30 +287,28 @@ async function getAllInvitations(ctx: QueryCtx | MutationCtx) {
   return await fetchAllBetterAuthRows<InvitationRow>(ctx, "invitation", 500);
 }
 
+const MAX_PENDING_INVITES = 5_000;
+
 /**
- * Drain `pendingUserInvites` newest-first through the `by_createdAt` index.
- * A fixed `.take(2000)` silently dropped older rows (taking their teams/
- * verticals metadata with them) once the table outgrew the cap. Past
- * `maxPages` we throw instead of returning a partial list as complete.
+ * Every `pendingUserInvites` row, newest first through the `by_createdAt`
+ * index, or a loud failure. A fixed `.take(2000)` silently dropped older rows
+ * (taking their teams/verticals metadata with them) once the table outgrew the
+ * cap; past `MAX_PENDING_INVITES` we throw instead of returning a partial list
+ * as complete. Bounded `take`, not a cursor loop — a query/mutation may only
+ * run one paginated query.
  */
 async function getAllPendingInvites(ctx: QueryCtx | MutationCtx) {
-  const rows: Doc<"pendingUserInvites">[] = [];
-  const maxPages = 50;
-  const pageSize = 500;
-  let cursor: string | null = null;
-  for (let page = 0; page < maxPages; page += 1) {
-    const result = await ctx.db
-      .query("pendingUserInvites")
-      .withIndex("by_createdAt")
-      .order("desc")
-      .paginate({ cursor, numItems: pageSize });
-    rows.push(...result.page);
-    if (result.isDone) return rows;
-    cursor = result.continueCursor;
+  const rows = await ctx.db
+    .query("pendingUserInvites")
+    .withIndex("by_createdAt")
+    .order("desc")
+    .take(MAX_PENDING_INVITES + 1);
+  if (rows.length > MAX_PENDING_INVITES) {
+    throw new Error(
+      `pendingUserInvites exceeded ${MAX_PENDING_INVITES} rows; refusing to return a partial list.`,
+    );
   }
-  throw new Error(
-    `pendingUserInvites exceeded ${maxPages} pages of ${pageSize} (got ${rows.length} rows). Refusing a partial result.`,
-  );
+  return rows;
 }
 
 const ORG_CHILD_PAGE = 500;
@@ -2561,8 +2559,7 @@ export const updateUserAdmin = mutation({
   },
   handler: async (ctx, args) => {
     const adminUser = await requireAdmin(ctx);
-    const users = await getAllAuthUsers(ctx);
-    const target = users.find((user) => getUserId(user) === args.userId);
+    const target = await findAuthUserById(ctx, args.userId);
     if (!target || !target.email) throw new Error("User not found.");
     const now = Date.now();
     if (args.role) {
@@ -2889,8 +2886,7 @@ export const sendPasswordResetAdmin = mutation({
   returns: v.object({ ok: v.boolean(), email: v.string() }),
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
-    const users = await getAllAuthUsers(ctx);
-    const target = users.find((user) => getUserId(user) === args.userId);
+    const target = await findAuthUserById(ctx, args.userId);
     if (!target?.email) throw new Error("User email not found.");
     await ctx.scheduler.runAfter(0, internal.account.requestPasswordResetInternal, {
       email: target.email,

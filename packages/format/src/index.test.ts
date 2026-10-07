@@ -3,6 +3,7 @@ import {
   PORTAL_TIMEZONE,
   addPacificWeeks,
   formatDateTimeRange,
+  formatHours,
   formatUsd,
   formatUsdOptional,
   occurrenceEndAtFromAnchor,
@@ -13,6 +14,7 @@ import {
   pacificScheduleDayCount,
   pacificScheduleMaxDayIndex,
   pacificDayIndexFromAnchor,
+  plural,
   toPacificDateTimeInput,
 } from "./index";
 
@@ -35,6 +37,32 @@ describe("formatUsdOptional", () => {
 
   it("formats a present value", () => {
     expect(formatUsdOptional(10)).toBe("$10.00");
+  });
+});
+
+describe("plural", () => {
+  it("uses the singular form for exactly one", () => {
+    expect(plural(1, "event")).toBe("1 event");
+  });
+
+  it("adds s by default", () => {
+    expect(plural(3, "event")).toBe("3 events");
+    expect(plural(0, "event")).toBe("0 events");
+  });
+
+  it("uses an explicit plural form", () => {
+    expect(plural(2, "box", "boxes")).toBe("2 boxes");
+  });
+
+  it("groups thousands", () => {
+    expect(plural(1234, "event")).toBe("1,234 events");
+  });
+});
+
+describe("formatHours", () => {
+  it("formats to two decimals with an h suffix", () => {
+    expect(formatHours(8)).toBe("8.00 h");
+    expect(formatHours(7.5)).toBe("7.50 h");
   });
 });
 

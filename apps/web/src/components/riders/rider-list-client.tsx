@@ -5,7 +5,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { GridFourIcon, PlusIcon, StarIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { downloadBytes } from "@/lib/download-bytes";
-import { formatDate } from "@/lib/format";
+import { formatDate, plural } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -21,9 +21,6 @@ type RiderSummary = NonNullable<
   ReturnType<typeof useQuery<typeof api.bandRiders.listForActiveBand>>
 >[number];
 
-function plural(count: number, one: string, many = `${one}s`) {
-  return `${count} ${count === 1 ? one : many}`;
-}
 
 function riderDetail(rider: RiderSummary) {
   return [

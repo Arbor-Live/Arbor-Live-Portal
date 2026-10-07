@@ -76,47 +76,6 @@ const QUESTION_STEPS: StepId[] = [
   "contractorPay",
   "signature",
 ];
-type CrewOnboardingData = {
-  status: "not_started" | "in_progress" | "completed" | "waived";
-  incompleteStepCount: number;
-  payrollMethod?: "stanford" | "external";
-  profileCompletedAt?: number;
-  whatsappAcknowledgedAt?: number;
-  instagramAcknowledgedAt?: number;
-  hasFederalWorkStudy?: boolean | null;
-  fwsAcknowledgedAt?: number;
-  narcanCompletedAt?: number;
-  soberMonitorCompletedAt?: number;
-  emergencySopsAcknowledgedAt?: number;
-  crewExpectationsAcknowledgedAt?: number;
-  liftingCompletedAt?: number;
-  hasValidDriversLicense?: boolean;
-  cartTrainingCompletedAt?: number;
-  studentId?: string;
-  employmentStartDate?: number;
-  hasOtherCampusEmployment?: boolean;
-  otherCampusEmploymentHours?: number;
-  i9AcknowledgedAt?: number;
-  timecardAcknowledgedAt?: number;
-  contractorPayAcknowledgedAt?: number;
-  agreedToOnboardingDocAt?: number;
-  signatureLegalName?: string;
-  completedAt?: number;
-  profile: {
-    name: string;
-    email: string;
-    avatarUrl?: string;
-    phone?: string;
-    calendarInviteEmail?: string;
-    showOnPublicCrewPage: boolean;
-    publicCrewDescription?: string;
-    username?: string;
-    pronouns?: string;
-    gradYear?: number;
-    stanfordPosition?: StanfordPositionOption;
-  };
-};
-
 const STANFORD_STEP_ORDER: StepId[] = [
   "welcome",
   "profile",
@@ -233,10 +192,7 @@ const EMPTY_FORM: FormState = {
 export function CrewOnboardingWizard() {
   const router = useRouter();
   const { ready: previewReady, devPreview } = useDevPreviewReady();
-  const onboarding = useQuery(api.onboarding.getMyCrewOnboarding, {}) as
-    | CrewOnboardingData
-    | null
-    | undefined;
+  const onboarding = useQuery(api.onboarding.getMyCrewOnboarding, {});
   const saveProfileStep = useMutation(api.onboarding.saveCrewProfileStep);
   const saveOnboardingStep = useMutation(api.onboarding.saveCrewOnboardingStep);
   const completeOnboarding = useMutation(api.onboarding.completeCrewOnboarding);

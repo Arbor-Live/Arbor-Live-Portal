@@ -27,6 +27,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { plural } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { inventoryItemLabel } from "./constants";
 import { packageSection, packageStatus, packageTypeIds, packagePriceUsd, type PackageRow } from "./package-form";
@@ -77,9 +78,6 @@ function setPackageParam(value: string | null) {
   window.history.replaceState(null, "", url);
 }
 
-function plural(count: number, noun: string, nouns = `${noun}s`) {
-  return `${count.toLocaleString()} ${count === 1 ? noun : nouns}`;
-}
 
 async function attempt(action: () => Promise<unknown>, success: string) {
   try {

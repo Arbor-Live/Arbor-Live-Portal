@@ -17,10 +17,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { api } from "@/lib/convex-api";
+import { formatUsdOptional } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { inventoryPackageSchema, type InventoryPackageFormValues } from "@/lib/validations/inventory";
 import { HERO_LANDSCAPE_ASPECT_RATIO } from "@/lib/image-processing";
-import { formatCurrency } from "./constants";
 import {
   buildPackagePayload,
   contentsFromDraft,
@@ -195,7 +195,7 @@ function PackageSheetBody({
           }
           description={
             row
-              ? `Worth ${formatCurrency(row.estimatedRentalValueUsd)} at the contents' normal rental rates.`
+              ? `Worth ${formatUsdOptional(row.estimatedRentalValueUsd)} at the contents' normal rental rates.`
               : "A rentable kit: name it, add equipment from the catalog, then price it."
           }
         />
@@ -253,8 +253,8 @@ function PackageSheetBody({
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            Suggested from the contents: {formatCurrency(Number(suggested.subsidized.toFixed(2)))} subsidized,{" "}
-            {formatCurrency(Number(suggested.nonSubsidized.toFixed(2)))} non-subsidized. Where a unit offers
+            Suggested from the contents: {formatUsdOptional(Number(suggested.subsidized.toFixed(2)))} subsidized,{" "}
+            {formatUsdOptional(Number(suggested.nonSubsidized.toFixed(2)))} non-subsidized. Where a unit offers
             alternatives, the dearest one counts.
           </p>
         </SheetSection>

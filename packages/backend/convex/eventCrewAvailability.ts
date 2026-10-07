@@ -27,7 +27,6 @@ import {
 } from "./lib/userVerticals";
 import { resolveParticipationFlags } from "./lib/userParticipation";
 import { resolveUserStatus } from "./lib/userStatus";
-import { loadAllAdminProfiles } from "./lib/userProfiles";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { loadEventHostDisplay } from "./lib/hostOrgs";
 import {

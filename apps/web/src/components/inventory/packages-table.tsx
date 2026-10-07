@@ -6,7 +6,7 @@ import { RowCell, RowGroup, RowMenu, RowText } from "@/components/list-page";
 import { StatusPill } from "@/components/page-header";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { formatCurrency } from "./constants";
+import { formatUsdOptional } from "@/lib/format";
 import {
   PACKAGE_STATUS_LABELS,
   PACKAGE_STATUS_TONES,
@@ -96,10 +96,10 @@ export function PackagesTable({
           detail={packageContentsSummary(row)}
         />
         <RowCell className="w-24" hideBelow="lg" muted>
-          {formatCurrency(row.estimatedRentalValueUsd)}
+          {formatUsdOptional(row.estimatedRentalValueUsd)}
         </RowCell>
         <RowCell className="w-24" hideBelow="sm">
-          {formatCurrency(packagePriceUsd(row))}
+          {formatUsdOptional(packagePriceUsd(row))}
         </RowCell>
         <StatusPill
           tone={PACKAGE_STATUS_TONES[status]}

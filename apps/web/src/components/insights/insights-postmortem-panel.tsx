@@ -13,6 +13,7 @@ import {
 import { formatRate, highRatingShare, ratingBreakdown, StatRow, StatTile } from "@/components/insights/insights-ui";
 import { RowCell, RowList, RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -82,7 +83,7 @@ export function InsightsPostMortemPanel({ startMs, endMs }: InsightsPostMortemPa
         </CardHeader>
         <CardContent>
           {data === undefined ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <Skeleton className="h-24 w-full" />
           ) : data.eventRatings.length === 0 ? (
             <p className="text-sm text-muted-foreground">No event reviews in this range.</p>
           ) : (
@@ -109,7 +110,7 @@ export function InsightsPostMortemPanel({ startMs, endMs }: InsightsPostMortemPa
         </CardHeader>
         <CardContent className="space-y-3">
           {data === undefined ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <Skeleton className="h-24 w-full" />
           ) : data.entries.length === 0 ? (
             <p className="text-sm text-muted-foreground">No post-mortems in this range.</p>
           ) : (

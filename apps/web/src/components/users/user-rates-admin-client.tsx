@@ -33,6 +33,7 @@ import {
   type CrewRateRow,
   type GlobalCrewRates,
 } from "@/lib/crew-rate-modes";
+import { plural } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { CrewRateSheetBody } from "./crew-rates/crew-rate-sheet";
 import { GlobalRatesDialog } from "./crew-rates/global-rates-dialog";
@@ -48,9 +49,6 @@ function setPersonParam(value: string | null) {
   window.history.replaceState(null, "", url);
 }
 
-function plural(count: number, noun: string, nouns = `${noun}s`) {
-  return `${count.toLocaleString()} ${count === 1 ? noun : nouns}`;
-}
 
 async function attempt(action: () => Promise<unknown>, success: string) {
   try {

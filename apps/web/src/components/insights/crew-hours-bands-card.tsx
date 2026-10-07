@@ -8,6 +8,7 @@ import { InsightCard, plural } from "@/components/insights/insights-ui";
 import { EmptyState, ListSummary, RowCell, RowGroup, RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 import type { Tone } from "@/components/page-header";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { usePacificToday } from "@/hooks/use-pacific-today";
 import { recentQuarters } from "@/lib/academic-periods";
@@ -87,7 +88,7 @@ export function CrewHoursBandsCard() {
       {!quarter ? (
         <EmptyState>No Stanford quarters to measure yet.</EmptyState>
       ) : data === undefined ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <Skeleton className="h-24 w-full" />
       ) : data.crew.length === 0 ? (
         <EmptyState>No active crew to measure.</EmptyState>
       ) : (

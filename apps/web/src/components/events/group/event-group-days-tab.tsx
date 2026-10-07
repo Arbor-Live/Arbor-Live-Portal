@@ -22,7 +22,7 @@ import { StatusPill } from "@/components/page-header";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
-import { formatDate, formatTime, formatUsd } from "@/lib/format";
+import { formatDate, formatTime, formatUsd, plural } from "@/lib/format";
 import {
   eventStatusBadgeTone,
   formatEventStatusLabel,
@@ -31,9 +31,6 @@ import {
 import { formatOccurrencePreview, groupDayLabel, groupDayNoun } from "@/lib/event-series";
 import { useEventGroup } from "@/components/events/group/event-group-context";
 
-function plural(count: number, one: string, many: string) {
-  return `${count} ${count === 1 ? one : many}`;
-}
 
 /** The group's days in order, with crew and cost per day, plus add/cancel actions. */
 export function EventGroupDaysTab() {
