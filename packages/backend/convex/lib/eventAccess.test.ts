@@ -3,7 +3,10 @@ import type { QueryCtx } from "../_generated/server";
 import type { AuthUser } from "./auth";
 import { canEditEventForUser } from "./eventAccess";
 
-/** Profiles by user id; only `userAdminProfiles.by_userId` is read. */
+/**
+ * Profiles by user id from `userAdminProfiles.by_userId`. No user has
+ * organization memberships, so an `admin` role resolves as a legacy portal admin.
+ */
 function fakeCtx(verticalsByUserId: Record<string, string[]>): QueryCtx {
   return {
     db: {
@@ -16,6 +19,9 @@ function fakeCtx(verticalsByUserId: Record<string, string[]>): QueryCtx {
                 if (table !== "userAdminProfiles") return null;
                 const verticals = verticalsByUserId[userId];
                 return verticals ? { userId, verticals } : null;
+              },
+              async take() {
+                return [];
               },
             };
           },

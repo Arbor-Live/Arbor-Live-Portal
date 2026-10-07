@@ -977,6 +977,27 @@ export const waiveCrewOnboarding = mutation({
   },
 });
 
+const ONBOARDING_PAGE_SIZE = 500;
+const MAX_ONBOARDING_PAGES = 40;
+
+/** Every onboarding row (one per user); throws rather than returning a partial list. */
+async function loadAllUserOnboardingRows(ctx: QueryCtx): Promise<Doc<"userOnboarding">[]> {
+  const rows: Doc<"userOnboarding">[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < MAX_ONBOARDING_PAGES; page += 1) {
+    const result = await ctx.db
+      .query("userOnboarding")
+      .withIndex("by_status")
+      .paginate({ cursor, numItems: ONBOARDING_PAGE_SIZE });
+    rows.push(...result.page);
+    if (result.isDone) return rows;
+    cursor = result.continueCursor;
+  }
+  throw new Error(
+    `userOnboarding exceeded ${MAX_ONBOARDING_PAGES} pages of ${ONBOARDING_PAGE_SIZE}. Refusing a partial result.`,
+  );
+}
+
 export const listCrewOnboardingForAdmin = query({
   args: {},
   returns: v.array(
@@ -1011,7 +1032,7 @@ export const listCrewOnboardingForAdmin = query({
   ),
   handler: async (ctx) => {
     await requireAdmin(ctx);
-    const rows = await ctx.db.query("userOnboarding").withIndex("by_status").take(2000);
+    const rows = await loadAllUserOnboardingRows(ctx);
     const profiles = await loadAllAdminProfiles(ctx);
     const payrollByUserId = new Map(
       profiles.map((profile) => [profile.userId, normalizePayrollMethod(profile.payrollMethod)]),

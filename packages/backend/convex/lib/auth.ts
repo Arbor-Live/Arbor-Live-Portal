@@ -220,12 +220,15 @@ export async function requireAuth(
  * while every membership write resyncs the role (`syncGlobalRoleFromMemberships`).
  * For staff identity, prefer `isPortalAdmin`, which derives from memberships.
  * Never select email recipients by this role — use `listPortalAdminEmails`.
+ *
+ * Staff access needs both the cached role and an admin-granting membership
+ * (`isStaffAdmin`), so a stale cache on a band/DJ admin grants nothing.
  */
 export async function requireAdmin(
   ctx: AuthCtx,
 ): Promise<AuthUser> {
   const user = await requireAuth(ctx);
-  if (user.role !== "admin") {
+  if (!(await isStaffAdmin(ctx, user))) {
     throw new Error("Admin access required.");
   }
   return user;
@@ -234,6 +237,18 @@ export async function requireAdmin(
 /** See `requireAdmin` — `role` is a membership cache, not proof of staff. */
 export function isAdmin(user: AuthUser | null | undefined): boolean {
   return Boolean(user && user.role === "admin");
+}
+
+/**
+ * Arbor Live staff admin: the cached `role: "admin"` *and* a membership that
+ * still grants it. Use this, not `isAdmin`, anywhere access depends on it.
+ */
+export async function isStaffAdmin(
+  ctx: AuthCtx,
+  user: AuthUser | null | undefined,
+): Promise<boolean> {
+  if (!user || !isAdmin(user)) return false;
+  return await isPortalAdmin(ctx, getUserId(user));
 }
 
 export type ActiveOrganizationContext = {
@@ -431,7 +446,7 @@ export async function requireVerticalOrAdmin(
   vertical: UserVertical,
 ): Promise<AuthUser> {
   const user = await requireAuth(ctx);
-  if (isAdmin(user)) return user;
+  if (await isStaffAdmin(ctx, user)) return user;
   const profile = await getUserAdminProfile(ctx, getUserId(user));
   const { verticals } = resolveProfileMembership(profile ?? {});
   if (!hasVertical(verticals, vertical)) {
@@ -445,7 +460,7 @@ export async function requireAnyVerticalOrAdmin(
   candidates: readonly UserVertical[],
 ): Promise<AuthUser> {
   const user = await requireAuth(ctx);
-  if (isAdmin(user)) return user;
+  if (await isStaffAdmin(ctx, user)) return user;
   const profile = await getUserAdminProfile(ctx, getUserId(user));
   const { verticals } = resolveProfileMembership(profile ?? {});
   if (!hasAnyVertical(verticals, candidates)) {
@@ -456,7 +471,7 @@ export async function requireAnyVerticalOrAdmin(
 
 /** Admins, or members of the Operations team (who book acts, run events and invoices). */
 export async function hasOperationsAccess(ctx: AuthCtx, user: AuthUser): Promise<boolean> {
-  if (isAdmin(user)) return true;
+  if (await isStaffAdmin(ctx, user)) return true;
   const profile = await getUserAdminProfile(ctx, getUserId(user));
   return hasVertical(resolveProfileMembership(profile ?? {}).verticals, "Operations");
 }
@@ -477,7 +492,7 @@ export async function requireOperationsAccess(ctx: AuthCtx): Promise<AuthUser> {
  */
 export async function requireAdminOrOperations(ctx: AuthCtx): Promise<AuthUser> {
   const user = await requireAuth(ctx);
-  if (isAdmin(user)) return user;
+  if (await isStaffAdmin(ctx, user)) return user;
   return await requireOperationsAccess(ctx);
 }
 

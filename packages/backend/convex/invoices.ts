@@ -57,6 +57,7 @@ import {
   schedulePayingPartyAddedEmail,
 } from "./email/payingPartyEmails";
 import {
+  loadCompensationRatesByUserIds,
   loadInvoiceCrewRateSettings,
   normalizeCompensationRateMode,
   resolveUserCompensationHourlyRateUsd,
@@ -918,7 +919,7 @@ export const listManagers = query({
     // Arbor staff quoting events need per-person Normal/Lead/Custom rates so
     // assigned leads bill at lead rate on the invoice (not only global Normal).
     const settings = await loadInvoiceCrewRateSettings(ctx);
-    const rateRows = await ctx.db.query("userCompensationRates").withIndex("by_updatedAt").take(1000);
+    const rateRows = await loadCompensationRatesByUserIds(ctx, orgUserIds);
     const rateByUserId = new Map(
       rateRows.map((rate) => [
         rate.userId,

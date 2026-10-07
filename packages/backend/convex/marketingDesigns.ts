@@ -91,9 +91,21 @@ async function serializeDesign(ctx: QueryCtx, design: DesignDoc) {
   };
 }
 
-async function loadDesignByEventId(ctx: QueryCtx) {
-  const designs = await ctx.db.query("eventMarketingDesigns").take(500);
-  return new Map(designs.map((design) => [design.eventId, design]));
+/** Each event's design, read by `by_eventId` so old designs can't crowd out new ones. */
+async function loadDesignByEventId(ctx: QueryCtx, eventIds: Id<"events">[]) {
+  const designs = await Promise.all(
+    eventIds.map((eventId) =>
+      ctx.db
+        .query("eventMarketingDesigns")
+        .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+        .first(),
+    ),
+  );
+  return new Map(
+    designs
+      .filter((design): design is DesignDoc => design !== null)
+      .map((design) => [design.eventId, design]),
+  );
 }
 
 async function upsertPosterAssignment(
@@ -191,7 +203,10 @@ export const listUpcomingPosterWork = query({
       .withIndex("by_startAt", (q) => q.gte("startAt", args.now).lte("startAt", windowEnd))
       .order("asc")
       .take(300);
-    const designByEventId = await loadDesignByEventId(ctx);
+    const designByEventId = await loadDesignByEventId(
+      ctx,
+      events.map((event) => event._id),
+    );
     const needle = args.search?.trim().toLowerCase();
 
     const filtered = events.filter((event) => {

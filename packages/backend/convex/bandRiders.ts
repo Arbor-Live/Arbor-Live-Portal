@@ -11,7 +11,7 @@ import {
 import {
   getActiveOrganizationContextOrNull,
   getUserId,
-  isAdmin,
+  isStaffAdmin,
   requireArborInternalContext,
   requireAuth,
   requireBandContext,
@@ -115,7 +115,7 @@ async function loadRiderForViewer(
   const rider = await ctx.db.get(riderId);
   if (!rider) throw new Error("Rider not found.");
 
-  if (isAdmin(user)) {
+  if (await isStaffAdmin(ctx, user)) {
     return { rider, canEdit: true };
   }
 
@@ -136,7 +136,7 @@ async function requireEditableRider(ctx: MutationCtx, riderId: Id<"bandRiders">)
   const rider = await ctx.db.get(riderId);
   if (!rider) throw new Error("Rider not found.");
 
-  if (isAdmin(user)) {
+  if (await isStaffAdmin(ctx, user)) {
     return { rider, organizationId: rider.organizationId };
   }
 
@@ -154,7 +154,7 @@ async function resolveRiderOrganizationId(
 ): Promise<string> {
   const user = await requireAuth(ctx);
   if (organizationId) {
-    if (!isAdmin(user)) {
+    if (!(await isStaffAdmin(ctx, user))) {
       const context = await requireBandContext(ctx);
       if (context.organizationId !== organizationId) {
         throw new Error("You do not have access to this artist.");

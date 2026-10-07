@@ -153,3 +153,46 @@ export async function applyPayrollMethodToProfile(
     updatedAt: Date.now(),
   });
 }
+
+const RATE_PAGE_SIZE = 500;
+const MAX_RATE_PAGES = 40;
+
+/**
+ * Every compensation rate (one row per user). Pages through the table and
+ * throws rather than returning a partial list, so newer users' rates can't
+ * silently drop off once the table outgrows a single `take`.
+ */
+export async function loadAllCompensationRates(
+  ctx: QueryCtx | MutationCtx,
+): Promise<Doc<"userCompensationRates">[]> {
+  const rows: Doc<"userCompensationRates">[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < MAX_RATE_PAGES; page += 1) {
+    const result = await ctx.db
+      .query("userCompensationRates")
+      .withIndex("by_updatedAt")
+      .paginate({ cursor, numItems: RATE_PAGE_SIZE });
+    rows.push(...result.page);
+    if (result.isDone) return rows;
+    cursor = result.continueCursor;
+  }
+  throw new Error(
+    `userCompensationRates exceeded ${MAX_RATE_PAGES} pages of ${RATE_PAGE_SIZE}. Refusing a partial result.`,
+  );
+}
+
+/** Compensation rates for a known set of users, read by `by_userId`. */
+export async function loadCompensationRatesByUserIds(
+  ctx: QueryCtx | MutationCtx,
+  userIds: Iterable<string>,
+): Promise<Doc<"userCompensationRates">[]> {
+  const rows = await Promise.all(
+    Array.from(new Set(userIds)).map((userId) =>
+      ctx.db
+        .query("userCompensationRates")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .first(),
+    ),
+  );
+  return rows.filter((row): row is Doc<"userCompensationRates"> => row !== null);
+}

@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
-import { requireAdmin, requireAuth, requireBandContext, requireAnyVerticalOrAdmin, isAdmin } from "./lib/auth";
+import { requireAdmin, requireAuth, requireBandContext, requireAnyVerticalOrAdmin, isStaffAdmin } from "./lib/auth";
 import {
   buildBandHeroObjectKey,
   buildEventArtifactObjectKey,
@@ -109,7 +109,7 @@ export const generateR2UploadUrl = mutation({
         throw new Error("Organization id is required for artist hero uploads.");
       }
       const user = await requireAuth(ctx);
-      if (!isAdmin(user)) {
+      if (!(await isStaffAdmin(ctx, user))) {
         const bandContext = await requireBandContext(ctx);
         if (bandContext.organizationId !== args.organizationId.trim()) {
           throw new Error("You can only upload hero images for your active artist.");

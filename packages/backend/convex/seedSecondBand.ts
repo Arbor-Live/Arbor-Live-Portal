@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { internalMutation } from "./_generated/server";
 
 /**
  * Local scratch helper. Brings an event to a clean two-band state:
@@ -7,8 +7,11 @@ import { mutation } from "./_generated/server";
  *   • a NEW artist org with a headliner rider big enough to spill onto a
  *     second snake (17 ports), for exercising console loss warnings.
  * Removes the duplicate participations earlier runs created.
+ *
+ * Internal: it deletes and rewrites rows on any event/org it is given, so only
+ * `npx convex run` may call it, never a client.
  */
-export const seedTwoBands = mutation({
+export const seedTwoBands = internalMutation({
   args: {
     eventId: v.id("events"),
     smallOrganizationId: v.string(),
