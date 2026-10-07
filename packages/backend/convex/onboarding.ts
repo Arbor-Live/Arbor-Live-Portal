@@ -977,25 +977,23 @@ export const waiveCrewOnboarding = mutation({
   },
 });
 
-const ONBOARDING_PAGE_SIZE = 500;
-const MAX_ONBOARDING_PAGES = 40;
+/** One row per user; far above the roster, low enough to stay inside read limits. */
+const MAX_ONBOARDING_ROWS = 5_000;
 
-/** Every onboarding row (one per user); throws rather than returning a partial list. */
+/**
+ * Every onboarding row, or a thrown error rather than a partial list. A single
+ * bounded read: Convex allows one paginated query per function, and this
+ * query already pages admin profiles.
+ */
 async function loadAllUserOnboardingRows(ctx: QueryCtx): Promise<Doc<"userOnboarding">[]> {
-  const rows: Doc<"userOnboarding">[] = [];
-  let cursor: string | null = null;
-  for (let page = 0; page < MAX_ONBOARDING_PAGES; page += 1) {
-    const result = await ctx.db
-      .query("userOnboarding")
-      .withIndex("by_status")
-      .paginate({ cursor, numItems: ONBOARDING_PAGE_SIZE });
-    rows.push(...result.page);
-    if (result.isDone) return rows;
-    cursor = result.continueCursor;
+  const rows = await ctx.db
+    .query("userOnboarding")
+    .withIndex("by_status")
+    .take(MAX_ONBOARDING_ROWS + 1);
+  if (rows.length > MAX_ONBOARDING_ROWS) {
+    throw new Error(`userOnboarding exceeded ${MAX_ONBOARDING_ROWS} rows; refusing a partial result.`);
   }
-  throw new Error(
-    `userOnboarding exceeded ${MAX_ONBOARDING_PAGES} pages of ${ONBOARDING_PAGE_SIZE}. Refusing a partial result.`,
-  );
+  return rows;
 }
 
 export const listCrewOnboardingForAdmin = query({

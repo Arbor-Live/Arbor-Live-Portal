@@ -154,31 +154,28 @@ export async function applyPayrollMethodToProfile(
   });
 }
 
-const RATE_PAGE_SIZE = 500;
-const MAX_RATE_PAGES = 40;
+/** One row per user; far above the roster, low enough to stay inside read limits. */
+const MAX_COMPENSATION_RATES = 5_000;
 
 /**
- * Every compensation rate (one row per user). Pages through the table and
- * throws rather than returning a partial list, so newer users' rates can't
- * silently drop off once the table outgrows a single `take`.
+ * Every compensation rate (one row per user). Throws rather than returning a
+ * partial list, so newer users' rates can't silently drop off as the table
+ * grows. A single bounded read: Convex allows one paginated query per
+ * function, and callers already page other tables.
  */
 export async function loadAllCompensationRates(
   ctx: QueryCtx | MutationCtx,
 ): Promise<Doc<"userCompensationRates">[]> {
-  const rows: Doc<"userCompensationRates">[] = [];
-  let cursor: string | null = null;
-  for (let page = 0; page < MAX_RATE_PAGES; page += 1) {
-    const result = await ctx.db
-      .query("userCompensationRates")
-      .withIndex("by_updatedAt")
-      .paginate({ cursor, numItems: RATE_PAGE_SIZE });
-    rows.push(...result.page);
-    if (result.isDone) return rows;
-    cursor = result.continueCursor;
+  const rows = await ctx.db
+    .query("userCompensationRates")
+    .withIndex("by_updatedAt")
+    .take(MAX_COMPENSATION_RATES + 1);
+  if (rows.length > MAX_COMPENSATION_RATES) {
+    throw new Error(
+      `userCompensationRates exceeded ${MAX_COMPENSATION_RATES} rows; refusing a partial result.`,
+    );
   }
-  throw new Error(
-    `userCompensationRates exceeded ${MAX_RATE_PAGES} pages of ${RATE_PAGE_SIZE}. Refusing a partial result.`,
-  );
+  return rows;
 }
 
 /** Compensation rates for a known set of users, read by `by_userId`. */
