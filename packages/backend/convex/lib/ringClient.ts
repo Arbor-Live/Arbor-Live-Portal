@@ -11,6 +11,8 @@
 
 const OAUTH_URL = "https://oauth.ring.com/oauth/token";
 const CLIENT_API = "https://api.ring.com/clients_api/";
+const DEVICES_V3_API = "https://api.ring.com/device_info/v3/devices";
+const HISTORY_API = "https://api.ring.com/evm/v2/history/";
 const USER_AGENT = "android:com.ringapp";
 
 export type RingFetch = (url: string, init?: RequestInit) => Promise<Response>;
@@ -214,14 +216,35 @@ function toCamera(device: unknown): RingCamera | null {
   };
 }
 
-/** Every camera on the account: doorbells, stick-up/battery cams, shared doorbells. */
+/** Ring kinds on the v3 device list that aren't cameras. */
+const NON_CAMERA_KIND = /chime|base_station|beams|bridge|sensor|alarm|lock|hub/;
+
+/**
+ * Every camera on the account: doorbells and stick-up/battery cams it owns
+ * (`ring_devices`) plus cameras at locations shared with it, which Ring only
+ * lists on the v3 endpoint.
+ */
 export async function listRingCameras(fetchImpl: RingFetch, accessToken: string, hardwareId: string) {
-  const body = await ringGet(fetchImpl, `${CLIENT_API}ring_devices`, accessToken, hardwareId);
-  const groups = ["doorbots", "authorized_doorbots", "stickup_cams"];
-  return groups.flatMap((group) => {
-    const devices = field(body, group);
+  const [legacy, v3] = await Promise.all([
+    ringGet(fetchImpl, `${CLIENT_API}ring_devices`, accessToken, hardwareId),
+    ringGet(fetchImpl, DEVICES_V3_API, accessToken, hardwareId),
+  ]);
+  const cameras = ["doorbots", "authorized_doorbots", "stickup_cams"].flatMap((group) => {
+    const devices = field(legacy, group);
     return Array.isArray(devices) ? devices.map(toCamera).filter((camera) => camera !== null) : [];
   });
+  const known = new Set(cameras.map((camera) => camera.deviceId));
+  const shared = field(v3, "devices");
+  for (const device of Array.isArray(shared) ? shared : []) {
+    const kind = field(device, "kind");
+    if (typeof kind !== "string" || NON_CAMERA_KIND.test(kind)) continue;
+    const camera = toCamera(device);
+    if (camera && !known.has(camera.deviceId)) {
+      known.add(camera.deviceId);
+      cameras.push(camera);
+    }
+  }
+  return cameras;
 }
 
 export function ringClipKind(rawKind: string): RingClipKind {
@@ -231,58 +254,78 @@ export function ringClipKind(rawKind: string): RingClipKind {
   return "other";
 }
 
-function toClip(entry: unknown, deviceId: number): RingClip | null {
-  const dingId = field(entry, "ding_id");
-  const createdAt = field(entry, "created_at");
-  if ((typeof dingId !== "string" && typeof dingId !== "number") || typeof createdAt !== "number") return null;
-  const rawKind = String(field(entry, "kind") ?? "other");
-  const duration = field(entry, "duration");
-  const thumbnail = field(entry, "thumbnail_url");
+/** The signed link for one of an event's files (Ring signs them for 15 minutes). */
+function eventMediaUrl(event: unknown, fileType: "VIDEO" | "THUMBNAIL") {
+  const media = field(field(field(event, "visualizations"), "cloud_media_visualization"), "media");
+  const file = Array.isArray(media) ? media.find((entry) => field(entry, "file_type") === fileType) : undefined;
+  const url = field(file, "url");
+  return typeof url === "string" && url ? url : undefined;
+}
+
+function toClip(event: unknown, deviceId: number): RingClip | null {
+  const eventId = field(event, "event_id");
+  const createdAt = Date.parse(String(field(event, "start_time")));
+  if (typeof eventId !== "string" || !eventId || !Number.isFinite(createdAt)) return null;
+  const rawKind = String(field(event, "event_type") ?? "other");
+  const durationMs = field(event, "duration_ms");
   return {
-    dingId: String(dingId),
+    dingId: eventId,
     deviceId,
     kind: ringClipKind(rawKind),
     rawKind,
     createdAt,
-    durationSec: typeof duration === "number" && duration > 0 ? duration : undefined,
-    personDetected: Boolean(field(field(entry, "cv_properties"), "person_detected")),
-    thumbnailUrl: typeof thumbnail === "string" && thumbnail ? thumbnail : undefined,
+    durationSec: typeof durationMs === "number" && durationMs > 0 ? Math.round(durationMs / 1000) : undefined,
+    personDetected: field(field(event, "cv"), "person_detected") === true,
+    thumbnailUrl: eventMediaUrl(event, "THUMBNAIL"),
   };
 }
 
-/** Recorded clips between two instants, oldest first. Needs Ring Protect. */
+const HISTORY_PAGE_SIZE = 100;
+/** Stops a runaway backfill: 50 pages is 5,000 clips. */
+const HISTORY_MAX_PAGES = 50;
+
+/**
+ * Recorded clips since an instant, newest first. Needs Ring Protect. Uses the
+ * event history the Ring app reads, which (unlike the older video search)
+ * also covers shared cameras.
+ */
 export async function searchRingClips(
   fetchImpl: RingFetch,
   accessToken: string,
   hardwareId: string,
-  args: { deviceId: number; from: number; to: number },
+  args: { deviceId: number; since: number },
 ): Promise<RingClip[]> {
-  const params = new URLSearchParams({
-    doorbot_id: String(args.deviceId),
-    date_from: String(Math.floor(args.from)),
-    date_to: String(Math.floor(args.to)),
-    order: "asc",
-    api_version: "11",
-  });
-  params.append("includes[]", "pva");
-  const body = await ringGet(fetchImpl, `${CLIENT_API}video_search/history?${params}`, accessToken, hardwareId);
-  const entries = field(body, "video_search");
-  return Array.isArray(entries)
-    ? entries.map((entry) => toClip(entry, args.deviceId)).filter((clip) => clip !== null)
-    : [];
+  const clips: RingClip[] = [];
+  let paginationKey: string | undefined;
+  for (let page = 0; page < HISTORY_MAX_PAGES; page++) {
+    const params = new URLSearchParams({ limit: String(HISTORY_PAGE_SIZE) });
+    if (paginationKey) params.set("pagination_key", paginationKey);
+    const body = await ringGet(
+      fetchImpl,
+      `${HISTORY_API}devices/${args.deviceId}?${params}`,
+      accessToken,
+      hardwareId,
+    );
+    const items = field(body, "items");
+    if (!Array.isArray(items) || items.length === 0) break;
+    let reachedSince = false;
+    for (const item of items) {
+      const clip = toClip(item, args.deviceId);
+      if (!clip) continue;
+      if (clip.createdAt < args.since) reachedSince = true;
+      else clips.push(clip);
+    }
+    const next = field(body, "pagination_key");
+    if (reachedSince || typeof next !== "string" || !next) break;
+    paginationKey = next;
+  }
+  return clips;
 }
 
 /** A short-lived MP4 link for one clip. */
 export async function getRingClipUrl(fetchImpl: RingFetch, accessToken: string, hardwareId: string, dingId: string) {
-  const body = await ringGet(
-    fetchImpl,
-    `${CLIENT_API}dings/${encodeURIComponent(dingId)}/share/play?disable_redirect=true`,
-    accessToken,
-    hardwareId,
-  );
-  const url = field(body, "url");
-  if (typeof url !== "string" || !url) {
-    throw new RingRequestError("Ring has no video for this clip yet.", 404);
-  }
+  const event = await ringGet(fetchImpl, `${HISTORY_API}events/${encodeURIComponent(dingId)}`, accessToken, hardwareId);
+  const url = eventMediaUrl(event, "VIDEO");
+  if (!url) throw new RingRequestError("Ring has no video for this clip yet.", 404);
   return url;
 }

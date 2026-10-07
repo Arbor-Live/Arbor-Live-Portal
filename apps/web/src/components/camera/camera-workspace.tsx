@@ -11,7 +11,7 @@ import {
   WarningCircleIcon,
   XIcon,
 } from "@phosphor-icons/react";
-import { ClipSheet, type ClipRow } from "@/components/camera/clip-sheet";
+import { ClipSheet, useRingThumbnail, type ClipRow } from "@/components/camera/clip-sheet";
 import { RingAuthCommand, RingConnectForm } from "@/components/camera/ring-connect-form";
 import { EmptyState, ListSummary, RowFlag, RowGroup, RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
@@ -56,11 +56,12 @@ function plural(count: number, noun: string) {
 
 function ClipThumbnail({ clip, className }: { clip: ClipRow; className?: string }) {
   const Icon = RING_CLIP_KIND_ICONS[clip.kind];
+  const src = useRingThumbnail(clip.thumbnailUrl);
   return (
     <span className={`flex aspect-video shrink-0 items-center justify-center overflow-hidden bg-muted ${className ?? ""}`}>
-      {clip.thumbnailUrl ? (
+      {src ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={clip.thumbnailUrl} alt="" className="size-full object-cover" loading="lazy" />
+        <img src={src} alt="" className="size-full object-cover" data-testid="ring-clip-thumbnail" />
       ) : (
         <Icon className="size-5 text-muted-foreground" aria-hidden />
       )}
