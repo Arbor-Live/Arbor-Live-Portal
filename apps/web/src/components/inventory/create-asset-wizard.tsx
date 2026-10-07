@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { CameraIcon, KeyboardIcon } from "@phosphor-icons/react";
 import { normalizeAssetScanInput } from "@/lib/asset-scan";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,23 +19,14 @@ import {
 } from "@/components/ui/sheet";
 import { toCategoryOptions } from "./constants";
 import { ContainsEditor } from "./contains-editor";
-import type { ScanOutcome } from "./use-barcode-camera";
+import { BarcodeCameraView } from "./barcode-camera-view";
+import { useBarcodeCamera, type ScanOutcome } from "./use-barcode-camera";
 import {
   InventoryItemDetails,
   type ItemDetailsContainerOption,
 } from "./inventory-item-details";
 import { SearchableSelect } from "./searchable-select";
-
-type WizardTag = {
-  localId: string;
-  assetId: string;
-  serialNumber: string;
-  storageLocationId: string;
-  containedInAssetId: string;
-  status: string;
-  notes: string;
-  contains: string[];
-};
+import { applyLabelScan, emptyTag, type WizardTag } from "./wizard-tags-model";
 
 type TypeDraft = {
   name: string;
@@ -43,19 +35,6 @@ type TypeDraft = {
   category: string;
   msrpUsd: string;
 };
-
-function emptyTag(from?: Pick<WizardTag, "storageLocationId" | "containedInAssetId">): WizardTag {
-  return {
-    localId: crypto.randomUUID(),
-    assetId: "",
-    serialNumber: "",
-    storageLocationId: from?.storageLocationId ?? "",
-    containedInAssetId: from?.containedInAssetId ?? "",
-    status: "",
-    notes: "",
-    contains: [],
-  };
-}
 
 function formatTypeDisplay(type: { name: string; model: string; manufacturer?: string }) {
   const maker = type.manufacturer?.trim();
@@ -89,6 +68,10 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
   const focusAssetLocalIdRef = useRef<string | null>(null);
   const serialInputRefs = useRef(new Map<string, HTMLInputElement>());
   const assetInputRefs = useRef(new Map<string, HTMLInputElement>());
+  const tagsRef = useRef(tags);
+  useEffect(() => {
+    tagsRef.current = tags;
+  }, [tags]);
 
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: true });
   const types = useQuery(api.inventoryTypes.listOptions, {});
@@ -242,6 +225,25 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
     addContains(localId, assetId);
     return "accepted";
   }
+
+  /**
+   * One camera for the whole batch: it stays open while labels and serials are
+   * scanned back to back, and never moves focus (no keyboard popping up).
+   */
+  const labelCamera = useBarcodeCamera((raw): ScanOutcome => {
+    const existing = new Set(
+      (itemSummaries ?? []).flatMap((item) => (item.assetId ? [item.assetId.toLowerCase()] : [])),
+    );
+    const result = applyLabelScan(tagsRef.current, raw, existing);
+    if ("error" in result) {
+      setScanError(result.error);
+      return "rejected";
+    }
+    setScanError(null);
+    tagsRef.current = result.tags;
+    setTags(result.tags);
+    return "accepted";
+  });
 
   async function createNewType() {
     if (!typeDraft.name.trim() || !typeDraft.model.trim() || !effectiveTypeDraftCategory) {
@@ -465,6 +467,24 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
 
         {step === 2 ? (
           <div className="space-y-4">
+            <div className="space-y-2 rounded-none border bg-muted/20 p-3" data-testid="wizard-label-scanner">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Scan each asset&apos;s label, then its serial barcode. A new asset starts on its own.
+                </p>
+                {labelCamera.supported ? (
+                  <Button type="button" variant="outline" size="sm" onClick={labelCamera.toggleCamera}>
+                    {labelCamera.cameraOn ? <KeyboardIcon className="size-4" /> : <CameraIcon className="size-4" />}
+                    {labelCamera.cameraOn ? "Hide camera" : "Scan labels"}
+                  </Button>
+                ) : null}
+              </div>
+              <BarcodeCameraView
+                camera={labelCamera}
+                idleHint="Labels (QR / ALE tags) fill Asset ID; any other barcode fills Serial."
+                testId="wizard-label-scanner-last"
+              />
+            </div>
             {scanError ? <p className="text-sm text-destructive">{scanError}</p> : null}
             {tags.map((tag, index) => {
               const options = containmentOptions.filter((option) => option.assetId !== tag.assetId.trim());

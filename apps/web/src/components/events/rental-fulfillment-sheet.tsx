@@ -521,7 +521,7 @@ export function RentalFulfillmentSheet({
                         </div>
                       )}
                       {!isExceptions ? (
-                        <AssetScanner onSubmit={handleScan} disabled={busy} autoFocus keepCameraOpen />
+                        <AssetScanner onSubmit={handleScan} disabled={busy} autoFocus />
                       ) : null}
                     </>
                   ) : null}

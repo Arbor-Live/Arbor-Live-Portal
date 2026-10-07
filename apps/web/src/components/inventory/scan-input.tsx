@@ -4,6 +4,7 @@ import type { KeyboardEvent, Ref } from "react";
 import { CameraIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { BarcodeCameraView } from "./barcode-camera-view";
 import { useBarcodeCamera } from "./use-barcode-camera";
 
 type ScanInputProps = {
@@ -46,16 +47,15 @@ export function ScanInput({
   className,
   showCameraButton = true,
 }: ScanInputProps) {
-  const { cameraOn, toggleCamera, cameraError, videoRef, supported } = useBarcodeCamera(
-    (raw) => {
-      if (onScan) {
-        void onScan(raw);
-        return;
-      }
-      onChange(raw.trim());
-    },
-    { closeOnDetect: true },
-  );
+  // Stays open after a read: a later read replaces the value, "Hide camera" closes it.
+  const camera = useBarcodeCamera((raw) => {
+    if (onScan) {
+      void onScan(raw);
+      return;
+    }
+    onChange(raw.trim());
+  });
+  const { cameraOn, toggleCamera, supported } = camera;
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key !== "Enter") return;
@@ -86,7 +86,8 @@ export function ScanInput({
             type="button"
             variant="outline"
             size="icon"
-            aria-label="Scan with camera"
+            aria-label={cameraOn ? "Hide camera" : "Scan with camera"}
+            aria-pressed={cameraOn}
             disabled={disabled}
             onClick={toggleCamera}
             className="shrink-0"
@@ -95,15 +96,7 @@ export function ScanInput({
           </Button>
         ) : null}
       </div>
-      {cameraError ? <p className="text-xs text-destructive">{cameraError}</p> : null}
-      {cameraOn ? (
-        <video
-          ref={videoRef}
-          className="aspect-video w-full rounded-md bg-black object-cover"
-          muted
-          playsInline
-        />
-      ) : null}
+      <BarcodeCameraView camera={camera} idleHint="Point the camera at a QR code or barcode." />
     </div>
   );
 }

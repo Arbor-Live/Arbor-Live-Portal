@@ -62,6 +62,7 @@ export function InventoryItemEditor({
   const children = useQuery(api.inventoryItems.getChildren, editingId ? { id: editingId } : "skip");
   const [containsScanError, setContainsScanError] = useState<string | null>(null);
   const [containsError, setContainsError] = useState<string | null>(null);
+  const [containerScanError, setContainerScanError] = useState<string | null>(null);
   const convex = useConvex();
 
   const form = useConvexForm<InventoryItemFormValues>({
@@ -126,6 +127,22 @@ export function InventoryItemEditor({
     return (await setChildren([...ids, found._id])) ? "accepted" : "rejected";
   }
 
+  /** Resolve a scanned or typed container (tag, link, short link) the same way the scanners do. */
+  async function scanContainer(raw: string): Promise<ScanOutcome> {
+    const found = await convex.query(api.inventoryItems.resolveByScan, { raw });
+    if (!found) {
+      setContainerScanError(`No item found for “${raw.trim()}”.`);
+      return "rejected";
+    }
+    if (found._id === editingId) {
+      setContainerScanError("An item can't be contained in itself.");
+      return "rejected";
+    }
+    setContainerScanError(null);
+    form.setValue("containedInAssetId", found._id, { shouldDirty: true });
+    return "accepted";
+  }
+
   const values = form.watch();
   const onDetailsChange = (patch: Partial<InventoryItemFormValues>) => {
     for (const [key, value] of Object.entries(patch)) {
@@ -170,13 +187,13 @@ export function InventoryItemEditor({
               notes: values.notes ?? "",
             }}
             onChange={onDetailsChange}
-            errors={
-              form.formState.errors.assetId
-                ? {
-                    assetId: form.formState.errors.assetId.message ?? "Add an Asset ID or Serial Number",
-                  }
-                : undefined
-            }
+            errors={{
+              assetId: form.formState.errors.assetId
+                ? (form.formState.errors.assetId.message ?? "Add an Asset ID or Serial Number")
+                : undefined,
+              containedInAssetId: containerScanError ?? undefined,
+            }}
+            onScanContainedIn={scanContainer}
             types={types.map((type) => ({ value: type._id, label: `${type.name} - ${type.model}` }))}
             locations={locations.map((location) => ({
               value: location._id,

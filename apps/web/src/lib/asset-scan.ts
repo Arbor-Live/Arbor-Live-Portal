@@ -120,6 +120,25 @@ export function normalizeAssetScanInput(raw: string): string | null {
   return parseAssetScanInput(raw).assetId;
 }
 
+/**
+ * Extra search strings for a typed / pasted asset reference, so a picker finds
+ * ALE-0041 or arbor.st/e/ALE-0041 under its stored id "41".
+ */
+export function assetSearchVariants(query: string): string[] {
+  const assetId = normalizeAssetScanInput(query);
+  return assetId && assetId !== query.trim() ? [assetId] : [];
+}
+
+/**
+ * A short label for a read: the asset id inside an equipment link
+ * (arbor.st/e/ALE-0099 → "99"), anything else as read.
+ */
+export function describeScan(raw: string): string {
+  const trimmed = stripNoise(raw);
+  if (!tryParseUrl(trimmed) && !EQUIPMENT_PATH_RE.test(trimmed)) return trimmed;
+  return normalizeAssetScanInput(trimmed) ?? trimmed;
+}
+
 /** Candidate bare assetIds to try (canonical form + case variants). */
 export function assetIdLookupCandidates(assetId: string): string[] {
   const base = stripNoise(assetId);
@@ -152,6 +171,19 @@ export function looksLikeAssetTag(raw: string): boolean {
   // PREFIX-DIGITS e.g. MIC-12
   if (/^[A-Za-z]{2,8}-\d{2,}$/.test(trimmed)) return true;
   return false;
+}
+
+/**
+ * Where a camera read belongs when labelling gear in bulk: our labels are QR
+ * links (arbor.st/e/…) or ALE / short numeric tags; any other code (Code 128,
+ * UPC, a long number) is the manufacturer's serial. Deliberately narrower than
+ * `looksLikeAssetTag`, which also counts PREFIX-DIGITS shapes that serials share.
+ */
+export function classifyLabelScan(raw: string): "assetId" | "serialNumber" {
+  const trimmed = stripNoise(raw);
+  if (tryParseUrl(trimmed) || EQUIPMENT_PATH_RE.test(trimmed)) return "assetId";
+  if (/^ALE[\s-]*\d+$/i.test(trimmed) || /^\d{1,6}$/.test(trimmed)) return "assetId";
+  return "serialNumber";
 }
 
 /**

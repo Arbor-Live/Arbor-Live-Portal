@@ -28,8 +28,10 @@ function optionKey(option: SearchableSelectOption) {
   return option.value === "" ? "__empty__" : option.value;
 }
 
-function matchesQuery(option: SearchableSelectOption, query: string) {
-  return fuzzyScoreHaystack(query, [option.label, option.description, option.keywords]) > 0;
+/** Best fuzzy score across the typed query and its variants. */
+function scoreOption(option: SearchableSelectOption, queries: string[]) {
+  const haystack = [option.label, option.description, option.keywords];
+  return Math.max(0, ...queries.map((query) => fuzzyScoreHaystack(query, haystack)));
 }
 
 export function SearchableSelect({
@@ -50,6 +52,7 @@ export function SearchableSelect({
   contentClassName,
   clearable = false,
   clearLabel = "Clear",
+  queryVariants,
 }: {
   /** Wires the trigger to a `<Label htmlFor>`. */
   id?: string;
@@ -71,6 +74,11 @@ export function SearchableSelect({
   /** Offer an entry that clears the value, leaving the field empty. */
   clearable?: boolean;
   clearLabel?: string;
+  /**
+   * Other spellings of the typed query to match on too, e.g. the bare asset id
+   * inside a pasted `arbor.st/e/ALE-0041` link.
+   */
+  queryVariants?: (query: string) => string[];
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -81,6 +89,13 @@ export function SearchableSelect({
     [options, value],
   );
 
+  const searchQueries = useMemo(() => {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+    const variants = queryVariants?.(trimmed) ?? [];
+    return [...new Set([trimmed, ...variants.map((variant) => variant.trim()).filter(Boolean)])];
+  }, [query, queryVariants]);
+
   const listOptions = useMemo(() => {
     const base = (() => {
       if (serverBacked) {
@@ -89,14 +104,12 @@ export function SearchableSelect({
         }
         return options;
       }
-      const trimmed = query.trim();
-      if (!trimmed) return options;
+      if (!searchQueries.length) return options;
       // Rank locally-filtered options so the closest match is first rather
       // than wherever it fell in the incoming (often alphabetical) order.
       return [...options].sort(
         (a, b) =>
-          fuzzyScoreHaystack(trimmed, [b.label, b.description, b.keywords]) -
-            fuzzyScoreHaystack(trimmed, [a.label, a.description, a.keywords]) ||
+          scoreOption(b, searchQueries) - scoreOption(a, searchQueries) ||
           a.label.localeCompare(b.label),
       );
     })();
@@ -106,13 +119,15 @@ export function SearchableSelect({
       { value: "", label: clearLabel, keywords: "none clear unset empty" },
       ...base.filter((option) => option.value !== ""),
     ];
-  }, [clearable, clearLabel, minQueryLength, options, query, selected, serverBacked, value]);
+  }, [clearable, clearLabel, minQueryLength, options, query, searchQueries, selected, serverBacked, value]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const canCreate =
     Boolean(onCreate) &&
     normalizedQuery.length > 0 &&
-    !options.some((option) => option.label.trim().toLowerCase() === normalizedQuery);
+    !options.some((option) =>
+      searchQueries.some((entry) => option.label.trim().toLowerCase() === entry.toLowerCase()),
+    );
 
   const showSearchHint = serverBacked && query.trim().length < minQueryLength && !searching;
   const emptyMessage = searching
@@ -152,7 +167,12 @@ export function SearchableSelect({
       onInputValueChange={updateQuery}
       isItemEqualToValue={(a, b) => a.value === b.value}
       itemToStringLabel={(item) => item.label}
-      filter={serverBacked ? null : matchesQuery}
+      filter={
+        serverBacked
+          ? null
+          : (option: SearchableSelectOption, typed: string) =>
+              scoreOption(option, [typed, ...(queryVariants?.(typed.trim()) ?? [])]) > 0
+      }
     >
       <ComboboxTrigger
         id={id}

@@ -4,7 +4,9 @@ import { useMemo } from "react";
 import { CameraIcon, XIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { assetSearchVariants } from "@/lib/asset-scan";
 import { SearchableSelect } from "./searchable-select";
+import { BarcodeCameraView } from "./barcode-camera-view";
 import { useBarcodeCamera, type ScanOutcome } from "./use-barcode-camera";
 
 export type ContainsOption = {
@@ -48,9 +50,8 @@ export function ContainsEditor({
     return options.filter((option) => !selected.has(option.value));
   }, [options, value]);
   // A container is filled one asset after another, so the camera stays open between reads.
-  const { cameraOn, toggleCamera, cameraError, videoRef, supported, lastDetected } = useBarcodeCamera(
-    (raw) => onScan?.(raw),
-  );
+  const camera = useBarcodeCamera((raw) => onScan?.(raw));
+  const { cameraOn, toggleCamera, supported } = camera;
 
   const selectedOptions = useMemo(() => {
     const byValue = new Map(options.map((option) => [option.value, option]));
@@ -96,8 +97,12 @@ export function ContainsEditor({
               label: option.assetId,
               description: option.label,
             }))}
-            placeholder="Add an asset…"
+            placeholder="Type or paste ALE-0041 / arbor.st/e/…"
             emptyLabel={available.length ? "Add an asset…" : "No more assets to add"}
+            queryVariants={assetSearchVariants}
+            // Anything not in the list (a short link, another spelling) resolves like a scan.
+            onCreate={onScan ? (query) => void onScan(query) : undefined}
+            createLabel="Look up"
           />
         </div>
         {onScan && supported ? (
@@ -105,7 +110,8 @@ export function ContainsEditor({
             type="button"
             variant="outline"
             size="icon"
-            aria-label="Scan a barcode to add"
+            aria-label={cameraOn ? "Hide camera" : "Scan a barcode to add"}
+            aria-pressed={cameraOn}
             disabled={disabled}
             onClick={toggleCamera}
             className="shrink-0"
@@ -114,22 +120,10 @@ export function ContainsEditor({
           </Button>
         ) : null}
       </div>
-      {cameraError ? <p className="text-xs text-destructive">{cameraError}</p> : null}
-      {cameraOn ? (
-        <video
-          ref={videoRef}
-          className="aspect-video w-full rounded-md bg-black object-cover"
-          muted
-          playsInline
-        />
-      ) : null}
-      {cameraOn ? (
-        <p className="text-xs text-muted-foreground" aria-live="polite">
-          {lastDetected
-            ? `Read ${lastDetected}. Scan the next one, or close the camera when you're done.`
-            : "Scan each asset that goes inside. The camera stays open between scans."}
-        </p>
-      ) : null}
+      <BarcodeCameraView
+        camera={camera}
+        idleHint="Scan each asset that goes inside. The camera stays open between scans."
+      />
     </div>
   );
 }
