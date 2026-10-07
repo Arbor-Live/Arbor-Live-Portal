@@ -18,6 +18,7 @@ import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatDate, formatTime } from "@/lib/format";
 import { formatClipDuration, RING_CLIP_KIND_LABELS, type RingClipKind } from "@/lib/ring-clips";
+import { ringThumbnailSrc } from "@/lib/ring-thumbnail";
 
 export type ClipRow = {
   _id: Id<"ringClips">;
@@ -46,10 +47,31 @@ function useClipUrl() {
   );
 }
 
+/** The thumbnail as something an `<img>` can show (Ring's are video frames), or null. */
+export function useRingThumbnail(url: string | null) {
+  const [loaded, setLoaded] = useState<{ url: string; src: string | null } | null>(null);
+  useEffect(() => {
+    if (!url) return;
+    let cancelled = false;
+    void ringThumbnailSrc(url).then((src) => {
+      if (!cancelled) setLoaded({ url, src });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+  return loaded && loaded.url === url ? loaded.src : null;
+}
+
+/** Ring records in HEVC, which Safari and Chrome on Mac play but Firefox doesn't. */
+const UNSUPPORTED_VIDEO_MESSAGE =
+  "This browser can't play Ring's video format (HEVC). Use Safari or Chrome, or open the video in a new tab.";
+
 type VideoState = { status: "loading" } | { status: "ready"; url: string } | { status: "error"; message: string };
 
 function ClipPlayer({ clip }: { clip: ClipRow }) {
   const getUrl = useClipUrl();
+  const poster = useRingThumbnail(clip.thumbnailUrl);
   const [state, setState] = useState<VideoState>({ status: "loading" });
 
   const [attempt, setAttempt] = useState(0);
@@ -76,12 +98,19 @@ function ClipPlayer({ clip }: { clip: ClipRow }) {
       <video
         key={state.url}
         src={state.url}
-        poster={clip.thumbnailUrl ?? undefined}
+        poster={poster ?? undefined}
         controls
         autoPlay
         playsInline
         className="aspect-video w-full bg-black"
         data-testid="ring-clip-video"
+        onError={(event) => {
+          const unsupported = event.currentTarget.error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;
+          setState({
+            status: "error",
+            message: unsupported ? UNSUPPORTED_VIDEO_MESSAGE : "Couldn't play this clip.",
+          });
+        }}
       />
     );
   }
@@ -89,10 +118,16 @@ function ClipPlayer({ clip }: { clip: ClipRow }) {
     return (
       <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 border border-dashed px-4 text-center text-sm text-muted-foreground">
         <p>{state.message}</p>
-        <Button type="button" size="sm" variant="outline" onClick={() => {
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            urlCache.delete(clip._id);
             setState({ status: "loading" });
             setAttempt((count) => count + 1);
-          }}>
+          }}
+        >
           Try again
         </Button>
       </div>

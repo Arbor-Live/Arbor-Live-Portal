@@ -7670,9 +7670,9 @@ export const seedRingCamera = mutation({
 
 export const generateRingThumbnailUploadUrl = mutation({
   args: {},
-  returns: v.string(),
+  returns: v.object({ uploadUrl: v.string() }),
   handler: async (ctx) => {
     assertE2eHelpersEnabled();
-    return await ctx.storage.generateUploadUrl();
+    return { uploadUrl: await ctx.storage.generateUploadUrl() };
   },
 });
