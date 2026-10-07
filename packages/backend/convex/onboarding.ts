@@ -25,9 +25,11 @@ import {
 import { normalizeAlertRecipients } from "./lib/alertRecipients";
 import {
   FWS_JOB_INFO,
+  fwsJobInfoValue,
   ONBOARDING_FWS_EMAILS,
   ONBOARDING_LEADERSHIP_EMAILS,
   ONBOARDING_LINKS,
+  onboardingLinksValue,
 } from "./lib/onboardingLinks";
 import {
   formatCompensationRateLabel,
@@ -469,40 +471,6 @@ export const updateCrewOnboardingSettings = mutation({
     }
     return { ok: true as const };
   },
-});
-
-const onboardingLinksValue = v.object({
-  whatsappInvite: v.string(),
-  whatsappGroupName: v.string(),
-  instagramArbor: v.string(),
-  instagramArborHandle: v.string(),
-  instagramTrivia: v.string(),
-  instagramTriviaHandle: v.string(),
-  fwsInfo: v.string(),
-  soberMonitorsGuide: v.string(),
-  soberMonitorsTest: v.string(),
-  onboardingDoc: v.string(),
-  narcanVideo: v.string(),
-  narcanVideoEmbed: v.string(),
-  i9Appointment: v.string(),
-  i9AcceptableDocuments: v.string(),
-  starsPortal: v.string(),
-  sequoiaTimecardHelp: v.string(),
-  cartTrainingCode: v.string(),
-  liftingTrainingCode: v.string(),
-  liftingTrainingUrl: v.string(),
-});
-
-const fwsJobInfoValue = v.object({
-  hiringDepartment: v.string(),
-  jobTitle: v.string(),
-  briefDescription: v.string(),
-  hourlyWage: v.string(),
-  projectTaskAward: v.string(),
-  supervisorName: v.string(),
-  supervisorEmail: v.string(),
-  hrAdminName: v.string(),
-  hrAdminEmail: v.string(),
 });
 
 const crewOnboardingReturn = v.object({
