@@ -2723,8 +2723,13 @@ export const updateUserAdmin = mutation({
     if (args.organizationMemberships?.length) {
       await syncGlobalRoleFromMemberships(ctx, args.userId);
     } else if (args.role) {
+      // An admin-granting membership makes it admin. The no-membership legacy
+      // exception only keeps a user who is already cached as admin; it never
+      // promotes a member.
+      const membershipRole = await resolveGlobalRoleFromActiveMemberships(ctx, args.userId);
+      const keepsLegacyAdmin = target.role === "admin" && (await isPortalAdmin(ctx, args.userId));
       const role =
-        args.role === "admin" && (await isPortalAdmin(ctx, args.userId)) ? "admin" : "member";
+        args.role === "admin" && (membershipRole === "admin" || keepsLegacyAdmin) ? "admin" : "member";
       if (target.role !== role) {
         await ctx.runMutation(components.betterAuth.adapter.updateOne, {
           input: {
