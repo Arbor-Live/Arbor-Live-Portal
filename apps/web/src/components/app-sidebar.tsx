@@ -10,6 +10,9 @@ import { useMutation, useQuery } from "convex/react"
 import { useNow } from "@/lib/use-now"
 import { api } from "@/lib/convex-api"
 import { isArtistOrganizationType } from "@/lib/artist-types"
+import { navItems, sectionSubItems, type NavItem, type NavSubItem } from "@/lib/nav"
+import { getConvexErrorMessage } from "@/lib/convex-error"
+import { notify } from "@/lib/notify"
 import { useSessionShell } from "@/components/session-shell-provider"
 import { useViewMode } from "@/components/view-mode-provider"
 import { getDefaultAdminSchedulingRange } from "@/lib/crew-availability"
@@ -41,139 +44,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
-import {
-  CalendarDotsIcon,
-  CaretRightIcon,
-  CurrencyDollarIcon,
-  HouseIcon,
-  UsersIcon,
-  GuitarIcon,
-  PackageIcon,
-  LifebuoyIcon,
-  MegaphoneIcon,
-  MusicNotesIcon,
-  ImagesIcon,
-  VideoCameraIcon,
-} from "@phosphor-icons/react"
-
-type NavSubItem = {
-  title: string
-  url: string
-  /** Portal admins only. */
-  adminOnly?: boolean
-  /** Arbor staff only: hidden from artists viewing their own act. */
-  staffOnly?: boolean
-  /** The act workspace: artists and admins, not other Arbor staff. */
-  actWorkspace?: boolean
-  /** Operations team and admins (not crew). */
-  opsOnly?: boolean
-  /** Label for Arbor staff when it differs from the artist's own ("Edit artist profile" vs "Profile"). */
-  staffTitle?: string
-}
-
-type NavItem = {
-  title: string
-  url: string
-  icon: typeof CalendarDotsIcon
-  /** Portal admins only. */
-  adminOnly?: boolean
-  /** Operations team and admins (not crew). */
-  opsOnly?: boolean
-  bandOnly?: boolean
-  marketingOnly?: boolean
-}
-
-const navItems: NavItem[] = [
-  { title: "Home", url: "/dashboard", icon: HouseIcon },
-  { title: "Events", url: "/dashboard/events", icon: CalendarDotsIcon },
-  { title: "Ops Center", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, opsOnly: true },
-  { title: "Users", url: "/dashboard/users", icon: UsersIcon, adminOnly: true },
-  {
-    title: "Artists",
-    url: "/dashboard/artists",
-    icon: GuitarIcon,
-  },
-  { title: "Opportunities", url: "/dashboard/opportunities", icon: MusicNotesIcon, bandOnly: true },
-  { title: "Media", url: "/dashboard/media", icon: ImagesIcon, bandOnly: true },
-  { title: "Inventory", url: "/dashboard/inventory", icon: PackageIcon },
-  { title: "Marketing", url: "/dashboard/marketing", icon: MegaphoneIcon, marketingOnly: true },
-  { title: "Camera", url: "/dashboard/camera", icon: VideoCameraIcon, adminOnly: true },
-]
-
-const inventorySubItems: NavSubItem[] = [
-  { title: "Inventory Items", url: "/dashboard/inventory/items" },
-  { title: "Borrow Requests", url: "/dashboard/inventory/borrow-requests" },
-  { title: "Damage & Repair", url: "/dashboard/inventory/damage" },
-  { title: "Types", url: "/dashboard/inventory/types", adminOnly: true },
-  { title: "Packages", url: "/dashboard/inventory/packages" },
-  { title: "Storage Locations", url: "/dashboard/inventory/storage-locations" },
-  { title: "Lost & Found", url: "/dashboard/inventory/lost-found" },
-  { title: "Print queue", url: "/dashboard/inventory/print-queue", adminOnly: true },
-  { title: "Import CSV", url: "/dashboard/inventory/import", adminOnly: true },
-]
-
-const financialHubSubItems: NavSubItem[] = [
-  { title: "Overview", url: "/dashboard/financial-hub" },
-  { title: "Insights", url: "/dashboard/financial-hub/insights" },
-  { title: "Booking Requests", url: "/dashboard/financial-hub/requests" },
-  { title: "Invoices", url: "/dashboard/financial-hub/invoices" },
-  { title: "Artist payouts", url: "/dashboard/financial-hub/artist-payouts" },
-  { title: "GrantED ledger", url: "/dashboard/financial-hub/granted" },
-  { title: "Crew timecards", url: "/dashboard/timecards", adminOnly: true },
-  { title: "My Timecards", url: "/dashboard/timecards/mine" },
-  { title: "Billing hosts", url: "/dashboard/financial-hub/organizations" },
-  { title: "Create Invoice", url: "/dashboard/financial-hub/invoices/new" },
-  { title: "Settings", url: "/dashboard/financial-hub/settings", adminOnly: true },
-]
-
-const eventsSubItems: NavSubItem[] = [
-  { title: "Overview", url: "/dashboard/events" },
-  { title: "Venues", url: "/dashboard/events/venues", opsOnly: true },
-  { title: "Open Mic", url: "/dashboard/events/open-mic" },
-  { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", opsOnly: true },
-  { title: "My Availability", url: "/dashboard/events/my-availability" },
-  { title: "My Post-event work", url: "/dashboard/events/post-event" },
-  { title: "My Timecards", url: "/dashboard/timecards/mine" },
-  { title: "Create Event", url: "/dashboard/events/new", opsOnly: true },
-]
-
-const usersSubItems: NavSubItem[] = [
-  { title: "People", url: "/dashboard/users" },
-  { title: "Invitations", url: "/dashboard/users/invitations" },
-  { title: "Organizations", url: "/dashboard/users/organizations" },
-  { title: "Crew applications", url: "/dashboard/users/crew-applications", adminOnly: true },
-  { title: "Crew Rates", url: "/dashboard/users/crew-rates" },
-]
-
-const marketingSubItems: NavSubItem[] = [
-  { title: "Design board", url: "/dashboard/marketing/designs" },
-  { title: "Work & stories", url: "/dashboard/marketing/work" },
-  { title: "Short links", url: "/dashboard/marketing/links" },
-  { title: "Settings", url: "/dashboard/marketing/settings" },
-]
-
-// Staff see the booking work first (open positions, who to contact, new acts),
-// then editing one act. An artist sees only its own act: Profile, Team,
-// Technical riders, Payments.
-const bandsSubItems: NavSubItem[] = [
-  { title: "Open positions", url: "/dashboard/artists/positions", staffOnly: true, opsOnly: true },
-  { title: "Directory", url: "/dashboard/artists/directory", staffOnly: true },
-  { title: "Artist applications", url: "/dashboard/users/artist-applications", opsOnly: true },
-  { title: "Organizations", url: "/dashboard/users/organizations", adminOnly: true },
-  { title: "Profile", staffTitle: "Edit artist profile", url: "/dashboard/artists", actWorkspace: true },
-  { title: "Team", url: "/dashboard/artists/team", actWorkspace: true },
-  { title: "Technical riders", staffTitle: "Edit artist riders", url: "/dashboard/artists/riders", actWorkspace: true },
-  { title: "Payments", url: "/dashboard/artists/payments", actWorkspace: true },
-]
-
-const sectionSubItems: Record<string, NavSubItem[]> = {
-  "/dashboard/events": eventsSubItems,
-  "/dashboard/financial-hub": financialHubSubItems,
-  "/dashboard/inventory": inventorySubItems,
-  "/dashboard/users": usersSubItems,
-  "/dashboard/marketing": marketingSubItems,
-  "/dashboard/artists": bandsSubItems,
-}
+import { CaretRightIcon, LifebuoyIcon } from "@phosphor-icons/react"
 
 function visibleSubItems(
   subItems: NavSubItem[] | undefined,
@@ -199,19 +70,11 @@ function canAccessNavItem(
   },
 ) {
   if (access.isBandContext) {
-    if (item.bandOnly) return true
-    // Band orgs keep Home, profile / riders / payments even though the section is
-    // admin-facing for Arbor Live.
-    if (item.url === "/dashboard") return true
-    if (item.url === "/dashboard/artists") return true
-    return (
-      item.url !== "/dashboard/events" &&
-      item.url !== "/dashboard/financial-hub" &&
-      item.url !== "/dashboard/inventory" &&
-      item.url !== "/dashboard/users" &&
-      item.url !== "/dashboard/marketing" &&
-      item.url !== "/dashboard"
-    )
+    // Band orgs keep Home and their own act (profile / riders / payments) even
+    // though the Artists section is admin-facing for Arbor Live, plus the band
+    // tools. Everything else is staff-facing — including adminOnly items like
+    // Camera, which the old fallback here accidentally let through.
+    return item.bandOnly || item.url === "/dashboard" || item.url === "/dashboard/artists"
   }
   if (item.bandOnly) return false
   if (item.url === "/dashboard" && !access.isCrewContext && !access.isAdminHomeContext) return false
@@ -228,6 +91,15 @@ function canAccessNavItem(
 const secondaryItems = [
   { title: "Support", url: "mailto:arborlive@stanford.edu", icon: <LifebuoyIcon /> },
 ]
+
+function PendingCountChip({ count }: { count: number }) {
+  if (count <= 0) return null
+  return (
+    <span className="ml-auto rounded-full bg-status-amber-500/15 px-1.5 py-0.5 text-3xs font-medium text-status-amber-700 dark:text-status-amber-200">
+      {count}
+    </span>
+  )
+}
 
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
@@ -356,13 +228,12 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     }
   }
 
-  function PendingCountChip({ count }: { count: number }) {
-    if (count <= 0) return null
-    return (
-      <span className="ml-auto rounded-full bg-status-amber-500/15 px-1.5 py-0.5 text-3xs font-medium text-status-amber-700">
-        {count}
-      </span>
-    )
+  async function handleChangeOrganization(organizationId: string) {
+    try {
+      await setActiveOrganization({ organizationId })
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error))
+    }
   }
 
   return (
@@ -385,7 +256,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
           <Select
             value={activeOrganization?.organizationId}
             onValueChange={(value) => {
-              void setActiveOrganization({ organizationId: value })
+              void handleChangeOrganization(value)
             }}
             disabled={!myOrganizations?.length || !activeOrganization?.organizationId}
           >
@@ -463,7 +334,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
               (sum, subItem) => sum + pendingChipCountForUrl(subItem.url),
               0,
             )
-            return (
+  return (
               <Collapsible
                 key={item.url}
                 asChild

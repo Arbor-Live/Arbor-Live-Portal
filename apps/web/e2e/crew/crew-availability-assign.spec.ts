@@ -12,7 +12,7 @@ test.describe("crew availability respond", () => {
     }) as { eventId: string; title: string };
 
     await page.goto("/dashboard/events/my-availability");
-    await expect(page.getByText("My Availability").first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("My availability").first()).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText(seeded.title).first()).toBeVisible({ timeout: 25_000 });
 
     const card = page.getByTestId("crew-availability-event").filter({ hasText: seeded.title }).first();

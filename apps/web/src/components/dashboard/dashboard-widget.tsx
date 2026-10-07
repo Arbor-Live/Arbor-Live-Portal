@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Icon } from "@phosphor-icons/react";
-import { EmptyState, RowList } from "@/components/list-page";
+import { RowList } from "@/components/list-page";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -62,7 +62,9 @@ export function WidgetRows({
   children: React.ReactNode;
 }) {
   if (loading) return <Skeleton className="h-16 w-full" />;
-  if (empty) return <EmptyState>{empty}</EmptyState>;
+  // One quiet line, not a dashed box: Home is mostly widgets with nothing to
+  // do, and full-size empty states pushed the ones that need you off screen.
+  if (empty) return <p className="text-sm text-muted-foreground">{empty}</p>;
   return (
     <RowList joined testId={testId}>
       {children}

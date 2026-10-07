@@ -23,7 +23,7 @@ test.describe("event series", () => {
     );
 
     await page.goto("/dashboard/events/new");
-    await expect(page.getByText("Create Event").first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("Create event").first()).toBeVisible({ timeout: 20_000 });
 
     await page
       .locator("div.space-y-1")

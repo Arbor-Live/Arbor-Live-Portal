@@ -14,6 +14,9 @@ import { formatDateTime } from "@/lib/format";
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
+/** Home stays scannable; the full crewing list lives on Crew scheduling. */
+const MAX_ROWS = 8;
+
 /**
  * Upcoming events with what each still needs, so an event shows up once:
  * every event needing crew in the crewing window, then the soonest others.
@@ -21,7 +24,9 @@ const plural = (count: number, word: string) => `${count} ${word}${count === 1 ?
 export function AdminUpcomingEventsWidget() {
   const [now] = useState(() => Date.now());
   const data = useQuery(api.dashboardHome.listUpcomingAdminEvents, { now, limit: 6 });
-  const events = data?.events ?? [];
+  const allEvents = data?.events ?? [];
+  const events = allEvents.slice(0, MAX_ROWS);
+  const hiddenCount = allEvents.length - events.length;
 
   return (
     <DashboardWidget
@@ -95,6 +100,14 @@ export function AdminUpcomingEventsWidget() {
           );
         })}
       </WidgetRows>
+      {hiddenCount > 0 ? (
+        <Link
+          href="/dashboard/events/crew-scheduling"
+          className="block text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        >
+          {hiddenCount} more on Crew scheduling
+        </Link>
+      ) : null}
     </DashboardWidget>
   );
 }

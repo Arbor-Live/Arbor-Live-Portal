@@ -217,14 +217,16 @@ function EventBoardCard({
       <div className="flex items-start gap-2">
         <span className={cn("mt-1 size-2.5 shrink-0 rounded-(--radius-dot)", eventTypeDot(event.eventType))} />
         <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-medium leading-snug text-foreground">{event.title}</p>
-            {showTime ? (
-              <p className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-                {formatBoardTime(event.scheduleSummary?.showAt ?? event.startAt)}
-              </p>
-            ) : null}
-          </div>
+          {/* The time sits above the title, not beside it: day columns are
+              narrow, and sharing a row squeezed titles into broken words. */}
+          {showTime ? (
+            <p className="text-2xs tabular-nums text-muted-foreground">
+              {formatBoardTime(event.scheduleSummary?.showAt ?? event.startAt)}
+            </p>
+          ) : null}
+          <p className="min-w-0 break-words text-sm font-medium leading-snug text-foreground">
+            {event.title}
+          </p>
           <p className="text-2xs leading-snug text-muted-foreground">
             {formatBoardRange(event.startAt, event.endAt)}
           </p>
@@ -517,6 +519,7 @@ export function EventsBoardView({ events }: { events: DashboardEvent[] }) {
                       size="icon-sm"
                       className="shrink-0"
                       title={`Create event on ${header.title}`}
+                      aria-label={`Create event on ${header.title}`}
                     >
                       <Link href={`/dashboard/events/new?date=${key}`}>
                         <PlusIcon className="size-4" />

@@ -9,7 +9,7 @@ test.describe("event create smoke", () => {
     const dayLabel = String(Math.min(28, new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()));
 
     await page.goto("/dashboard/events/new");
-    await expect(page.getByText("Create Event").first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("Create event").first()).toBeVisible({ timeout: 20_000 });
 
     await page
       .locator("div.space-y-1")

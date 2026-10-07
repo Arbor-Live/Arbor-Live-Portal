@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
+import { DashboardBreadcrumb } from "@/components/dashboard-breadcrumb";
 import { FormSaveBarStackProvider } from "@/components/forms";
 import { OnboardingBanner } from "@/components/onboarding/onboarding-banner";
 import { InactiveAccountBanner } from "@/components/onboarding/inactive-account-banner";
@@ -39,7 +40,7 @@ export default async function DashboardLayout({
             <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
               <SidebarTrigger />
               <Separator orientation="vertical" className="h-4" />
-              <p className="font-medium">Dashboard</p>
+              <DashboardBreadcrumb />
               <div className="ml-auto">
                 <NotificationBell />
               </div>
@@ -51,9 +52,10 @@ export default async function DashboardLayout({
             {/* Stacks every FormSaveBar on the page so two forms on one tab
                 (e.g. event overview + pull list) don't cover each other. */}
             <FormSaveBarStackProvider>
-              <main className="flex-1 p-6">
+              {/* SidebarInset already renders the <main> landmark. */}
+              <div className="flex-1 p-6">
                 <DashboardSleepGate>{children}</DashboardSleepGate>
-              </main>
+              </div>
             </FormSaveBarStackProvider>
           </SidebarInset>
         </SidebarProvider>
