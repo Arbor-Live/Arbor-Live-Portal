@@ -32,5 +32,7 @@ export const ADMIN_HOME_WIDGETS: DashboardWidgetDefinition[] = [
     title: "Damage & repair",
     component: DamageReportsWidget,
   },
-  ...DEFAULT_CREW_WIDGETS,
+  // An admin's own crew widgets stay one switch away in Customize, but start
+  // off so Home leads with the work that needs an admin.
+  ...DEFAULT_CREW_WIDGETS.map((widget) => ({ ...widget, hiddenByDefault: true })),
 ];

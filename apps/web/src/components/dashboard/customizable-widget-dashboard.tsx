@@ -21,6 +21,8 @@ export type DashboardWidgetDefinition = {
   id: string;
   title: string;
   component: ComponentType;
+  /** Off until the viewer switches it on in Customize (no saved layout yet). */
+  hiddenByDefault?: boolean;
 };
 
 function unique(ids: string[]) {
@@ -43,9 +45,13 @@ function normalizePreference(
       validIds.has(id),
     ),
   );
-  const hiddenWidgetIds = unique(
-    (preference?.hiddenWidgetIds ?? []).filter((id) => validIds.has(id)),
-  );
+  // A saved layout is the viewer's own choice; only fall back to the
+  // registry's defaults before they've customized anything.
+  const savedHidden =
+    preference === null || preference === undefined
+      ? widgets.filter((widget) => widget.hiddenByDefault).map((widget) => widget.id)
+      : preference.hiddenWidgetIds;
+  const hiddenWidgetIds = unique(savedHidden.filter((id) => validIds.has(id)));
   return { widgetOrder, hiddenWidgetIds };
 }
 
@@ -191,15 +197,25 @@ export function CustomizableWidgetDashboard({
           Every widget is hidden. Customize the page to bring some back.
         </EmptyState>
       ) : (
-        <div className="columns-1 gap-4 md:columns-2">
-          {visibleWidgets.map((widget) => {
-            const Widget = widget.component;
-            return (
-              <div key={widget.id} className="mb-4 break-inside-avoid">
-                <Widget />
-              </div>
-            );
-          })}
+        // Two columns filled alternately, so the page reads left to right in
+        // the Customize order (CSS columns read top to bottom). On phones the
+        // column wrappers dissolve (`contents`) and `order` restores the list.
+        <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
+          {[0, 1].map((column) => (
+            <div key={column} className="contents md:flex md:min-w-0 md:flex-col md:gap-4">
+              {visibleWidgets.map((widget, index) => {
+                if (index % 2 !== column) return null;
+                const Widget = widget.component;
+                return (
+                  // `empty:hidden`: a widget with nothing to show (CoHo card)
+                  // renders null and shouldn't leave a gap.
+                  <div key={widget.id} className="min-w-0 empty:hidden md:order-none" style={{ order: index }}>
+                    <Widget />
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </div>
       )}
     </div>

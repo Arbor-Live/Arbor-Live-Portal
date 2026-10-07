@@ -34,7 +34,7 @@ export function DamageReportsWidget() {
               <RowText
                 eyebrow={formatDateTime(report.reportedAt)}
                 title={`${report.assetId ?? "No ID"}${report.typeName ? ` · ${report.typeName}` : ""}`}
-                detail={report.eventTitle ?? "Event unknown"}
+                detail={report.eventTitle ?? "Not linked to an event"}
               />
               <div className="flex flex-wrap gap-1">
                 {report.operability === "needs_repair" ? (

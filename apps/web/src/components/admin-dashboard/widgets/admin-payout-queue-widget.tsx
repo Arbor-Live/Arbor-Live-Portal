@@ -34,7 +34,10 @@ export function AdminPayoutQueueWidget() {
       testId="home-payout-queue"
       summary={counts ? `In workflow order · ${counts.paid} already paid` : null}
     >
-      <WidgetRows loading={counts === undefined} empty={null}>
+      <WidgetRows
+        loading={counts === undefined}
+        empty={stages.every((stage) => stage.count === 0) ? "Nothing in the payout queue right now." : null}
+      >
         {stages.map((stage) => (
           <ListRow key={stage.label} href={PAYOUTS_HREF}>
             <RowText title={stage.label} detail={stage.detail} />
