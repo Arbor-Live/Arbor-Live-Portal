@@ -116,6 +116,7 @@ export function CustomizableWidgetDashboard({
     const ok = await confirm({
       title: "Reset Home to the default widgets?",
       confirmLabel: "Reset layout",
+      destructive: true,
     });
     if (!ok) return;
     try {

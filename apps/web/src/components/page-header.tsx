@@ -116,8 +116,8 @@ export function PageHeader({
         ) : (
           // Only the title shares a row with the actions, so the description
           // and meta keep the full width on narrow screens.
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+            <div className="min-w-0 flex-1 basis-48">
               {typeof title === "string" ? <PageTitle>{title}</PageTitle> : title}
             </div>
             {actionBar}
