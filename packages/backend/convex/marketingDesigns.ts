@@ -31,7 +31,6 @@ import {
 import { schedulePublicEventsSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 import { getEventArtists } from "./lib/eventArtists";
-import { MAX_DESIGNS_PER_EVENT } from "./lib/marketingDesigns";
 import { listFilter, matchesListFilter } from "./lib/listFilters";
 import { resolveEffectiveVenueAddress } from "./lib/venues";
 
@@ -94,25 +93,23 @@ async function serializeDesign(ctx: QueryCtx, design: DesignDoc) {
 
 /**
  * Each event's newest design (any status: the board shows drafts and their
- * assignees), read by `by_eventId` so old designs can't crowd out new ones.
+ * assignees), newest first by `by_eventId_and_updatedAt`, so old designs can't crowd out new ones.
  */
 async function loadDesignByEventId(ctx: QueryCtx, eventIds: Id<"events">[]) {
-  const designsPerEvent = await Promise.all(
+  const designs = await Promise.all(
     eventIds.map((eventId) =>
       ctx.db
         .query("eventMarketingDesigns")
-        .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-        .take(MAX_DESIGNS_PER_EVENT),
+        .withIndex("by_eventId_and_updatedAt", (q) => q.eq("eventId", eventId))
+        .order("desc")
+        .first(),
     ),
   );
-  const byEventId = new Map<Id<"events">, DesignDoc>();
-  for (const designs of designsPerEvent) {
-    for (const design of designs) {
-      const current = byEventId.get(design.eventId);
-      if (!current || design.updatedAt > current.updatedAt) byEventId.set(design.eventId, design);
-    }
-  }
-  return byEventId;
+  return new Map(
+    designs
+      .filter((design): design is DesignDoc => design !== null)
+      .map((design) => [design.eventId, design]),
+  );
 }
 
 async function upsertPosterAssignment(

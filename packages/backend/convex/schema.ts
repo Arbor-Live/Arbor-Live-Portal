@@ -2180,6 +2180,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_eventId", ["eventId"])
+    .index("by_eventId_and_updatedAt", ["eventId", "updatedAt"])
     .index("by_updatedAt", ["updatedAt"])
     .index("by_assigneeUserId_and_updatedAt", ["assigneeUserId", "updatedAt"])
     .index("by_status", ["status"]),
