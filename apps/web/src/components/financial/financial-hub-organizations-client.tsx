@@ -17,6 +17,7 @@ import { Form } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -204,10 +205,9 @@ export function FinancialHubOrganizationsClient() {
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>Billing hosts</CardTitle>
           <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={includeInactive}
-              onChange={(e) => setIncludeInactive(e.target.checked)}
+              onCheckedChange={(checked) => setIncludeInactive(checked === true)}
             />
             Show archived
           </label>
@@ -386,10 +386,9 @@ export function FinancialHubOrganizationsClient() {
                     ) : (
                       mergeCandidates.map((group) => (
                         <label key={group._id} className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={mergeVictimIds.includes(group._id)}
-                            onChange={() => toggleMergeVictim(group._id)}
+                            onCheckedChange={() => toggleMergeVictim(group._id)}
                           />
                           <span>{group.name}</span>
                         </label>

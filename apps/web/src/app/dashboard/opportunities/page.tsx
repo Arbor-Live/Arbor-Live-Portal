@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { BandOnlyGuard } from "@/components/org-context-guard";
 import { ArtistOpportunitiesClient } from "@/components/bands/artist-opportunities-client";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -12,7 +13,7 @@ export default function ArtistOpportunitiesPage() {
   // Suspense boundary in a production build.
   return (
     <BandOnlyGuard>
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading opportunities…</p>}>
+      <Suspense fallback={<Skeleton className="h-64 w-full" />}>
         <ArtistOpportunitiesClient />
       </Suspense>
     </BandOnlyGuard>

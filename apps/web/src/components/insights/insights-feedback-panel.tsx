@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { formatRate, highRatingShare, ratingBreakdown, StatRow, StatTile } from "@/components/insights/insights-ui";
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -80,7 +81,7 @@ export function InsightsFeedbackPanel({ startMs, endMs }: InsightsFeedbackPanelP
         </CardHeader>
         <CardContent className="space-y-3">
           {data === undefined ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <Skeleton className="h-24 w-full" />
           ) : data.entries.length === 0 ? (
             <p className="text-sm text-muted-foreground">No feedback in this range.</p>
           ) : (

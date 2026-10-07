@@ -3,7 +3,7 @@
 import { RowCell, RowGroup, RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 import { StatusPill, type Tone } from "@/components/page-header";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatHours } from "@/lib/format";
 
 type PeriodStatus = "open" | "due" | "past_due";
 
@@ -30,8 +30,6 @@ export const PERIOD_STATUS: Record<PeriodStatus, { label: string; tone: Tone }> 
   due: { label: "Due", tone: "amber" },
   past_due: { label: "Past due", tone: "rose" },
 };
-
-const hours = (value: number) => `${value.toFixed(2)} h`;
 
 export function periodTotals(period: TimecardPeriod) {
   return period.days.reduce(
@@ -69,8 +67,8 @@ export function TimecardPeriodList({ periods }: { periods: TimecardPeriod[] }) {
             aside={
               period.daysWorked > 0 ? (
                 <span className="text-xs text-muted-foreground tabular-nums">
-                  <span className="font-medium text-foreground">{hours(totals.input)}</span> to input ·{" "}
-                  {hours(totals.actual)} worked
+                  <span className="font-medium text-foreground">{formatHours(totals.input)}</span> to input ·{" "}
+                  {formatHours(totals.actual)} worked
                 </span>
               ) : null
             }
@@ -86,9 +84,9 @@ export function TimecardPeriodList({ periods }: { periods: TimecardPeriod[] }) {
                     href={`/dashboard/events/${event.eventId}`}
                   >
                     <RowText eyebrow={formatDate(day.dateMs)} title={event.title} />
-                    <RowCell className="w-28">{hours(event.inputHours)} to input</RowCell>
+                    <RowCell className="w-28">{formatHours(event.inputHours)} to input</RowCell>
                     <RowCell className="w-28" hideBelow="sm" muted>
-                      {hours(event.actualHours)} worked
+                      {formatHours(event.actualHours)} worked
                     </RowCell>
                   </ListRow>
                 )),

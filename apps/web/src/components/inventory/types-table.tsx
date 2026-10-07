@@ -5,7 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { ListRow } from "@/components/list-row";
 import { RowCell, RowMenu, RowText } from "@/components/list-page";
-import { formatCurrency } from "./constants";
+import { formatUsdOptional } from "@/lib/format";
 import { formatTypeDisplay } from "./package-section-utils";
 import {
   formatUnitCount,
@@ -112,7 +112,7 @@ export function TypesTable({
                 detail={capabilities.length ? capabilities.join(" · ") : "No capabilities"}
               />
               <RowCell className="w-20" hideBelow="md">
-                {formatCurrency(row.nonSubsidizedRentalPriceUsd ?? row.rentalPriceUsd)}
+                {formatUsdOptional(row.nonSubsidizedRentalPriceUsd ?? row.rentalPriceUsd)}
               </RowCell>
               <RowCell className="w-20">
                 <span

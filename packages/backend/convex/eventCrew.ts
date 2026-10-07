@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import schema from "./schema";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { requireEventEditAccess } from "./lib/eventAccess";
 import { calculateCrewCost, syncEventCrewCostUsd } from "./lib/crewCost";
@@ -18,9 +19,60 @@ function hoursBetween(start: number, end: number) {
   return Number(((end - start) / 3_600_000).toFixed(2));
 }
 
+const computedCrewCostValue = v.object({
+  totalCostUsd: v.number(),
+  bufferedTotalCostUsd: v.number(),
+  bufferPercent: v.number(),
+  totalRegularHours: v.number(),
+  totalOvertimeHours: v.number(),
+  overtimeMultiplier: v.number(),
+  otPremium: v.boolean(),
+  byUser: v.array(
+    v.object({
+      userId: v.string(),
+      name: v.string(),
+      rateUsd: v.number(),
+      regularHours: v.number(),
+      overtimeHours: v.number(),
+      costUsd: v.number(),
+    }),
+  ),
+  byScheduleBlock: v.array(
+    v.object({
+      scheduleBlockId: v.optional(v.id("eventScheduleBlocks")),
+      blockLabel: v.string(),
+      blockType: v.optional(v.string()),
+      startsAt: v.number(),
+      regularHours: v.number(),
+      overtimeHours: v.number(),
+      subtotalUsd: v.number(),
+      rows: v.array(
+        v.object({
+          shiftId: v.id("eventCrewShifts"),
+          userId: v.optional(v.string()),
+          name: v.string(),
+          role: v.string(),
+          startsAt: v.number(),
+          endsAt: v.number(),
+          totalHours: v.number(),
+          regularHours: v.number(),
+          overtimeHours: v.number(),
+          baseRateUsd: v.number(),
+          overtimeMultiplier: v.number(),
+          overtimeRateUsd: v.number(),
+          subtotalUsd: v.number(),
+          missingRate: v.boolean(),
+        }),
+      ),
+    }),
+  ),
+  missingRateUsers: v.array(v.string()),
+  missingRateOpenSlotCount: v.number(),
+});
+
 export const listByEvent = query({
   args: { eventId: v.id("events") },
-  returns: v.array(v.any()),
+  returns: v.array(schema.doc("eventCrewShifts")),
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
@@ -33,7 +85,7 @@ export const listByEvent = query({
 
 export const getComputedCrewCost = query({
   args: { eventId: v.id("events") },
-  returns: v.any(),
+  returns: computedCrewCostValue,
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);

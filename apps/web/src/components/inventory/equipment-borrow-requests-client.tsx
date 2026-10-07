@@ -46,7 +46,7 @@ import {
 } from "@/lib/borrow-request-tabs";
 import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
-import { formatDate, formatDateTime, formatDateTimeRange } from "@/lib/format";
+import { formatDate, formatDateTime, formatDateTimeRange, plural } from "@/lib/format";
 import { notify } from "@/lib/notify";
 
 type BorrowLine = {
@@ -119,9 +119,6 @@ const WHEN_OPTIONS = [
 /** To review starts on the pending queue, shown as a chip so it's clear how to widen it. */
 const REVIEW_DEFAULT_FILTERS: FilterState = { status: { operator: "is", values: ["submitted"] } };
 
-function plural(count: number, noun: string, nouns = `${noun}s`) {
-  return `${count.toLocaleString()} ${count === 1 ? noun : nouns}`;
-}
 
 function equipmentSummary(lines: BorrowLine[]) {
   if (lines.length === 0) return "No equipment";

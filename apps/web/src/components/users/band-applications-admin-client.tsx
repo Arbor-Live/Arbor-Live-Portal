@@ -34,7 +34,7 @@ import {
 } from "@/lib/band-application-status";
 import { api } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
-import { formatDate } from "@/lib/format";
+import { formatDate, plural } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import {
   ArtistApplicationSheetBody,
@@ -51,9 +51,6 @@ function setApplicationParam(value: string | null) {
   window.history.replaceState(null, "", url);
 }
 
-function plural(count: number, noun: string, nouns = `${noun}s`) {
-  return `${count.toLocaleString()} ${count === 1 ? noun : nouns}`;
-}
 
 async function attempt(action: () => Promise<unknown>, success: string) {
   try {

@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useBeforeUnload } from "@/hooks/use-before-unload";
 import { api } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { plural } from "@/lib/format";
 import { canonicalizeAssetIdTag } from "@/lib/asset-scan";
 import { notify } from "@/lib/notify";
 
@@ -227,9 +228,6 @@ function waitingSteps(): Record<StepId, StepState> {
   };
 }
 
-function plural(count: number, noun: string, nouns = `${noun}s`) {
-  return `${count.toLocaleString()} ${count === 1 ? noun : nouns}`;
-}
 
 function isCsvFile(file: File) {
   return /\.csv$/i.test(file.name) || file.type === "text/csv";

@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/convex-api";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatHours } from "@/lib/format";
 import { PERIOD_STATUS } from "@/components/timecards/timecard-period-list";
 
 type TimecardOverviewRow = FunctionReturnType<
@@ -78,8 +78,6 @@ const GROUPS: {
     test: (row) => row.totalInputHours <= 0 && row.daysWorked === 0,
   },
 ];
-
-const hours = (value: number) => `${value.toFixed(2)} h`;
 
 /** Every active crew member's hours for one pay period, most to input first. */
 export function AdminTimecardsOverviewClient() {
@@ -161,8 +159,8 @@ export function AdminTimecardsOverviewClient() {
       ) : (
         <>
           <ListSummary testId="timecards-summary" order="Most hours to input first.">
-            {rows.length} crew member{rows.length === 1 ? "" : "s"} · {hours(totalWorked)} worked ·{" "}
-            {hours(totalInput)} to input
+            {rows.length} crew member{rows.length === 1 ? "" : "s"} · {formatHours(totalWorked)} worked ·{" "}
+            {formatHours(totalInput)} to input
           </ListSummary>
           {rows.length === 0 ? (
             <EmptyState>
@@ -206,11 +204,11 @@ export function AdminTimecardsOverviewClient() {
                             {row.daysWorked} day{row.daysWorked === 1 ? "" : "s"}
                           </RowCell>
                           <RowCell className="w-32" align="right" hideBelow="md" muted>
-                            {hours(row.totalActualHours)} worked
+                            {formatHours(row.totalActualHours)} worked
                           </RowCell>
                           <RowCell className="w-32" align="right">
                             <span className={row.totalInputHours > 0 ? "font-medium" : "text-muted-foreground"}>
-                              {hours(row.totalInputHours)} to input
+                              {formatHours(row.totalInputHours)} to input
                             </span>
                           </RowCell>
                         </ListRow>

@@ -354,7 +354,7 @@ export function InvoiceLinkedEventCrewSection({
         <CardHeader>
           <CardTitle>Crew Schedule</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">Loading linked event schedule...</CardContent>
+        <CardContent className="text-sm text-muted-foreground">Loading linked event schedule…</CardContent>
       </Card>
     );
   }

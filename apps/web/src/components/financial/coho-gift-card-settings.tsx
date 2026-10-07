@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { AlertRecipientList } from "@/components/financial/alert-recipient-list";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatUsd } from "@/lib/format";
 import { notify } from "@/lib/notify";
 
 export function CohoGiftCardSettings() {
@@ -186,7 +186,7 @@ function CardRow({
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{card.label}</p>
           <p className="text-xs text-muted-foreground">
-            {card.balanceUsd != null ? `$${card.balanceUsd.toFixed(2)}` : "Balance not fetched yet"}
+            {card.balanceUsd != null ? formatUsd(card.balanceUsd) : "Balance not fetched yet"}
             {card.cardNumber ? ` · ${card.cardNumber}` : ""}
           </p>
           {card.lastCheckedAt ? (

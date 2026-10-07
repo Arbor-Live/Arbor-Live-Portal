@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CaretDownIcon, TrashIcon, type Icon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
-import { formatUsd } from "@/lib/format";
+import { formatUsd, plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
@@ -16,9 +16,7 @@ export const LINE_GRID =
   "grid items-start gap-2 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] [&>*:first-child]:col-span-full @3xl/lines:grid-cols-[minmax(0,1fr)_8.5rem_7.5rem_7rem_4rem] @3xl/lines:[&>*:first-child]:col-span-1";
 
 
-export function plural(count: number, word: string, pluralWord = `${word}s`) {
-  return `${count} ${count === 1 ? word : pluralWord}`;
-}
+export { plural };
 
 /** A section of the table: header row with its subtotal, then its rows. */
 export function LineGroup({

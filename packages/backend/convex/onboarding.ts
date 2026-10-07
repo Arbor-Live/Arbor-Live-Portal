@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, type Infer } from "convex/values";
 import { formatDate } from "@arbor/format";
 import { components, internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
@@ -471,6 +471,40 @@ export const updateCrewOnboardingSettings = mutation({
   },
 });
 
+const onboardingLinksValue = v.object({
+  whatsappInvite: v.string(),
+  whatsappGroupName: v.string(),
+  instagramArbor: v.string(),
+  instagramArborHandle: v.string(),
+  instagramTrivia: v.string(),
+  instagramTriviaHandle: v.string(),
+  fwsInfo: v.string(),
+  soberMonitorsGuide: v.string(),
+  soberMonitorsTest: v.string(),
+  onboardingDoc: v.string(),
+  narcanVideo: v.string(),
+  narcanVideoEmbed: v.string(),
+  i9Appointment: v.string(),
+  i9AcceptableDocuments: v.string(),
+  starsPortal: v.string(),
+  sequoiaTimecardHelp: v.string(),
+  cartTrainingCode: v.string(),
+  liftingTrainingCode: v.string(),
+  liftingTrainingUrl: v.string(),
+});
+
+const fwsJobInfoValue = v.object({
+  hiringDepartment: v.string(),
+  jobTitle: v.string(),
+  briefDescription: v.string(),
+  hourlyWage: v.string(),
+  projectTaskAward: v.string(),
+  supervisorName: v.string(),
+  supervisorEmail: v.string(),
+  hrAdminName: v.string(),
+  hrAdminEmail: v.string(),
+});
+
 const crewOnboardingReturn = v.object({
   status: onboardingStatusValue,
   incompleteStepCount: v.number(),
@@ -497,8 +531,8 @@ const crewOnboardingReturn = v.object({
   agreedToOnboardingDocAt: v.optional(v.number()),
   signatureLegalName: v.optional(v.string()),
   completedAt: v.optional(v.number()),
-  links: v.any(),
-  fwsJobInfo: v.any(),
+  links: onboardingLinksValue,
+  fwsJobInfo: fwsJobInfoValue,
   profile: v.object({
     name: v.string(),
     email: v.string(),
@@ -592,7 +626,7 @@ export const getMyStatus = query({
 export const getMyCrewOnboarding = query({
   args: {},
   returns: v.union(crewOnboardingReturn, v.null()),
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<Infer<typeof crewOnboardingReturn> | null> => {
     const user = await requireAuth(ctx);
     const userId = getUserId(user);
 

@@ -43,7 +43,7 @@ import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
-import { formatDate } from "@/lib/format";
+import { formatDate, plural } from "@/lib/format";
 import {
   featuredStatPresets,
   formatPublishedAtInput,
@@ -61,7 +61,7 @@ const LexicalEditor = dynamic(
   () => import("@/components/editor/lexical-editor").then((m) => m.LexicalEditor),
   {
     ssr: false,
-    loading: () => <p className="text-sm text-muted-foreground">Loading editor...</p>,
+    loading: () => <p className="text-sm text-muted-foreground">Loading editor…</p>,
   },
 );
 
@@ -117,9 +117,6 @@ function setPostParam(value: string | null) {
   window.history.replaceState(null, "", url);
 }
 
-function plural(count: number, noun: string) {
-  return `${count} ${count === 1 ? noun : `${noun}s`}`;
-}
 
 export function WorkPostsManager() {
   const { confirm } = useAppDialog();

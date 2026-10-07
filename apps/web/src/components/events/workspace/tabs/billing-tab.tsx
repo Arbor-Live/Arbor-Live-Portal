@@ -22,7 +22,7 @@ import { RowCell } from "@/components/list-page";
 import { Input } from "@/components/ui/input";
 import type { SearchableSelectOption } from "@/components/inventory/searchable-select";
 import { EventLinkedInvoicesField } from "@/components/events/event-linked-invoices-field";
-import { formatDateTime, formatUsd } from "@/lib/format";
+import { formatDateTime, formatHours, formatUsd } from "@/lib/format";
 import {
   arborEarnedRevenueUsd,
   eventPassThroughCostUsd,
@@ -39,10 +39,6 @@ import {
   useHostGroupOptions,
 } from "@/components/events/workspace/host-fields";
 import { useEventWorkspace } from "@/components/events/workspace/event-workspace-provider";
-
-function formatHours(value: number) {
-  return `${value.toFixed(2)}h`;
-}
 
 function UsdInput({
   value,

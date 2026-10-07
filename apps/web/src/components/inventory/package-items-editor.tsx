@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MultiSelectFilter } from "./multi-select-filter";
-import { formatCurrency, inventoryItemLabel } from "./constants";
+import { formatUsdOptional } from "@/lib/format";
+import { inventoryItemLabel } from "./constants";
 import {
   bucketForCategoryKey,
   formatTypeDisplay,
@@ -246,7 +247,7 @@ export function PackageItemsEditor({
           <span className="font-medium">{totalUnits}</span> total
         </span>
         <span className="text-muted-foreground">
-          Suggested {formatCurrency(Number(suggestedPricing.nonSubsidized.toFixed(2)))} non-subsidized
+          Suggested {formatUsdOptional(Number(suggestedPricing.nonSubsidized.toFixed(2)))} non-subsidized
         </span>
       </div>
 
@@ -389,12 +390,12 @@ export function PackageItemsEditor({
             <summary className="cursor-pointer font-medium">Suggested package pricing</summary>
             <p className="mt-2">
               Suggested Subsidized:{" "}
-              <span className="font-medium">{formatCurrency(Number(suggestedPricing.subsidized.toFixed(2)))}</span>
+              <span className="font-medium">{formatUsdOptional(Number(suggestedPricing.subsidized.toFixed(2)))}</span>
             </p>
             <p>
               Suggested Non-Subsidized:{" "}
               <span className="font-medium">
-                {formatCurrency(Number(suggestedPricing.nonSubsidized.toFixed(2)))}
+                {formatUsdOptional(Number(suggestedPricing.nonSubsidized.toFixed(2)))}
               </span>
             </p>
           </details>

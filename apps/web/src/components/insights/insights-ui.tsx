@@ -7,8 +7,10 @@ import { RowCell, RowFlag, RowList, RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatUsd } from "@/lib/format";
+import { formatUsd, plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+export { plural };
 
 /*
  * Building blocks shared by the Insights tabs: stat tiles for headline
@@ -60,9 +62,6 @@ export function ratingBreakdown(distribution: Array<{ key: string; count: number
     .map((row) => `${row.key}★ ${row.count}`)
     .join(" · ");
 }
-
-export const plural = (count: number, word: string, pluralWord = `${word}s`) =>
-  `${count.toLocaleString("en-US")} ${count === 1 ? word : pluralWord}`;
 
 /** A row of stat tiles. */
 export function StatRow({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -135,7 +134,7 @@ export function InsightCard({
         {description ? <CardDescription>{description}</CardDescription> : null}
       </CardHeader>
       <CardContent className="space-y-3">
-        {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : children}
+        {loading ? <Skeleton className="h-16 w-full" /> : children}
       </CardContent>
     </Card>
   );

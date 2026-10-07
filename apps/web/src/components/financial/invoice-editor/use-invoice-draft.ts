@@ -16,6 +16,7 @@ import {
 } from "@/lib/invoice-crew-from-event";
 import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
 import { getConvexAppErrorData, getConvexErrorMessage } from "@/lib/convex-error";
+import { formatUsd } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { computeInvoiceDraftTotals } from "@/lib/compute-invoice-draft-totals";
 import {
@@ -884,7 +885,7 @@ export function useInvoiceDraft({
         } else if (result.revision?.kind === "matched_approval" && result.appliedDiscount) {
           const { discountValue, reachesApproved } = result.appliedDiscount;
           notify.success(
-            `Saved as version ${result.revision.number} with a $${discountValue.toFixed(2)} discount. ${
+            `Saved as version ${result.revision.number} with a ${formatUsd(discountValue)} discount. ${
               reachesApproved ? "The approved total stands." : "The client's approval stands."
             }`,
           );

@@ -27,7 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { api } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
-import { addDaysToDateKey, formatRelativeTime, formatTime, pacificDateAndTimeToMs, pacificDateKey } from "@/lib/format";
+import { addDaysToDateKey, formatRelativeTime, formatTime, pacificDateAndTimeToMs, pacificDateKey, plural } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import {
   clipDayLabel,
@@ -48,10 +48,6 @@ function setClipParam(value: string | null) {
   if (value) url.searchParams.set(CLIP_PARAM, value);
   else url.searchParams.delete(CLIP_PARAM);
   window.history.replaceState(null, "", url);
-}
-
-function plural(count: number, noun: string) {
-  return `${count.toLocaleString()} ${count === 1 ? noun : `${noun}s`}`;
 }
 
 function ClipThumbnail({ clip, className }: { clip: ClipRow; className?: string }) {
