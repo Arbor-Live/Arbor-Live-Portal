@@ -15,9 +15,34 @@ import path from "node:path";
 
 const ENV_RELATIVE_PATHS = [
   "apps/web/.env",
-  "apps/web/.env.production.local",
   "packages/backend/.env",
 ];
+
+/**
+ * Generated per build (`materialize-convex-public-env.mjs`) from the worktree's
+ * own Convex URL, so it must stay per-worktree: shared, every build pointed
+ * every other worktree at its backend. Earlier links to the shared store are
+ * removed; the next build writes a real file.
+ */
+const PER_WORKTREE_GENERATED_PATHS = ["apps/web/.env.production.local"];
+
+function unlinkSharedGeneratedFile(relativePath, sharedRoot, repoRoot) {
+  const linkPath = path.join(repoRoot, relativePath);
+  if (!isSymlink(linkPath)) return;
+  const target = path.resolve(path.dirname(linkPath), fs.readlinkSync(linkPath));
+  if (target.startsWith(`${sharedRoot}${path.sep}`)) {
+    fs.unlinkSync(linkPath);
+    console.log(`Unlinked shared ${relativePath} (now generated per worktree)`);
+  }
+}
+
+function isSymlink(filePath) {
+  try {
+    return fs.lstatSync(filePath).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
 
 /** When no worktree has a real env file yet, seed shared copies from examples. */
 const ENV_EXAMPLE_SOURCES = {
@@ -134,6 +159,9 @@ function main() {
   let linked = 0;
   for (const relativePath of ENV_RELATIVE_PATHS) {
     if (linkEnvFile(relativePath, sharedRoot, repoRoot)) linked += 1;
+  }
+  for (const relativePath of PER_WORKTREE_GENERATED_PATHS) {
+    unlinkSharedGeneratedFile(relativePath, sharedRoot, repoRoot);
   }
 
   if (linked === 0) {
