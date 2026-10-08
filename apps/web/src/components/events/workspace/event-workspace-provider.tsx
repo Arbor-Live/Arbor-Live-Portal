@@ -44,6 +44,7 @@ import { eventGroupKind, groupDayNoun, type SeriesEditScope } from "@/lib/event-
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import type { SaveStatus } from "@/hooks/use-convex-form";
+import { useBeforeUnload } from "@/hooks/use-before-unload";
 import {
   buildEventUpdatePatch,
   changedDraftKeys,
@@ -264,6 +265,11 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
   const seriesMeta = eventData?.series ?? null;
   const canEdit = eventData?.canEdit ?? false;
   const readOnly = eventData !== undefined && !canEdit;
+
+  useBeforeUnload(
+    dirty.size > 0 && canEdit,
+    "You have unsaved changes on this event. Leaving the page will lose them.",
+  );
 
   const dayCount = useMemo(() => {
     const startMs = localDateTimeInputToMs(draft.startAt);

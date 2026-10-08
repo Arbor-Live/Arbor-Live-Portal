@@ -43,6 +43,7 @@ export function PublicWorkGrid({ posts }: { posts: PublicWorkPostCard[] }) {
               key={filter.id}
               type="button"
               onClick={() => setKindFilter(filter.id)}
+              aria-pressed={kindFilter === filter.id}
               className={cn(
                 "rounded-none border px-3 py-1.5 text-sm font-medium transition-colors",
                 kindFilter === filter.id

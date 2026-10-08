@@ -41,7 +41,7 @@ export function PublicQuoteChangeRequestSection({
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
             <TextareaFormField
               name="note"
-              label=""
+              label="What changes do you need?"
               placeholder="Tell us what changes are needed"
             />
             <Button type="submit" variant="outline" disabled={form.saveStatus === "saving"}>

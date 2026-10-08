@@ -55,9 +55,11 @@ test.describe("staff payment proof management", () => {
     const dialog = page.getByTestId("invalidate-proof-dialog");
     await expect(dialog.getByText("Invalidate payment proof")).toBeVisible({ timeout: 25_000 });
 
-    // The reason is required server-side; a rejected invalidate keeps the dialog open.
-    await dialog.getByRole("button", { name: "Invalidate proof", exact: true }).click();
-    await expect(dialog.getByText("Invalidate payment proof")).toBeVisible({ timeout: 25_000 });
+    // The reason is required: the confirm stays disabled (and the hint shows)
+    // until the note is filled.
+    const confirmInvalidate = dialog.getByRole("button", { name: "Invalidate proof", exact: true });
+    await expect(confirmInvalidate).toBeDisabled();
+    await expect(dialog.getByText("A reason is required.")).toBeVisible();
     const stillActive = runConvex("e2eHelpers:getPaymentProofState", {
       invoiceId: seeded.invoiceId,
     }) as ProofState;
@@ -67,7 +69,8 @@ test.describe("staff payment proof management", () => {
 
     const note = "E2E: reference did not match the bank record.";
     await dialog.getByPlaceholder("Reason for invalidation (required)").fill(note);
-    await dialog.getByRole("button", { name: "Invalidate proof", exact: true }).click();
+    await expect(confirmInvalidate).toBeEnabled();
+    await confirmInvalidate.click();
 
     const state = await pollConvex<ProofState>(
       "e2eHelpers:getPaymentProofState",

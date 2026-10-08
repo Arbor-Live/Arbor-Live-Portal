@@ -26,12 +26,12 @@ export function PublicQuoteUpdatedBanner({
 
   return (
     <Alert
-      className="border-status-amber-500/40 bg-status-amber-500/10 text-status-amber-700"
+      className="border-status-amber-500/40 bg-status-amber-500/10 text-status-amber-700 dark:text-status-amber-300"
       data-testid="public-quote-updated"
     >
       <WarningIcon aria-hidden />
       <AlertTitle>We updated your quote after you approved it</AlertTitle>
-      <AlertDescription className="space-y-3 text-status-amber-700">
+      <AlertDescription className="space-y-3 text-status-amber-700 dark:text-status-amber-300">
         <p>
           You approved {formatUsd(lastApproved.totalUsd)}. It&apos;s now {formatUsd(latest.totalUsd)} (
           {formatUsdDelta(latest.totalUsd - lastApproved.totalUsd, formatUsd)}). Review the changes and approve

@@ -100,19 +100,27 @@ export function CohoGiftCardSettings() {
 
           <div className="space-y-2 rounded-md border p-3">
             <p className="text-sm font-medium">Add card</p>
-            <Input
-              placeholder="Card name (e.g. CoHo main)"
-              value={newLabel}
-              disabled={!ready || addingCard}
-              onChange={(event) => setNewLabel(event.target.value)}
-            />
-            <Input
-              type="password"
-              placeholder="Toast token"
-              value={newToken}
-              disabled={!ready || addingCard}
-              onChange={(event) => setNewToken(event.target.value)}
-            />
+            <div className="space-y-1">
+              <Label htmlFor="coho-new-card-label">Card name</Label>
+              <Input
+                id="coho-new-card-label"
+                placeholder="Card name (e.g. CoHo main)"
+                value={newLabel}
+                disabled={!ready || addingCard}
+                onChange={(event) => setNewLabel(event.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="coho-new-card-token">Toast token</Label>
+              <Input
+                id="coho-new-card-token"
+                type="password"
+                placeholder="Toast token"
+                value={newToken}
+                disabled={!ready || addingCard}
+                onChange={(event) => setNewToken(event.target.value)}
+              />
+            </div>
             <Button
               type="button"
               variant="outline"
@@ -202,22 +210,26 @@ function CardRow({
           Remove
         </Button>
       </div>
-      <div className="flex gap-2">
-        <Input
-          type="password"
-          placeholder="Replace token…"
-          value={token}
-          disabled={busy}
-          onChange={(event) => setToken(event.target.value)}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy || !token.trim()}
-          onClick={() => void handleReplace()}
-        >
-          Replace token
-        </Button>
+      <div className="space-y-1">
+        <Label htmlFor={`coho-replace-token-${card._id}`}>Replace token</Label>
+        <div className="flex gap-2">
+          <Input
+            id={`coho-replace-token-${card._id}`}
+            type="password"
+            placeholder="Replace token…"
+            value={token}
+            disabled={busy}
+            onChange={(event) => setToken(event.target.value)}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy || !token.trim()}
+            onClick={() => void handleReplace()}
+          >
+            Replace token
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -308,14 +308,26 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
             <p className="text-muted-foreground">
               The client will be able to submit new payment proof from their portal.
             </p>
-            <Textarea
-              className="min-h-24"
-              value={invalidateNote}
-              onChange={(event) => setInvalidateNote(event.target.value)}
-              placeholder="Reason for invalidation (required)"
-            />
+            <div className="space-y-1">
+              <Label htmlFor="invoice-invalidate-proof-note">Reason (the client sees this)</Label>
+              <Textarea
+                id="invoice-invalidate-proof-note"
+                className="min-h-24"
+                value={invalidateNote}
+                onChange={(event) => setInvalidateNote(event.target.value)}
+                placeholder="Reason for invalidation (required)"
+              />
+              {!invalidateNote.trim() ? (
+                <p className="text-xs text-muted-foreground">A reason is required.</p>
+              ) : null}
+            </div>
             <div className="flex gap-2">
-              <Button type="button" size="sm" disabled={busy} onClick={() => void onInvalidate()}>
+              <Button
+                type="button"
+                size="sm"
+                disabled={busy || !invalidateNote.trim()}
+                onClick={() => void onInvalidate()}
+              >
                 Confirm invalidate
               </Button>
               <Button

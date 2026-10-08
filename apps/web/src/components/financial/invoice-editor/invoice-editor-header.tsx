@@ -334,7 +334,23 @@ export function InvoiceEditorHeader({
   return (
     <>
       <PageHeader
-        back={{ href: "/dashboard/financial-hub/invoices", label: "Invoices" }}
+        back={{
+          href: "/dashboard/financial-hub/invoices",
+          label: "Invoices",
+          onClick: (event) => {
+            if (!draft.isDraftDirty) return;
+            event.preventDefault();
+            void (async () => {
+              const ok = await confirm({
+                title: "Discard unsaved changes to this quote?",
+                description: "What you've typed that hasn't been saved will be lost.",
+                confirmLabel: "Discard changes",
+                destructive: true,
+              });
+              if (ok) router.push("/dashboard/financial-hub/invoices");
+            })();
+          },
+        }}
         actions={primaryAction}
         menu={menu}
         menuLabel="More invoice actions"

@@ -144,12 +144,20 @@ export function usePaymentActions() {
               onChange={(event) => setNote(event.target.value)}
               placeholder="Reason for invalidation (required)"
             />
+            {!note.trim() ? (
+              <p className="text-xs text-muted-foreground">A reason is required.</p>
+            ) : null}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setInvalidating(null)}>
               Cancel
             </Button>
-            <Button type="button" variant="destructive" disabled={invalidateBusy} onClick={() => void confirmInvalidate()}>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={invalidateBusy || !note.trim()}
+              onClick={() => void confirmInvalidate()}
+            >
               Invalidate proof
             </Button>
           </DialogFooter>

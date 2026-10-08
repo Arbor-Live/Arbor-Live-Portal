@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { acceptAppDialog } from "../helpers/auth";
 import { pollConvex, runConvex } from "../helpers/convex";
 import { pickSearchableOption } from "../helpers/select";
 import {
@@ -111,8 +112,9 @@ test.describe("invoice fee definitions", () => {
       (state) => state?.active === true,
     );
 
-    // Delete.
+    // Delete (the row asks for confirmation first).
     await row.getByRole("button", { name: "Delete" }).click();
+    await acceptAppDialog(page, "Delete fee");
     await pollConvex<FeeDefinitionState | null>(
       "e2eHelpers:getInvoiceFeeDefinitionByKey",
       { key: crudKey },

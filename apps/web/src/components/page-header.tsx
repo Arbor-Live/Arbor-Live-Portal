@@ -55,7 +55,12 @@ export function PageHeader({
   children,
   className,
 }: {
-  back?: { href: string; label: string };
+  back?: {
+    href: string;
+    label: string;
+    /** Runs before navigating; call `event.preventDefault()` to cancel. */
+    onClick?: (event: React.MouseEvent<HTMLAnchorElement>) => void;
+  };
   /** Right-aligned buttons (keep to one or two). */
   actions?: React.ReactNode;
   /** `DropdownMenuItem`s for the `⋯` menu: secondary and destructive actions. */
@@ -100,7 +105,7 @@ export function PageHeader({
       {back ? (
         <div className="flex flex-wrap items-center justify-between gap-2 gap-y-2">
           <Button asChild variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
-            <Link href={back.href}>
+            <Link href={back.href} onClick={back.onClick}>
               <ArrowLeftIcon />
               {back.label}
             </Link>

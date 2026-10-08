@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import type { MediaGalleryAsset } from "@/components/media/media-gallery";
 
 type MediaViewerProps = {
@@ -13,11 +14,23 @@ type MediaViewerProps = {
 
 export function MediaViewer({ asset, onClose, onPrevious, onNext }: MediaViewerProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-      <div className="relative flex max-h-full w-full max-w-5xl flex-col gap-3">
-        <div className="flex items-center justify-between gap-2 text-white">
-          <p className="truncate text-sm">{asset.originalFileName}</p>
-          <div className="flex items-center gap-2">
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+    >
+      <DialogContent
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto bg-black/90 text-white ring-white/10 sm:max-w-5xl"
+        showCloseButton={false}
+        aria-label={asset.originalFileName}
+        aria-describedby={undefined}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <DialogTitle className="min-w-0 flex-1 truncate text-sm font-medium text-white">
+            {asset.originalFileName}
+          </DialogTitle>
+          <div className="flex shrink-0 items-center gap-2">
             {onPrevious ? (
               <Button type="button" size="sm" variant="secondary" onClick={onPrevious}>
                 Previous
@@ -33,7 +46,7 @@ export function MediaViewer({ asset, onClose, onPrevious, onNext }: MediaViewerP
             </Button>
           </div>
         </div>
-        <div className="relative flex min-h-[40vh] flex-1 items-center justify-center overflow-hidden rounded-lg bg-black">
+        <div className="relative flex min-h-[40vh] items-center justify-center overflow-hidden rounded-lg bg-black">
           {asset.type === "VIDEO" && asset.playbackUrl ? (
             <video
               src={asset.playbackUrl}
@@ -52,7 +65,7 @@ export function MediaViewer({ asset, onClose, onPrevious, onNext }: MediaViewerP
             />
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

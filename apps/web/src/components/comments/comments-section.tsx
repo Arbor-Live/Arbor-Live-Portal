@@ -391,8 +391,8 @@ function CommentsPanel({
                           <button
                             type="button"
                             data-testid="comment-delete"
-                            aria-label="Delete"
-                            className="rounded-sm p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover/message:opacity-100 hover:text-destructive focus-visible:opacity-100 disabled:opacity-50"
+                            aria-label={`Delete comment by ${comment.authorName}`}
+                            className="relative rounded-sm p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover/message:opacity-100 [@media(hover:none)]:opacity-100 hover:text-destructive focus-visible:opacity-100 disabled:opacity-50 after:absolute after:-inset-2"
                             disabled={deletingId === comment._id}
                             onClick={() => void handleDelete(comment._id)}
                           >

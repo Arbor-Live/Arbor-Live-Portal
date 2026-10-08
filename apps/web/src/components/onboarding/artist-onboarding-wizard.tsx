@@ -1008,17 +1008,25 @@ export function BandOnboardingWizard() {
                       emptyLabel="Select payee"
                     />
                     <div className="grid gap-2 sm:grid-cols-2">
-                      <Input
-                        value={form.designatedPayeeName}
-                        onChange={(event) => patch({ designatedPayeeName: event.target.value })}
-                        placeholder="Payee name"
-                      />
-                      <Input
-                        type="email"
-                        value={form.designatedPayeeEmail}
-                        onChange={(event) => patch({ designatedPayeeEmail: event.target.value })}
-                        placeholder="Payee email"
-                      />
+                      <div className="space-y-1">
+                        <Label htmlFor="band-payee-name">Payee name</Label>
+                        <Input
+                          id="band-payee-name"
+                          value={form.designatedPayeeName}
+                          onChange={(event) => patch({ designatedPayeeName: event.target.value })}
+                          placeholder="Payee name"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="band-payee-email">Payee email</Label>
+                        <Input
+                          id="band-payee-email"
+                          type="email"
+                          value={form.designatedPayeeEmail}
+                          onChange={(event) => patch({ designatedPayeeEmail: event.target.value })}
+                          placeholder="Payee email"
+                        />
+                      </div>
                     </div>
                     <BandPayeePayoutMethodField
                       value={form.designatedPayeePayoutMethod}
