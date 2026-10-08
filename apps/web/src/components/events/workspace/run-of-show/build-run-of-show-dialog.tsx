@@ -173,7 +173,7 @@ export function BuildRunOfShowDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MagicWandIcon className="size-4" />
@@ -185,7 +185,9 @@ export function BuildRunOfShowDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        {/* The body scrolls, not DialogContent: pickers portal into the
+            content, and a scrolling content box would clip them. */}
+        <div className="-mx-1 min-h-0 space-y-4 overflow-y-auto px-1">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="ros-doors">Doors</Label>

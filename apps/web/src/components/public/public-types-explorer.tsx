@@ -121,7 +121,14 @@ export function PublicTypesExplorer({
           </select>
         </div>
 
-        {!filteredRows.length ? (
+        {!filteredRows.length && rows.length > 0 ? (
+          <Card>
+            <CardContent className="py-6 text-sm text-muted-foreground">
+              Nothing listed has that capability. Choose &ldquo;All capabilities&rdquo; to see
+              everything.
+            </CardContent>
+          </Card>
+        ) : !filteredRows.length ? (
           <Card>
             <CardHeader>
               <CardTitle>No public types</CardTitle>

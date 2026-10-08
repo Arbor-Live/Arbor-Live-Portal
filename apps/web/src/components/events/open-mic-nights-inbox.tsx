@@ -123,7 +123,8 @@ export function OpenMicEventsInbox() {
                             !(await confirm({
                               title: "Disable Open Mic on this event?",
                               description: "Queues stay archived in the runner.",
-                              confirmLabel: "Disable",
+                              confirmLabel: "Disable Open Mic",
+                              destructive: true,
                             }))
                           ) {
                             return;

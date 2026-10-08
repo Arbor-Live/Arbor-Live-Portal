@@ -338,6 +338,8 @@ export function InvoiceEditorHeader({
           href: "/dashboard/financial-hub/invoices",
           label: "Invoices",
           onClick: (event) => {
+            // Modified clicks (new tab/window) leave this page as it is.
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
             if (!draft.isDraftDirty) return;
             event.preventDefault();
             void (async () => {

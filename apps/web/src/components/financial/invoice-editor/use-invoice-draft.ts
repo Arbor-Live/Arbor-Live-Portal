@@ -971,9 +971,9 @@ export function useInvoiceDraft({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- persistDraft is recreated each render; draftSignature covers content changes
   }, [draftSignature, autosaveEnabled, activeInvoiceId, invoiceFieldsHydrated, editorBaselineReady, isDraftDirty, saving, saveState.status]);
 
-  // Warn on unload only for changes autosave won't cover (a sent/approved
-  // quote, or a new invoice). Autosaved drafts recover on their own.
-  useBeforeUnload(isDraftDirty && !autosaveEnabled, "You have unsaved changes to this quote.");
+  // Warn on unload while anything is unsaved, including a draft whose
+  // autosave is still debouncing: leaving now would drop that save.
+  useBeforeUnload(isDraftDirty, "You have unsaved changes to this quote.");
 
   return {
     invoiceId,
