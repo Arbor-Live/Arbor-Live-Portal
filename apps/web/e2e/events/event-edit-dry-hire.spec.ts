@@ -38,14 +38,14 @@ test.describe("event edit and dry hire", () => {
       .getByRole("textbox")
       .fill(title);
 
-    await selectSearchableOption(page, "Event Type", "Dry Hire");
+    await selectSearchableOption(page, "Event type", "Dry Hire");
     await fillDateTimeRangeNearLabel(page, "When", {
       dayLabel,
       startTime: "10:00 AM",
       endTime: "6:00 PM",
     });
 
-    await page.getByRole("button", { name: "Create Event" }).first().click();
+    await page.getByRole("button", { name: "Create event" }).first().click();
     await page.waitForURL(/\/dashboard\/events\/(?!new(?:\/|$))[^/?#]+/, { timeout: 45_000 });
 
     const eventUrl = page.url().replace(/\/$/, "").replace(/\/schedule$/, "");

@@ -81,7 +81,7 @@ export function PublicQuoteFinancials({
   return (
     <div className="space-y-4">
       <QuoteSection title="Equipment" rows={grouped.equipment} />
-      <QuoteSection title="External Rentals" rows={grouped.external} />
+      <QuoteSection title="External rentals" rows={grouped.external} />
       <QuoteSection title="Artists" rows={grouped.artists} />
       <PublicQuoteCrew lineItems={grouped.crew} />
       <QuoteSection title="Fees" rows={grouped.fees} />

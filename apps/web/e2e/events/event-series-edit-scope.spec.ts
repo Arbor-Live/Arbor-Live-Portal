@@ -44,7 +44,7 @@ test.describe("event series edit scope", () => {
       .fill("3");
 
     await expect(page.getByText("Preview (3 occurrences)")).toBeVisible({ timeout: 20_000 });
-    await page.getByRole("button", { name: "Create Series" }).first().click();
+    await page.getByRole("button", { name: "Create series" }).first().click();
     await page.waitForURL(/\/dashboard\/events\/(?!new(?:\/|$))[^/?#]+/, { timeout: 60_000 });
     await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 25_000 });
 

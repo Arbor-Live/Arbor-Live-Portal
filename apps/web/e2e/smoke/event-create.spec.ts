@@ -23,7 +23,7 @@ test.describe("event create smoke", () => {
       endTime: "10:00 PM",
     });
 
-    await page.getByRole("button", { name: "Create Event" }).first().click();
+    await page.getByRole("button", { name: "Create event" }).first().click();
     await page.waitForURL(/\/dashboard\/events\/(?!new(?:\/|$))[^/?#]+/, { timeout: 45_000 });
     await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("event-title-input")).toHaveValue(title);

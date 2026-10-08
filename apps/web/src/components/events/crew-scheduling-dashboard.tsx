@@ -11,6 +11,8 @@ import { TypeChip } from "@/components/events/workspace/run-of-show/run-of-show-
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePickerField } from "@/components/ui/date-picker";
+import { EmptyState } from "@/components/list-page";
+import { Skeleton } from "@/components/ui/skeleton";
 import { AcademicPeriodPicks } from "@/components/academic-period-picks";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -378,15 +380,18 @@ export function CrewSchedulingDashboard() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
         <div className="min-w-0 space-y-3">
           {!range ? null : !rows ? (
-            <p className="text-sm text-muted-foreground">Loading crew scheduling…</p>
+            <div className="space-y-3">
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-32 w-full" />
+            </div>
           ) : null}
 
           {range && rows && rows.length === 0 ? (
-            <p className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+            <EmptyState>
               {needsCrewOnly
                 ? "Every crewed event in this range is fully staffed."
                 : "No crewed events found in this date range."}
-            </p>
+            </EmptyState>
           ) : null}
 
           {rows?.map((row) => {

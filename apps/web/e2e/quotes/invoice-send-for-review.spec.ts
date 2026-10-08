@@ -147,7 +147,7 @@ test.describe("invoice send for client review", () => {
       const clientPage = await clientContext.newPage();
       await clientPage.goto(`${seeded.trackPath}?tab=quote`);
       await expect(
-        clientPage.getByText(/Terms & Conditions|Approve quote/i).first(),
+        clientPage.getByText(/Terms & conditions|Approve quote/i).first(),
       ).toBeVisible({ timeout: 25_000 });
     } finally {
       await clientContext.close();
@@ -187,7 +187,7 @@ test.describe("invoice send for client review", () => {
     try {
       const clientPage = await clientContext.newPage();
       await clientPage.goto(`${seeded.trackPath}?tab=quote`);
-      await expect(clientPage.getByText(/Terms & Conditions/i).first()).toBeVisible({
+      await expect(clientPage.getByText(/Terms & conditions/i).first()).toBeVisible({
         timeout: 25_000,
       });
       await clientPage.getByPlaceholder("Tell us what changes are needed").fill("Please adjust crew hours.");
@@ -231,7 +231,7 @@ test.describe("invoice send for client review", () => {
       await expect(recheckPage.getByRole("button", { name: "Approve quote" })).toBeVisible({
         timeout: 25_000,
       });
-      await expect(recheckPage.getByText(/Terms & Conditions/i).first()).toBeVisible({
+      await expect(recheckPage.getByText(/Terms & conditions/i).first()).toBeVisible({
         timeout: 25_000,
       });
     } finally {

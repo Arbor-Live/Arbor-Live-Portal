@@ -177,7 +177,7 @@ export function ItemsManager() {
   return (
     <div className="space-y-4 pb-24" data-testid="items-page">
       <PageHeader
-        title="Inventory Items"
+        title="Inventory items"
         description="Every unit of gear Arbor owns. Scan a tag to find one, open it to edit, nest it in a case, or report damage."
         actions={
           <>

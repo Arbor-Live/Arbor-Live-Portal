@@ -6,6 +6,10 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
+import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState, RowFlag, RowList, RowMenu, RowText } from "@/components/list-page";
+import { ListRow } from "@/components/list-row";
 import { formatDateTime } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { optimisticSetOpenMicStatus } from "@/lib/open-mic-optimistic";
@@ -44,132 +48,120 @@ export function OpenMicEventsInbox() {
         </Button>
       </div>
 
-      <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+      <p className="border border-dashed px-3 py-2 text-sm text-muted-foreground">
         Open Mic is an add-on on events. Enable it from an event&rsquo;s
         <span className="px-1 text-foreground">Add-ons</span> section to list it here.
       </p>
 
-      <div className="space-y-2">
-        {(events ?? []).map((event) => {
-          const past = event.startAt < now;
-          return (
-            <div key={event._id} className="rounded-md border p-3">
-              <div className="flex flex-wrap items-start gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium">{event.title}</p>
-                  <p className="text-xs text-muted-foreground">{formatDateTime(event.startAt)}</p>
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                    <span className="rounded bg-muted px-2 py-0.5">{statusLabel(event.status)}</span>
-                    {event.eventStatus ? (
-                      <span className="rounded bg-muted px-2 py-0.5">
-                        Event: {event.eventStatus}
-                      </span>
+      {events === undefined ? (
+        <div className="space-y-2">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </div>
+      ) : events.length === 0 ? (
+        <EmptyState>No events with Open Mic enabled. Turn it on from an event&rsquo;s Add-ons section.</EmptyState>
+      ) : (
+        <RowList testId="open-mic-inbox-list">
+          {events.map((event) => {
+            const past = event.startAt < now;
+            return (
+              <ListRow
+                key={event._id}
+                href={`/dashboard/events/${event._id}`}
+                data-testid={`open-mic-event-${event._id}`}
+                actions={
+                  <RowMenu label={`More for ${event.title}`}>
+                    <DropdownMenuItem asChild>
+                      <Link href={`/dashboard/events/${event._id}`}>Open event</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href={`/dashboard/events/open-mic/${event._id}`}>Runner</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    {event.status === "scheduled" && !past ? (
+                      <DropdownMenuItem
+                        disabled={!event.runnerWindowOpen}
+                        title={
+                          event.runnerWindowOpen
+                            ? "Open the runner queue"
+                            : `Runner opens ${formatDateTime(event.runnerOpensAt)} (1h before start)`
+                        }
+                        onSelect={() =>
+                          void setOpenMicStatus({ eventId: event._id, status: "live" }).catch((err) => {
+                            void alert(getConvexErrorMessage(err));
+                          })
+                        }
+                      >
+                        Go live
+                      </DropdownMenuItem>
                     ) : null}
-                    <span
-                      className={`rounded px-2 py-0.5 ${event.runnerWindowOpen ? "bg-status-emerald-500/15 text-status-emerald-700" : "bg-muted text-muted-foreground"}`}
+                    {event.status === "live" ? (
+                      <DropdownMenuItem
+                        onSelect={() =>
+                          void setOpenMicStatus({ eventId: event._id, status: "completed" })
+                        }
+                      >
+                        Mark completed
+                      </DropdownMenuItem>
+                    ) : null}
+                    {event.status !== "cancelled" && event.status !== "completed" ? (
+                      <DropdownMenuItem
+                        onSelect={() =>
+                          void setOpenMicStatus({ eventId: event._id, status: "cancelled" })
+                        }
+                      >
+                        Cancel
+                      </DropdownMenuItem>
+                    ) : null}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={() => {
+                        void (async () => {
+                          if (
+                            !(await confirm({
+                              title: "Disable Open Mic on this event?",
+                              description: "Queues stay archived in the runner.",
+                              confirmLabel: "Disable",
+                            }))
+                          ) {
+                            return;
+                          }
+                          await updateEvent({ id: event._id, openMicEnabled: false }).catch((err) => {
+                            void alert(getConvexErrorMessage(err));
+                          });
+                        })();
+                      }}
                     >
-                      Runner: {event.runnerWindowOpen ? "Open" : "Closed"}
-                    </span>
-                    <span className="rounded bg-muted px-2 py-0.5">Queued: {event.queuedCount}</span>
-                    <span className="rounded bg-muted px-2 py-0.5">
-                      Performed: {event.performedCount}
-                    </span>
-                    {event.hasCurrent ? (
-                      <span className="rounded bg-status-emerald-500/15 px-2 py-0.5 text-status-emerald-700">
-                        Performer on stage
-                      </span>
+                      Disable
+                    </DropdownMenuItem>
+                  </RowMenu>
+                }
+              >
+                <div className="min-w-0 flex-1 space-y-1">
+                  <RowText
+                    eyebrow={statusLabel(event.status)}
+                    title={event.title}
+                    detail={formatDateTime(event.startAt)}
+                  />
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {event.eventStatus ? (
+                      <RowFlag tone="neutral">Event: {event.eventStatus}</RowFlag>
                     ) : null}
+                    <RowFlag tone={event.runnerWindowOpen ? "emerald" : "neutral"}>
+                      Runner: {event.runnerWindowOpen ? "Open" : "Closed"}
+                    </RowFlag>
+                    <RowFlag tone="neutral">Queued: {event.queuedCount}</RowFlag>
+                    <RowFlag tone="neutral">Performed: {event.performedCount}</RowFlag>
+                    {event.hasCurrent ? <RowFlag tone="emerald">Performer on stage</RowFlag> : null}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button asChild type="button" variant="outline" size="sm">
-                    <Link href={`/dashboard/events/${event._id}`}>Open event</Link>
-                  </Button>
-                  <Button asChild type="button" variant="outline" size="sm">
-                    <Link href={`/dashboard/events/open-mic/${event._id}`}>Runner</Link>
-                  </Button>
-                  {event.status === "scheduled" && !past ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={!event.runnerWindowOpen}
-                      title={
-                        event.runnerWindowOpen
-                          ? "Open the runner queue"
-                          : `Runner opens ${formatDateTime(event.runnerOpensAt)} (1h before start)`
-                      }
-                      onClick={() =>
-                        void setOpenMicStatus({ eventId: event._id, status: "live" }).catch(
-                          (err) => {
-                            void alert(getConvexErrorMessage(err));
-                          },
-                        )
-                      }
-                    >
-                      Go live
-                    </Button>
-                  ) : null}
-                  {event.status === "live" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        void setOpenMicStatus({ eventId: event._id, status: "completed" })
-                      }
-                    >
-                      Mark completed
-                    </Button>
-                  ) : null}
-                  {event.status !== "cancelled" && event.status !== "completed" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        void setOpenMicStatus({ eventId: event._id, status: "cancelled" })
-                      }
-                    >
-                      Cancel
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive"
-                    onClick={() => {
-                      void (async () => {
-                        if (
-                          !(await confirm({
-                            title: "Disable Open Mic on this event?",
-                            description: "Queues stay archived in the runner.",
-                            confirmLabel: "Disable",
-                          }))
-                        ) {
-                          return;
-                        }
-                        await updateEvent({ id: event._id, openMicEnabled: false }).catch((err) => {
-                          void alert(getConvexErrorMessage(err));
-                        });
-                      })();
-                    }}
-                  >
-                    Disable
-                  </Button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-        {events && events.length === 0 ? (
-          <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-            No events with Open Mic enabled. Turn it on from an event&rsquo;s Add-ons section.
-          </p>
-        ) : null}
-        {events === undefined ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-      </div>
+              </ListRow>
+            );
+          })}
+        </RowList>
+      )}
     </div>
   );
 }

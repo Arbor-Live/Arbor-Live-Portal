@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { EmptyState } from "@/components/list-page";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MediaViewer } from "@/components/media/media-viewer";
@@ -36,7 +37,7 @@ export function MediaGallery({
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   if (!assets.length) {
-    return <p className="text-sm text-muted-foreground">{emptyMessage}</p>;
+    return <EmptyState>{emptyMessage}</EmptyState>;
   }
 
   return (

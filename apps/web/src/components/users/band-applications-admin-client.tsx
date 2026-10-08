@@ -202,6 +202,7 @@ export function BandApplicationsAdminClient() {
   return (
     <div className="space-y-4 pb-24" data-testid="artist-applications-page">
       <PageHeader
+        back={{ href: "/dashboard/users", label: "Users" }}
         title="Artist applications"
         description="Artists who applied through the public form. Approving creates the artist org, invites the contact and any listed members, and leaves payout onboarding for them to finish. Their public listing stays off until they turn it on."
         meta={

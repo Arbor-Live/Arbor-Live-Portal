@@ -231,6 +231,7 @@ export function CrewApplicationsAdminClient() {
   return (
     <div className="space-y-4 pb-24" data-testid="crew-applications-page">
       <PageHeader
+        back={{ href: "/dashboard/users", label: "Users" }}
         title="Crew applications"
         description="People who applied to join crew. Reach out with a Calendly link, meet them, then put them on a training event or invite them as members."
       />

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery } from "convex/react";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
+import { EmptyState } from "@/components/list-page";
 import { MetaItem, PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TimecardPeriodSummary } from "@/components/timecards/timecard-period-summary";
@@ -34,8 +35,14 @@ export function AdminTimecardDetailClient({ userId }: { userId: string }) {
         }
       />
 
-      <TimecardPeriodSummary periods={detail.periods} />
-      <TimecardPeriodList periods={detail.periods} />
+      {detail.periods.length === 0 ? (
+        <EmptyState>No shifts yet. Hours appear here after they&rsquo;re scheduled.</EmptyState>
+      ) : (
+        <>
+          <TimecardPeriodSummary periods={detail.periods} />
+          <TimecardPeriodList periods={detail.periods} />
+        </>
+      )}
     </div>
   );
 }

@@ -278,7 +278,16 @@ function PosterWorkPanel({
   }, [design, hydrated]);
 
   if (design === undefined) {
-    return <DetailSheetHeader title="Loading…" description="Loading the event's poster work." />;
+    return (
+      <>
+        <DetailSheetHeader title="Poster" description="Loading the event's poster work." />
+        <div className="space-y-3 px-4 py-4">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+      </>
+    );
   }
   if (design === null) {
     return <DetailSheetHeader title="Event not found" description="It may have been deleted." />;

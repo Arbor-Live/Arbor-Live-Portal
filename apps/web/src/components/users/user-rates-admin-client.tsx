@@ -170,6 +170,7 @@ export function UserRatesAdminClient() {
   return (
     <div className="space-y-4 pb-24" data-testid="crew-rates-page">
       <PageHeader
+        back={{ href: "/dashboard/users", label: "Users" }}
         title="Crew rates"
         description="What each person is paid per hour. Normal and Lead follow the global rates; Custom is a fixed rate for one person. Rates price timecards and invoice crew lines."
         actions={

@@ -31,8 +31,8 @@ test.describe("public booking submit", () => {
     await page.getByLabel("Stanford email").fill(email);
     await clickNext(page);
 
-    await page.getByLabel("First Name").fill("E2E");
-    await page.getByLabel("Last Name").fill("Booker");
+    await page.getByLabel("First name").fill("E2E");
+    await page.getByLabel("Last name").fill("Booker");
     await page.getByLabel("Phone").fill("6505550188");
     await clickNext(page);
 

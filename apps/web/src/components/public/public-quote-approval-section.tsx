@@ -98,7 +98,7 @@ export function PublicQuoteApprovalSection({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Terms & Conditions</CardTitle>
+        <CardTitle>Terms & conditions</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <MarkdownContent>{termsAndConditionsMarkdown || "_No terms configured._"}</MarkdownContent>

@@ -13,7 +13,7 @@ test.describe("booking track approve", () => {
     };
 
     await page.goto(`${seeded.trackPath}?tab=quote`);
-    await expect(page.getByText(/Terms & Conditions|Approve quote/i).first()).toBeVisible({
+    await expect(page.getByText(/Terms & conditions|Approve quote/i).first()).toBeVisible({
       timeout: 25_000,
     });
 

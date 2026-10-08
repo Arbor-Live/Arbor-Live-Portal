@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { EventStateBadges, getDerivedLifecycleState } from "@/components/events/event-state-badges";
+import { EmptyState, RowFlag, RowList, RowText } from "@/components/list-page";
+import { ListRow } from "@/components/list-row";
 import { Button } from "@/components/ui/button";
 
 import { formatDateTime } from "@/lib/format";
@@ -35,43 +37,46 @@ export function EventsUpcomingView({ events }: { events: DashboardEvent[] }) {
     .sort((a, b) => a.startAt - b.startAt);
 
   if (!upcoming.length) {
-    return <p className="text-sm text-muted-foreground">No upcoming events found.</p>;
+    return <EmptyState>No upcoming events found.</EmptyState>;
   }
 
   return (
-    <div className="space-y-2">
+    <RowList testId="events-upcoming-list">
       {upcoming.map((row) => (
-        <div key={row._id} className="rounded-md border p-3">
-          <div className="flex flex-wrap items-start gap-2">
-            <div className="min-w-0 flex-1 space-y-1">
-              <p className="font-medium">{row.title}</p>
-              <p className="text-xs text-muted-foreground">
-                {formatDateTime(row.startAt)} {"->"} {formatDateTime(row.endAt)}
-              </p>
-              <EventStateBadges status={row.status} startAt={row.startAt} endAt={row.endAt} />
-              <div className="flex flex-wrap gap-2 text-xs">
-                {row.eventType ? <span className="rounded bg-muted px-2 py-0.5">{row.eventType}</span> : null}
-                {row.venueName ? <span className="rounded bg-muted px-2 py-0.5">{row.venueName}</span> : null}
-                <span className="rounded bg-muted px-2 py-0.5">Crew {row.assignedCrewCount ?? 0}</span>
-                {row.pullListSummary && row.pullListSummary.totalLines > 0 ? (
-                  <span className="rounded bg-muted px-2 py-0.5">
-                    Pull list {row.pullListSummary.totalLines} · {row.pullListSummary.totalPieces} pcs
-                  </span>
-                ) : null}
-                {row.scheduleSummary?.setupAt ? (
-                  <span className="rounded bg-muted px-2 py-0.5">Call {formatDateTime(row.scheduleSummary.setupAt)}</span>
-                ) : null}
-                {row.scheduleSummary?.showAt ? (
-                  <span className="rounded bg-muted px-2 py-0.5">Show {formatDateTime(row.scheduleSummary.showAt)}</span>
-                ) : null}
-              </div>
-            </div>
+        <ListRow
+          key={row._id}
+          href={`/dashboard/events/${row._id}`}
+          data-testid={`events-upcoming-row-${row._id}`}
+          actions={
             <Button asChild variant="outline" size="sm">
               <Link href={`/dashboard/events/${row._id}`}>Open</Link>
             </Button>
+          }
+        >
+          <div className="min-w-0 flex-1 space-y-1">
+            <RowText
+              eyebrow={`${formatDateTime(row.startAt)} → ${formatDateTime(row.endAt)}`}
+              title={row.title}
+              detail={[row.eventType, row.venueName].filter(Boolean).join(" · ")}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <EventStateBadges status={row.status} startAt={row.startAt} endAt={row.endAt} />
+              <RowFlag tone="neutral">Crew {row.assignedCrewCount ?? 0}</RowFlag>
+              {row.pullListSummary && row.pullListSummary.totalLines > 0 ? (
+                <RowFlag tone="neutral">
+                  Pull list {row.pullListSummary.totalLines} · {row.pullListSummary.totalPieces} pcs
+                </RowFlag>
+              ) : null}
+              {row.scheduleSummary?.setupAt ? (
+                <RowFlag tone="neutral">Call {formatDateTime(row.scheduleSummary.setupAt)}</RowFlag>
+              ) : null}
+              {row.scheduleSummary?.showAt ? (
+                <RowFlag tone="neutral">Show {formatDateTime(row.scheduleSummary.showAt)}</RowFlag>
+              ) : null}
+            </div>
           </div>
-        </div>
+        </ListRow>
       ))}
-    </div>
+    </RowList>
   );
 }

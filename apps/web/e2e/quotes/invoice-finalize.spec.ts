@@ -46,6 +46,6 @@ test.describe("staff invoice create", () => {
     expect(state.publicPath).toBeTruthy();
 
     await page.goto(`${state.publicPath!}?tab=quote`);
-    await expect(page.getByText(/Terms & Conditions/i).first()).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText(/Terms & conditions/i).first()).toBeVisible({ timeout: 25_000 });
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { OptimizedRemoteImage } from "@/components/media/optimized-remote-image";
 import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
@@ -125,8 +126,17 @@ export function PublicTypesExplorer({
             <CardHeader>
               <CardTitle>No public types</CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Ask an admin to enable public listing on inventory types, or try a different capability filter.
+            <CardContent className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                No equipment is listed right now. Tell us what you need and we&apos;ll put
+                together a quote.
+              </p>
+              <Link
+                href="/request"
+                className="inline-flex text-sm font-medium text-foreground underline-offset-4 hover:underline"
+              >
+                Request a quote
+              </Link>
             </CardContent>
           </Card>
         ) : null}

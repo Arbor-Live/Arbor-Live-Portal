@@ -45,7 +45,7 @@ test.describe("venue create and pick", () => {
     await createDialog.getByRole("button", { name: /Create & select/i }).click();
     await expect(createDialog).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Create Event" }).first().click();
+    await page.getByRole("button", { name: "Create event" }).first().click();
     await page.waitForURL(/\/dashboard\/events\/(?!new(?:\/|$))[^/?#]+/, { timeout: 45_000 });
     await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 20_000 });
 

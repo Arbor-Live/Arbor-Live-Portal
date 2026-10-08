@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { EmptyState } from "@/components/list-page";
 import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TimecardPeriodSummary } from "@/components/timecards/timecard-period-summary";
@@ -21,6 +22,8 @@ export function TimecardsClient() {
 
       {timecards === undefined ? (
         <Skeleton className="h-48 w-full" />
+      ) : timecards.length === 0 ? (
+        <EmptyState>No shifts yet. Hours appear here after you&rsquo;re scheduled.</EmptyState>
       ) : (
         <>
           <TimecardPeriodSummary periods={timecards} />
