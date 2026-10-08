@@ -750,7 +750,7 @@ export const convertToMember = mutation({
         stanfordPosition: application.stanfordPosition,
       });
       await clearUserBan(ctx, existingUserId);
-      // Joining crew never demotes: an existing Arbor role (an admin applying
+      // Joining crew never demotes: an active Arbor role (an admin applying
       // as crew) is kept.
       const existingArborMembership = await ctx.db
         .query("userOrganizationMemberships")
@@ -761,7 +761,9 @@ export const convertToMember = mutation({
       await upsertOrgMembership(ctx, {
         userId: existingUserId,
         organizationId: arborOrg.id,
-        role: existingArborMembership?.role ?? "member",
+        // An inactive membership's old role is not restored: reactivating
+        // a removed admin through a crew application would re-grant admin.
+        role: existingArborMembership?.active ? existingArborMembership.role : "member",
         active: true,
       });
       await syncGlobalRoleFromMemberships(ctx, existingUserId);

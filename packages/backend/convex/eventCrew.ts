@@ -386,14 +386,15 @@ export const listCrewConflictsForEvent = query({
       .query("eventCrewAvailabilityResponses")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(500);
-    const userIds = Array.from(
-      new Set([
-        ...args.userIds.map((id) => id.trim()).filter(Boolean),
-        ...responses.map((response) => response.userId),
-      ]),
-    )
-      .sort()
-      .slice(0, CONFLICT_USER_CAP);
+    // The board's own assignees are checked first; responders fill whatever
+    // room is left under the cap, so a long responder list can't push an
+    // assignee out and hide their double booking.
+    const assigneeIds = [...new Set(args.userIds.map((id) => id.trim()).filter(Boolean))].sort();
+    const assigneeSet = new Set(assigneeIds);
+    const responderIds = [...new Set(responses.map((response) => response.userId))]
+      .filter((id) => !assigneeSet.has(id))
+      .sort();
+    const userIds = [...assigneeIds, ...responderIds].slice(0, CONFLICT_USER_CAP);
     const perUser = await Promise.all(
       userIds.map((userId) =>
         ctx.db

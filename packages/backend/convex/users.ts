@@ -1909,6 +1909,8 @@ export const listUsersForAdmin = query({
   },
 });
 
+const PER_MEMBER_PROFILE_READ_LIMIT = 1_000;
+
 /**
  * One organization's members for the directory's organization sheet. Narrower
  * than `listUsersForAdmin` — no rates, profiles of non-members, or cross-org
@@ -1930,9 +1932,16 @@ export const listOrganizationMembersForAdmin = query({
     await requireAdmin(ctx);
     const memberships = await loadOrgMembershipsForOrganization(ctx, args.organizationId);
     const userIds = [...new Set(memberships.map((membership) => membership.userId))];
+    // One read per member is fine for a band or the crew roster, but past
+    // ~1,000 it would crowd Convex's 4,096 index-range limit: read every
+    // profile in one bounded query instead.
     const [userByKey, profileByUserId] = await Promise.all([
       findAuthUsersByIds(ctx, userIds),
-      loadAdminProfilesByUserIds(ctx, userIds),
+      userIds.length > PER_MEMBER_PROFILE_READ_LIMIT
+        ? loadAllAdminProfiles(ctx).then(
+            (profiles) => new Map(profiles.map((profile) => [profile.userId, profile])),
+          )
+        : loadAdminProfilesByUserIds(ctx, userIds),
     ]);
     const seen = new Set<string>();
     const rows: Array<{
