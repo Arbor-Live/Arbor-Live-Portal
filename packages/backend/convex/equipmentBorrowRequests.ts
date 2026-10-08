@@ -9,7 +9,7 @@ import {
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { getUserId, isAdmin, requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
+import { getUserId, isStaffAdmin, requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { insertPullListItemsFromLines } from "./eventPullLists";
 import { allocateBorrowRequestNumber } from "./lib/publicReferenceIds";
 import { resolveVenueLink } from "./lib/venues";
@@ -236,7 +236,7 @@ export const get = query({
     const request = await ctx.db.get(id);
     if (!request) return null;
     const isMine = request.requesterUserId === getUserId(user);
-    if (!isMine && !isAdmin(user)) return null;
+    if (!isMine && !(await isStaffAdmin(ctx, user))) return null;
     return { request, isMine };
   },
 });

@@ -979,6 +979,29 @@ export const waiveCrewOnboarding = mutation({
   },
 });
 
+/**
+ * One row per user, several times the roster. Rows carry ~25 fields, so this
+ * also keeps the read (with the admin profiles it's joined to) well under
+ * Convex's 16 MiB per-query limit.
+ */
+const MAX_ONBOARDING_ROWS = 2_000;
+
+/**
+ * Every onboarding row, or a thrown error rather than a partial list. A single
+ * bounded read: Convex allows one paginated query per function, and this
+ * query already pages admin profiles.
+ */
+async function loadAllUserOnboardingRows(ctx: QueryCtx): Promise<Doc<"userOnboarding">[]> {
+  const rows = await ctx.db
+    .query("userOnboarding")
+    .withIndex("by_status")
+    .take(MAX_ONBOARDING_ROWS + 1);
+  if (rows.length > MAX_ONBOARDING_ROWS) {
+    throw new Error(`userOnboarding exceeded ${MAX_ONBOARDING_ROWS} rows; refusing a partial result.`);
+  }
+  return rows;
+}
+
 export const listCrewOnboardingForAdmin = query({
   args: {},
   returns: v.array(
@@ -1013,7 +1036,7 @@ export const listCrewOnboardingForAdmin = query({
   ),
   handler: async (ctx) => {
     await requireAdmin(ctx);
-    const rows = await ctx.db.query("userOnboarding").withIndex("by_status").take(2000);
+    const rows = await loadAllUserOnboardingRows(ctx);
     const profiles = await loadAllAdminProfiles(ctx);
     const payrollByUserId = new Map(
       profiles.map((profile) => [profile.userId, normalizePayrollMethod(profile.payrollMethod)]),

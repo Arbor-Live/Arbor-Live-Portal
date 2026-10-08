@@ -12,6 +12,7 @@ import {
   getCurrentUserOrNull,
   getUserId,
   isAdmin,
+  isStaffAdmin,
   isPortalAdmin,
   requireAdmin,
   requireAdminOrOperations,
@@ -84,6 +85,7 @@ import { ensureOnboardingForOrgMembership, ensureOrganizationOnboarding, resolve
 import {
   applyPayrollMethodToProfile,
   loadInvoiceCrewRateSettings,
+  loadAllCompensationRates,
   normalizeCompensationRateMode,
   normalizePayrollMethod,
   resolveUserCompensationHourlyRateUsd,
@@ -1493,6 +1495,7 @@ export const getViewer = query({
     if (!user) return null;
     const userId = getUserId(user);
     const orgContext = await getActiveOrganizationContextOrNull(ctx);
+    const viewerIsStaffAdmin = await isStaffAdmin(ctx, user);
     const profile = await ctx.db
       .query("userAdminProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
@@ -1501,8 +1504,8 @@ export const getViewer = query({
     return {
       userId,
       role: user.role ?? undefined,
-      isAdmin: isAdmin(user),
-      isCrewOnly: !isAdmin(user) && orgContext?.organizationType === "arbor_internal",
+      isAdmin: viewerIsStaffAdmin,
+      isCrewOnly: !viewerIsStaffAdmin && orgContext?.organizationType === "arbor_internal",
       verticals: membership.verticals,
       disciplines: membership.disciplines,
     };
@@ -1587,6 +1590,7 @@ export const getSessionShell = query({
     if (!user) return null;
     const userId = getUserId(user);
     const orgContext = await getActiveOrganizationContextOrNull(ctx);
+    const viewerIsStaffAdmin = await isStaffAdmin(ctx, user);
     const profile = await ctx.db
       .query("userAdminProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
@@ -1666,8 +1670,8 @@ export const getSessionShell = query({
       viewer: {
         userId,
         role: user.role ?? undefined,
-        isAdmin: isAdmin(user),
-        isCrewOnly: !isAdmin(user) && orgContext?.organizationType === "arbor_internal",
+        isAdmin: viewerIsStaffAdmin,
+        isCrewOnly: !viewerIsStaffAdmin && orgContext?.organizationType === "arbor_internal",
         status: resolveUserStatus(profile),
         verticals: membership.verticals,
         disciplines: membership.disciplines,
@@ -1759,7 +1763,7 @@ export const listWithRates = query({
   handler: async (ctx) => {
     await requireAdmin(ctx);
     const users = await getAllAuthUsers(ctx);
-    const rates = await ctx.db.query("userCompensationRates").withIndex("by_updatedAt").take(1000);
+    const rates = await loadAllCompensationRates(ctx);
     const settings = await loadInvoiceCrewRateSettings(ctx);
     const rateByUserId = new Map(
       rates.map((rate) => [
@@ -1804,7 +1808,7 @@ export const listUsersForAdmin = query({
     const users = await getAllAuthUsers(ctx);
     const organizations = await getAllOrganizations(ctx);
     const organizationById = new Map(organizations.map((org) => [getRecordId(org), org]));
-    const rates = await ctx.db.query("userCompensationRates").withIndex("by_updatedAt").take(1000);
+    const rates = await loadAllCompensationRates(ctx);
     const settings = await loadInvoiceCrewRateSettings(ctx);
     const rateByUserId = new Map(
       rates.map((rate) => [
@@ -2562,18 +2566,6 @@ export const updateUserAdmin = mutation({
     const target = await findAuthUserById(ctx, args.userId);
     if (!target || !target.email) throw new Error("User not found.");
     const now = Date.now();
-    if (args.role) {
-      await ctx.runMutation(components.betterAuth.adapter.updateOne, {
-        input: {
-          model: "user",
-          where: [{ field: "email", value: target.email }],
-          update: {
-            role: args.role,
-            updatedAt: now,
-          },
-        },
-      });
-    }
     if (args.name !== undefined) {
       const name = args.name.trim();
       if (!name) throw new Error("Name is required.");
@@ -2721,10 +2713,28 @@ export const updateUserAdmin = mutation({
           active: existingMembershipRow?.active ?? true,
         });
       }
-      // An explicit `role` wins; otherwise keep the global role in step with the
-      // memberships just written so access cannot linger after they are removed.
-      if (!args.role) {
-        await syncGlobalRoleFromMemberships(ctx, args.userId);
+    }
+    // The global role caches memberships, so derive it rather than taking
+    // `args.role` at its word: "admin" sticks only with an Arbor Live admin
+    // membership behind it.
+    if (args.organizationMemberships?.length) {
+      await syncGlobalRoleFromMemberships(ctx, args.userId);
+    } else if (args.role) {
+      // An admin-granting membership makes it admin. The no-membership legacy
+      // exception only keeps a user who is already cached as admin; it never
+      // promotes a member.
+      const membershipRole = await resolveGlobalRoleFromActiveMemberships(ctx, args.userId);
+      const keepsLegacyAdmin = target.role === "admin" && (await isPortalAdmin(ctx, args.userId));
+      const role =
+        args.role === "admin" && (membershipRole === "admin" || keepsLegacyAdmin) ? "admin" : "member";
+      if (target.role !== role) {
+        await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+          input: {
+            model: "user",
+            where: [{ field: "email", value: target.email }],
+            update: { role, updatedAt: now },
+          },
+        });
       }
     }
     return { ok: true };
@@ -3168,7 +3178,7 @@ export const inviteMemberToActiveOrganization = mutation({
     const context = await requireBandContext(ctx);
     const admin = await requireAuth(ctx);
     const adminId = getUserId(admin);
-    if (!isAdmin(admin)) {
+    if (!(await isStaffAdmin(ctx, admin))) {
       const callerMembership = await ctx.db
         .query("userOrganizationMemberships")
         .withIndex("by_userId_and_organizationId", (q) =>
@@ -3293,7 +3303,7 @@ export const updateMemberBandRole = mutation({
         q.eq("userId", actorId).eq("organizationId", context.organizationId),
       )
       .unique();
-    const isOrgAdmin = isArtistOrgAdminRole(actorMembership?.role) || isAdmin(actor);
+    const isOrgAdmin = isArtistOrgAdminRole(actorMembership?.role) || (await isStaffAdmin(ctx, actor));
     if (actorId !== targetUserId && !isOrgAdmin) {
       throw new Error("Only artist admins can edit another member's role.");
     }

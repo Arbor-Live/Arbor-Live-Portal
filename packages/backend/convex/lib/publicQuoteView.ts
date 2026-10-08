@@ -96,10 +96,19 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
     discountValue: invoice.discountValue,
   });
   const pendingArtistLineIds = await listPendingArtistLineIds(ctx, lineItems);
+  // An explicit projection: raw line items carry internal pricing
+  // (`packageOriginalRateUsd`, `packageExclusionDiscountUsd`) that must not
+  // reach a forwardable quote link.
   const displayLineItems = lineItems.map((row, index) => {
     const doc = documentLineItems[index]!;
     return {
-      ...row,
+      _id: row._id,
+      section: row.section,
+      rateUsd: row.rateUsd,
+      notes: row.notes,
+      memberCount: row.memberCount,
+      performanceHours: row.performanceHours,
+      crewSource: row.crewSource,
       detailNote: pendingArtistLineIds.has(row._id) ? ARTIST_ESTIMATE_NOTE : undefined,
       label: doc.label,
       quantity: doc.quantity,

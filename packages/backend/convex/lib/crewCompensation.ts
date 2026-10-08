@@ -153,3 +153,43 @@ export async function applyPayrollMethodToProfile(
     updatedAt: Date.now(),
   });
 }
+
+/** One row per user; far above the roster, low enough to stay inside read limits. */
+const MAX_COMPENSATION_RATES = 5_000;
+
+/**
+ * Every compensation rate (one row per user). Throws rather than returning a
+ * partial list, so newer users' rates can't silently drop off as the table
+ * grows. A single bounded read: Convex allows one paginated query per
+ * function, and callers already page other tables.
+ */
+export async function loadAllCompensationRates(
+  ctx: QueryCtx | MutationCtx,
+): Promise<Doc<"userCompensationRates">[]> {
+  const rows = await ctx.db
+    .query("userCompensationRates")
+    .withIndex("by_updatedAt")
+    .take(MAX_COMPENSATION_RATES + 1);
+  if (rows.length > MAX_COMPENSATION_RATES) {
+    throw new Error(
+      `userCompensationRates exceeded ${MAX_COMPENSATION_RATES} rows; refusing a partial result.`,
+    );
+  }
+  return rows;
+}
+
+/** Compensation rates for a known set of users, read by `by_userId`. */
+export async function loadCompensationRatesByUserIds(
+  ctx: QueryCtx | MutationCtx,
+  userIds: Iterable<string>,
+): Promise<Doc<"userCompensationRates">[]> {
+  const rows = await Promise.all(
+    Array.from(new Set(userIds)).map((userId) =>
+      ctx.db
+        .query("userCompensationRates")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .first(),
+    ),
+  );
+  return rows.filter((row): row is Doc<"userCompensationRates"> => row !== null);
+}
