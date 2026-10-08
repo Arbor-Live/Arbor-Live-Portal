@@ -157,9 +157,9 @@ function InvoiceEditorAlerts({ draft }: { draft: InvoiceDraft }) {
   if (warnings.length === 0) return null;
 
   return (
-    <Alert className="border-status-amber-500/40 bg-status-amber-500/10 text-status-amber-700">
+    <Alert className="border-status-amber-500/40 bg-status-amber-500/10 text-status-amber-700 dark:text-status-amber-300">
       <WarningIcon aria-hidden />
-      <AlertDescription className="space-y-1 text-status-amber-700">
+      <AlertDescription className="space-y-1 text-status-amber-700 dark:text-status-amber-300">
         {warnings.map((warning, index) => (
           <div key={index}>{warning}</div>
         ))}

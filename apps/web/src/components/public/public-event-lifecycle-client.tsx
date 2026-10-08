@@ -276,7 +276,7 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
           ) : (
             <Card>
               <CardHeader>
-                <CardTitle>Event Details</CardTitle>
+                <CardTitle>Event details</CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
                 This quote is not linked to an event yet. Schedule and operations details will
@@ -333,7 +333,7 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
               {data.invoice.notes ? (
                 <Card>
                   <CardHeader>
-                    <CardTitle>Quote Notes</CardTitle>
+                    <CardTitle>Quote notes</CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm whitespace-pre-wrap">
                     {data.invoice.notes}

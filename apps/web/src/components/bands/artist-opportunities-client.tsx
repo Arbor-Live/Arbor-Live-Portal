@@ -257,15 +257,15 @@ function MyRequests({
             <li
               key={inquiry.inquiryId}
               data-testid="inquiry-row"
-              className="flex items-center gap-3 py-3 pr-3 pl-4 text-sm"
+              className="flex flex-wrap items-center gap-3 py-3 pr-3 pl-4 text-sm"
             >
               <PosterTile
                 imageUrl={inquiry.posterUrl}
                 seed={inquiry.eventId}
                 title={inquiry.title}
-                className="w-12"
+                className="w-12 shrink-0"
               />
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 grow basis-48">
                 <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">
                   {formatDate(inquiry.startAt)}
                   {inquiry.venueName ? ` · ${inquiry.venueName}` : ""}
@@ -275,20 +275,23 @@ function MyRequests({
                   <p className="truncate text-xs text-muted-foreground">{inquiry.genres}</p>
                 ) : null}
               </div>
-              {inquiry.publicEventUrl ? (
-                <Button asChild variant="outline" className="shrink-0">
-                  <a href={inquiry.publicEventUrl} target="_blank" rel="noreferrer">
-                    View event page
-                    <ArrowSquareOutIcon className="size-3" />
-                  </a>
-                </Button>
-              ) : null}
-              <StatusPill
-                tone={inquiry.status === "submitted" ? "blue" : "neutral"}
-                className="h-7 w-24 shrink-0 justify-center capitalize"
-              >
-                {inquiry.status}
-              </StatusPill>
+              {/* Wraps to its own line when the poster + title don't leave room. */}
+              <div className="flex items-center gap-2">
+                {inquiry.publicEventUrl ? (
+                  <Button asChild variant="outline" className="shrink-0">
+                    <a href={inquiry.publicEventUrl} target="_blank" rel="noreferrer">
+                      View event page
+                      <ArrowSquareOutIcon className="size-3" />
+                    </a>
+                  </Button>
+                ) : null}
+                <StatusPill
+                  tone={inquiry.status === "submitted" ? "blue" : "neutral"}
+                  className="h-7 w-24 shrink-0 justify-center capitalize"
+                >
+                  {inquiry.status}
+                </StatusPill>
+              </div>
             </li>
           ))}
         </ul>

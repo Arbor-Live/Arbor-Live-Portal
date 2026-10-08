@@ -94,6 +94,7 @@ export function MarketingLinksEditor({
                       : "cursor-grab active:cursor-grabbing",
                   )}
                   title="Drag to reorder"
+                  aria-label={`Drag to reorder link ${index + 1}`}
                 >
                   <DotsSixVerticalIcon className="size-4" weight="bold" />
                 </span>
@@ -104,6 +105,7 @@ export function MarketingLinksEditor({
                   className="size-7 p-0"
                   disabled={disabled || !controls.canMoveUp}
                   title="Move up"
+                  aria-label={`Move link ${index + 1} up`}
                   onClick={controls.moveUp}
                 >
                   <CaretUpIcon className="size-4" />
@@ -115,6 +117,7 @@ export function MarketingLinksEditor({
                   className="size-7 p-0"
                   disabled={disabled || !controls.canMoveDown}
                   title="Move down"
+                  aria-label={`Move link ${index + 1} down`}
                   onClick={controls.moveDown}
                 >
                   <CaretDownIcon className="size-4" />
@@ -133,6 +136,7 @@ export function MarketingLinksEditor({
                   placeholder="Label (e.g. Partiful RSVP)"
                   disabled={disabled}
                   className="min-w-0 flex-1"
+                  aria-label={`Link ${index + 1} label`}
                   onChange={(event) => updateLink(index, { label: event.target.value })}
                 />
               </div>
@@ -141,6 +145,7 @@ export function MarketingLinksEditor({
                 placeholder="https://..."
                 disabled={disabled}
                 className="min-w-0 sm:flex-1"
+                aria-label={`Link ${index + 1} URL`}
                 onChange={(event) => {
                   const nextUrl = event.target.value;
                   const guessed = guessMarketingLinkIcon(nextUrl);

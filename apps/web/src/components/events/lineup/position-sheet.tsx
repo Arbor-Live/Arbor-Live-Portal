@@ -2,10 +2,11 @@
 
 import { SheetSection } from "@/components/list-page";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EnvelopeSimpleIcon, MicrophoneStageIcon, UserIcon } from "@phosphor-icons/react";
 import type { Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -93,8 +94,31 @@ export function PositionSheet({
   eventStartAt?: number;
   eventEndAt?: number;
 }) {
+  const { confirm } = useAppDialog();
+  const dirtyRef = useRef(false);
+
+  async function requestClose() {
+    if (dirtyRef.current) {
+      const name = row ? (rowActName(row) ?? (row.slot ? slotTitle(row.slot) : "Act")) : null;
+      const discard = await confirm({
+        title: name ? `Discard your changes to ${name}?` : "Discard your changes?",
+        description: "What you've typed in the panel will be lost. The saved position stays as it was.",
+        destructive: true,
+        confirmLabel: "Discard changes",
+      });
+      if (!discard) return;
+    }
+    dirtyRef.current = false;
+    onOpenChange(false);
+  }
   return (
-    <Sheet open={row !== null} onOpenChange={onOpenChange}>
+    <Sheet
+      open={row !== null}
+      onOpenChange={(next) => {
+        if (next) onOpenChange(true);
+        else void requestClose();
+      }}
+    >
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg" data-testid="position-sheet">
         {row ? (
           // Keyed so drafts reset when another row opens.
@@ -110,7 +134,13 @@ export function PositionSheet({
             handlers={handlers}
             eventStartAt={eventStartAt}
             eventEndAt={eventEndAt}
-            onClose={() => onOpenChange(false)}
+            onDirtyChange={(dirty) => {
+              dirtyRef.current = dirty;
+            }}
+            onClose={() => {
+              dirtyRef.current = false;
+              onOpenChange(false);
+            }}
           />
         ) : null}
       </SheetContent>
@@ -129,6 +159,7 @@ function PositionSheetBody({
   handlers,
   eventStartAt,
   eventEndAt,
+  onDirtyChange,
   onClose,
 }: {
   row: BillRow;
@@ -141,6 +172,7 @@ function PositionSheetBody({
   handlers: PositionSheetHandlers;
   eventStartAt?: number;
   eventEndAt?: number;
+  onDirtyChange: (dirty: boolean) => void;
   onClose: () => void;
 }) {
   const { slot, performer } = row;
@@ -153,6 +185,10 @@ function PositionSheetBody({
   const slotDirty = Boolean(serverDraft && draft && !slotDraftsEqual(draft, serverDraft));
   const [externalName, setExternalName] = useState(slot?.externalArtistName ?? "");
   const [editingPayout, setEditingPayout] = useState(false);
+  const externalNameDirty = Boolean(slot && externalName.trim() !== slot.externalArtistName);
+  useEffect(() => {
+    onDirtyChange(slotDirty || externalNameDirty);
+  }, [slotDirty, externalNameDirty, onDirtyChange]);
 
   async function run(action: () => Promise<unknown>) {
     setBusy(true);

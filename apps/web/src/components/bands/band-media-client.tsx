@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/page-header";
 import { MediaGallery } from "@/components/media/media-gallery";
 import { MediaAlbumLink } from "@/components/media/media-album-link";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BandOnlyGuard } from "@/components/org-context-guard";
 import { useSessionShell } from "@/components/session-shell-provider";
 import { useMediaAlbum, type MediaAlbumTarget } from "@/hooks/use-media-album";
@@ -105,7 +106,11 @@ export function BandMediaClient() {
         />
 
         {assetsStatus === "LoadingFirstPage" ? (
-          <p className="text-sm text-muted-foreground">Loading media…</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {Array.from({ length: 10 }, (_, index) => (
+              <Skeleton key={index} className="aspect-square w-full" />
+            ))}
+          </div>
         ) : (
           <MediaGallery
             assets={assets}

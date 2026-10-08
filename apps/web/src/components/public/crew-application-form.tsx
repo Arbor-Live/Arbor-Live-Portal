@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OnboardingAckCheckbox, OnboardingTextarea } from "@/components/onboarding/onboarding-ui";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   submitCrewApplication,
   type CrewApplicationFormValues,
@@ -191,12 +192,10 @@ export function CrewApplicationForm() {
         <h2 className="font-heading text-lg font-semibold">Team interest</h2>
         <div className="space-y-2">
           <Label htmlFor="vertical">Area of interest</Label>
-          <select
-            id="vertical"
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+          <Select
             value={form.vertical}
-            onChange={(event) => {
-              const vertical = event.target.value as CrewApplicationFormValues["vertical"];
+            onValueChange={(value) => {
+              const vertical = value as CrewApplicationFormValues["vertical"];
               const options = DISCIPLINES_BY_VERTICAL[vertical] ?? [];
               const keepDiscipline = options.some((option) => option.value === form.discipline);
               patch({
@@ -207,43 +206,48 @@ export function CrewApplicationForm() {
               });
             }}
           >
-            {VERTICALS.map((vertical) => (
-              <option key={vertical} value={vertical}>
-                {vertical}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="vertical">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {VERTICALS.map((vertical) => (
+                <SelectItem key={vertical} value={vertical}>
+                  {vertical}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {(DISCIPLINES_BY_VERTICAL[form.vertical] ?? []).length > 0 ? (
           <div className="space-y-2">
             <Label htmlFor="discipline">Specialty</Label>
-            <select
-              id="discipline"
+            <Select
               required
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
-              value={form.discipline}
-              onChange={(event) =>
+              value={form.discipline || undefined}
+              onValueChange={(value) =>
                 patch({
-                  discipline: event.target.value as CrewApplicationFormValues["discipline"],
+                  discipline: value as CrewApplicationFormValues["discipline"],
                 })
               }
             >
-              <option value="" disabled>
-                Select a specialty
-              </option>
-              {(DISCIPLINES_BY_VERTICAL[form.vertical] ?? []).map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="discipline">
+                <SelectValue placeholder="Select a specialty" />
+              </SelectTrigger>
+              <SelectContent>
+                {(DISCIPLINES_BY_VERTICAL[form.vertical] ?? []).map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         ) : null}
 
         {form.vertical === "Crew" ? (
           <div className="space-y-2">
-            <p className="text-sm font-medium">Standing availability (5pm–midnight PT)</p>
+            <p className="text-sm font-medium">Standing availability (5pm–midnight)</p>
             <p className="text-xs text-muted-foreground">
               Tell us which nights you&apos;re usually free — we use this as a preference when
               scheduling.
@@ -269,23 +273,25 @@ export function CrewApplicationForm() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="position">Position</Label>
-            <select
-              id="position"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+            <Select
               value={form.stanfordPosition}
-              onChange={(event) =>
+              onValueChange={(value) =>
                 patch({
-                  stanfordPosition: event.target
-                    .value as CrewApplicationFormValues["stanfordPosition"],
+                  stanfordPosition: value as CrewApplicationFormValues["stanfordPosition"],
                 })
               }
             >
-              {POSITIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="position">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {POSITIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           {form.stanfordPosition !== "other" ? (
             <div className="space-y-2">

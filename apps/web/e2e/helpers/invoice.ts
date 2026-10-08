@@ -152,7 +152,7 @@ export async function clientApprovedQuote(page: Page, browser: Browser, label: s
   try {
     const clientPage = await clientContext.newPage();
     await clientPage.goto(`${drafted.publicPath!}?tab=quote`);
-    await expect(clientPage.getByText(/Terms & Conditions/i).first()).toBeVisible({ timeout: 25_000 });
+    await expect(clientPage.getByText(/Terms & conditions/i).first()).toBeVisible({ timeout: 25_000 });
     await clientPage.getByPlaceholder("Jordan Lee").fill("E2E Approver");
     await clientPage.getByText("I will be submitting the payment").click();
     await clientPage.getByRole("button", { name: "Approve quote" }).click();

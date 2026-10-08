@@ -115,15 +115,15 @@ function InvoiceTotalCard({ draft }: { draft: InvoiceDraft }) {
         </div>
 
         {draft.pricingUnsaved && isDraftDirty ? (
-          <p className="text-xs text-status-amber-700">Pricing differs from last saved total.</p>
+          <p className="text-xs text-status-amber-700 dark:text-status-amber-300">Pricing differs from last saved total.</p>
         ) : null}
         {totals.discountAmountUsd > totals.equipmentSubtotalUsd || invoice?.discountWarning ? (
-          <p className="text-xs text-status-amber-700" data-testid="invoice-discount-warning">
+          <p className="text-xs text-status-amber-700 dark:text-status-amber-300" data-testid="invoice-discount-warning">
             {invoice?.discountWarning ?? "Discount exceeds equipment rental subtotal."}
           </p>
         ) : null}
         {draft.defaultCrewHourlyRateUsd <= 0 && crewHoursQuoted ? (
-          <p className="text-xs text-status-amber-700" data-testid="invoice-crew-rate-warning">
+          <p className="text-xs text-status-amber-700 dark:text-status-amber-300" data-testid="invoice-crew-rate-warning">
             Crew hours are on the quote but the global crew rate is $0. Set Normal/Lead rates under{" "}
             <Link href="/dashboard/users/crew-rates" className="underline underline-offset-2">
               Users → Crew rates

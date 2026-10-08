@@ -150,7 +150,7 @@ export function EventCreateForm() {
   const quarterEnd = draft.startAt ? quarterClassesEndFor(draft.startAt.slice(0, 10)) : null;
 
   const showFulfillment = RENTAL_EVENT_TYPES.includes(draft.eventType);
-  const createLabel = isRecurring ? "Create Series" : "Create Event";
+  const createLabel = isRecurring ? "Create series" : "Create event";
 
   async function submit() {
     if (creating) return;
@@ -210,7 +210,7 @@ export function EventCreateForm() {
         <CardHeader className="border-b">
           <CardTitle className="flex items-center gap-2 text-lg">
             <CalendarPlusIcon className="size-5 text-primary" />
-            Create Event
+            Create event
           </CardTitle>
           <p className="text-sm text-muted-foreground">
             Start with the essentials. Schedule, crew, equipment, and billing come after it&apos;s saved.
@@ -225,7 +225,7 @@ export function EventCreateForm() {
               autoFocus
             />
           </Field>
-          <Field label="Event Type" icon={ShapesIcon}>
+          <Field label="Event type" icon={ShapesIcon}>
             <EventTypeSelect value={draft.eventType} onChange={(eventType) => update({ eventType })} />
           </Field>
           {showFulfillment ? (
@@ -263,7 +263,7 @@ export function EventCreateForm() {
               allowCreate
             />
           </Field>
-          <Field label="Event Manager" icon={UserCircleIcon}>
+          <Field label="Event manager" icon={UserCircleIcon}>
             <UserSelect
               value={draft.managerUserId}
               onChange={(managerUserId) => update({ managerUserId })}

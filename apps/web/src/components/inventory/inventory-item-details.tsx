@@ -148,7 +148,7 @@ export function InventoryItemDetails({
           ) : null}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-serial-number`}>Serial Number</Label>
+          <Label htmlFor={`${idPrefix}-serial-number`}>Serial number</Label>
           <ScanInput
             id={`${idPrefix}-serial-number`}
             value={values.serialNumber}
@@ -158,7 +158,7 @@ export function InventoryItemDetails({
             inputRef={serialInputRef}
             placeholder="Scan or type serial"
             disabled={disabled}
-            ariaLabel="Serial Number"
+            ariaLabel="Serial number"
           />
           {serialLooksLikeAssetTag ? (
             <p className="text-xs text-status-amber-700">
@@ -190,7 +190,7 @@ export function InventoryItemDetails({
       )}
 
       <div className="space-y-2" data-testid={testIdPrefix ? `${testIdPrefix}-location-field` : undefined}>
-        <Label htmlFor={`${idPrefix}-storage-location`}>Storage Location</Label>
+        <Label htmlFor={`${idPrefix}-storage-location`}>Storage location</Label>
         <SearchableSelect
           id={`${idPrefix}-storage-location`}
           value={values.storageLocationId ?? ""}

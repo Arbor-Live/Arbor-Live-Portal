@@ -180,7 +180,7 @@ export function EventsMainPageClient() {
             <ToggleGroupItem value="upcoming">Upcoming</ToggleGroupItem>
           </ToggleGroup>
           <Button asChild>
-            <Link href="/dashboard/events/new">Create Event</Link>
+            <Link href="/dashboard/events/new">Create event</Link>
           </Button>
         </div>
       </FilterBar>

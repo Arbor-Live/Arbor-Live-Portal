@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { CopyIcon } from "@phosphor-icons/react";
 import { EventSelect } from "@/components/events/event-select";
@@ -113,14 +113,46 @@ export function ShortLinkSheet({
   defaults?: Partial<ShortLinkFormValues>;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { confirm } = useAppDialog();
+  const dirtyRef = useRef(false);
+
+  async function requestClose() {
+    if (dirtyRef.current) {
+      const discard = await confirm({
+        title: link
+          ? `Discard your changes to ${link.label || `/${link.slug}`}?`
+          : "Discard this new short link?",
+        description: "What you've typed in the panel will be lost. The saved link stays as it was.",
+        destructive: true,
+        confirmLabel: "Discard changes",
+      });
+      if (!discard) return;
+    }
+    dirtyRef.current = false;
+    onOpenChange(false);
+  }
+
   return (
-    <DetailSheet open={open} onOpenChange={onOpenChange} testId="short-link-sheet">
+    <DetailSheet
+      open={open}
+      onOpenChange={(next) => {
+        if (next) onOpenChange(true);
+        else void requestClose();
+      }}
+      testId="short-link-sheet"
+    >
       {open ? (
         <ShortLinkSheetBody
           key={link?._id ?? "new"}
           link={link}
           defaults={defaults}
-          onClose={() => onOpenChange(false)}
+          onDirtyChange={(dirty) => {
+            dirtyRef.current = dirty;
+          }}
+          onClose={() => {
+            dirtyRef.current = false;
+            onOpenChange(false);
+          }}
         />
       ) : null}
     </DetailSheet>
@@ -130,10 +162,12 @@ export function ShortLinkSheet({
 function ShortLinkSheetBody({
   link,
   defaults,
+  onDirtyChange,
   onClose,
 }: {
   link: ShortLinkRow | null;
   defaults?: Partial<ShortLinkFormValues>;
+  onDirtyChange: (dirty: boolean) => void;
   onClose: () => void;
 }) {
   const { confirm } = useAppDialog();
@@ -148,13 +182,19 @@ function ShortLinkSheetBody({
     defaultValues: link ? toValues(link) : { ...EMPTY, ...defaults },
     mode: "onTouched",
   });
+  const isDirty = form.formState.isDirty;
+  useEffect(() => {
+    onDirtyChange(isDirty);
+  }, [isDirty, onDirtyChange]);
   const labelValue = form.watch("label");
   const slugValue = form.watch("slug");
   const expiryMode = form.watch("expiryMode");
 
   useEffect(() => {
     if (!slugTouched) {
-      form.setValue("slug", slugifyShortLinkLabel(labelValue ?? ""), { shouldDirty: true });
+      // Derived from the label, so it doesn't count as its own edit — the
+      // label keystroke is what makes the draft dirty.
+      form.setValue("slug", slugifyShortLinkLabel(labelValue ?? ""));
     }
   }, [labelValue, slugTouched, form]);
 

@@ -329,6 +329,7 @@ export function VenuesManager() {
   return (
     <div className="space-y-4 pb-24" data-testid="venues-page">
       <PageHeader
+        back={{ href: "/dashboard/events", label: "Events" }}
         title="Venues"
         description="Buildings and the spaces inside them. Events pick a venue from here, and spaces inherit their building's address, contacts and files."
         actions={

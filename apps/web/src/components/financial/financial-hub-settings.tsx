@@ -9,6 +9,7 @@ import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { CohoGiftCardSettings } from "@/components/financial/coho-gift-card-settings";
 import { CrewOnboardingSettings } from "@/components/financial/crew-onboarding-settings";
 import { useConvexForm } from "@/hooks/use-convex-form";
@@ -73,7 +74,7 @@ export function FinancialHubSettings() {
     <div className="grid gap-4 pb-24 md:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>Fee Definitions</CardTitle>
+          <CardTitle>Fee definitions</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {(fees ?? []).map((fee) => (
@@ -83,11 +84,11 @@ export function FinancialHubSettings() {
             <p className="mb-2 text-sm font-medium">Add fee</p>
             <Form {...addFeeForm}>
               <form onSubmit={addFeeForm.handleSubmit(onAddFee)} className="grid gap-2">
-                <TextFormField name="key" label="" placeholder="Key (e.g. labor_fee)" />
-                <TextFormField name="label" label="" placeholder="Label" />
+                <TextFormField name="key" label="Fee key" placeholder="Key (e.g. labor_fee)" />
+                <TextFormField name="label" label="Fee label" placeholder="Label" />
                 <TextFormField
                   name="defaultAmountUsd"
-                  label=""
+                  label="Default amount"
                   placeholder="Default amount"
                   type="number"
                 />
@@ -102,7 +103,7 @@ export function FinancialHubSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Terms Templates</CardTitle>
+          <CardTitle>Terms templates</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {(terms ?? []).map((term) => (
@@ -126,7 +127,7 @@ export function FinancialHubSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Crew Cost Defaults</CardTitle>
+          <CardTitle>Crew cost defaults</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
@@ -210,6 +211,7 @@ function FeeRow({
 }) {
   const updateFee = useMutation(api.invoiceFeeDefinitions.update);
   const removeFee = useMutation(api.invoiceFeeDefinitions.remove);
+  const { confirm } = useAppDialog();
 
   const form = useConvexForm<{ defaultAmountUsd: number }>({
     schema: feeDefinitionSchema.pick({ defaultAmountUsd: true }),
@@ -247,7 +249,7 @@ function FeeRow({
       <div className="mt-2 flex flex-wrap gap-2">
         <Form {...form}>
           <form className="flex flex-1 flex-wrap items-end gap-2" onSubmit={form.handleSubmit(onSave)}>
-            <TextFormField name="defaultAmountUsd" label="" type="number" />
+            <TextFormField name="defaultAmountUsd" label="Default amount" type="number" />
             {form.formState.isDirty ? (
               <Button type="submit" size="sm" disabled={form.saveStatus === "saving"}>
                 Save
@@ -270,7 +272,16 @@ function FeeRow({
         <Button
           type="button"
           variant="outline"
-          onClick={() => void form.runMutation(() => removeFee({ id: fee._id }))}
+          onClick={async () => {
+            const ok = await confirm({
+              title: `Delete ${fee.label}?`,
+              description: "Quotes and invoices already using it keep their fee. New quotes will not offer it.",
+              destructive: true,
+              confirmLabel: "Delete fee",
+            });
+            if (!ok) return;
+            await form.runMutation(() => removeFee({ id: fee._id }));
+          }}
         >
           Delete
         </Button>
@@ -293,6 +304,7 @@ function TermsRow({
 }) {
   const updateTerms = useMutation(api.invoiceTerms.update);
   const removeTerms = useMutation(api.invoiceTerms.remove);
+  const { confirm } = useAppDialog();
 
   const form = useConvexForm<{ markdown: string }>({
     schema: termsDefinitionSchema.pick({ markdown: true }),
@@ -328,7 +340,7 @@ function TermsRow({
       </p>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSave)}>
-          <TextareaFormField name="markdown" label="" className="min-h-20" />
+          <TextareaFormField name="markdown" label="Terms text" className="min-h-20" />
           {form.formState.isDirty ? (
             <Button type="submit" size="sm" className="mt-2" disabled={form.saveStatus === "saving"}>
               Save
@@ -349,7 +361,16 @@ function TermsRow({
         <Button
           type="button"
           variant="outline"
-          onClick={() => void form.runMutation(() => removeTerms({ id: term._id }))}
+          onClick={async () => {
+            const ok = await confirm({
+              title: `Delete ${term.label} (${term.version})?`,
+              description: "Quotes and invoices already using it keep their terms. New quotes will not offer it.",
+              destructive: true,
+              confirmLabel: "Delete terms",
+            });
+            if (!ok) return;
+            await form.runMutation(() => removeTerms({ id: term._id }));
+          }}
         >
           Delete
         </Button>

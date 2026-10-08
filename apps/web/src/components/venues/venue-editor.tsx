@@ -115,6 +115,7 @@ function DocumentationLinksEditor({
             type="button"
             variant="outline"
             size="sm"
+            aria-label={`Remove documentation link ${link.title.trim() || index + 1}`}
             onClick={() => onChange(documentationLinks.filter((_, i) => i !== index))}
           >
             ×
@@ -346,6 +347,7 @@ export function VenueEditor({
                         type="button"
                         variant="outline"
                         size="sm"
+                        aria-label={`Remove nickname ${nickname.trim() || index + 1}`}
                         onClick={() =>
                           form.setValue(
                             "nicknames",
@@ -523,6 +525,7 @@ export function VenueEditor({
                       type="button"
                       variant="outline"
                       size="sm"
+                      aria-label={`Remove circuit ${circuit.label.trim() || index + 1}`}
                       onClick={() =>
                         form.setValue(
                           "circuits",

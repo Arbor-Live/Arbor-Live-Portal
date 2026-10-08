@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
@@ -82,19 +81,14 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <div>
-          <p className="font-medium">{event.title}</p>
-          <p className="text-xs text-muted-foreground">
-            {formatDateTime(event.startAt)} · {event.status}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Runner opens {formatDateTime(event.runnerOpensAt)} · closes {formatDateTime(event.runnerClosesAt)}
-          </p>
-        </div>
-        <Button asChild variant="outline" size="sm" className="ml-auto">
-          <Link href="/dashboard/events/open-mic">Back to Open Mic</Link>
-        </Button>
+      <div>
+        <p className="font-medium">{event.title}</p>
+        <p className="text-xs text-muted-foreground">
+          {formatDateTime(event.startAt)} · {event.status}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Runner opens {formatDateTime(event.runnerOpensAt)} · closes {formatDateTime(event.runnerClosesAt)}
+        </p>
       </div>
 
       {windowClosed ? (

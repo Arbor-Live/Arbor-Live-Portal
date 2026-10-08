@@ -11,7 +11,7 @@ export default function BookingRequestSettingsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        back={{ href: "/dashboard/financial-hub/requests", label: "Booking Requests" }}
+        back={{ href: "/dashboard/financial-hub/requests", label: "Booking requests" }}
         title="Booking request settings"
         description="Configure who receives new booking requests in round-robin order."
       />

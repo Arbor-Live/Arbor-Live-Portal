@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { pickSelectOption } from "../helpers/select";
 import { adminAuthFile } from "../helpers/auth";
 import { pollConvex } from "../helpers/convex";
 
@@ -22,9 +23,9 @@ test.describe("public crew application", () => {
     await publicPage.getByLabel("What excites you about joining?").fill("E2E test suite");
     // Specialties are scoped per vertical: Marketing offers Design /
     // Photography / Videography, and one is required.
-    await publicPage.locator("#vertical").selectOption("Marketing");
-    await publicPage.locator("#discipline").selectOption("Photography");
-    await publicPage.locator("#position").selectOption("undergrad");
+    await pickSelectOption(publicPage, publicPage.locator("#vertical"), "Marketing");
+    await pickSelectOption(publicPage, publicPage.locator("#discipline"), "Photography");
+    await pickSelectOption(publicPage, publicPage.locator("#position"), "Undergrad");
     await publicPage.getByLabel("Graduation year").fill("2028");
     await publicPage.getByRole("button", { name: "Submit application" }).click();
     await expect(publicPage.getByText("Thanks for applying").first()).toBeVisible({
@@ -68,25 +69,30 @@ test.describe("public crew application", () => {
     await expect(publicPage.getByLabel("Full name")).toBeVisible({ timeout: 20_000 });
 
     const specialty = publicPage.locator("#discipline");
-    const specialtyOptionValues = () =>
-      specialty.locator("option").evaluateAll((options) =>
-        options.map((option) => (option as HTMLOptionElement).value).filter(Boolean),
-      );
+    // The specialty picker is a Radix Select: read its options from the open
+    // listbox, then close it with Escape.
+    const specialtyOptionLabels = async () => {
+      await specialty.click();
+      const labels = await publicPage.getByRole("option").allTextContents();
+      await publicPage.keyboard.press("Escape");
+      await expect(publicPage.getByRole("option")).toHaveCount(0);
+      return labels.map((label) => label.trim());
+    };
 
-    await publicPage.locator("#vertical").selectOption("Crew");
-    expect(await specialtyOptionValues()).toEqual([
+    await pickSelectOption(publicPage, publicPage.locator("#vertical"), "Crew");
+    expect(await specialtyOptionLabels()).toEqual([
       "Sound",
       "Lights",
       "Photography",
       "Videography",
-      "unsure",
+      "I'm not sure",
     ]);
 
-    await publicPage.locator("#vertical").selectOption("Marketing");
-    expect(await specialtyOptionValues()).toEqual(["Design", "Photography", "Videography", "unsure"]);
+    await pickSelectOption(publicPage, publicPage.locator("#vertical"), "Marketing");
+    expect(await specialtyOptionLabels()).toEqual(["Design", "Photography", "Videography", "I'm not sure"]);
 
     // Operations and Trivia have no specialties, so the picker disappears.
-    await publicPage.locator("#vertical").selectOption("Operations");
+    await pickSelectOption(publicPage, publicPage.locator("#vertical"), "Operations");
     await expect(specialty).toHaveCount(0);
     await expect(publicPage.getByText("Standing availability", { exact: false })).toHaveCount(0);
 

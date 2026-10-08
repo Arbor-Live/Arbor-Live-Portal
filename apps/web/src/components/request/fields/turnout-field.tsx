@@ -50,7 +50,7 @@ export function TurnoutField() {
         ) : null}
 
         {count >= 200 ? (
-          <p className="mt-1 text-xs text-status-amber-700">
+          <p className="mt-1 text-xs text-status-amber-700 dark:text-status-amber-300">
             Campus sensation territory. We&apos;ll reach out with extra coordination after you submit.
           </p>
         ) : null}

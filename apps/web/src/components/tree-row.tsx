@@ -33,6 +33,9 @@ export function TreeRowLeading({
           type="button"
           variant="ghost"
           size="icon-xs"
+          // The 24px caret keeps its look; the `after` ring makes the tap
+          // target 32px without shifting the row.
+          className="relative after:absolute after:-inset-1"
           aria-label={expanded ? `Collapse ${name}` : `Expand ${name}`}
           aria-expanded={expanded}
           onClick={onToggle}

@@ -48,7 +48,7 @@ test.describe("invoice approval token regeneration", () => {
 
       // The original link works.
       await clientPage.goto(`${oldPath}?tab=quote`);
-      await expect(clientPage.getByText(/Terms & Conditions/i).first()).toBeVisible({
+      await expect(clientPage.getByText(/Terms & conditions/i).first()).toBeVisible({
         timeout: 25_000,
       });
 
@@ -58,7 +58,7 @@ test.describe("invoice approval token regeneration", () => {
         new RegExp(`${before.publicApprovalToken}$`),
       );
       await clientPage.goto(`${oldPath}?tab=quote`);
-      await expect(clientPage.getByText(/Terms & Conditions/i).first()).toBeVisible({
+      await expect(clientPage.getByText(/Terms & conditions/i).first()).toBeVisible({
         timeout: 25_000,
       });
 
@@ -91,7 +91,7 @@ test.describe("invoice approval token regeneration", () => {
 
       // The new link works.
       await clientPage.goto(`${newPath}?tab=quote`);
-      await expect(clientPage.getByText(/Terms & Conditions/i).first()).toBeVisible({
+      await expect(clientPage.getByText(/Terms & conditions/i).first()).toBeVisible({
         timeout: 25_000,
       });
     } finally {

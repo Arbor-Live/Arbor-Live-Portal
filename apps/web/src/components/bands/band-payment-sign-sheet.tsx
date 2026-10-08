@@ -75,7 +75,7 @@ export function BandPaymentSignSheet({
         onOpenChange(next);
       }}
     >
-      <SheetContent className="sm:max-w-md" data-testid="band-payment-sign-sheet">
+      <SheetContent className="overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-md" data-testid="band-payment-sign-sheet">
         <SheetHeader>
           <SheetTitle>E-sign payment</SheetTitle>
           <SheetDescription>

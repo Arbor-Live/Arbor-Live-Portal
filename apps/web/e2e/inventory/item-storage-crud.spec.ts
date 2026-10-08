@@ -82,7 +82,7 @@ test.describe.serial("inventory items and storage locations", () => {
     const child = await waitForStorageLocation(childLocation, (state) => Boolean(state?.path));
 
     await page.goto("/dashboard/inventory/items");
-    await expect(page.getByRole("heading", { name: "Inventory Items" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Inventory items" })).toBeVisible({
       timeout: 30_000,
     });
 
@@ -101,7 +101,7 @@ test.describe.serial("inventory items and storage locations", () => {
 
   test("a duplicate asset ID is refused", async ({ page }) => {
     await page.goto("/dashboard/inventory/items");
-    await expect(page.getByRole("heading", { name: "Inventory Items" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Inventory items" })).toBeVisible({
       timeout: 30_000,
     });
 
@@ -120,7 +120,7 @@ test.describe.serial("inventory items and storage locations", () => {
     const content = await waitForInventoryItem(contentAssetId, (state) => Boolean(state?.itemId));
 
     await page.goto("/dashboard/inventory/items");
-    await expect(page.getByRole("heading", { name: "Inventory Items" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Inventory items" })).toBeVisible({
       timeout: 30_000,
     });
     await searchItems(page, contentAssetId);
@@ -157,7 +157,7 @@ test.describe.serial("inventory items and storage locations", () => {
     const seededCase = await waitForInventoryItem(caseAssetId, (state) => state?.contains.length === 1);
 
     await page.goto("/dashboard/inventory/items");
-    await expect(page.getByRole("heading", { name: "Inventory Items" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Inventory items" })).toBeVisible({
       timeout: 30_000,
     });
     await searchItems(page, caseAssetId);
@@ -269,7 +269,7 @@ async function createItem(
   const card = sheet.getByTestId("wizard-tag-0");
   await sheet.getByLabel("Asset ID").fill(options.assetId);
   if (options.serialNumber) {
-    await sheet.getByLabel("Serial Number").fill(options.serialNumber);
+    await sheet.getByLabel("Serial number").fill(options.serialNumber);
   }
   if (options.locationPath) {
     await pickSearchableOption(

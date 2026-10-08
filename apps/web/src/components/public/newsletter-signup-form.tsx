@@ -47,7 +47,7 @@ export function NewsletterSignupForm({
 
   if (status === "done") {
     return (
-      <p className={cn("text-sm text-foreground/80", className)}>
+      <p role="status" className={cn("text-sm text-foreground/80", className)}>
         You&apos;re on the list — look out for the next email.
       </p>
     );

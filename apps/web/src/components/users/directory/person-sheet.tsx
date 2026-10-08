@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { XIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
@@ -152,12 +152,43 @@ export function PersonSheet({
   orgOptions: OrgOption[];
   onOpenChange: (open: boolean) => void;
 }) {
+  const { confirm } = useAppDialog();
+  const dirtyRef = useRef(false);
+
+  async function requestClose() {
+    if (dirtyRef.current) {
+      const discard = await confirm({
+        title: user ? `Discard your changes to ${user.name}?` : "Discard your changes?",
+        description: "What you've typed in the panel will be lost. The saved person stays as they were.",
+        destructive: true,
+        confirmLabel: "Discard changes",
+      });
+      if (!discard) return;
+    }
+    dirtyRef.current = false;
+    onOpenChange(false);
+  }
+
   return (
-    <Sheet open={user !== null} onOpenChange={onOpenChange}>
+    <Sheet
+      open={user !== null}
+      onOpenChange={(next) => {
+        if (next) onOpenChange(true);
+        else void requestClose();
+      }}
+    >
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg" data-testid="person-sheet">
         {user ? (
           // Keyed so drafts reset when another person opens.
-          <PersonSheetBody key={user.id} user={user} onboarding={onboarding} orgOptions={orgOptions} />
+          <PersonSheetBody
+            key={user.id}
+            user={user}
+            onboarding={onboarding}
+            orgOptions={orgOptions}
+            onDirtyChange={(dirty) => {
+              dirtyRef.current = dirty;
+            }}
+          />
         ) : null}
       </SheetContent>
     </Sheet>
@@ -168,10 +199,12 @@ function PersonSheetBody({
   user,
   onboarding,
   orgOptions,
+  onDirtyChange,
 }: {
   user: AdminUser;
   onboarding: CrewOnboardingRow | null;
   orgOptions: OrgOption[];
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   const actions = usePersonActions();
   const { alert } = useAppDialog();
@@ -189,6 +222,9 @@ function PersonSheetBody({
     mode: "onChange",
   });
   const { isDirty } = form.formState;
+  useEffect(() => {
+    onDirtyChange(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   // Adopt server changes while the admin hasn't started editing.
   useEffect(() => {

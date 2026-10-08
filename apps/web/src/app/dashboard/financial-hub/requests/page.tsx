@@ -15,7 +15,7 @@ export default function EventRequestsPage() {
     <div className="space-y-4 pb-24">
       <PageHeader
         back={{ href: "/dashboard/financial-hub", label: "Ops Center" }}
-        title="Booking Requests"
+        title="Booking requests"
         description="Inbound booking requests, from first ask to event. Answer what needs you, and convert accepted requests into tentative events."
         actions={
           <>

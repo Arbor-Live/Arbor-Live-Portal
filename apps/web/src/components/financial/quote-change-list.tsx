@@ -19,10 +19,10 @@ export function QuoteChangeList({ changes }: { changes: QuoteLineChange[] }) {
             <span
               className={
                 change.kind === "added"
-                  ? "text-xs font-medium text-status-emerald-700"
+                  ? "text-xs font-medium text-status-emerald-700 dark:text-status-emerald-300"
                   : change.kind === "removed"
                     ? "text-xs font-medium text-destructive"
-                    : "text-xs font-medium text-status-amber-700"
+                    : "text-xs font-medium text-status-amber-700 dark:text-status-amber-300"
               }
             >
               {change.kind === "added" ? "Added" : change.kind === "removed" ? "Removed" : "Changed"}

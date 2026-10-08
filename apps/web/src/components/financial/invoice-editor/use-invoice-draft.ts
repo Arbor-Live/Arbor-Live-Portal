@@ -18,6 +18,7 @@ import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
 import { getConvexAppErrorData, getConvexErrorMessage } from "@/lib/convex-error";
 import { formatUsd } from "@/lib/format";
 import { notify } from "@/lib/notify";
+import { useBeforeUnload } from "@/hooks/use-before-unload";
 import { computeInvoiceDraftTotals } from "@/lib/compute-invoice-draft-totals";
 import {
   arborEarnedRevenueUsd,
@@ -969,6 +970,10 @@ export function useInvoiceDraft({
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- persistDraft is recreated each render; draftSignature covers content changes
   }, [draftSignature, autosaveEnabled, activeInvoiceId, invoiceFieldsHydrated, editorBaselineReady, isDraftDirty, saving, saveState.status]);
+
+  // Warn on unload while anything is unsaved, including a draft whose
+  // autosave is still debouncing: leaving now would drop that save.
+  useBeforeUnload(isDraftDirty, "You have unsaved changes to this quote.");
 
   return {
     invoiceId,

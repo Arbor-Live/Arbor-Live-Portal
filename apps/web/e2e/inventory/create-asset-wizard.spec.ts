@@ -42,7 +42,7 @@ test.describe.serial("create-asset wizard", () => {
     page,
   }) => {
     await page.goto("/dashboard/inventory/items");
-    await expect(page.getByRole("heading", { name: "Inventory Items" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Inventory items" })).toBeVisible({
       timeout: 30_000,
     });
 
@@ -100,7 +100,7 @@ test.describe.serial("create-asset wizard", () => {
 
   test("refuses a cyclic containment between two new tags", async ({ page }) => {
     await page.goto("/dashboard/inventory/items");
-    await expect(page.getByRole("heading", { name: "Inventory Items" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Inventory items" })).toBeVisible({
       timeout: 30_000,
     });
 
@@ -156,7 +156,7 @@ test.describe.serial("create-asset wizard", () => {
     expect(state?.itemId).toBeTruthy();
 
     await page.goto("/dashboard/inventory/items");
-    await expect(page.getByRole("heading", { name: "Inventory Items" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Inventory items" })).toBeVisible({
       timeout: 30_000,
     });
 

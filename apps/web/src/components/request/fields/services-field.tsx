@@ -44,6 +44,7 @@ export function ServicesField() {
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setValue("crewOrRental", option, { shouldDirty: true, shouldValidate: true })}
+                aria-pressed={isSelected}
                 className={`flex w-full cursor-pointer items-center gap-3 rounded-md border p-3 text-left text-sm ${
                   isSelected ? "border-primary bg-primary/5" : "hover:bg-muted/40"
                 }`}
@@ -75,6 +76,7 @@ export function ServicesField() {
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => toggleService(option)}
+                aria-pressed={isSelected}
                 className={`flex w-full cursor-pointer items-center gap-3 rounded-md border p-3 text-left text-sm ${
                   isSelected ? "border-primary bg-primary/5" : "hover:bg-muted/40"
                 }`}

@@ -533,10 +533,10 @@ function StepFields({
           <MarkStepAnswered />
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <TextField name="firstName" label="First Name" placeholder="First Name" autoFocus />
-              <TextField name="lastName" label="Last Name" placeholder="Last Name" />
+              <TextField name="firstName" label="First name" placeholder="Jordan" autoFocus />
+              <TextField name="lastName" label="Last name" placeholder="Lee" />
             </div>
-            <TextField name="phone" label="Phone" placeholder="Phone" type="tel" />
+            <TextField name="phone" label="Phone" placeholder="(650) 555-0142" type="tel" />
           </div>
         </>
       );
@@ -547,8 +547,8 @@ function StepFields({
         <>
           <MarkStepAnswered />
           <div className="space-y-4">
-            <TextField name="venueName" label="Venue Name" placeholder="Venue Name" autoFocus />
-            <TextField name="venueAddress" label="Venue Address" placeholder="Venue Address" />
+            <TextField name="venueName" label="Venue name" placeholder="Dinkelspiel Auditorium" autoFocus />
+            <TextField name="venueAddress" label="Venue address" placeholder="471 Lagunita Dr, Stanford" />
           </div>
         </>
       );

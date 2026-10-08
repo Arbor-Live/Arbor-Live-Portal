@@ -11,7 +11,7 @@ test.describe("public quote approval", () => {
     };
 
     await page.goto(`${seeded.path}?tab=quote`);
-    await expect(page.getByText(/Terms & Conditions/i).first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/Terms & conditions/i).first()).toBeVisible({ timeout: 20_000 });
 
     await page.getByPlaceholder("Jordan Lee").fill("E2E Approver");
     await page.getByText("I will be submitting the payment").click();
