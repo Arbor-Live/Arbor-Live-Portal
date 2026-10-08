@@ -115,6 +115,29 @@ export async function loadLinkedInvoiceSummaries(
   return summaries;
 }
 
+/**
+ * Event ids linked to this invoice as additional bills, deduped in link order.
+ * Batch joins load the event docs themselves (deduped across invoices); this
+ * saves them the per-link `db.get` that `listAdditionallyLinkedEvents` does.
+ */
+export async function listAdditionallyLinkedEventIds(
+  ctx: QueryCtx | MutationCtx,
+  invoiceId: Id<"invoices">,
+): Promise<Id<"events">[]> {
+  const links = await ctx.db
+    .query("eventInvoiceLinks")
+    .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
+    .take(MAX_LINKS_PER_LOOKUP);
+  const ids: Id<"events">[] = [];
+  const seen = new Set<string>();
+  for (const link of links) {
+    if (seen.has(link.eventId)) continue;
+    seen.add(link.eventId);
+    ids.push(link.eventId);
+  }
+  return ids;
+}
+
 /** Events that reference this invoice as an additional link, not as their primary. */
 export async function listAdditionallyLinkedEvents(
   ctx: QueryCtx | MutationCtx,

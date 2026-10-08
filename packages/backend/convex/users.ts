@@ -8,6 +8,7 @@ import {
   assertAdminMayPreviewOrganization,
   findAuthOrganizationById,
   findAuthUserById,
+  findAuthUsersByIds,
   getActiveOrganizationContextOrNull,
   getCurrentUserOrNull,
   getUserId,
@@ -93,7 +94,14 @@ import {
   type PayrollMethod,
   type UserCompensationRateMode,
 } from "./lib/crewCompensation";
-import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
+import {
+  buildUserProfileImageByUserId,
+  loadAdminProfilesByUserIds,
+} from "./lib/userProfileImage";
+import {
+  loadOrgMembershipsByUserIds,
+  loadOrgMembershipsForOrganization,
+} from "./lib/orgMembership";
 import { assertUsernameAvailable, normalizeUsername } from "./lib/username";
 import { clearUserBan, setAuthUserBanState } from "./lib/userAccess";
 import { loadAllAdminProfiles } from "./lib/userProfiles";
@@ -1822,13 +1830,13 @@ export const listUsersForAdmin = query({
     );
     const profiles = await loadAllAdminProfiles(ctx);
     const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
-    const orgMemberships = await ctx.db.query("userOrganizationMemberships").withIndex("by_userId").take(5000);
-    const membershipsByUserId = new Map<string, typeof orgMemberships>();
-    for (const membership of orgMemberships) {
-      const list = membershipsByUserId.get(membership.userId) ?? [];
-      list.push(membership);
-      membershipsByUserId.set(membership.userId, list);
-    }
+    // Per-user `by_userId` reads, not one eq-less scan: the output needs each
+    // user's rows, and a bare `take(5000)` silently dropped memberships once
+    // the table outgrew it.
+    const membershipsByUserId = await loadOrgMembershipsByUserIds(
+      ctx,
+      users.map((user) => getUserId(user)),
+    );
 
     const search = args.search?.trim().toLowerCase();
     return users
@@ -1852,7 +1860,6 @@ export const listUsersForAdmin = query({
           name: user.name ?? user.email ?? "Unknown user",
           email: user.email ?? "",
           role: user.role ?? "member",
-          banned: Boolean(user.banned),
           status: resolveUserStatus(profile),
           username: profile?.username ?? "",
           phone: profile?.phone ?? "",
@@ -1899,6 +1906,65 @@ export const listUsersForAdmin = query({
         return haystack.includes(search);
       })
       .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+const PER_MEMBER_PROFILE_READ_LIMIT = 1_000;
+
+/**
+ * One organization's members for the directory's organization sheet. Narrower
+ * than `listUsersForAdmin` — no rates, profiles of non-members, or cross-org
+ * data — so opening a sheet does not subscribe to the whole user directory.
+ * Any membership row counts (not only `active`), matching the directory filter.
+ */
+export const listOrganizationMembersForAdmin = query({
+  args: { organizationId: v.string() },
+  returns: v.array(
+    v.object({
+      id: v.string(),
+      name: v.string(),
+      email: v.string(),
+      status: userStatusValue,
+      membershipRole: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const memberships = await loadOrgMembershipsForOrganization(ctx, args.organizationId);
+    const userIds = [...new Set(memberships.map((membership) => membership.userId))];
+    // One read per member is fine for a band or the crew roster, but past
+    // ~1,000 it would crowd Convex's 4,096 index-range limit: read every
+    // profile in one bounded query instead.
+    const [userByKey, profileByUserId] = await Promise.all([
+      findAuthUsersByIds(ctx, userIds),
+      userIds.length > PER_MEMBER_PROFILE_READ_LIMIT
+        ? loadAllAdminProfiles(ctx).then(
+            (profiles) => new Map(profiles.map((profile) => [profile.userId, profile])),
+          )
+        : loadAdminProfilesByUserIds(ctx, userIds),
+    ]);
+    const seen = new Set<string>();
+    const rows: Array<{
+      id: string;
+      name: string;
+      email: string;
+      status: ReturnType<typeof resolveUserStatus>;
+      membershipRole: string;
+    }> = [];
+    for (const membership of memberships) {
+      const user = userByKey.get(membership.userId);
+      const id = user ? getUserId(user) : "";
+      if (!user || !id || seen.has(id)) continue;
+      seen.add(id);
+      rows.push({
+        id,
+        name: user.name ?? user.email ?? "Unknown user",
+        email: user.email ?? "",
+        status: resolveUserStatus(profileByUserId.get(membership.userId)),
+        membershipRole: membership.role,
+      });
+    }
+    return rows.sort((a, b) => a.name.localeCompare(b.name));
   },
 });
 
@@ -2074,6 +2140,7 @@ export const inviteUserAdmin = mutation({
         role: membershipRole,
         active: true,
       });
+      await syncGlobalRoleFromMemberships(ctx, existingUserId);
       if (crewInvite.isArbor && crewInvite.inviteKind === "crew") {
         await applyCrewCompensationAndPayroll(ctx, {
           userId: existingUserId,
@@ -3241,6 +3308,7 @@ export const inviteMemberToActiveOrganization = mutation({
         active: true,
         bandRole,
       });
+      await syncGlobalRoleFromMemberships(ctx, existingUserId);
       await ensureOnboardingForOrgMembership(ctx, {
         userId: existingUserId,
         organizationId: context.organizationId,
@@ -3382,13 +3450,25 @@ export const backfillUserAdminDefaults = mutation({
         defaultOrganizationId: defaultOrg.id,
       });
       touchedProfiles += 1;
-      await upsertOrgMembership(ctx, {
-        userId,
-        organizationId: defaultOrg.id,
-        role: user.role ?? "member",
-        active: true,
-      });
-      touchedMemberships += 1;
+      // Only fill in a missing default membership. Existing rows are the
+      // source of truth (role and active flag), and the cached role is not:
+      // "admin" is granted only to a legacy admin with no memberships at all.
+      const existingDefault = await ctx.db
+        .query("userOrganizationMemberships")
+        .withIndex("by_userId_and_organizationId", (q) =>
+          q.eq("userId", userId).eq("organizationId", defaultOrg.id),
+        )
+        .unique();
+      if (!existingDefault) {
+        const legacyAdmin = user.role === "admin" && (await isPortalAdmin(ctx, userId));
+        await upsertOrgMembership(ctx, {
+          userId,
+          organizationId: defaultOrg.id,
+          role: legacyAdmin ? "admin" : "member",
+          active: true,
+        });
+        touchedMemberships += 1;
+      }
       const activeOrg = await ctx.db
         .query("userActiveOrganizations")
         .withIndex("by_userId", (q) => q.eq("userId", userId))

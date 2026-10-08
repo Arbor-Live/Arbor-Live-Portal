@@ -165,7 +165,9 @@ function artistValues(artist: BandOrgRow): ArtistProfileValues {
 
 function OrganizationSheetBody({ org, onAddPerson }: { org: DirectoryOrg; onAddPerson: () => void }) {
   const actions = useOrganizationActions();
-  const members = useQuery(api.users.listUsersForAdmin, { organizationId: org.id });
+  const members = useQuery(api.users.listOrganizationMembersForAdmin, {
+    organizationId: org.id,
+  });
   const [busy, setBusy] = useState(false);
 
   async function run(action: () => Promise<unknown>) {
@@ -212,9 +214,6 @@ function OrganizationSheetBody({ org, onAddPerson }: { org: DirectoryOrg; onAddP
         ) : (
           <ul className="divide-y border text-sm">
             {members.map((member) => {
-              const membership = member.organizationMemberships.find(
-                (row) => row.organizationId === org.id,
-              );
               const status = userStatusOption(member.status);
               return (
                 <ListRow
@@ -228,7 +227,7 @@ function OrganizationSheetBody({ org, onAddPerson }: { org: DirectoryOrg; onAddP
                     <span className="block truncate text-xs text-muted-foreground">{member.email}</span>
                   </span>
                   <span className="w-24 shrink-0 text-right text-xs text-muted-foreground">
-                    {membership ? roleLabel(membership.role) : null}
+                    {roleLabel(member.membershipRole)}
                   </span>
                   {member.status !== "active" ? (
                     <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">

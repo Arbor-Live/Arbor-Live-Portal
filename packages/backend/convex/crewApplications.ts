@@ -48,6 +48,7 @@ import {
   ensureUserProfileDefaults,
   getAuthRecordId,
   resolveOrCreateOrganization,
+  syncGlobalRoleFromMemberships,
   upsertOrgMembership,
 } from "./users";
 
@@ -749,12 +750,23 @@ export const convertToMember = mutation({
         stanfordPosition: application.stanfordPosition,
       });
       await clearUserBan(ctx, existingUserId);
+      // Joining crew never demotes: an active Arbor role (an admin applying
+      // as crew) is kept.
+      const existingArborMembership = await ctx.db
+        .query("userOrganizationMemberships")
+        .withIndex("by_userId_and_organizationId", (q) =>
+          q.eq("userId", existingUserId).eq("organizationId", arborOrg.id),
+        )
+        .unique();
       await upsertOrgMembership(ctx, {
         userId: existingUserId,
         organizationId: arborOrg.id,
-        role: "member",
+        // An inactive membership's old role is not restored: reactivating
+        // a removed admin through a crew application would re-grant admin.
+        role: existingArborMembership?.active ? existingArborMembership.role : "member",
         active: true,
       });
+      await syncGlobalRoleFromMemberships(ctx, existingUserId);
       await upsertUserCompensationRate(ctx, {
         userId: existingUserId,
         rateMode: args.rateMode,

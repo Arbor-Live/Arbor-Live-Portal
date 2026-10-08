@@ -97,12 +97,26 @@ function resolveRentalFulfillmentMode(
   return rentalFulfillmentMode;
 }
 
+/**
+ * Event picker options. The only consumer is `EventSelect`, which renders a
+ * handful of fields, so return a slim projection instead of 200 full docs.
+ */
 export const list = query({
   args: {
     status: v.optional(eventStatusValue),
     query: v.optional(v.string()),
     linkedInvoiceOnly: v.optional(v.boolean()),
   },
+  returns: v.array(
+    v.object({
+      _id: v.id("events"),
+      title: v.string(),
+      startAt: v.number(),
+      venueName: v.optional(v.string()),
+      status: eventStatusValue,
+      eventType: v.optional(v.string()),
+    }),
+  ),
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
@@ -126,8 +140,16 @@ export const list = query({
           .join(" ")
           .toLowerCase();
         return haystack.includes(q);
-      });
-    return rows.sort((a, b) => b.startAt - a.startAt);
+      })
+      .sort((a, b) => b.startAt - a.startAt);
+    return rows.map((row) => ({
+      _id: row._id,
+      title: row.title,
+      startAt: row.startAt,
+      venueName: row.venueName,
+      status: row.status,
+      eventType: row.eventType,
+    }));
   },
 });
 

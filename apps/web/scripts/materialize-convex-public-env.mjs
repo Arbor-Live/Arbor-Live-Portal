@@ -33,9 +33,10 @@ function loadEnvDir(dir, files) {
   }
 }
 
-// Match next.config.ts so local/worktree env files (including arbor-env symlinks) work.
-loadEnvDir(webRoot, [".env", ".env.local", ".env.development", ".env.development.local"]);
-loadEnvDir(backendRoot, [".env", ".env.local"]);
+// The first file to set a key wins, so list them highest precedence first (as
+// Next.js resolves them): a worktree's own `.env.local` beats the shared `.env`.
+loadEnvDir(webRoot, [".env.development.local", ".env.local", ".env.development", ".env"]);
+loadEnvDir(backendRoot, [".env.local", ".env"]);
 loadEnvFile(path.join(webRoot, ".env.production.local"));
 
 function readStatic(...keys) {
@@ -77,5 +78,13 @@ if (siteUrl) {
   lines.push(`NEXT_PUBLIC_CONVEX_SITE_URL=${siteUrl}`);
 }
 
-fs.writeFileSync(path.join(webRoot, ".env.production.local"), `${lines.join("\n")}\n`);
+const outputPath = path.join(webRoot, ".env.production.local");
+// Never write through a symlink: an old worktree link points at the env store
+// shared by every worktree, and this file holds this worktree's Convex URL.
+try {
+  if (fs.lstatSync(outputPath).isSymbolicLink()) fs.unlinkSync(outputPath);
+} catch {
+  // No file yet.
+}
+fs.writeFileSync(outputPath, `${lines.join("\n")}\n`);
 console.log("Wrote apps/web/.env.production.local for Next.js build.");

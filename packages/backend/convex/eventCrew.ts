@@ -349,6 +349,11 @@ const CONFLICT_LOOKBACK_MS = 24 * 3_600_000;
 /**
  * Other events' shifts for these people that overlap this event's schedule.
  * The schedule UI checks each section against them to flag double-booking.
+ *
+ * `userIds` is the caller's extra people (draft shift assignees, known on first
+ * render). Everyone who answered this event's availability is folded in here,
+ * so the client does not have to wait for a summary query to pass them — that
+ * kept the conflicts query behind a render waterfall.
  */
 export const listCrewConflictsForEvent = query({
   args: {
@@ -377,10 +382,19 @@ export const listCrewConflictsForEvent = query({
     const spanStart = Math.min(event.startAt, ...blocks.map((block) => block.startsAt));
     const spanEnd = Math.max(event.endAt, ...blocks.map((block) => block.endsAt));
 
-    const userIds = Array.from(new Set(args.userIds.map((id) => id.trim()).filter(Boolean))).slice(
-      0,
-      CONFLICT_USER_CAP,
-    );
+    const responses = await ctx.db
+      .query("eventCrewAvailabilityResponses")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(500);
+    // The board's own assignees are checked first; responders fill whatever
+    // room is left under the cap, so a long responder list can't push an
+    // assignee out and hide their double booking.
+    const assigneeIds = [...new Set(args.userIds.map((id) => id.trim()).filter(Boolean))].sort();
+    const assigneeSet = new Set(assigneeIds);
+    const responderIds = [...new Set(responses.map((response) => response.userId))]
+      .filter((id) => !assigneeSet.has(id))
+      .sort();
+    const userIds = [...assigneeIds, ...responderIds].slice(0, CONFLICT_USER_CAP);
     const perUser = await Promise.all(
       userIds.map((userId) =>
         ctx.db

@@ -118,26 +118,49 @@ export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
     [responders],
   );
 
-  const conflictUserIds = useMemo(() => {
-    const ids = new Set<string>(responders.map((responder) => responder.userId));
+  // Draft assignees are the only conflict people known on first render. The
+  // query folds in this event's availability responders server-side, so it
+  // does not wait on `summary` — that dependency made conflicts a second
+  // round-trip behind the summary query.
+  const shiftUserIds = useMemo(() => {
+    const ids = new Set<string>();
     for (const shift of shifts) {
       const userId = shift.userId?.trim();
       if (userId) ids.add(userId);
     }
     return [...ids].sort();
-  }, [responders, shifts]);
+  }, [shifts]);
   const conflictsResult = useQuery(
     api.eventCrew.listCrewConflictsForEvent,
-    conflictUserIds.length > 0 ? { eventId, userIds: conflictUserIds } : "skip",
+    shiftUserIds.length > 0 || askAvailability ? { eventId, userIds: shiftUserIds } : "skip",
   );
   const conflicts: CrewConflict[] = useMemo(() => conflictsResult ?? [], [conflictsResult]);
 
-  const indexed = shifts.map((shift, index) => ({ shift, index }));
-  const trainees = indexed.filter(({ shift }) => isTraineeShift(shift));
-  const unlinked = indexed.filter(
-    ({ shift }) =>
-      !isTraineeShift(shift) && !sectionBlocks.some((block) => shiftBelongsToBlock(shift, block)),
-  );
+  // Every key a shift can link to a block by (client ref or stored block id),
+  // so "not linked to a section" is one Set lookup per shift instead of a
+  // scan over every block.
+  const blockKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const block of sectionBlocks) {
+      const ref = getBlockRef(block);
+      if (ref) keys.add(ref);
+      if (block.id) keys.add(block.id);
+    }
+    return keys;
+  }, [sectionBlocks, getBlockRef]);
+  const { indexed, trainees, unlinked } = useMemo(() => {
+    const indexed = shifts.map((shift, index) => ({ shift, index }));
+    return {
+      indexed,
+      trainees: indexed.filter(({ shift }) => isTraineeShift(shift)),
+      unlinked: indexed.filter(
+        ({ shift }) =>
+          !isTraineeShift(shift) &&
+          !blockKeys.has(shift.scheduleBlockRef ?? "") &&
+          !blockKeys.has(shift.scheduleBlockId ?? ""),
+      ),
+    };
+  }, [shifts, blockKeys]);
   const backupUserIds = useMemo(
     () =>
       new Set(
@@ -147,7 +170,7 @@ export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
       ),
     [responders],
   );
-  const staffing = countStaffing(shifts, backupUserIds);
+  const staffing = useMemo(() => countStaffing(shifts, backupUserIds), [shifts, backupUserIds]);
   const stillLooking = staffing.open > 0 || staffing.backup > 0;
 
   const assignedUsers = useMemo(() => {

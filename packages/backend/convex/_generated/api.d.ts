@@ -185,6 +185,7 @@ import type * as lib_inventoryUpload from "../lib/inventoryUpload.js";
 import type * as lib_invoiceArtistDays from "../lib/invoiceArtistDays.js";
 import type * as lib_invoiceDocumentBuild from "../lib/invoiceDocumentBuild.js";
 import type * as lib_invoiceEvents from "../lib/invoiceEvents.js";
+import type * as lib_invoiceListRows from "../lib/invoiceListRows.js";
 import type * as lib_invoicePaymentStatus from "../lib/invoicePaymentStatus.js";
 import type * as lib_invoicePeople from "../lib/invoicePeople.js";
 import type * as lib_invoiceProfit from "../lib/invoiceProfit.js";
@@ -476,6 +477,7 @@ declare const fullApi: ApiFromModules<{
   "lib/invoiceArtistDays": typeof lib_invoiceArtistDays;
   "lib/invoiceDocumentBuild": typeof lib_invoiceDocumentBuild;
   "lib/invoiceEvents": typeof lib_invoiceEvents;
+  "lib/invoiceListRows": typeof lib_invoiceListRows;
   "lib/invoicePaymentStatus": typeof lib_invoicePaymentStatus;
   "lib/invoicePeople": typeof lib_invoicePeople;
   "lib/invoiceProfit": typeof lib_invoiceProfit;
