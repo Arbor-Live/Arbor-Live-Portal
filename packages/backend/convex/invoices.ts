@@ -12,7 +12,7 @@ import { syncBookingRequestStatusFromInvoice } from "./lib/bookingRequestStatus"
 import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
 import { listAdditionallyLinkedEvents } from "./lib/eventInvoiceLinks";
 import { unclaimSlot, upsertEventBandParticipation } from "./eventBands";
-import { listEventsByInvoiceId, listEventsLinkedToInvoice } from "./lib/invoiceEvents";
+import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import {
   addPublicEventContact,
   deletePublicEventContact,
@@ -20,8 +20,12 @@ import {
 } from "./lib/publicEventContacts";
 import { resolveArtistLineDayScope } from "./lib/invoiceArtistDays";
 import { isMultiDayGroup, isRecurringGroup } from "./lib/eventGroupKind";
-import { getActivePaymentProofSubmissionForInvoice, getPaymentProofOpensAt } from "./lib/paymentProof";
-import { invoiceDueEndMs } from "./lib/invoicePaymentStatus";
+import { getActivePaymentProofSubmissionForInvoice } from "./lib/paymentProof";
+import {
+  computeInvoiceListLabels,
+  computeInvoiceListPaymentStatus,
+  loadInvoiceListJoins,
+} from "./lib/invoiceListRows";
 import { matchDiscountToApproval, type ApprovalDiscountMatch } from "./lib/approvalDiscount";
 import {
   billingQuantityForEquipmentLine,
@@ -67,7 +71,6 @@ import {
   loadAdminProfilesByUserIds,
 } from "./lib/userProfileImage";
 import {
-  eventPassThroughCostUsd,
   invoicePassThroughUsd,
   netProfitFromInvoiceUsd,
 } from "./lib/invoiceProfit";
@@ -1022,111 +1025,10 @@ async function recentInvoices(
 }
 
 /**
- * Series / linked-event labels for the invoice list. Deliberately lighter than
- * `resolveSeriesMetadataForInvoice`, which scans up to 200 series occurrences
- * per invoice to compute counts the list never renders.
- */
-async function resolveInvoiceListLabels(ctx: QueryCtx, invoiceId: Id<"invoices">) {
-  const series = await findSeriesByInvoiceId(ctx, invoiceId);
-  const linkedEvents = await listEventsLinkedToInvoice(ctx, invoiceId);
-  const primaryEvent = linkedEvents[0];
-  const eventCostsUsd = primaryEvent
-    ? (primaryEvent.crewCostUsd ?? 0) +
-      (primaryEvent.bandsCostUsd ?? 0) +
-      (primaryEvent.externalRentalsCostUsd ?? 0) +
-      (primaryEvent.otherCostUsd ?? 0)
-    : null;
-  const eventPassThroughCostsUsd = primaryEvent
-    ? eventPassThroughCostUsd(
-        primaryEvent.bandsCostUsd ?? 0,
-        primaryEvent.externalRentalsCostUsd ?? 0,
-      )
-    : null;
-  if (series) {
-    return {
-      seriesTitle: series.title,
-      linkedEventTitle: linkedEvents[0]?.title,
-      eventCostsUsd,
-      eventPassThroughCostsUsd,
-      primaryEvent,
-    };
-  }
-  const seriesIds = [
-    ...new Set(
-      linkedEvents.map((row) => row.seriesId).filter((id): id is Id<"eventSeries"> => Boolean(id)),
-    ),
-  ];
-  const seriesDoc = seriesIds.length === 1 ? await ctx.db.get(seriesIds[0]!) : null;
-  return {
-    seriesTitle: seriesDoc && isRecurringGroup(seriesDoc) ? seriesDoc.title : undefined,
-    linkedEventTitle: linkedEvents[0]?.title,
-    eventCostsUsd,
-    eventPassThroughCostsUsd,
-    primaryEvent,
-  };
-}
-
-export const list = query({
-  args: { status: v.optional(invoiceListStatusValue) },
-  handler: async (ctx, args) => {
-    await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
-    return await recentInvoices(ctx, args.status);
-  },
-});
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-type InvoiceListPaymentStatus =
-  | "estimate"
-  | "ready_to_finalize"
-  | "payment_pending"
-  | "proof_received"
-  | "overdue"
-  | "paid";
-
-/**
- * Payment status for the invoice list, computed only for approved quotes:
- * `paid` once money landed on our account; while it's still an estimate,
- * `estimate` before the event ends and `ready_to_finalize` after (staff owe
- * the final invoice); then `overdue` past the due date
- * (counting days since), `proof_received` when the client submitted payment
- * proof we haven't confirmed yet, else `payment_pending`. Non-approved quotes
- * (draft / awaiting approval / changes requested) return null.
- */
-async function resolveInvoiceListPaymentStatus(
-  ctx: QueryCtx,
-  invoice: Doc<"invoices">,
-  primaryEvent: Doc<"events"> | undefined,
-): Promise<{ paymentStatus: InvoiceListPaymentStatus | null; daysOverdue: number }> {
-  if ((invoice.clientApprovalStatus ?? "pending") !== "approved") {
-    return { paymentStatus: null, daysOverdue: 0 };
-  }
-  if (invoice.paymentReceivedAt) {
-    return { paymentStatus: "paid", daysOverdue: 0 };
-  }
-  const now = Date.now();
-  const activeSubmission = await getActivePaymentProofSubmissionForInvoice(ctx, invoice._id);
-  if (getPaymentProofOpensAt(invoice) == null && !activeSubmission) {
-    const eventEnded = primaryEvent ? primaryEvent.endAt < now : false;
-    return { paymentStatus: eventEnded ? "ready_to_finalize" : "estimate", daysOverdue: 0 };
-  }
-  const dueEndMs = invoiceDueEndMs(invoice, primaryEvent?.timezone);
-  if (dueEndMs != null && now > dueEndMs) {
-    return {
-      paymentStatus: "overdue",
-      daysOverdue: Math.max(0, Math.floor((now - dueEndMs) / DAY_MS) + 1),
-    };
-  }
-  return {
-    paymentStatus: activeSubmission ? "proof_received" : "payment_pending",
-    daysOverdue: 0,
-  };
-}
-
-/**
  * Invoice list rows. Returns an explicit slim projection rather than spreading
  * the whole doc — the list table renders seven columns, not sixty fields.
+ * Joins for the page are batched in `loadInvoiceListJoins`; the label and
+ * payment-status math lives in `lib/invoiceListRows.ts`.
  */
 export const listEnriched = query({
   args: {
@@ -1138,55 +1040,64 @@ export const listEnriched = query({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const rows = await recentInvoices(ctx, args.status, args.excludeClosed);
-    return await Promise.all(
-      rows.map(async (invoice) => {
-        const {
-          seriesTitle,
-          linkedEventTitle,
-          eventCostsUsd,
-          eventPassThroughCostsUsd,
-          primaryEvent,
-        } = await resolveInvoiceListLabels(ctx, invoice._id);
-        const { paymentStatus, daysOverdue } = await resolveInvoiceListPaymentStatus(
-          ctx,
-          invoice,
-          primaryEvent,
-        );
-        return {
-          _id: invoice._id,
-          invoiceNumber: invoice.invoiceNumber,
-          status: invoice.status,
-          clientApprovalStatus: invoice.clientApprovalStatus,
-          paymentReceivedAt: invoice.paymentReceivedAt,
-          billingFinalizedAt: invoice.billingFinalizedAt,
-          paymentStatus,
-          daysOverdue,
-          managerName: invoice.managerName,
-          issueDate: invoice.issueDate,
-          totalUsd: invoice.totalUsd,
-          netProfitUsd:
-            eventCostsUsd == null || eventPassThroughCostsUsd == null
-              ? null
-              : netProfitFromInvoiceUsd(
-                  invoice.totalUsd,
-                  invoicePassThroughUsd(
-                    invoice.artistsSubtotalUsd,
-                    invoice.externalRentalsSubtotalUsd,
-                  ),
-                  eventCostsUsd,
-                  eventPassThroughCostsUsd,
+    const joins = await loadInvoiceListJoins(ctx, rows);
+    const nowMs = Date.now();
+    return rows.map((invoice) => {
+      const join = joins.get(invoice._id)!;
+      const labels = computeInvoiceListLabels({
+        series: join.series,
+        inferredSeries: join.inferredSeries,
+        linkedEvents: join.linkedEvents,
+      });
+      const { paymentStatus, daysOverdue } = computeInvoiceListPaymentStatus({
+        invoice,
+        primaryEvent: labels.primaryEvent,
+        hasActiveSubmission: Boolean(join.activePaymentProof),
+        nowMs,
+      });
+      return {
+        _id: invoice._id,
+        invoiceNumber: invoice.invoiceNumber,
+        status: invoice.status,
+        clientApprovalStatus: invoice.clientApprovalStatus,
+        paymentReceivedAt: invoice.paymentReceivedAt,
+        billingFinalizedAt: invoice.billingFinalizedAt,
+        paymentStatus,
+        daysOverdue,
+        managerName: invoice.managerName,
+        issueDate: invoice.issueDate,
+        totalUsd: invoice.totalUsd,
+        netProfitUsd:
+          labels.eventCostsUsd == null || labels.eventPassThroughCostsUsd == null
+            ? null
+            : netProfitFromInvoiceUsd(
+                invoice.totalUsd,
+                invoicePassThroughUsd(
+                  invoice.artistsSubtotalUsd,
+                  invoice.externalRentalsSubtotalUsd,
                 ),
-          publicApprovalToken: invoice.publicApprovalToken,
-          clientGroupName: invoice.clientGroupName,
-          clientContactName: invoice.clientContactName,
-          createdAt: invoice.createdAt,
-          clientReviewReadyAt: invoice.clientReviewReadyAt,
-          changesRequestedAt: invoice.changesRequestedAt,
-          seriesTitle,
-          linkedEventTitle,
-        };
-      }),
-    );
+                labels.eventCostsUsd,
+                labels.eventPassThroughCostsUsd,
+              ),
+        publicApprovalToken: invoice.publicApprovalToken,
+        clientGroupName: invoice.clientGroupName,
+        clientContactName: invoice.clientContactName,
+        createdAt: invoice.createdAt,
+        clientReviewReadyAt: invoice.clientReviewReadyAt,
+        changesRequestedAt: invoice.changesRequestedAt,
+        seriesTitle: labels.seriesTitle,
+        linkedEventTitle: labels.linkedEventTitle,
+      };
+    });
+  },
+});
+
+export const list = query({
+  args: { status: v.optional(invoiceListStatusValue) },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    return await recentInvoices(ctx, args.status);
   },
 });
 

@@ -24,13 +24,11 @@ export async function listEventsByInvoiceId(
   return [...events].sort((a, b) => a.startAt - b.startAt || a._creationTime - b._creationTime);
 }
 
-/** Primary `events.invoiceId` plus invoices linked as additional bills on an event. */
-export async function listEventsLinkedToInvoice(
-  ctx: QueryCtx | MutationCtx,
-  invoiceId: Id<"invoices">,
-): Promise<Doc<"events">[]> {
-  const primary = await listEventsByInvoiceId(ctx, invoiceId);
-  const additional = await listAdditionallyLinkedEvents(ctx, invoiceId);
+/** Chronological merge of an invoice's primary and additionally linked events. */
+export function mergeLinkedInvoiceEvents(
+  primary: Doc<"events">[],
+  additional: Doc<"events">[],
+): Doc<"events">[] {
   const seen = new Set(primary.map((event) => event._id));
   const merged = [...primary];
   for (const event of additional) {
@@ -39,6 +37,16 @@ export async function listEventsLinkedToInvoice(
     merged.push(event);
   }
   return merged.sort((a, b) => a.startAt - b.startAt || a._creationTime - b._creationTime);
+}
+
+/** Primary `events.invoiceId` plus invoices linked as additional bills on an event. */
+export async function listEventsLinkedToInvoice(
+  ctx: QueryCtx | MutationCtx,
+  invoiceId: Id<"invoices">,
+): Promise<Doc<"events">[]> {
+  const primary = await listEventsByInvoiceId(ctx, invoiceId);
+  const additional = await listAdditionallyLinkedEvents(ctx, invoiceId);
+  return mergeLinkedInvoiceEvents(primary, additional);
 }
 
 export async function listApprovedInvoicesWithoutEvent(
