@@ -270,10 +270,11 @@ export const resolveMyEventMedia = mutation({
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
 
-    // Only show-shift crew owe media; assigned leads/managers without a show
-    // shift are not asked and cannot resolve.
+    // Only show-shift crew owe media. Anyone else may still upload, but has
+    // nothing to resolve, so this is a no-op rather than an error (the upload
+    // dropzone calls this after every event upload).
     if (!(await userWorkedShowShift(ctx, args.eventId, userId))) {
-      throw new Error("You did not work this event's show shift.");
+      return null;
     }
 
     const existing = await ctx.db
