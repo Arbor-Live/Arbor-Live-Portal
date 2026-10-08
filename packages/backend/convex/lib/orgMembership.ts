@@ -7,15 +7,6 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
  */
 const MAX_ORG_MEMBERSHIPS = 5_000;
 
-/** A person is not in 100 organizations (same ceiling as `lib/globalRole.ts`). */
-const MAX_USER_ORG_MEMBERSHIPS = 100;
-
-/**
- * Stay well under Convex's 1,000 concurrent I/O ops per function when fanning
- * out one membership read per user.
- */
-const MEMBERSHIP_LOOKUP_CHUNK = 200;
-
 /**
  * Every membership row for an org (active or not). Bounded read with a loud cap
  * instead of a cursor loop — a query/mutation may only run one paginated query.
@@ -52,38 +43,35 @@ export async function loadActiveOrgMemberUserIds(
   return orgUserIds;
 }
 
+/** Every membership row; far above the roster, inside Convex's 32k-document read limit. */
+const MAX_ALL_ORG_MEMBERSHIPS = 15_000;
+
 /**
- * Each user's organization memberships, read through `by_userId` with an
- * equality bound — one indexed read per user instead of a single eq-less table
- * scan that silently truncates. Bounded per user with a loud cap, read in
- * chunks to stay under Convex's concurrent I/O limit. Every requested user
- * maps to their rows — an empty list when they have none.
+ * Each user's organization memberships, from one bounded read of the whole
+ * table (a single index range). One `by_userId` read per user would hit
+ * Convex's 4,096 index-range limit once the roster (alumni are kept forever)
+ * passed a few thousand people. Throws rather than returning a partial list.
+ * Every requested user maps to their rows, an empty list when they have none.
  */
 export async function loadOrgMembershipsByUserIds(
   ctx: QueryCtx | MutationCtx,
   userIds: Iterable<string>,
 ): Promise<Map<string, Doc<"userOrganizationMemberships">[]>> {
-  const ids = [...new Set(userIds)].filter((id) => id.length > 0);
-  const byUserId = new Map<string, Doc<"userOrganizationMemberships">[]>();
-  for (let start = 0; start < ids.length; start += MEMBERSHIP_LOOKUP_CHUNK) {
-    const chunk = ids.slice(start, start + MEMBERSHIP_LOOKUP_CHUNK);
-    const rows = await Promise.all(
-      chunk.map((userId) =>
-        ctx.db
-          .query("userOrganizationMemberships")
-          .withIndex("by_userId", (q) => q.eq("userId", userId))
-          .take(MAX_USER_ORG_MEMBERSHIPS + 1),
-      ),
+  const rows = await ctx.db
+    .query("userOrganizationMemberships")
+    .withIndex("by_userId")
+    .take(MAX_ALL_ORG_MEMBERSHIPS + 1);
+  if (rows.length > MAX_ALL_ORG_MEMBERSHIPS) {
+    throw new Error(
+      `userOrganizationMemberships exceeded ${MAX_ALL_ORG_MEMBERSHIPS} rows; refusing to return a partial list.`,
     );
-    chunk.forEach((userId, index) => {
-      const memberships = rows[index]!;
-      if (memberships.length > MAX_USER_ORG_MEMBERSHIPS) {
-        throw new Error(
-          `userOrganizationMemberships for ${userId} exceeded ${MAX_USER_ORG_MEMBERSHIPS} rows; refusing to return a partial list.`,
-        );
-      }
-      byUserId.set(userId, memberships);
-    });
+  }
+  const byUserId = new Map<string, Doc<"userOrganizationMemberships">[]>();
+  for (const userId of userIds) {
+    if (userId) byUserId.set(userId, []);
+  }
+  for (const row of rows) {
+    byUserId.get(row.userId)?.push(row);
   }
   return byUserId;
 }
