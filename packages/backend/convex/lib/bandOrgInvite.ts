@@ -10,6 +10,7 @@ import {
   ensureUserProfileDefaults,
   getAuthRecordId,
   resolveOrCreateOrganization,
+  syncGlobalRoleFromMemberships,
   upsertOrgMembership,
 } from "../users";
 import { getUserId, type AuthUser } from "./auth";
@@ -87,6 +88,7 @@ export async function inviteEmailToBandOrg(
       active: true,
       bandRole: args.bandRole,
     });
+    await syncGlobalRoleFromMemberships(ctx, existingUserId);
     await ensureOnboardingForOrgMembership(ctx, {
       userId: existingUserId,
       organizationId: args.organizationId,

@@ -2074,6 +2074,7 @@ export const inviteUserAdmin = mutation({
         role: membershipRole,
         active: true,
       });
+      await syncGlobalRoleFromMemberships(ctx, existingUserId);
       if (crewInvite.isArbor && crewInvite.inviteKind === "crew") {
         await applyCrewCompensationAndPayroll(ctx, {
           userId: existingUserId,
@@ -3241,6 +3242,7 @@ export const inviteMemberToActiveOrganization = mutation({
         active: true,
         bandRole,
       });
+      await syncGlobalRoleFromMemberships(ctx, existingUserId);
       await ensureOnboardingForOrgMembership(ctx, {
         userId: existingUserId,
         organizationId: context.organizationId,
@@ -3382,13 +3384,25 @@ export const backfillUserAdminDefaults = mutation({
         defaultOrganizationId: defaultOrg.id,
       });
       touchedProfiles += 1;
-      await upsertOrgMembership(ctx, {
-        userId,
-        organizationId: defaultOrg.id,
-        role: user.role ?? "member",
-        active: true,
-      });
-      touchedMemberships += 1;
+      // Only fill in a missing default membership. Existing rows are the
+      // source of truth (role and active flag), and the cached role is not:
+      // "admin" is granted only to a legacy admin with no memberships at all.
+      const existingDefault = await ctx.db
+        .query("userOrganizationMemberships")
+        .withIndex("by_userId_and_organizationId", (q) =>
+          q.eq("userId", userId).eq("organizationId", defaultOrg.id),
+        )
+        .unique();
+      if (!existingDefault) {
+        const legacyAdmin = user.role === "admin" && (await isPortalAdmin(ctx, userId));
+        await upsertOrgMembership(ctx, {
+          userId,
+          organizationId: defaultOrg.id,
+          role: legacyAdmin ? "admin" : "member",
+          active: true,
+        });
+        touchedMemberships += 1;
+      }
       const activeOrg = await ctx.db
         .query("userActiveOrganizations")
         .withIndex("by_userId", (q) => q.eq("userId", userId))
