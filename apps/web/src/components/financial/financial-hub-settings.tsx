@@ -74,7 +74,7 @@ export function FinancialHubSettings() {
     <div className="grid gap-4 pb-24 md:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>Fee Definitions</CardTitle>
+          <CardTitle>Fee definitions</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {(fees ?? []).map((fee) => (
@@ -103,7 +103,7 @@ export function FinancialHubSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Terms Templates</CardTitle>
+          <CardTitle>Terms templates</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {(terms ?? []).map((term) => (
@@ -127,7 +127,7 @@ export function FinancialHubSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Crew Cost Defaults</CardTitle>
+          <CardTitle>Crew cost defaults</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">

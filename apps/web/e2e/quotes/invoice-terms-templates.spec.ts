@@ -27,7 +27,7 @@ type ReviewState = {
 };
 
 /**
- * Terms templates (`/dashboard/financial-hub/settings` "Terms Templates" card).
+ * Terms templates (`/dashboard/financial-hub/settings` "Terms templates" card).
  *
  * The card is the source of the invoice editor's Terms checkboxes and, through
  * `loadInvoiceTerms`, of the terms block on the public quote page. The spec
@@ -54,7 +54,7 @@ test.describe("invoice terms templates", () => {
 
   test("admin adds, edits, disables, and deletes a terms template", async ({ page }) => {
     await page.goto("/dashboard/financial-hub/settings");
-    await expect(page.getByText("Terms Templates").first()).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText("Terms templates").first()).toBeVisible({ timeout: 25_000 });
 
     // Add via the card's form. These fields have real labels, so the form
     // helpers locate them. "Label" is a prefix match: the fee card's label
@@ -126,7 +126,7 @@ test.describe("invoice terms templates", () => {
 
     // Create the template through the settings card, then drive the editor.
     await page.goto("/dashboard/financial-hub/settings");
-    await expect(page.getByText("Terms Templates").first()).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText("Terms templates").first()).toBeVisible({ timeout: 25_000 });
     await formField(page, /^Label/).fill(integrationLabel);
     await formField(page, "Version").fill("v2");
     await formTextarea(page, "Markdown").fill(markdown);

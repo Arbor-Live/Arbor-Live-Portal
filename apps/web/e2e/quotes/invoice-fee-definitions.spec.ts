@@ -32,7 +32,7 @@ type TotalsState = {
 };
 
 /**
- * Fee definitions (`/dashboard/financial-hub/settings` "Fee Definitions" card).
+ * Fee definitions (`/dashboard/financial-hub/settings` "Fee definitions" card).
  *
  * The card is the source of the invoice editor's fee picker: a definition's
  * `defaultAmountUsd` pre-fills the rate when a fee row selects it, and the
@@ -61,7 +61,7 @@ test.describe("invoice fee definitions", () => {
 
   test("admin adds, edits, disables, and deletes a fee definition", async ({ page }) => {
     await page.goto("/dashboard/financial-hub/settings");
-    await expect(page.getByText("Fee Definitions").first()).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText("Fee definitions").first()).toBeVisible({ timeout: 25_000 });
 
     // Add via the card's form.
     await page.getByPlaceholder("Key (e.g. labor_fee)").fill(crudKey);
@@ -129,7 +129,7 @@ test.describe("invoice fee definitions", () => {
 
     // Create the definition through the settings card, then drive the editor.
     await page.goto("/dashboard/financial-hub/settings");
-    await expect(page.getByText("Fee Definitions").first()).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText("Fee definitions").first()).toBeVisible({ timeout: 25_000 });
     await page.getByPlaceholder("Key (e.g. labor_fee)").fill(integrationKey);
     await page.getByPlaceholder("Label").fill(integrationLabel);
     await page.getByPlaceholder("Default amount").fill(String(rate));
