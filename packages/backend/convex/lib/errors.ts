@@ -20,6 +20,27 @@ export function appError(code: string, message: string): never {
   } satisfies AppErrorData);
 }
 
+/**
+ * A failure we can describe safely to the user but still want in Sentry: the
+ * client shows `message` and reports it (`report: true`) with the function tag.
+ * Only the cause's class name is kept — never its message or stack.
+ */
+export function reportedAppError(
+  code: string,
+  message: string,
+  functionName: string,
+  cause?: unknown,
+): never {
+  const causeName = cause instanceof Error && cause.name.trim() ? cause.name : undefined;
+  throw new ConvexError({
+    code,
+    message,
+    report: true,
+    function: functionName,
+    ...(causeName ? { causeName } : {}),
+  } satisfies AppErrorData);
+}
+
 function isAppErrorData(value: unknown): value is AppErrorData {
   if (typeof value !== "object" || value === null) return false;
   const data = value as Record<string, unknown>;

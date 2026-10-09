@@ -22,7 +22,7 @@ import {
   requireBandContext,
   type AuthUser,
 } from "./lib/auth";
-import { appError, withReportableErrors } from "./lib/errors";
+import { appError, reportedAppError, withReportableErrors } from "./lib/errors";
 import {
   resolveGlobalRoleFromActiveMemberships,
   resolveGlobalRoleForExistingUser,
@@ -1344,10 +1344,13 @@ export const deleteArchivedBandOrganizationAdmin = mutation({
           where: [{ field: "_id", value: args.organizationId }],
         },
       });
-    } catch {
-      appError(
+    } catch (error) {
+      // Unexpected, so it's reported; the message stays the safe retry hint.
+      reportedAppError(
         "ORG_AUTH_DELETE_FAILED",
         "Could not delete the organization's auth records; nothing was deleted. Please retry.",
+        "users.deleteArchivedBandOrganizationAdmin",
+        error,
       );
     }
 
