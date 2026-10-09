@@ -486,7 +486,7 @@ export const scanOutboundAsset = mutation({
     const root = await resolveInventoryItemByScan(ctx, args.raw);
     if (!root) {
       const normalized = normalizeAssetScanInput(args.raw);
-      appError("ASSET_SCAN_UNRESOLVED", 
+      appError("ASSET_SCAN_UNRESOLVED",
         normalized
           ? `No inventory item matches “${normalized}”. Check the tag and try again.`
           : "Couldn’t read that scan. Try typing the asset tag (for example ALE-0041).",
@@ -576,7 +576,7 @@ export const scanOutboundAsset = mutation({
     }
 
     if (!primaryUnitId || checkedOffCount + addedCount === 0) {
-      appError("OUTBOUND_PACK_UNRESOLVED", 
+      appError("OUTBOUND_PACK_UNRESOLVED",
         skippedAlreadyCount > 0
           ? `${subject} ${bundle.length > 1 ? "are" : "is"} already packed.`
           : `Couldn’t pack ${subject}. Try scanning again.`,
@@ -699,7 +699,7 @@ export const completeOutbound = mutation({
     const units = await listUnitsForFulfillment(ctx, fulfillment._id);
     const pending = units.filter((unit) => unit.outboundStatus === "pending");
     if (pending.length > 0) {
-      appError("OUTBOUND_ITEMS_PENDING", 
+      appError("OUTBOUND_ITEMS_PENDING",
         `Resolve ${pending.length} unchecked item${pending.length === 1 ? "" : "s"} with replace, no tag, or removed before completing.`,
       );
     }
@@ -819,7 +819,7 @@ export const scanReturnAsset = mutation({
     const root = await resolveInventoryItemByScan(ctx, args.raw);
     if (!root) {
       const normalized = normalizeAssetScanInput(args.raw);
-      appError("ASSET_SCAN_UNRESOLVED", 
+      appError("ASSET_SCAN_UNRESOLVED",
         normalized
           ? `No inventory item matches “${normalized}”. Check the tag and try again.`
           : "Couldn’t read that scan. Try typing the asset tag (for example ALE-0041).",
@@ -868,14 +868,14 @@ export const scanReturnAsset = mutation({
 
     if (!primaryUnitId || checkedInCount === 0) {
       if (skippedAlreadyCount > 0) {
-        appError("RETURN_ALREADY_CHECKED_IN", 
+        appError("RETURN_ALREADY_CHECKED_IN",
           bundle.length > 1
             ? `${subject} are already checked in.`
             : `${subject} is already checked in.`,
         );
       }
       if (skippedNotOnListCount > 0) {
-        appError("RETURN_NOT_ON_LIST", 
+        appError("RETURN_NOT_ON_LIST",
           bundle.length > 1
             ? `${subject} aren’t on this return — they weren’t packed for this rental (or went out as “no tag”). Use Remaining to mark No tag / Missing instead of scanning.`
             : `${subject} isn’t on this return — it wasn’t packed for this rental (or went out as “no tag”). Use Remaining to mark No tag / Missing instead of scanning.`,
@@ -980,7 +980,7 @@ export const completeReturn = mutation({
     );
     const pending = units.filter((unit) => (unit.returnStatus ?? "pending") === "pending");
     if (pending.length > 0) {
-      appError("RETURN_ITEMS_PENDING", 
+      appError("RETURN_ITEMS_PENDING",
         `Resolve ${pending.length} unchecked item${pending.length === 1 ? "" : "s"} before completing the return.`,
       );
     }
