@@ -17,7 +17,7 @@ import {
   mediaAssetPageValidator,
   paginateAlbumAssets,
 } from "./lib/immichAssets";
-import { requireArborInternalContext, requireAuth, requireBandContext } from "./lib/auth";
+import { requireAdmin, requireArborInternalContext, requireAuth, requireBandContext } from "./lib/auth";
 import type { BackfillRunResult } from "./immichActions";
 
 const entityTypeValue = v.union(v.literal("band"), v.literal("event"));
@@ -180,6 +180,8 @@ export const runBackfillAlbums = mutation({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
+    // A full backfill and dedupe is admin maintenance, not something crew run.
+    await requireAdmin(ctx);
     await requireArborInternalContext(ctx);
     await ctx.scheduler.runAfter(0, internal.immichActions.backfillAllAlbums, {});
     await ctx.scheduler.runAfter(0, internal.immichDb.dedupeAllAlbumLinksInternal, {});

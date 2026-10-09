@@ -3047,6 +3047,40 @@ export const updateActiveBandProfile = mutation({
       .withIndex("by_organizationId", (q) => q.eq("organizationId", context.organizationId))
       .unique();
 
+    // Who gets paid (and at what rate) is the band admin's call: a regular
+    // member setting themselves as payee could then sign and receive payouts.
+    // Forms resend these fields on every save, so only a real change counts.
+    const text = (value: string | undefined) => value?.trim() || undefined;
+    const changesPayout =
+      (args.performerHourlyRateUsd !== undefined &&
+        args.performerHourlyRateUsd !== existing?.performerHourlyRateUsd) ||
+      (args.designatedPayeeUserId !== undefined &&
+        text(args.designatedPayeeUserId) !== existing?.designatedPayeeUserId) ||
+      (args.designatedPayeeName !== undefined &&
+        text(args.designatedPayeeName) !== existing?.designatedPayeeName) ||
+      (args.designatedPayeeEmail !== undefined &&
+        text(args.designatedPayeeEmail)?.toLowerCase() !== existing?.designatedPayeeEmail) ||
+      (args.designatedPayeeMailingAddress !== undefined &&
+        text(args.designatedPayeeMailingAddress) !== existing?.designatedPayeeMailingAddress) ||
+      (args.designatedPayeePayoutMethod !== undefined &&
+        args.designatedPayeePayoutMethod !== existing?.designatedPayeePayoutMethod);
+    if (changesPayout) {
+      const actor = await requireAuth(ctx);
+      const actorId = getUserId(actor);
+      const actorMembership = await ctx.db
+        .query("userOrganizationMemberships")
+        .withIndex("by_userId_and_organizationId", (q) =>
+          q.eq("userId", actorId).eq("organizationId", context.organizationId),
+        )
+        .unique();
+      const isOrgAdmin =
+        (actorMembership?.active === true && isArtistOrgAdminRole(actorMembership.role)) ||
+        (await isStaffAdmin(ctx, actor));
+      if (!isOrgAdmin) {
+        throw new Error("Only an artist admin can change who gets paid.");
+      }
+    }
+
     const publicListing = args.publicListing;
     const displayNameForSlug =
       args.displayName !== undefined ? args.displayName : existing?.displayName;

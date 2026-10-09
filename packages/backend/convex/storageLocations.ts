@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireAuth } from "./lib/auth";
+import { requireArborInternalContext, requireAuth } from "./lib/auth";
 
 function normalizeName(name: string) {
   return name.trim();
@@ -33,7 +33,7 @@ export const create = mutation({
     parentId: v.optional(v.id("storageLocations")),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const now = Date.now();
     const name = normalizeName(args.name);
 
@@ -75,7 +75,7 @@ export const update = mutation({
     parentId: v.optional(v.id("storageLocations")),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Storage location not found.");
 
@@ -125,7 +125,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("storageLocations") },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Storage location not found.");
 

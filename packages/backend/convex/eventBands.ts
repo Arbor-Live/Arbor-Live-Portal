@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { requireOutreachAccess } from "./lib/outreachAccess";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { components, internal } from "./_generated/api";
@@ -811,7 +812,7 @@ export const inviteBandFromEvent = mutation({
     participationId: v.id("eventBandParticipations"),
   }),
   handler: async (ctx, args) => {
-    await requireArborInternalContext(ctx);
+    await requireOutreachAccess(ctx);
     const staff = await requireAuth(ctx);
     const inviterId = getUserId(staff);
     if (!inviterId) throw new Error("Unable to resolve your account.");

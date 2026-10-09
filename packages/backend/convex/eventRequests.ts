@@ -698,6 +698,7 @@ export const addEventContactByRequestToken = mutation({
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
       .unique();
     if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
+    if (isRequestPublicTokenExpired(request)) throw new Error("This request link has expired.");
     const invoice = await ctx.db.get(request.linkedInvoiceId);
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
       throw new Error("Quote is not ready for review yet.");
@@ -727,6 +728,7 @@ export const deleteEventContactByRequestToken = mutation({
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
       .unique();
     if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
+    if (isRequestPublicTokenExpired(request)) throw new Error("This request link has expired.");
     const invoice = await ctx.db.get(request.linkedInvoiceId);
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
       throw new Error("Quote is not ready for review yet.");

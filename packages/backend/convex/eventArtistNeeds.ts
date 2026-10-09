@@ -552,7 +552,7 @@ export const submitInquiry = mutation({
 export const dismissInquiry = mutation({
   args: { inquiryId: v.id("eventArtistInquiries") },
   handler: async (ctx, args) => {
-    await requireArborInternalContext(ctx);
+    await requireOutreachAccess(ctx);
     const inquiry = await ctx.db.get(args.inquiryId);
     if (!inquiry) throw new Error("Inquiry not found.");
     await ctx.db.patch(inquiry._id, { status: "dismissed", updatedAt: Date.now() });
@@ -569,7 +569,7 @@ export const acceptInquiry = mutation({
   args: { inquiryId: v.id("eventArtistInquiries") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireArborInternalContext(ctx);
+    await requireOutreachAccess(ctx);
     const inquiry = await ctx.db.get(args.inquiryId);
     if (!inquiry) throw new Error("Inquiry not found.");
     if (inquiry.status === "accepted") return null;
