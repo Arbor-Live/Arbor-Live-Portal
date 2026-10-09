@@ -42,6 +42,7 @@ import { resolveParticipationFlags } from "./lib/userParticipation";
 import { isArtistOrganizationType } from "./lib/organizationType";
 import { assertUsernameAvailable, normalizeUsername } from "./lib/username";
 import { loadAllAdminProfiles } from "./lib/userProfiles";
+import { appError, withReportableErrors } from "./lib/errors";
 
 const onboardingStatusValue = v.union(
   v.literal("not_started"),
@@ -703,20 +704,23 @@ export const saveCrewProfileStep = mutation({
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     const userId = getUserId(user);
-    await ensureCrewOnboarding(ctx, userId);
-    const now = Date.now();
-    const name = args.name.trim();
-    if (!name) throw new Error("Name is required.");
-    const phone = args.phone.trim();
-    if (!phone) throw new Error("Phone number is required.");
-    const calendarInviteEmail = args.calendarInviteEmail?.trim().toLowerCase() || undefined;
-    if (calendarInviteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(calendarInviteEmail)) {
-      throw new Error("Enter a valid calendar invite email.");
-    }
+    // Username checks run before the wrapper: `lib/username` is shared with
+    // account.ts and stays plain-Error.
     const usernameProvided = Object.prototype.hasOwnProperty.call(args, "username");
     const username = usernameProvided ? normalizeUsername(args.username) : undefined;
     if (username) {
       await assertUsernameAvailable(ctx, username, userId);
+    }
+    return await withReportableErrors("onboarding.saveCrewProfileStep", async () => {
+    await ensureCrewOnboarding(ctx, userId);
+    const now = Date.now();
+    const name = args.name.trim();
+    if (!name) appError("ONBOARDING_NAME_REQUIRED", "Name is required.");
+    const phone = args.phone.trim();
+    if (!phone) appError("ONBOARDING_PHONE_REQUIRED", "Phone number is required.");
+    const calendarInviteEmail = args.calendarInviteEmail?.trim().toLowerCase() || undefined;
+    if (calendarInviteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(calendarInviteEmail)) {
+      appError("ONBOARDING_CALENDAR_EMAIL_INVALID", "Enter a valid calendar invite email.");
     }
     const pronouns = args.pronouns?.trim() || undefined;
     const gradYear =
@@ -724,7 +728,7 @@ export const saveCrewProfileStep = mutation({
         ? Math.floor(args.gradYear)
         : undefined;
     if (gradYear !== undefined && (gradYear < 1950 || gradYear > 2100)) {
-      throw new Error("Enter a valid graduation year.");
+      appError("ONBOARDING_GRAD_YEAR_INVALID", "Enter a valid graduation year.");
     }
 
     const profile = await ctx.db
@@ -735,7 +739,7 @@ export const saveCrewProfileStep = mutation({
     // (so re-saving the step doesn't demand re-selecting it).
     const stanfordPosition = args.stanfordPosition ?? profile?.stanfordPosition;
     if (!stanfordPosition) {
-      throw new Error("Select your student type.");
+      appError("ONBOARDING_STUDENT_TYPE_REQUIRED", "Select your student type.");
     }
 
     if (user.email) {
@@ -791,6 +795,7 @@ export const saveCrewProfileStep = mutation({
       });
     }
     return null;
+    });
   },
 });
 
@@ -819,12 +824,13 @@ export const saveCrewOnboardingStep = mutation({
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     const userId = getUserId(user);
+    return await withReportableErrors("onboarding.saveCrewOnboardingStep", async () => {
     await ensureCrewOnboarding(ctx, userId);
     const row = await ctx.db
       .query("userOnboarding")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .unique();
-    if (!row) throw new Error("Onboarding record missing.");
+    if (!row) appError("ONBOARDING_RECORD_MISSING", "Onboarding record missing.");
     if (row.status === "completed" || row.status === "waived") return null;
 
     const now = Date.now();
@@ -854,19 +860,19 @@ export const saveCrewOnboardingStep = mutation({
     if (args.studentId !== undefined) {
       const studentId = args.studentId.trim();
       if (studentId && !/^\d{8}$/.test(studentId)) {
-        throw new Error("Enter an 8-digit student ID.");
+        appError("ONBOARDING_STUDENT_ID_INVALID", "Enter an 8-digit student ID.");
       }
       patch.studentId = studentId || undefined;
     }
     if (args.employmentStartDate !== undefined) {
       if (!Number.isFinite(args.employmentStartDate)) {
-        throw new Error("Enter a valid start date.");
+        appError("ONBOARDING_START_DATE_INVALID", "Enter a valid start date.");
       }
       patch.employmentStartDate = args.employmentStartDate;
     }
     if (args.otherCampusEmploymentHours !== undefined) {
       if (args.otherCampusEmploymentHours <= 0) {
-        throw new Error("Enter valid weekly hours.");
+        appError("ONBOARDING_WEEKLY_HOURS_INVALID", "Enter valid weekly hours.");
       }
       patch.otherCampusEmploymentHours = args.otherCampusEmploymentHours;
     }
@@ -880,6 +886,7 @@ export const saveCrewOnboardingStep = mutation({
 
     await ctx.db.patch(row._id, patch);
     return null;
+    });
   },
 });
 
@@ -892,11 +899,12 @@ export const completeCrewOnboarding = mutation({
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     const userId = getUserId(user);
+    return await withReportableErrors("onboarding.completeCrewOnboarding", async () => {
     const row = await ctx.db
       .query("userOnboarding")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .unique();
-    if (!row) throw new Error("Onboarding record missing.");
+    if (!row) appError("ONBOARDING_RECORD_MISSING", "Onboarding record missing.");
     if (row.status === "completed" || row.status === "waived") {
       return { ok: true };
     }
@@ -904,7 +912,7 @@ export const completeCrewOnboarding = mutation({
     const now = Date.now();
     const signatureLegalName = args.signatureLegalName.trim();
     if (signatureLegalName.length < 2) {
-      throw new Error("Enter your full legal name to sign.");
+      appError("ONBOARDING_SIGNATURE_NAME_REQUIRED", "Enter your full legal name to sign.");
     }
 
     const next: CrewOnboardingDoc = {
@@ -921,10 +929,16 @@ export const completeCrewOnboarding = mutation({
     const payrollMethod = normalizePayrollMethod(profile?.payrollMethod);
     // Guards in-progress profiles created before student type was required.
     if (!profile?.stanfordPosition) {
-      throw new Error("Select your student type before signing.");
+      appError(
+        "ONBOARDING_STUDENT_TYPE_REQUIRED_BEFORE_SIGNING",
+        "Select your student type before signing.",
+      );
     }
     if (!crewRequiredStepsComplete(next, payrollMethod)) {
-      throw new Error("Please complete all required onboarding steps before signing.");
+      appError(
+        "ONBOARDING_STEPS_INCOMPLETE",
+        "Please complete all required onboarding steps before signing.",
+      );
     }
 
     await ctx.db.patch(row._id, {
@@ -953,6 +967,7 @@ export const completeCrewOnboarding = mutation({
     });
 
     return { ok: true };
+    });
   },
 });
 
@@ -1139,12 +1154,13 @@ export const saveBandOnboardingStep = mutation({
     if (!orgContext || !isArtistOrganizationType(orgContext.organizationType)) {
       throw new Error("Artist organization context required.");
     }
+    return await withReportableErrors("onboarding.saveBandOnboardingStep", async () => {
     await ensureOrganizationOnboarding(ctx, orgContext.organizationId);
     const row = await ctx.db
       .query("organizationOnboarding")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", orgContext.organizationId))
       .unique();
-    if (!row) throw new Error("Artist onboarding record missing.");
+    if (!row) appError("ONBOARDING_ARTIST_RECORD_MISSING", "Artist onboarding record missing.");
     if (row.status === "completed" || row.status === "waived") return null;
 
     const now = Date.now();
@@ -1165,6 +1181,7 @@ export const saveBandOnboardingStep = mutation({
 
     await ctx.db.patch(row._id, patch);
     return null;
+    });
   },
 });
 
@@ -1177,11 +1194,12 @@ export const completeBandOnboarding = mutation({
     if (!orgContext || !isArtistOrganizationType(orgContext.organizationType)) {
       throw new Error("Artist organization context required.");
     }
+    return await withReportableErrors("onboarding.completeBandOnboarding", async () => {
     const row = await ctx.db
       .query("organizationOnboarding")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", orgContext.organizationId))
       .unique();
-    if (!row) throw new Error("Artist onboarding record missing.");
+    if (!row) appError("ONBOARDING_ARTIST_RECORD_MISSING", "Artist onboarding record missing.");
     if (row.status === "completed" || row.status === "waived") return { ok: true };
 
     const membersDone = Boolean(row.membersCompletedAt || row.soloAcknowledgedAt);
@@ -1191,7 +1209,10 @@ export const completeBandOnboarding = mutation({
       !row.ratesPayeeCompletedAt ||
       !membersDone
     ) {
-      throw new Error("Complete identity, rates/payee, members, and payment explanation steps first.");
+      appError(
+        "ONBOARDING_ARTIST_STEPS_INCOMPLETE",
+        "Complete identity, rates/payee, members, and payment explanation steps first.",
+      );
     }
 
     const now = Date.now();
@@ -1204,6 +1225,7 @@ export const completeBandOnboarding = mutation({
       organizationId: orgContext.organizationId,
     });
     return { ok: true };
+    });
   },
 });
 
