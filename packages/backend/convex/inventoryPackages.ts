@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireAuth } from "./lib/auth";
+import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
   collectKeysFromInventoryPackage,
@@ -533,7 +533,7 @@ export const create = mutation({
     active: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const contents = normalizeWriteContents(args);
     await validateContents(ctx, contents);
     const now = Date.now();
@@ -589,7 +589,7 @@ export const update = mutation({
     active: v.boolean(),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Package not found.");
     const contents = normalizeWriteContents(args);
@@ -645,7 +645,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("inventoryPackages") },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Package not found.");
 

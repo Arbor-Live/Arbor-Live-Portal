@@ -2,7 +2,7 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
-import { requireAuth } from "./lib/auth";
+import { requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
 import {
   FILTER_SCAN_WINDOW,
   isActiveFilter,
@@ -423,7 +423,7 @@ export const create = mutation({
     publicSlug: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const now = Date.now();
     const capabilities = (args.capabilities ?? []).map((cap) => cap.trim().toLowerCase());
     await validateCapabilities(ctx, capabilities);
@@ -506,7 +506,8 @@ export const update = mutation({
     publicSlug: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdmin(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Type not found.");
 
@@ -608,7 +609,8 @@ export const bulkUpdateVisibility = mutation({
     publicProfile: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdmin(ctx);
+    await requireArborInternalContext(ctx);
     if (!args.ids.length) {
       return { updated: 0 };
     }
@@ -651,7 +653,8 @@ export const bulkUpdateVisibility = mutation({
 export const remove = mutation({
   args: { id: v.id("inventoryTypes") },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdmin(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Type not found.");
 

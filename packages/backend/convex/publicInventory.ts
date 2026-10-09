@@ -135,7 +135,9 @@ export const equipmentByAssetId = query({
 
     return {
       assetId: item.assetId,
-      serialNumber: item.serialNumber,
+      // Asset IDs are near-sequential, so a serial number here could be
+      // harvested for every asset; show it only on publicly profiled gear.
+      serialNumber: showProfile ? item.serialNumber : undefined,
       lostFound: {
         instructions: settings?.instructions,
         contactEmail: settings?.contactEmail,

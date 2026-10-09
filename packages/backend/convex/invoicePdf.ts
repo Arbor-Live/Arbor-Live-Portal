@@ -1,11 +1,11 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { getUserId, requireAuth } from "./lib/auth";
+import { getUserId, requireArborInternalContext, requireAuth } from "./lib/auth";
 
 export const listExports = query({
   args: { invoiceId: v.id("invoices") },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const rows = await ctx.db
       .query("invoiceExports")
       .withIndex("by_invoiceId_and_createdAt", (q) => q.eq("invoiceId", args.invoiceId))
@@ -21,6 +21,7 @@ export const createExportRecord = mutation({
     downloadUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
     const user = await requireAuth(ctx);
     const invoice = await ctx.db.get(args.invoiceId);
     if (!invoice) throw new Error("Invoice not found.");

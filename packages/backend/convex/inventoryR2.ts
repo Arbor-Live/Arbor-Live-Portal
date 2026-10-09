@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
-import { requireAdmin, requireAuth, requireBandContext, requireAnyVerticalOrAdmin, isStaffAdmin } from "./lib/auth";
+import { requireAdmin, requireArborInternalContext, requireAuth, requireBandContext, requireAnyVerticalOrAdmin, isStaffAdmin } from "./lib/auth";
 import {
   buildBandHeroObjectKey,
   buildEventArtifactObjectKey,
@@ -183,6 +183,8 @@ export const generateR2UploadUrl = mutation({
         uploadId,
       });
     } else {
+      // Inventory catalog uploads are staff work, like the catalog writes.
+      await requireArborInternalContext(ctx);
       if (!args.entityKind) throw new Error("Inventory entity kind is required.");
       if (args.purpose === "artifact" || args.purpose === "document" || args.purpose === "poster") {
         throw new Error("Artifact/document/poster purpose is only valid for event or venue uploads.");
@@ -222,7 +224,7 @@ export const generateInventoryUploadUrl = mutation({
     url: v.string(),
   }),
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
 
     validateInventoryUploadRequest({
       entityKind: args.entityKind,

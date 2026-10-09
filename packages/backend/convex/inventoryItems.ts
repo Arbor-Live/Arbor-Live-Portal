@@ -2,7 +2,7 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireAuth } from "./lib/auth";
+import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import {
   FILTER_SCAN_WINDOW,
   isActiveFilter,
@@ -244,7 +244,7 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const assetId = args.assetId ? canonicalizeAssetIdTag(args.assetId) : "";
     if (!assetId && !args.serialNumber?.trim()) {
       throw new Error("Add an Asset ID or Serial Number.");
@@ -316,7 +316,7 @@ export const createMany = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     if (args.items.length === 0) return { created: 0 };
     if (args.items.length > MAX_BATCH_ITEMS) {
       throw new Error(`Cannot create more than ${MAX_BATCH_ITEMS} items at once.`);
@@ -524,7 +524,7 @@ export const update = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Inventory item not found.");
 
@@ -586,7 +586,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("inventoryItems") },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Inventory item not found.");
     const children = await ctx.db
@@ -604,7 +604,7 @@ export const setContainer = mutation({
     containedInAssetId: v.optional(v.id("inventoryItems")),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Inventory item not found.");
     if (args.containedInAssetId === args.id) {
@@ -649,7 +649,7 @@ export const replaceContainedAssets = mutation({
     childIds: v.array(v.id("inventoryItems")),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const container = await ctx.db.get(args.containerId);
     if (!container) throw new Error("Inventory item not found.");
 
