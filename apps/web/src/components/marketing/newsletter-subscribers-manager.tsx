@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { EmptyState, ListSummary, RowList, RowText } from "@/components/list-page";
@@ -16,22 +16,24 @@ import { formatDate } from "@/lib/format";
 
 type StatusFilter = "all" | "subscribed" | "unsubscribed";
 
+const PAGE_SIZE = 200;
+
 export function NewsletterSubscribersManager() {
   const config = useQuery(api.newsletter.getBroadcastConfig, {});
+  const counts = useQuery(api.newsletter.subscriberCounts, {});
   const [filter, setFilter] = useState<StatusFilter>("all");
-  const listing = useQuery(api.newsletter.listSubscribers, {
-    status: filter === "all" ? undefined : filter,
-    limit: 200,
-  });
+  const { results: rows, status, loadMore } = usePaginatedQuery(
+    api.newsletter.listSubscribers,
+    { status: filter === "all" ? undefined : filter },
+    { initialNumItems: PAGE_SIZE },
+  );
   const sendNow = useMutation(api.newsletter.sendNow);
   const retrySync = useMutation(api.newsletter.retrySync);
   const { confirm } = useAppDialog();
   const [sending, setSending] = useState(false);
 
-  const counts = listing?.counts;
-  const rows = listing?.subscribers ?? [];
   const total = counts ? counts.subscribed + counts.unsubscribed : 0;
-  const syncErrors = rows.filter((row) => row.syncError).length;
+  const syncErrors = counts?.syncErrors ?? 0;
 
   async function handleSendNow() {
     const ok = await confirm({
@@ -84,7 +86,7 @@ export function NewsletterSubscribersManager() {
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
-        {config === undefined || listing === undefined ? (
+        {config === undefined || counts === undefined || status === "LoadingFirstPage" ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
           <>
@@ -173,6 +175,16 @@ export function NewsletterSubscribersManager() {
                 ))}
               </RowList>
             )}
+            {status === "CanLoadMore" || status === "LoadingMore" ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={status === "LoadingMore"}
+                onClick={() => loadMore(PAGE_SIZE)}
+              >
+                {status === "LoadingMore" ? "Loading…" : "Load more"}
+              </Button>
+            ) : null}
           </>
         )}
       </CardContent>
