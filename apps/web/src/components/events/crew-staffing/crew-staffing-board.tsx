@@ -263,12 +263,15 @@ export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
             pending={pending}
           />
         ) : null}
-        {uncheckedUserIds.length > 0 ? (
-          <p className="text-xs text-muted-foreground">
-            Double bookings weren&apos;t checked for {uncheckedUserIds.length}{" "}
-            {uncheckedUserIds.length === 1 ? "responder" : "responders"}.
-          </p>
-        ) : null}
+        {/* Mounted up front so the notice is announced when it appears. */}
+        <div aria-live="polite">
+          {uncheckedUserIds.length > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Double bookings weren&apos;t checked for {uncheckedUserIds.length}{" "}
+              {uncheckedUserIds.length === 1 ? "person" : "people"}.
+            </p>
+          ) : null}
+        </div>
         {assignedUsers.length > 0 ? (
           <div className="space-y-1">
             {assignedUsers.map((person) => (
