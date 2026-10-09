@@ -6,13 +6,7 @@ import { useMutation, useQuery } from "convex/react";
 import type { QuestionnaireItemDefinition } from "@shadcn/react/questionnaire";
 import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { NumberInput } from "@/components/ui/number-input";
-import { Label } from "@/components/ui/label";
-import { UserSelect } from "@/components/users/user-select";
 import { toUserSelectOption } from "@/lib/user-select-description";
-import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import {
   Questionnaire,
@@ -26,18 +20,9 @@ import {
   QuestionnaireWizardFooter,
   QuestionnaireWizardProgress,
 } from "@/components/ui/questionnaire-wizard";
-import {
-  OnboardingAckCheckbox,
-  OnboardingSkipButton,
-  OnboardingTextarea,
-} from "@/components/onboarding/onboarding-ui";
+import { OnboardingSkipButton } from "@/components/onboarding/onboarding-ui";
 import { getConvexErrorMessage } from "@/lib/convex-error";
-import {
-  BAND_PAYEE_1099_NOTICE,
-  BAND_PAYEE_MAILING_ADDRESS_HINT,
-  BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER,
-  DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
-} from "@/lib/band-payout-copy";
+import { DEFAULT_BAND_PAYEE_PAYOUT_METHOD } from "@/lib/band-payout-copy";
 import { useDevPreviewReady } from "@/hooks/use-dev-preview";
 import { trimOptional } from "@/lib/band-profile-lists";
 import { slugifyBandName } from "@/lib/validations/bands";
@@ -58,6 +43,9 @@ import { PasskeyStep } from "./artist/steps/passkey-step";
 import { HeroStep } from "./artist/steps/hero-step";
 import { SocialsStep } from "./artist/steps/socials-step";
 import { MembersStep } from "./artist/steps/members-step";
+import { RatesStep } from "./artist/steps/rates-step";
+import { PaymentStep } from "./artist/steps/payment-step";
+import { ThankYouStep } from "./artist/steps/thank-you-step";
 
 export function BandOnboardingWizard() {
   const router = useRouter();
@@ -509,10 +497,7 @@ export function BandOnboardingWizard() {
                 <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
                   {STEP_HEADLINES.thankYou}
                 </h1>
-                <div className="space-y-4 text-sm text-foreground/70">
-                  <p>Your artist profile is ready. We&apos;ll be in touch about booking!</p>
-                  <Button onClick={goToDashboard}>Go to dashboard</Button>
-                </div>
+                <ThankYouStep onGoToDashboard={goToDashboard} />
               </div>
             ) : (
               <>
@@ -608,92 +593,13 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.rates}
                 </QuestionnaireTitle>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="band-rate">Rate per person per hour (USD)</Label>
-                    <NumberInput
-                      id="band-rate"
-                      min={0}
-                      value={form.performerHourlyRateUsd}
-                      onValueChange={(performerHourlyRateUsd) => patch({ performerHourlyRateUsd })}
-                      autoFocus
-                    />
-                  </div>
-
-                  <div className="space-y-2 border-t border-border/50 pt-4">
-                    <p className="text-sm font-medium text-foreground">Designated payee</p>
-                    <p className="text-xs text-muted-foreground">
-                      One person who receives and distributes payment on behalf of the artist. You can
-                      pick a current member or a pending invite — fill in their name and mailing
-                      address below if needed.
-                    </p>
-                    <UserSelect
-                      value={payeeSelectValue}
-                      onChange={(value) => {
-                        if (value.startsWith(PENDING_PAYEE_PREFIX)) {
-                          const email = normalizeEmail(value.slice(PENDING_PAYEE_PREFIX.length));
-                          const localPart = email.split("@")[0] ?? email;
-                          patch({
-                            designatedPayeeUserId: "",
-                            designatedPayeeEmail: email,
-                            designatedPayeeName:
-                              form.designatedPayeeName.trim() || localPart || email,
-                          });
-                          return;
-                        }
-                        const user = (members ?? []).find((row) => row.userId === value);
-                        patch({
-                          designatedPayeeUserId: value,
-                          designatedPayeeName: user?.name ?? form.designatedPayeeName,
-                          designatedPayeeEmail: user?.email ?? form.designatedPayeeEmail,
-                        });
-                      }}
-                      options={payeeOptions}
-                      placeholder="Select member or pending invite…"
-                      emptyLabel="Select payee"
-                    />
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label htmlFor="band-payee-name">Payee name</Label>
-                        <Input
-                          id="band-payee-name"
-                          value={form.designatedPayeeName}
-                          onChange={(event) => patch({ designatedPayeeName: event.target.value })}
-                          placeholder="Payee name"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="band-payee-email">Payee email</Label>
-                        <Input
-                          id="band-payee-email"
-                          type="email"
-                          value={form.designatedPayeeEmail}
-                          onChange={(event) => patch({ designatedPayeeEmail: event.target.value })}
-                          placeholder="Payee email"
-                        />
-                      </div>
-                    </div>
-                    <BandPayeePayoutMethodField
-                      value={form.designatedPayeePayoutMethod}
-                      onChange={(method) => patch({ designatedPayeePayoutMethod: method })}
-                      idPrefix="band-onboarding"
-                    />
-                    <div className="space-y-1">
-                      <Label htmlFor="band-payee-mailing-address">Mailing address</Label>
-                      <OnboardingTextarea
-                        id="band-payee-mailing-address"
-                        value={form.designatedPayeeMailingAddress}
-                        onChange={(event) =>
-                          patch({ designatedPayeeMailingAddress: event.target.value })
-                        }
-                        placeholder={BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        {BAND_PAYEE_MAILING_ADDRESS_HINT}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <RatesStep
+                  form={form}
+                  patch={patch}
+                  members={members}
+                  payeeOptions={payeeOptions}
+                  payeeSelectValue={payeeSelectValue}
+                />
                 <MarkStepAnswered />
                 <QuestionnaireFieldError className="text-sm">
                   {currentStep === "rates" ? fieldError : null}
@@ -707,24 +613,7 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.payment}
                 </QuestionnaireTitle>
-                <div className="space-y-4">
-                  <div className="space-y-3 text-sm text-foreground/70">
-                    <p>
-                      After your event, Arbor Live pays your designated payee directly by the
-                      performer hourly rate on file, multiplied by the hours you performed.
-                    </p>
-                    <p>
-                      Your payee is responsible for distributing payment to the rest of the members.
-                      You can update your payee or rate anytime from your artist settings.
-                    </p>
-                    <p>{BAND_PAYEE_1099_NOTICE}</p>
-                  </div>
-                  <OnboardingAckCheckbox
-                    checked={form.paymentExplainedAck}
-                    onChange={(next) => patch({ paymentExplainedAck: next })}
-                    label="I understand how payouts work for this artist."
-                  />
-                </div>
+                <PaymentStep form={form} patch={patch} />
                 <MarkStepAnswered />
                 <QuestionnaireFieldError className="text-sm">
                   {currentStep === "payment" ? fieldError : null}
