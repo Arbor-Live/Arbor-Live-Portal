@@ -1,5 +1,6 @@
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { appError } from "./errors";
 import { findSeriesByInvoiceId } from "./invoiceSeries";
 import { listEventsByInvoiceId } from "./invoiceEvents";
 
@@ -13,7 +14,7 @@ export async function resolveHostLink(
     return { hostGroupId: undefined, host: undefined };
   }
   const group = await ctx.db.get(hostGroupId);
-  if (!group) throw new Error("Host organization not found.");
+  if (!group) appError("HOST_NOT_FOUND", "Host organization not found.");
   return {
     hostGroupId: group._id,
     host: group.name,
@@ -38,8 +39,8 @@ export async function resolveAdditionalHostGroupIds(
     if (!id || seen.has(id)) continue;
     if (primaryHostGroupId && id === primaryHostGroupId) continue;
     const group = await ctx.db.get(id);
-    if (!group) throw new Error("Additional host organization not found.");
-    if (group.active === false) throw new Error(`Host organization "${group.name}" is archived.`);
+    if (!group) appError("HOST_NOT_FOUND", "Additional host organization not found.");
+    if (group.active === false) appError("HOST_ARCHIVED", `Host organization "${group.name}" is archived.`);
     seen.add(id);
     resolved.push(id);
   }
@@ -99,7 +100,7 @@ export async function resolveEventPrimaryHostLink(
     options.invoiceId !== undefined ? options.invoiceId ?? undefined : options.existingInvoiceId ?? undefined;
   if (invoiceId) {
     const invoice = await ctx.db.get(invoiceId);
-    if (!invoice) throw new Error("Linked invoice not found.");
+    if (!invoice) appError("INVOICE_NOT_FOUND", "Linked invoice not found.");
     if (!invoice.groupId) {
       return { hostGroupId: undefined, host: undefined };
     }

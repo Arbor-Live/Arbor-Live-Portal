@@ -10,6 +10,7 @@ import {
   requireAuth,
   requireOperationsAccess,
 } from "./lib/auth";
+import { appError, withReportableErrors } from "./lib/errors";
 import { canEditEventForUser, requireEventEditAccess } from "./lib/eventAccess";
 import {
   eventStatusValue,
@@ -602,7 +603,10 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await requireOperationsAccess(ctx);
-    if (args.endAt <= args.startAt) throw new Error("Event end time must be after start time.");
+    return await withReportableErrors("events.create", async () => {
+    if (args.endAt <= args.startAt) {
+      appError("EVENT_END_BEFORE_START", "Event end time must be after start time.");
+    }
     const now = Date.now();
     const spansMultipleDays = pacificDateKey(args.startAt) !== pacificDateKey(args.endAt);
     const initialStatus = normalizeEventStatus(args.status);
@@ -671,6 +675,7 @@ export const create = mutation({
       await replaceAdditionalInvoiceLinks(ctx, eventId, invoiceSplit.additional);
     }
     return eventId;
+    });
   },
 });
 
@@ -734,11 +739,12 @@ export const update = mutation({
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     await requireEventEditAccess(ctx, args.id);
+    return await withReportableErrors("events.update", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Event not found.");
+    if (!existing) appError("EVENT_NOT_FOUND", "Event not found.");
     const startAt = args.startAt ?? existing.startAt;
     const endAt = args.endAt ?? existing.endAt;
-    if (endAt <= startAt) throw new Error("Event end time must be after start time.");
+    if (endAt <= startAt) appError("EVENT_END_BEFORE_START", "Event end time must be after start time.");
     const spansMultipleDays = pacificDateKey(startAt) !== pacificDateKey(endAt);
     const nextEventType = args.eventType ?? existing.eventType;
     const nextRentalFulfillmentMode =
@@ -892,7 +898,7 @@ export const update = mutation({
       }
     } else if (hasSeries && existing.seriesId && scope !== "this") {
       const series = group;
-      if (!series) throw new Error("Linked event series not found.");
+      if (!series) appError("EVENT_SERIES_NOT_FOUND", "Linked event series not found.");
       const referenceIndex = existing.occurrenceIndex ?? 0;
       const nextAnchorStartAt =
         referenceIndex === 0 && args.startAt !== undefined ? args.startAt : series.anchorStartAt;
@@ -945,7 +951,7 @@ export const update = mutation({
         }
       }
       const updatedSeries = await ctx.db.get(existing.seriesId);
-      if (!updatedSeries) throw new Error("Linked event series not found.");
+      if (!updatedSeries) appError("EVENT_SERIES_NOT_FOUND", "Linked event series not found.");
       const overrides: SeriesOverviewOverride = {
         status: nextStatus,
         visibility: patch.visibility,
@@ -1071,6 +1077,7 @@ export const update = mutation({
         await scheduleEventCancelledEmails(ctx, occ.id, now);
       }
     }
+    });
   },
 });
 
@@ -1085,8 +1092,9 @@ export const setStatus = mutation({
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     await requireEventEditAccess(ctx, args.id);
+    return await withReportableErrors("events.setStatus", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Event not found.");
+    if (!existing) appError("EVENT_NOT_FOUND", "Event not found.");
     const wasCancelled = normalizeEventStatus(existing.status) === "cancelled";
     const prevStatus = normalizeEventStatus(existing.status);
     const nextStatus = normalizeEventStatus(args.status);
@@ -1120,6 +1128,7 @@ export const setStatus = mutation({
     if (prevStatus !== nextStatus && existing.invoiceId) {
       await syncMultiDayGroupForInvoice(ctx, existing.invoiceId, now);
     }
+    });
   },
 });
 
@@ -1136,8 +1145,9 @@ export const setOperationsLead = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("events.setOperationsLead", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Event not found.");
+    if (!existing) appError("EVENT_NOT_FOUND", "Event not found.");
     // `patch` ignores undefined, so `replace` is required to clear the field.
     const next = { ...existing, updatedAt: Date.now() };
     const lead = args.operationsLeadUserId?.trim();
@@ -1145,6 +1155,7 @@ export const setOperationsLead = mutation({
     else delete next.operationsLeadUserId;
     await ctx.db.replace(args.id, next);
     return null;
+    });
   },
 });
 
@@ -1153,12 +1164,14 @@ export const deleteEvent = mutation({
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("events.deleteEvent", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Event not found.");
+    if (!existing) appError("EVENT_NOT_FOUND", "Event not found.");
     if (normalizeEventStatus(existing.status) !== "cancelled") {
-      throw new Error("Only cancelled events can be deleted.");
+      appError("EVENT_DELETE_REQUIRES_CANCELLED", "Only cancelled events can be deleted.");
     }
     await deleteEventRecord(ctx, args.id);
+    });
   },
 });
 
@@ -1168,8 +1181,9 @@ export const duplicate = mutation({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     await requireEventEditAccess(ctx, args.id);
+    return await withReportableErrors("events.duplicate", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Event not found.");
+    if (!existing) appError("EVENT_NOT_FOUND", "Event not found.");
     const now = Date.now();
     const newId = await ctx.db.insert("events", {
       title: `${existing.title} (Copy)`,
@@ -1262,5 +1276,6 @@ export const duplicate = mutation({
       await syncMultiDayGroupForInvoice(ctx, existing.invoiceId, now);
     }
     return newId;
+    });
   },
 });

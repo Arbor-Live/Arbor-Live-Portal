@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { appError } from "./errors";
 
 type DbCtx = MutationCtx | QueryCtx;
 
@@ -162,7 +163,7 @@ export async function resolveVenueLink(
     return { venueId: undefined, venueName: undefined, venueAddress: undefined };
   }
   const venue = await ctx.db.get(venueId);
-  if (!venue) throw new Error("Venue not found.");
+  if (!venue) appError("VENUE_NOT_FOUND", "Venue not found.");
   return {
     venueId: venue._id,
     venueName: venue.path,
