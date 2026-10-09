@@ -22,6 +22,7 @@ import {
   requireBandContext,
   type AuthUser,
 } from "./lib/auth";
+import { appError, withReportableErrors } from "./lib/errors";
 import {
   resolveGlobalRoleFromActiveMemberships,
   resolveGlobalRoleForExistingUser,
@@ -507,14 +508,17 @@ async function assertArborCrewInviteCompensation(
     };
   }
   if (!args.rateMode) {
-    throw new Error("Rate mode is required for Arbor Live crew invites.");
+    appError("INVITE_RATE_MODE_REQUIRED", "Rate mode is required for Arbor Live crew invites.");
   }
   if (!args.payrollMethod) {
-    throw new Error("Payment method is required for Arbor Live crew invites.");
+    appError(
+      "INVITE_PAYROLL_METHOD_REQUIRED",
+      "Payment method is required for Arbor Live crew invites.",
+    );
   }
   if (args.rateMode === "custom") {
     if (args.customHourlyRateUsd === undefined || args.customHourlyRateUsd < 0) {
-      throw new Error("Custom hourly rate is required.");
+      appError("INVITE_CUSTOM_RATE_REQUIRED", "Custom hourly rate is required.");
     }
   }
   return {
@@ -1029,15 +1033,19 @@ export const updateBandOrganizationProfileAdmin = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
+    return await withReportableErrors("users.updateBandOrganizationProfileAdmin", async () => {
     const now = Date.now();
     const organizations = await getAllOrganizations(ctx);
     const organization = organizations.find((entry) => getRecordId(entry) === args.organizationId);
-    if (!organization) throw new Error("Organization not found.");
+    if (!organization) appError("ORG_NOT_FOUND", "Organization not found.");
     if (isArborOrganization(organization)) {
-      throw new Error("Use artist org profile editor only for artist organizations.");
+      appError(
+        "ORG_PROFILE_NOT_ARTIST",
+        "Use artist org profile editor only for artist organizations.",
+      );
     }
     if (args.performerHourlyRateUsd !== undefined && args.performerHourlyRateUsd < 0) {
-      throw new Error("Performer hourly rate must be 0 or greater.");
+      appError("ORG_PERFORMER_RATE_INVALID", "Performer hourly rate must be 0 or greater.");
     }
 
     const existing = await ctx.db
@@ -1058,7 +1066,7 @@ export const updateBandOrganizationProfileAdmin = mutation({
       await assertUniqueBandPublicSlug(ctx, publicSlug, args.organizationId);
     }
     if (publicListing && !publicSlug) {
-      throw new Error("Add a public URL slug to list on the artists page.");
+      appError("ORG_PUBLIC_SLUG_REQUIRED", "Add a public URL slug to list on the artists page.");
     }
 
     if (existing) {
@@ -1157,6 +1165,7 @@ export const updateBandOrganizationProfileAdmin = mutation({
       organizationId: args.organizationId,
     });
     return profileId;
+    });
   },
 });
 
@@ -1240,19 +1249,23 @@ export const archiveBandOrganizationAdmin = mutation({
   returns: v.object({ ok: v.boolean(), deactivatedUserIds: v.array(v.string()) }),
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
+    return await withReportableErrors("users.archiveBandOrganizationAdmin", async () => {
     const now = Date.now();
     const organizations = await getAllOrganizations(ctx);
     const organization = organizations.find((entry) => getRecordId(entry) === args.organizationId);
-    if (!organization) throw new Error("Organization not found.");
+    if (!organization) appError("ORG_NOT_FOUND", "Organization not found.");
     if (isArborOrganization(organization)) {
-      throw new Error("The Arbor Live organization cannot be archived.");
+      appError(
+        "ORG_ARCHIVE_ARBOR_FORBIDDEN",
+        "The Arbor Live organization cannot be archived.",
+      );
     }
     const profile = await ctx.db
       .query("organizationProfiles")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
       .unique();
     if (!profile || !isArtistOrganizationType(profile.organizationType)) {
-      throw new Error("Only artist/DJ organizations can be archived.");
+      appError("ORG_ARCHIVE_NOT_ARTIST", "Only artist/DJ organizations can be archived.");
     }
     if (profile.status === "archived") {
       return { ok: true, deactivatedUserIds: [] };
@@ -1269,6 +1282,7 @@ export const archiveBandOrganizationAdmin = mutation({
     await clearActiveOrgSelections(ctx, args.organizationId);
 
     return { ok: true, deactivatedUserIds };
+    });
   },
 });
 
@@ -1277,13 +1291,15 @@ export const unarchiveBandOrganizationAdmin = mutation({
   returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
+    return await withReportableErrors("users.unarchiveBandOrganizationAdmin", async () => {
     const profile = await ctx.db
       .query("organizationProfiles")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
       .unique();
-    if (!profile) throw new Error("Organization profile not found.");
+    if (!profile) appError("ORG_PROFILE_NOT_FOUND", "Organization profile not found.");
     await ctx.db.patch(profile._id, { status: "active", updatedAt: Date.now() });
     return { ok: true };
+    });
   },
 });
 
@@ -1292,14 +1308,18 @@ export const deleteArchivedBandOrganizationAdmin = mutation({
   returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
+    return await withReportableErrors("users.deleteArchivedBandOrganizationAdmin", async () => {
     const now = Date.now();
     const profile = await ctx.db
       .query("organizationProfiles")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
       .unique();
-    if (!profile) throw new Error("Organization profile not found.");
+    if (!profile) appError("ORG_PROFILE_NOT_FOUND", "Organization profile not found.");
     if (profile.status !== "archived") {
-      throw new Error("Only archived organizations can be deleted. Archive it first.");
+      appError(
+        "ORG_DELETE_REQUIRES_ARCHIVED",
+        "Only archived organizations can be deleted. Archive it first.",
+      );
     }
 
     // Delete the auth-side records first. These run in the same transaction as
@@ -1325,7 +1345,8 @@ export const deleteArchivedBandOrganizationAdmin = mutation({
         },
       });
     } catch {
-      throw new Error(
+      appError(
+        "ORG_AUTH_DELETE_FAILED",
         "Could not delete the organization's auth records; nothing was deleted. Please retry.",
       );
     }
@@ -1394,6 +1415,7 @@ export const deleteArchivedBandOrganizationAdmin = mutation({
     await releaseR2KeysIfUnreferenced(ctx, keysToRelease);
 
     return { ok: true };
+    });
   },
 });
 
@@ -1412,8 +1434,9 @@ export const createOrganizationAdmin = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
+    return await withReportableErrors("users.createOrganizationAdmin", async () => {
     const orgName = args.name.trim();
-    if (!orgName) throw new Error("Organization name is required.");
+    if (!orgName) appError("ORG_NAME_REQUIRED", "Organization name is required.");
     const resolved = await resolveOrCreateOrganization(ctx, orgName);
     const now = Date.now();
     const orgType = args.organizationType ?? (resolved.slug === "arbor-live" ? "arbor_internal" : "band");
@@ -1438,6 +1461,7 @@ export const createOrganizationAdmin = mutation({
       await ensureOrganizationOnboarding(ctx, resolved.id);
     }
     return { ...resolved, organizationType: orgType };
+    });
   },
 });
 
@@ -1750,8 +1774,12 @@ export const setActiveOrganization = mutation({
     } else if (await isPortalAdmin(ctx, userId)) {
       await assertAdminMayPreviewOrganization(ctx, args.organizationId);
     } else {
-      throw new Error("You are not an active member of this organization.");
+      appError(
+        "ACTIVE_ORG_NOT_MEMBER",
+        "You are not an active member of this organization.",
+      );
     }
+    return await withReportableErrors("users.setActiveOrganization", async () => {
     const now = Date.now();
     const existing = await ctx.db
       .query("userActiveOrganizations")
@@ -1763,6 +1791,7 @@ export const setActiveOrganization = mutation({
       await ctx.db.insert("userActiveOrganizations", { userId, organizationId: args.organizationId, updatedAt: now });
     }
     return { ok: true };
+    });
   },
 });
 
@@ -2045,10 +2074,13 @@ export const inviteUserAdmin = mutation({
     const adminId = getUserId(admin);
     if (!adminId) throw new Error("Unable to resolve current admin user.");
     const email = args.email.trim().toLowerCase();
-    if (!email) throw new Error("Email is required.");
+    if (!email) appError("INVITE_EMAIL_REQUIRED", "Email is required.");
+    // `lib/userVerticals` is shared and stays plain-Error, so validate before
+    // the wrapper.
     if (args.verticals !== undefined || args.disciplines !== undefined) {
       assertDisciplinesMatchVerticals(args.verticals ?? [], args.disciplines ?? []);
     }
+    return await withReportableErrors("users.inviteUserAdmin", async () => {
     const now = Date.now();
     const expiresAt = now + 14 * 24 * 60 * 60 * 1000;
 
@@ -2081,7 +2113,9 @@ export const inviteUserAdmin = mutation({
     let invitationId: string;
     if (pendingInvite) {
       invitationId = getRecordId(pendingInvite);
-      if (!invitationId) throw new Error("Existing pending invitation is missing an id.");
+      if (!invitationId) {
+        throw new Error("Existing pending invitation is missing an id.");
+      }
       await ctx.runMutation(components.betterAuth.adapter.updateOne, {
         input: {
           model: "invitation",
@@ -2187,6 +2221,7 @@ export const inviteUserAdmin = mutation({
     });
 
     return { invitationId, email, expiresAt };
+    });
   },
 });
 
@@ -2194,11 +2229,12 @@ export const resendInviteAdmin = mutation({
   args: { invitationId: v.string() },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
+    return await withReportableErrors("users.resendInviteAdmin", async () => {
     const invite = (await getAllInvitations(ctx)).find(
       (row) => getRecordId(row) === args.invitationId,
     );
-    if (!invite) throw new Error("Invitation not found.");
-    if (!invite.email) throw new Error("Invitation is missing email.");
+    if (!invite) appError("INVITE_NOT_FOUND", "Invitation not found.");
+    if (!invite.email) appError("INVITE_MISSING_EMAIL", "Invitation is missing email.");
     const now = Date.now();
     const expiresAt = now + 14 * 24 * 60 * 60 * 1000;
     await ctx.runMutation(components.betterAuth.adapter.updateOne, {
@@ -2239,6 +2275,7 @@ export const resendInviteAdmin = mutation({
       resendKey: String(now),
     });
     return { ok: true, expiresAt };
+    });
   },
 });
 
@@ -2254,13 +2291,13 @@ async function getInvitationById(ctx: MutationCtx | QueryCtx, invitationId: stri
   // Adapter `_id` lookups call `db.get` and throw on anything that is not a
   // Convex document id. Invitation ids from this app are Convex `_id`s.
   if (!/^[0-9a-z]{32}$/.test(invitationId)) {
-    throw new Error("Invitation not found.");
+    appError("INVITE_NOT_FOUND", "Invitation not found.");
   }
   const invite = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
     model: "invitation",
     where: [{ field: "_id", value: invitationId }],
   })) as InvitationRow | null;
-  if (!invite) throw new Error("Invitation not found.");
+  if (!invite) appError("INVITE_NOT_FOUND", "Invitation not found.");
   return invite;
 }
 
@@ -2293,10 +2330,10 @@ async function requirePendingInviteForActiveOrg(
   const context = await requireBandContext(ctx);
   const invite = await getInvitationById(ctx, invitationId);
   if (invite.organizationId !== context.organizationId) {
-    throw new Error("Invitation not found.");
+    appError("INVITE_NOT_FOUND", "Invitation not found.");
   }
   if (invite.status !== "pending") {
-    throw new Error("Only pending invitations can be updated.");
+    appError("INVITE_NOT_PENDING", "Only pending invitations can be updated.");
   }
   return invite;
 }
@@ -2308,8 +2345,8 @@ async function resendPendingInvitation(
 ) {
   const invitationId = getRecordId(invite);
   const email = (invite.email ?? "").trim().toLowerCase();
-  if (!invitationId) throw new Error("Invitation not found.");
-  if (!email) throw new Error("Invitation is missing email.");
+  if (!invitationId) appError("INVITE_NOT_FOUND", "Invitation not found.");
+  if (!email) appError("INVITE_MISSING_EMAIL", "Invitation is missing email.");
 
   const now = Date.now();
   const expiresAt = now + ORGANIZATION_INVITE_EXPIRY_MS;
@@ -2416,12 +2453,14 @@ export const cancelInviteAdmin = mutation({
   returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
+    return await withReportableErrors("users.cancelInviteAdmin", async () => {
     const invite = await getInvitationById(ctx, args.invitationId);
     if (invite.status !== "pending") {
-      throw new Error("Only pending invitations can be cancelled.");
+      appError("INVITE_NOT_PENDING_CANCEL", "Only pending invitations can be cancelled.");
     }
     await markInvitationCancelled(ctx, args.invitationId);
     return { ok: true };
+    });
   },
 });
 
@@ -2909,6 +2948,7 @@ export const addUserOrganizationMembershipAdmin = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
+    return await withReportableErrors("users.addUserOrganizationMembershipAdmin", async () => {
     const role = await normalizeMembershipRole(ctx, args.organizationId, args.role);
     const existing = await ctx.db
       .query("userOrganizationMemberships")
@@ -2917,7 +2957,10 @@ export const addUserOrganizationMembershipAdmin = mutation({
       )
       .unique();
     if (existing) {
-      throw new Error("Membership already exists for this user and organization.");
+      appError(
+        "MEMBERSHIP_EXISTS",
+        "Membership already exists for this user and organization.",
+      );
     }
     const id = await upsertOrgMembership(ctx, {
       userId: args.userId,
@@ -2931,6 +2974,7 @@ export const addUserOrganizationMembershipAdmin = mutation({
       await syncGlobalRoleFromMemberships(ctx, args.userId);
     }
     return { id, role };
+    });
   },
 });
 
@@ -2941,6 +2985,7 @@ export const removeUserOrganizationMembershipAdmin = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
+    return await withReportableErrors("users.removeUserOrganizationMembershipAdmin", async () => {
     const existing = await ctx.db
       .query("userOrganizationMemberships")
       .withIndex("by_userId_and_organizationId", (q) =>
@@ -2948,13 +2993,14 @@ export const removeUserOrganizationMembershipAdmin = mutation({
       )
       .unique();
     if (!existing) {
-      throw new Error("Membership not found.");
+      appError("MEMBERSHIP_NOT_FOUND", "Membership not found.");
     }
     await ctx.db.delete(existing._id);
     // Removing the last admin-granting membership must demote the global role,
     // or the removed admin keeps portal access with no membership to justify it.
     await syncGlobalRoleFromMemberships(ctx, args.userId);
     return { ok: true };
+    });
   },
 });
 
@@ -3039,7 +3085,7 @@ export const updateActiveBandProfile = mutation({
   handler: async (ctx, args) => {
     const context = await requireBandContext(ctx);
     if (args.performerHourlyRateUsd !== undefined && args.performerHourlyRateUsd < 0) {
-      throw new Error("Performer hourly rate must be 0 or greater.");
+      appError("ORG_PERFORMER_RATE_INVALID", "Performer hourly rate must be 0 or greater.");
     }
 
     const existing = await ctx.db
@@ -3077,10 +3123,14 @@ export const updateActiveBandProfile = mutation({
         (actorMembership?.active === true && isArtistOrgAdminRole(actorMembership.role)) ||
         (await isStaffAdmin(ctx, actor));
       if (!isOrgAdmin) {
-        throw new Error("Only an artist admin can change who gets paid.");
+        appError(
+          "BAND_PAYOUT_ADMIN_REQUIRED",
+          "Only an artist admin can change who gets paid.",
+        );
       }
     }
 
+    return await withReportableErrors("users.updateActiveBandProfile", async () => {
     const publicListing = args.publicListing;
     const displayNameForSlug =
       args.displayName !== undefined ? args.displayName : existing?.displayName;
@@ -3094,7 +3144,7 @@ export const updateActiveBandProfile = mutation({
       await assertUniqueBandPublicSlug(ctx, publicSlug, context.organizationId);
     }
     if (publicListing && !publicSlug) {
-      throw new Error("Add a public URL slug to list on the artists page.");
+      appError("ORG_PUBLIC_SLUG_REQUIRED", "Add a public URL slug to list on the artists page.");
     }
 
     const now = Date.now();
@@ -3196,6 +3246,7 @@ export const updateActiveBandProfile = mutation({
       organizationId: context.organizationId,
     });
     return profileId;
+    });
   },
 });
 
@@ -3287,12 +3338,13 @@ export const inviteMemberToActiveOrganization = mutation({
         )
         .unique();
       if (!callerMembership?.active || !isArtistOrgAdminRole(callerMembership.role)) {
-        throw new Error("Only band admins can invite members.");
+        appError("INVITE_BAND_ADMIN_REQUIRED", "Only band admins can invite members.");
       }
     }
+    return await withReportableErrors("users.inviteMemberToActiveOrganization", async () => {
     const now = Date.now();
     const email = args.email.trim().toLowerCase();
-    if (!email) throw new Error("Email is required.");
+    if (!email) appError("INVITE_EMAIL_REQUIRED", "Email is required.");
     const existingPending = await findPendingInvitationForOrg(ctx, {
       organizationId: context.organizationId,
       email,
@@ -3300,7 +3352,8 @@ export const inviteMemberToActiveOrganization = mutation({
     if (existingPending) {
       const existingRole = existingPending.role ?? "org_member";
       if (args.role !== existingRole) {
-        throw new Error(
+        appError(
+          "INVITE_PENDING_CONFLICT",
           "This email already has a pending invitation. Remove it before sending a different access level.",
         );
       }
@@ -3360,6 +3413,7 @@ export const inviteMemberToActiveOrganization = mutation({
       isExistingUser: Boolean(existingUserId),
     });
     return { invitationId, resent: false };
+    });
   },
 });
 
@@ -3371,8 +3425,12 @@ export const resendInviteForActiveOrganization = mutation({
     expiresAt: v.number(),
   }),
   handler: async (ctx, args) => {
+    // Invite lookup is an access check (it runs `requireBandContext`) and stays
+    // before the wrapper.
     const invite = await requirePendingInviteForActiveOrg(ctx, args.invitationId);
-    return await resendPendingInvitation(ctx, invite);
+    return await withReportableErrors("users.resendInviteForActiveOrganization", async () => {
+      return await resendPendingInvitation(ctx, invite);
+    });
   },
 });
 
@@ -3380,9 +3438,13 @@ export const cancelInviteForActiveOrganization = mutation({
   args: { invitationId: v.string() },
   returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
+    // Invite lookup is an access check (it runs `requireBandContext`) and stays
+    // before the wrapper.
     await requirePendingInviteForActiveOrg(ctx, args.invitationId);
-    await markInvitationCancelled(ctx, args.invitationId);
-    return { ok: true };
+    return await withReportableErrors("users.cancelInviteForActiveOrganization", async () => {
+      await markInvitationCancelled(ctx, args.invitationId);
+      return { ok: true };
+    });
   },
 });
 
