@@ -1,5 +1,6 @@
 "use server";
 
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { fetchMutation } from "convex/nextjs";
 import { api, type Id } from "@/lib/convex-api";
 import {
@@ -43,7 +44,7 @@ export async function submitOpenMicSignup(
   } catch (error) {
     return {
       ok: false,
-      message: error instanceof Error ? error.message : "Unable to submit your sign-up. Please try again.",
+      message: getConvexErrorMessage(error, "Unable to submit your sign-up. Please try again."),
     };
   }
 }

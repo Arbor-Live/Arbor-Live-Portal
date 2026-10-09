@@ -135,7 +135,7 @@ export function EventCreateForm() {
       return {
         rows: empty,
         keptCount: 0,
-        error: error instanceof Error ? error.message : "Invalid recurrence settings.",
+        error: getConvexErrorMessage(error, "Invalid recurrence settings."),
       };
     }
   }, [

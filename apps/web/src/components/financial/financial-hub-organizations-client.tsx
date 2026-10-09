@@ -1,5 +1,6 @@
 "use client";
 
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { Id } from "@/lib/convex-api";
@@ -162,7 +163,7 @@ export function FinancialHubOrganizationsClient() {
       await addAlias({ groupId: selectedGroupId, alias: aliasDraft.trim() });
       setAliasDraft("");
     } catch (error) {
-      await alert(error instanceof Error ? error.message : "Could not add alias.");
+      await alert(getConvexErrorMessage(error, "Could not add alias."));
     }
   }
 
@@ -187,7 +188,7 @@ export function FinancialHubOrganizationsClient() {
       setMergeOpen(false);
       setMergeVictimIds([]);
     } catch (error) {
-      await alert(error instanceof Error ? error.message : "Merge failed.");
+      await alert(getConvexErrorMessage(error, "Merge failed."));
     } finally {
       setMergeBusy(false);
     }
