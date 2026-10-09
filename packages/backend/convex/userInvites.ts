@@ -26,6 +26,7 @@ import {
   type UserCompensationRateMode,
 } from "./lib/crewCompensation";
 import type { StanfordPosition } from "./lib/stanfordPosition";
+import { appError, withReportableErrors } from "./lib/errors";
 
 type AuthUser = {
   id?: string;
@@ -230,15 +231,18 @@ export const acceptInviteWithPassword = mutation({
   }),
   handler: async (ctx, args) => {
     const token = args.token.trim();
-    if (args.password.length < 8) {
-      throw new Error("Password must be at least 8 characters.");
+    // The invite token is the caller's authorization: resolve it before the
+    // reportable wrapper, so only the account write itself is reported.
+    const resolved = await resolveInviteByToken(ctx, token);
+    if (!resolved) appError("INVITE_NOT_FOUND", "Invitation not found or already used.");
+    if (resolved.expired) appError("INVITE_EXPIRED", "This invitation has expired.");
+    if (resolved.hasAccount) {
+      appError("INVITE_HAS_ACCOUNT", "This email already has an account. Sign in instead.");
     }
 
-    const resolved = await resolveInviteByToken(ctx, token);
-    if (!resolved) throw new Error("Invitation not found or already used.");
-    if (resolved.expired) throw new Error("This invitation has expired.");
-    if (resolved.hasAccount) {
-      throw new Error("This email already has an account. Sign in instead.");
+    return await withReportableErrors("userInvites.acceptInviteWithPassword", async () => {
+    if (args.password.length < 8) {
+      appError("INVITE_PASSWORD_TOO_SHORT", "Password must be at least 8 characters.");
     }
 
     const { pending } = resolved;
@@ -344,5 +348,6 @@ export const acceptInviteWithPassword = mutation({
           : "/dashboard";
 
     return { email, onboardingPath };
+    });
   },
 });
