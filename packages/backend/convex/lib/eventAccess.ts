@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { getUserId, hasOperationsAccess, requireAuth, type AuthUser } from "./auth";
+import { appError } from "./errors";
 
 export function isEventLead(
   userId: string,
@@ -36,8 +37,10 @@ export async function canEditEvent(
 export async function requireEventEditAccess(ctx: QueryCtx | MutationCtx, eventId: Id<"events">) {
   await requireAuth(ctx);
   const event = await ctx.db.get(eventId);
-  if (!event) throw new Error("Event not found.");
+  if (!event) appError("EVENT_NOT_FOUND", "Event not found.");
   const canEdit = await canEditEvent(ctx, event);
-  if (!canEdit) throw new Error("You do not have permission to edit this event.");
+  if (!canEdit) {
+    appError("EVENT_EDIT_FORBIDDEN", "You do not have permission to edit this event.");
+  }
   return event;
 }

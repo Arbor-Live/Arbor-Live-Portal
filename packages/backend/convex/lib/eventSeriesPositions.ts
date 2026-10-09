@@ -8,6 +8,7 @@ import {
   type ArtistNeedActType,
   type ArtistNeedType,
 } from "./artistNeedTypes";
+import { appError } from "./errors";
 
 /**
  * Series position templates: the shape of a series' bill, applied to each
@@ -152,30 +153,40 @@ function isNonNegativeInteger(value: number) {
  */
 export function assertValidPositionTemplates(templates: readonly EventSeriesPositionTemplate[]) {
   if (templates.length > MAX_POSITION_TEMPLATES) {
-    throw new Error(
+    appError(
+      "POSITION_TEMPLATE_LIMIT",
       `A series can have at most ${MAX_POSITION_TEMPLATES} template positions, got ${templates.length}.`,
     );
   }
   assertUniqueTemplateKeys(templates);
   for (const template of templates) {
     const name = template.label.trim();
-    if (!name) throw new Error("Give every template position a name.");
+    if (!name) appError("POSITION_TEMPLATE_INVALID", "Give every template position a name.");
     if (!isNonNegativeInteger(template.dayIndex)) {
-      throw new Error(`"${name}": day must be a whole number, got ${template.dayIndex}.`);
+      appError(
+        "POSITION_TEMPLATE_INVALID",
+        `"${name}": day must be a whole number, got ${template.dayIndex}.`,
+      );
     }
     for (const [offset, duration, what] of [
       [template.setOffsetMs, template.setDurationMs, "set"],
       [template.soundcheckOffsetMs, template.soundcheckDurationMs, "soundcheck"],
     ] as const) {
       if (offset !== undefined && !Number.isFinite(offset)) {
-        throw new Error(`"${name}": ${what} start must be a number, got ${offset}.`);
+        appError(
+          "POSITION_TEMPLATE_INVALID",
+          `"${name}": ${what} start must be a number, got ${offset}.`,
+        );
       }
       if (duration === undefined) continue;
       if (offset === undefined) {
-        throw new Error(`"${name}": a ${what} length needs a ${what} start.`);
+        appError("POSITION_TEMPLATE_INVALID", `"${name}": a ${what} length needs a ${what} start.`);
       }
       if (!Number.isFinite(duration) || duration <= 0) {
-        throw new Error(`"${name}": ${what} length must be more than zero, got ${duration}.`);
+        appError(
+          "POSITION_TEMPLATE_INVALID",
+          `"${name}": ${what} length must be more than zero, got ${duration}.`,
+        );
       }
     }
   }
@@ -185,9 +196,11 @@ export function assertValidPositionTemplates(templates: readonly EventSeriesPosi
 export function assertUniqueTemplateKeys(templates: readonly EventSeriesPositionTemplate[]) {
   const seen = new Set<string>();
   for (const template of templates) {
-    if (!template.templateKey.trim()) throw new Error("Every template position needs a key.");
+    if (!template.templateKey.trim()) {
+      appError("POSITION_TEMPLATE_INVALID", "Every template position needs a key.");
+    }
     if (seen.has(template.templateKey)) {
-      throw new Error("Template positions must have unique keys.");
+      appError("POSITION_TEMPLATE_INVALID", "Template positions must have unique keys.");
     }
     seen.add(template.templateKey);
   }

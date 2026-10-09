@@ -8,6 +8,7 @@ import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { appError, withReportableErrors } from "./lib/errors";
 import { loadBackupUserIds } from "./lib/crewBackups";
 import { computeShiftStats as computeCrewShiftStats, isTraineeShift } from "./lib/crewShiftKinds";
 import { normalizeEventStatus } from "./lib/eventStatus";
@@ -232,7 +233,8 @@ export const create = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    if (args.endAt <= args.startAt) throw new Error("Event end time must be after start time.");
+    return await withReportableErrors("eventSeries.create", async () => {
+    if (args.endAt <= args.startAt) appError("EVENT_END_BEFORE_START", "Event end time must be after start time.");
     assertValidPositionTemplates(args.positionTemplates ?? []);
     const occurrenceSlots = computeOccurrenceSlots({
       anchorStartAt: args.startAt,
@@ -310,6 +312,7 @@ export const create = mutation({
       await replaceAdditionalInvoiceLinks(ctx, firstEventId, invoiceSplit.additional);
     }
     return { seriesId, firstEventId: firstEventId!, eventIds };
+    });
   },
 });
 
@@ -321,13 +324,14 @@ export const linkInvoice = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventSeries.linkInvoice", async () => {
     const series = await ctx.db.get(args.id);
-    if (!series) throw new Error("Event series not found.");
+    if (!series) appError("EVENT_SERIES_NOT_FOUND", "Event series not found.");
     if (isMultiDayGroup(series)) {
-      throw new Error("A multi-day booking is billed through its days' invoice.");
+      appError("SERIES_MULTI_DAY_USE_DAY_INVOICE", "A multi-day booking is billed through its days' invoice.");
     }
     const invoice = await ctx.db.get(args.invoiceId);
-    if (!invoice) throw new Error("Invoice not found.");
+    if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
     const now = Date.now();
     await ctx.db.patch(args.id, { invoiceId: args.invoiceId, updatedAt: now });
 
@@ -340,6 +344,7 @@ export const linkInvoice = mutation({
     }
     await syncLinkedEventsPrimaryHostFromInvoice(ctx, args.invoiceId);
     return args.id;
+    });
   },
 });
 
@@ -348,10 +353,11 @@ export const unlinkInvoice = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventSeries.unlinkInvoice", async () => {
     const series = await ctx.db.get(args.id);
-    if (!series) throw new Error("Event series not found.");
+    if (!series) appError("EVENT_SERIES_NOT_FOUND", "Event series not found.");
     if (isMultiDayGroup(series)) {
-      throw new Error("A multi-day booking is billed through its days' invoice.");
+      appError("SERIES_MULTI_DAY_USE_DAY_INVOICE", "A multi-day booking is billed through its days' invoice.");
     }
     const now = Date.now();
     await ctx.db.patch(args.id, { invoiceId: undefined, updatedAt: now });
@@ -362,6 +368,7 @@ export const unlinkInvoice = mutation({
       await ctx.db.patch(occurrence._id, { invoiceId: undefined, updatedAt: now });
     }
     return args.id;
+    });
   },
 });
 
@@ -372,14 +379,14 @@ const MAX_PULL_LIST_ROWS = 500;
 
 async function requireGroup(ctx: MutationCtx, id: Id<"eventSeries">) {
   const series = await ctx.db.get(id);
-  if (!series) throw new Error("Event series not found.");
+  if (!series) appError("EVENT_SERIES_NOT_FOUND", "Event series not found.");
   return series;
 }
 
 async function requireGroupDay(ctx: MutationCtx, id: Id<"eventSeries">, eventId: Id<"events">) {
   const event = await ctx.db.get(eventId);
   if (!event || event.seriesId !== id) {
-    throw new Error("Event is not part of this series.");
+    appError("EVENT_NOT_IN_SERIES", "Event is not part of this series.");
   }
   return event;
 }
@@ -395,11 +402,12 @@ export const regenerateFutureBlocks = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventSeries.regenerateFutureBlocks", async () => {
     const series = await requireGroup(ctx, args.id);
     assertValidReferenceIndex(args.fromOccurrenceIndex);
     const templates = args.blockTemplates ?? series.blockTemplates ?? undefined;
     if (!templates || templates.length === 0) {
-      throw new Error("No schedule block templates to apply.");
+      appError("SERIES_NO_BLOCK_TEMPLATES", "No schedule block templates to apply.");
     }
     const now = Date.now();
     if (args.blockTemplates) {
@@ -412,6 +420,7 @@ export const regenerateFutureBlocks = mutation({
       now,
     });
     return { updatedCount };
+    });
   },
 });
 
@@ -424,15 +433,17 @@ export const importScheduleFromOccurrence = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventSeries.importScheduleFromOccurrence", async () => {
     await requireGroup(ctx, args.id);
     const event = await requireGroupDay(ctx, args.id, args.eventId);
     const now = Date.now();
     const { blockTemplates = [] } = await captureDayTemplates(ctx, event, { schedule: true }, now);
     if (blockTemplates.length === 0) {
-      throw new Error("Selected occurrence has no schedule blocks to import.");
+      appError("SERIES_IMPORT_NO_BLOCKS", "Selected occurrence has no schedule blocks to import.");
     }
     await ctx.db.patch(args.id, { blockTemplates, updatedAt: now });
     return { templateCount: blockTemplates.length };
+    });
   },
 });
 
@@ -447,6 +458,7 @@ export const regenerateFutureShifts = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventSeries.regenerateFutureShifts", async () => {
     const series = await requireGroup(ctx, args.id);
     assertValidReferenceIndex(args.fromOccurrenceIndex);
     const templates =
@@ -454,10 +466,10 @@ export const regenerateFutureShifts = mutation({
         ? args.shiftTemplates
         : (series.shiftTemplates ?? undefined);
     if (!templates || templates.length === 0) {
-      throw new Error("No crew shift templates to apply.");
+      appError("SERIES_NO_SHIFT_TEMPLATES", "No crew shift templates to apply.");
     }
     if (!series.blockTemplates || series.blockTemplates.length === 0) {
-      throw new Error("Apply schedule block templates before crew shift templates.");
+      appError("SERIES_SHIFTS_NEED_BLOCKS", "Apply schedule block templates before crew shift templates.");
     }
     const now = Date.now();
     if (args.shiftTemplates && args.shiftTemplates.length > 0) {
@@ -471,6 +483,7 @@ export const regenerateFutureShifts = mutation({
       now,
     });
     return { updatedCount };
+    });
   },
 });
 
@@ -483,11 +496,12 @@ export const importShiftsFromOccurrence = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventSeries.importShiftsFromOccurrence", async () => {
     const series = await requireGroup(ctx, args.id);
     const event = await requireGroupDay(ctx, args.id, args.eventId);
     const blockTemplates = series.blockTemplates ?? undefined;
     if (!blockTemplates || blockTemplates.length === 0) {
-      throw new Error("Import schedule block templates before importing crew shifts.");
+      appError("SERIES_IMPORT_SHIFTS_NEED_BLOCKS", "Import schedule block templates before importing crew shifts.");
     }
     // An act's soundcheck/set blocks belong to one occurrence's lineup, not the series.
     const blocks = (
@@ -502,10 +516,11 @@ export const importShiftsFromOccurrence = mutation({
       .take(500);
     const templates = shiftsToTemplates(shifts, blocks, blockTemplates, event.startAt);
     if (templates.length === 0) {
-      throw new Error("Selected occurrence has no empty crew shifts to import.");
+      appError("SERIES_IMPORT_NO_SHIFTS", "Selected occurrence has no empty crew shifts to import.");
     }
     await ctx.db.patch(args.id, { shiftTemplates: templates, updatedAt: Date.now() });
     return { templateCount: templates.length };
+    });
   },
 });
 
@@ -520,6 +535,7 @@ export const regenerateFuturePositions = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventSeries.regenerateFuturePositions", async () => {
     const series = await requireGroup(ctx, args.id);
     assertValidReferenceIndex(args.fromOccurrenceIndex);
     const templates = args.positionTemplates ?? series.positionTemplates ?? [];
@@ -535,6 +551,7 @@ export const regenerateFuturePositions = mutation({
       now,
     });
     return { updatedCount };
+    });
   },
 });
 
@@ -547,6 +564,7 @@ export const importPositionsFromOccurrence = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventSeries.importPositionsFromOccurrence", async () => {
     await requireGroup(ctx, args.id);
     const event = await requireGroupDay(ctx, args.id, args.eventId);
     const now = Date.now();
@@ -557,12 +575,13 @@ export const importPositionsFromOccurrence = mutation({
       now,
     );
     if (positionTemplates.length === 0) {
-      throw new Error("Selected occurrence has no positions to import.");
+      appError("SERIES_IMPORT_NO_POSITIONS", "Selected occurrence has no positions to import.");
     }
     // Same rules as create/regenerate; throwing rolls back the key stamps.
     assertValidPositionTemplates(positionTemplates);
     await ctx.db.patch(args.id, { positionTemplates, updatedAt: now });
     return { templateCount: positionTemplates.length };
+    });
   },
 });
 
@@ -593,21 +612,22 @@ export const applyDaySetup = mutation({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     await requireEventEditAccess(ctx, args.eventId);
+    return await withReportableErrors("eventSeries.applyDaySetup", async () => {
     const now = Date.now();
     let source = await ctx.db.get(args.eventId);
-    if (!source) throw new Error("Event not found.");
+    if (!source) appError("EVENT_NOT_FOUND", "Event not found.");
     if (!source.seriesId && source.invoiceId) {
       // Days booked before groups existed: group them on first use.
       await syncMultiDayGroupForInvoice(ctx, source.invoiceId, now);
       source = await ctx.db.get(args.eventId);
     }
-    if (!source?.seriesId) throw new Error("This event has no other days to apply its setup to.");
+    if (!source?.seriesId) appError("DAY_SETUP_NO_SERIES", "This event has no other days to apply its setup to.");
     const sourceDay = source;
     const groupId = sourceDay.seriesId!;
     if (!isMultiDayGroup(await requireGroup(ctx, groupId))) {
       // A series already has its templates; copying one occurrence over them
       // would rewrite the series. Edit the templates on the series page.
-      throw new Error("Apply a series' setup from its templates on the series page.");
+      appError("DAY_SETUP_USE_SERIES_TEMPLATES", "Apply a series' setup from its templates on the series page.");
     }
     // Days that already happened keep their record (pull progress, crew).
     const targets = selectDaysInScope(
@@ -617,7 +637,8 @@ export const applyDaySetup = mutation({
       now,
     ).filter((day) => day._id !== sourceDay._id && day.endAt >= now);
     if (targets.length === 0) {
-      throw new Error(
+      appError(
+        "DAY_SETUP_NO_TARGETS",
         args.scope === "future"
           ? "There are no later upcoming days to apply this day's setup to."
           : "There are no other upcoming days to apply this day's setup to.",
@@ -641,7 +662,8 @@ export const applyDaySetup = mutation({
             .take(MAX_PULL_LIST_ROWS + 1)
         : [];
     if (sourcePullList.length > MAX_PULL_LIST_ROWS) {
-      throw new Error(
+      appError(
+        "DAY_SETUP_PULL_LIST_LIMIT",
         `This day's pull list is too long to copy (max ${MAX_PULL_LIST_ROWS} rows, got more).`,
       );
     }
@@ -662,7 +684,8 @@ export const applyDaySetup = mutation({
       pullListRows: sourcePullList.length,
     });
     if (nothingToApply) {
-      throw new Error(
+      appError(
+        "DAY_SETUP_EMPTY",
         "This day has nothing to apply yet: no Run of Show, crew, positions or pull list.",
       );
     }
@@ -690,6 +713,7 @@ export const applyDaySetup = mutation({
       await ctx.db.patch(target._id, { updatedAt: now });
     }
     return { updatedCount: targets.length, eventIds: targets.map((day) => day._id) };
+    });
   },
 });
 
@@ -711,22 +735,23 @@ export const addDay = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventSeries.addDay", async () => {
     const group = await requireGroup(ctx, args.id);
     if (!isMultiDayGroup(group)) {
-      throw new Error("Add occurrences to a recurring series from its rule instead.");
+      appError("SERIES_ADD_DAY_USE_RULE", "Add occurrences to a recurring series from its rule instead.");
     }
     const invoice = group.invoiceId ? await ctx.db.get(group.invoiceId) : null;
     if (!invoice) {
-      throw new Error("A booking's days share its invoice; link one before adding a day.");
+      appError("SERIES_ADD_DAY_NEEDS_INVOICE", "A booking's days share its invoice; link one before adding a day.");
     }
     const days = await listGroupDays(ctx, args.id);
     // Adding a day creates an invoice-backed event: the caller needs edit
     // access to the booking, shown by being able to edit one of its days.
     const modelDay = days.find((day) => day.status !== "cancelled") ?? days[0];
-    if (!modelDay) throw new Error("This booking has no days to add to.");
+    if (!modelDay) appError("SERIES_ADD_DAY_NO_MODEL", "This booking has no days to add to.");
     await requireEventEditAccess(ctx, modelDay._id);
     if (days.some((day) => pacificDateKey(day.startAt) === pacificDateKey(args.startAt))) {
-      throw new Error("This booking already has a day on that date.");
+      appError("SERIES_ADD_DAY_DUPLICATE_DATE", "This booking already has a day on that date.");
     }
     const now = Date.now();
     const eventId = await materializeOccurrence(ctx, group, days.length, args.startAt, now);
@@ -751,6 +776,7 @@ export const addDay = mutation({
     }
     await syncMultiDayGroupForInvoice(ctx, invoice._id, now);
     return eventId;
+    });
   },
 });
 
@@ -763,17 +789,18 @@ export const addOccurrences = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventSeries.addOccurrences", async () => {
     const series = await ctx.db.get(args.id);
-    if (!series) throw new Error("Event series not found.");
+    if (!series) appError("EVENT_SERIES_NOT_FOUND", "Event series not found.");
     const intervalWeeks = series.intervalWeeks;
     if (isMultiDayGroup(series) || intervalWeeks === undefined) {
-      throw new Error("Add a dated day to a multi-day booking instead.");
+      appError("SERIES_ADD_OCCURRENCES_USE_DAY", "Add a dated day to a multi-day booking instead.");
     }
     const existing = await listOccurrencesForSeries(ctx, args.id);
     const lastIndex = existing.length > 0 ? (existing[existing.length - 1]!.occurrenceIndex ?? 0) : -1;
 
     if (args.additionalCount === undefined && args.newSeriesEndAt === undefined) {
-      throw new Error("Provide additionalCount or newSeriesEndAt.");
+      appError("SERIES_ADD_OCCURRENCES_NO_COUNT", "Provide additionalCount or newSeriesEndAt.");
     }
     const newSlots = computeOccurrenceSlots({
       anchorStartAt: series.anchorStartAt,
@@ -799,6 +826,7 @@ export const addOccurrences = mutation({
     });
 
     return { eventIds };
+    });
   },
 });
 
@@ -810,8 +838,9 @@ export const cancelFuture = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventSeries.cancelFuture", async () => {
     const series = await ctx.db.get(args.id);
-    if (!series) throw new Error("Event series not found.");
+    if (!series) appError("EVENT_SERIES_NOT_FOUND", "Event series not found.");
     const now = Date.now();
     const occurrences = await listOccurrencesForSeries(ctx, args.id);
     if (isMultiDayGroup(series)) {
@@ -837,6 +866,7 @@ export const cancelFuture = mutation({
       await syncMultiDayGroupForInvoice(ctx, series.invoiceId, now);
     }
     return { cancelledCount };
+    });
   },
 });
 
@@ -845,13 +875,14 @@ export const reattachOccurrence = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventSeries.reattachOccurrence", async () => {
     const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
-    if (!event.seriesId) throw new Error("Event is not part of a series.");
-    if (!event.seriesDetached) throw new Error("Event is already attached to the series.");
+    if (!event) appError("EVENT_NOT_FOUND", "Event not found.");
+    if (!event.seriesId) appError("EVENT_NOT_IN_SERIES", "Event is not part of a series.");
+    if (!event.seriesDetached) appError("EVENT_ALREADY_ATTACHED", "Event is already attached to the series.");
 
     const series = await ctx.db.get(event.seriesId);
-    if (!series) throw new Error("Event series not found.");
+    if (!series) appError("EVENT_SERIES_NOT_FOUND", "Event series not found.");
 
     const now = Date.now();
     const startAt = groupDayStartAt(series, event);
@@ -904,6 +935,7 @@ export const reattachOccurrence = mutation({
     }
 
     return args.eventId;
+    });
   },
 });
 
@@ -912,9 +944,11 @@ export const endSeries = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventSeries.endSeries", async () => {
     const series = await ctx.db.get(args.id);
-    if (!series) throw new Error("Event series not found.");
+    if (!series) appError("EVENT_SERIES_NOT_FOUND", "Event series not found.");
     await ctx.db.patch(args.id, { status: "ended", updatedAt: Date.now() });
+    });
   },
 });
 
@@ -935,8 +969,9 @@ export const updateSeriesCosts = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventSeries.updateSeriesCosts", async () => {
     const series = await ctx.db.get(args.id);
-    if (!series) throw new Error("Event series not found.");
+    if (!series) appError("EVENT_SERIES_NOT_FOUND", "Event series not found.");
     const now = Date.now();
     await ctx.db.patch(args.id, {
       budgetUsd: args.budgetUsd ?? series.budgetUsd,
@@ -974,7 +1009,7 @@ export const updateSeriesCosts = mutation({
     // A multi-day booking's days carry their own costs; its group budget is a total.
     if ((args.propagateOccurrenceCosts ?? true) && !isMultiDayGroup(series)) {
       const updatedSeries = await ctx.db.get(args.id);
-      if (!updatedSeries) throw new Error("Event series not found.");
+      if (!updatedSeries) appError("EVENT_SERIES_NOT_FOUND", "Event series not found.");
       const occurrences = await listOccurrencesForSeries(ctx, args.id);
       for (const occurrence of occurrences) {
         if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
@@ -995,5 +1030,6 @@ export const updateSeriesCosts = mutation({
       }
     }
     return args.id;
+    });
   },
 });
