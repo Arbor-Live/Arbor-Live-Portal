@@ -12,6 +12,7 @@ import {
 } from "./lib/listFilters";
 import { assetIdLookupCandidates, canonicalizeAssetIdTag } from "./lib/assetScan";
 import { resolveInventoryItemByScan } from "./lib/rentalFulfillment";
+import { appError, withReportableErrors } from "./lib/errors";
 
 const MAX_LIST_LIMIT = 2000;
 const MAX_ASSET_ID_LIMIT = 5000;
@@ -245,29 +246,30 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("inventoryItems.create", async () => {
     const assetId = args.assetId ? canonicalizeAssetIdTag(args.assetId) : "";
     if (!assetId && !args.serialNumber?.trim()) {
-      throw new Error("Add an Asset ID or Serial Number.");
+      appError("INVENTORY_IDENTITY_REQUIRED", "Add an Asset ID or Serial Number.");
     }
     if (assetId) {
       const existingAsset = await ctx.db
         .query("inventoryItems")
         .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
         .unique();
-      if (existingAsset) throw new Error("Asset ID already exists.");
+      if (existingAsset) appError("INVENTORY_ASSET_ID_EXISTS", "Asset ID already exists.");
     }
 
     const type = await ctx.db.get(args.typeId);
-    if (!type) throw new Error("Inventory type not found.");
+    if (!type) appError("INVENTORY_TYPE_NOT_FOUND", "Inventory type not found.");
 
     if (args.storageLocationId) {
       const location = await ctx.db.get(args.storageLocationId);
-      if (!location) throw new Error("Storage location not found.");
+      if (!location) appError("INVENTORY_STORAGE_LOCATION_NOT_FOUND", "Storage location not found.");
     }
     let inheritedContainerLocationId: Id<"storageLocations"> | undefined;
     if (args.containedInAssetId) {
       const container = await ctx.db.get(args.containedInAssetId);
-      if (!container) throw new Error("Container asset not found.");
+      if (!container) appError("INVENTORY_CONTAINER_NOT_FOUND", "Container asset not found.");
       inheritedContainerLocationId = container.storageLocationId;
     }
     const effectiveStorageLocationId = inheritedContainerLocationId ?? args.storageLocationId;
@@ -283,6 +285,7 @@ export const create = mutation({
       notes: args.notes?.trim(),
       createdAt: now,
       updatedAt: now,
+    });
     });
   },
 });
@@ -317,12 +320,13 @@ export const createMany = mutation({
   },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("inventoryItems.createMany", async () => {
     if (args.items.length === 0) return { created: 0 };
     if (args.items.length > MAX_BATCH_ITEMS) {
-      throw new Error(`Cannot create more than ${MAX_BATCH_ITEMS} items at once.`);
+      appError("INVENTORY_BATCH_LIMIT", `Cannot create more than ${MAX_BATCH_ITEMS} items at once.`);
     }
     const type = await ctx.db.get(args.typeId);
-    if (!type) throw new Error("Inventory type not found.");
+    if (!type) appError("INVENTORY_TYPE_NOT_FOUND", "Inventory type not found.");
 
     // 1. Validate fields, reject duplicate assetIds within the batch and in the DB.
     const normalizedItems = args.items.map((item) => ({
@@ -340,20 +344,24 @@ export const createMany = mutation({
     for (const item of normalizedItems) {
       if (item.storageLocationId) {
         const location = await ctx.db.get(item.storageLocationId);
-        if (!location) throw new Error("Storage location not found.");
+        if (!location) appError("INVENTORY_STORAGE_LOCATION_NOT_FOUND", "Storage location not found.");
       }
       if (!item.assetId && !item.serialNumber) {
-        throw new Error("Every asset needs an Asset ID or Serial Number.");
+        appError("INVENTORY_BATCH_IDENTITY_REQUIRED", "Every asset needs an Asset ID or Serial Number.");
       }
       if (!item.assetId) continue;
       const key = item.assetId.toLowerCase();
-      if (seen.has(key)) throw new Error(`Duplicate asset ID in batch: ${item.assetId}`);
+      if (seen.has(key)) {
+        appError("INVENTORY_BATCH_DUPLICATE_ASSET_ID", `Duplicate asset ID in batch: ${item.assetId}`);
+      }
       seen.add(key);
       const existing = await ctx.db
         .query("inventoryItems")
         .withIndex("by_assetId", (q) => q.eq("assetId", item.assetId))
         .unique();
-      if (existing) throw new Error(`Asset ID already exists: ${item.assetId}`);
+      if (existing) {
+        appError("INVENTORY_BATCH_ASSET_ID_EXISTS", `Asset ID already exists: ${item.assetId}`);
+      }
     }
 
     // 2. Insert all items without containment, remembering in-batch ids.
@@ -387,11 +395,11 @@ export const createMany = mutation({
       const container = canonicalizeAssetIdTag(containerRaw);
       if (!child || !container) return;
       if (child.toLowerCase() === container.toLowerCase()) {
-        throw new Error("An asset cannot contain itself.");
+        appError("INVENTORY_ASSET_SELF_CONTAIN", "An asset cannot contain itself.");
       }
       const previous = childKeyToContainerKey.get(child.toLowerCase());
       if (previous && previous !== container.toLowerCase()) {
-        throw new Error(`Asset "${child}" is assigned to two containers.`);
+        appError("INVENTORY_ASSET_TWO_CONTAINERS", `Asset "${child}" is assigned to two containers.`);
       }
       childKeyToContainerKey.set(child.toLowerCase(), container.toLowerCase());
     };
@@ -399,10 +407,16 @@ export const createMany = mutation({
       // Containment is referenced by tag, so both sides of an edge need an ID.
       const label = item.assetId ?? item.serialNumber ?? "asset";
       if (item.containedInAssetId && !item.assetId) {
-        throw new Error(`“${label}” needs an Asset ID before it can be placed inside another asset.`);
+        appError(
+          "INVENTORY_NESTING_ASSET_ID_REQUIRED",
+          `“${label}” needs an Asset ID before it can be placed inside another asset.`,
+        );
       }
       if ((item.contains?.length ?? 0) > 0 && !item.assetId) {
-        throw new Error(`“${label}” needs an Asset ID before it can contain other assets.`);
+        appError(
+          "INVENTORY_CONTAIN_ASSET_ID_REQUIRED",
+          `“${label}” needs an Asset ID before it can contain other assets.`,
+        );
       }
       if (item.containedInAssetId) setEdge(item.assetId!, item.containedInAssetId);
       for (const childRef of item.contains ?? []) setEdge(childRef, item.assetId!);
@@ -433,8 +447,10 @@ export const createMany = mutation({
       const childId = idByAssetId.get(childKey) ?? (await findExisting(childKey))?._id;
       const containerId =
         idByAssetId.get(containerKey) ?? (await findExisting(containerKey))?._id;
-      if (!childId) throw new Error(`Referenced asset not found: ${childKey}`);
-      if (!containerId) throw new Error(`Container asset not found: ${containerKey}`);
+      if (!childId) appError("INVENTORY_BATCH_ASSET_NOT_FOUND", `Referenced asset not found: ${childKey}`);
+      if (!containerId) {
+        appError("INVENTORY_BATCH_CONTAINER_NOT_FOUND", `Container asset not found: ${containerKey}`);
+      }
       resolvedEdges.push({ childId, containerId });
     }
 
@@ -446,8 +462,12 @@ export const createMany = mutation({
       let pointer: Id<"inventoryItems"> | undefined = edge.containerId;
       let hops = 0;
       while (pointer) {
-        if (pointer === edge.childId) throw new Error("Cannot create cyclical asset containment.");
-        if (++hops > MAX_BATCH_ITEMS) throw new Error("Cannot create cyclical asset containment.");
+        if (pointer === edge.childId) {
+          appError("INVENTORY_CONTAINMENT_CYCLE", "Cannot create cyclical asset containment.");
+        }
+        if (++hops > MAX_BATCH_ITEMS) {
+          appError("INVENTORY_CONTAINMENT_CYCLE", "Cannot create cyclical asset containment.");
+        }
         const next: Id<"inventoryItems"> | undefined =
           containerIdByChildId.get(pointer) ?? (await ctx.db.get(pointer))?.containedInAssetId;
         pointer = next;
@@ -509,6 +529,7 @@ export const createMany = mutation({
     }
 
     return { created: normalizedItems.length };
+    });
   },
 });
 
@@ -525,12 +546,13 @@ export const update = mutation({
   },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("inventoryItems.update", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Inventory item not found.");
+    if (!existing) appError("INVENTORY_ITEM_NOT_FOUND", "Inventory item not found.");
 
     const assetId = args.assetId ? canonicalizeAssetIdTag(args.assetId) : "";
     if (!assetId && !args.serialNumber?.trim()) {
-      throw new Error("Add an Asset ID or Serial Number.");
+      appError("INVENTORY_IDENTITY_REQUIRED", "Add an Asset ID or Serial Number.");
     }
     if (assetId) {
       const duplicateAsset = await ctx.db
@@ -538,29 +560,29 @@ export const update = mutation({
         .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
         .unique();
       if (duplicateAsset && duplicateAsset._id !== args.id) {
-        throw new Error("Asset ID already exists.");
+        appError("INVENTORY_ASSET_ID_EXISTS", "Asset ID already exists.");
       }
     }
 
     const type = await ctx.db.get(args.typeId);
-    if (!type) throw new Error("Inventory type not found.");
+    if (!type) appError("INVENTORY_TYPE_NOT_FOUND", "Inventory type not found.");
 
     if (args.storageLocationId) {
       const location = await ctx.db.get(args.storageLocationId);
-      if (!location) throw new Error("Storage location not found.");
+      if (!location) appError("INVENTORY_STORAGE_LOCATION_NOT_FOUND", "Storage location not found.");
     }
     if (args.containedInAssetId === args.id) {
-      throw new Error("Asset cannot contain itself.");
+      appError("INVENTORY_SELF_CONTAIN", "Asset cannot contain itself.");
     }
     let inheritedContainerLocationId: Id<"storageLocations"> | undefined;
     if (args.containedInAssetId) {
       const container = await ctx.db.get(args.containedInAssetId);
-      if (!container) throw new Error("Container asset not found.");
+      if (!container) appError("INVENTORY_CONTAINER_NOT_FOUND", "Container asset not found.");
       inheritedContainerLocationId = container.storageLocationId;
       let pointer: Id<"inventoryItems"> | undefined = args.containedInAssetId;
       while (pointer) {
         if (pointer === args.id) {
-          throw new Error("Cannot create cyclical asset containment.");
+          appError("INVENTORY_CONTAINMENT_CYCLE", "Cannot create cyclical asset containment.");
         }
         const next: Doc<"inventoryItems"> | null = await ctx.db.get(pointer);
         pointer = next?.containedInAssetId;
@@ -580,6 +602,7 @@ export const update = mutation({
     });
 
     await cascadeLocationToDescendants(ctx, args.id, effectiveStorageLocationId);
+    });
   },
 });
 
@@ -587,14 +610,18 @@ export const remove = mutation({
   args: { id: v.id("inventoryItems") },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("inventoryItems.remove", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Inventory item not found.");
+    if (!existing) appError("INVENTORY_ITEM_NOT_FOUND", "Inventory item not found.");
     const children = await ctx.db
       .query("inventoryItems")
       .withIndex("by_containedInAssetId", (q) => q.eq("containedInAssetId", args.id))
       .first();
-    if (children) throw new Error("Cannot delete an asset that contains other assets.");
+    if (children) {
+      appError("INVENTORY_ITEM_HAS_CHILDREN", "Cannot delete an asset that contains other assets.");
+    }
     await ctx.db.delete(args.id);
+    });
   },
 });
 
@@ -605,20 +632,21 @@ export const setContainer = mutation({
   },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("inventoryItems.setContainer", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Inventory item not found.");
+    if (!existing) appError("INVENTORY_ITEM_NOT_FOUND", "Inventory item not found.");
     if (args.containedInAssetId === args.id) {
-      throw new Error("Asset cannot contain itself.");
+      appError("INVENTORY_SELF_CONTAIN", "Asset cannot contain itself.");
     }
     let inheritedContainerLocationId: Id<"storageLocations"> | undefined;
     if (args.containedInAssetId) {
       const container = await ctx.db.get(args.containedInAssetId);
-      if (!container) throw new Error("Container asset not found.");
+      if (!container) appError("INVENTORY_CONTAINER_NOT_FOUND", "Container asset not found.");
       inheritedContainerLocationId = container.storageLocationId;
       let pointer: Id<"inventoryItems"> | undefined = args.containedInAssetId;
       while (pointer) {
         if (pointer === args.id) {
-          throw new Error("Cannot create cyclical asset containment.");
+          appError("INVENTORY_CONTAINMENT_CYCLE", "Cannot create cyclical asset containment.");
         }
         const next: Doc<"inventoryItems"> | null = await ctx.db.get(pointer);
         pointer = next?.containedInAssetId;
@@ -635,6 +663,7 @@ export const setContainer = mutation({
       args.id,
       inheritedContainerLocationId ?? existing.storageLocationId,
     );
+    });
   },
 });
 
@@ -650,15 +679,18 @@ export const replaceContainedAssets = mutation({
   },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("inventoryItems.replaceContainedAssets", async () => {
     const container = await ctx.db.get(args.containerId);
-    if (!container) throw new Error("Inventory item not found.");
+    if (!container) appError("INVENTORY_ITEM_NOT_FOUND", "Inventory item not found.");
 
     const childIds = Array.from(new Set(args.childIds));
-    if (childIds.includes(args.containerId)) throw new Error("An asset cannot contain itself.");
+    if (childIds.includes(args.containerId)) {
+      appError("INVENTORY_ASSET_SELF_CONTAIN", "An asset cannot contain itself.");
+    }
 
     for (const childId of childIds) {
       const child = await ctx.db.get(childId);
-      if (!child) throw new Error("Inventory item not found.");
+      if (!child) appError("INVENTORY_ITEM_NOT_FOUND", "Inventory item not found.");
     }
 
     const currentChildren = await ctx.db
@@ -681,8 +713,12 @@ export const replaceContainedAssets = mutation({
       let pointer: Id<"inventoryItems"> | undefined = container.containedInAssetId;
       let hops = 0;
       while (pointer) {
-        if (pointer === childId) throw new Error("Cannot create cyclical asset containment.");
-        if (++hops > MAX_BATCH_ITEMS) throw new Error("Cannot create cyclical asset containment.");
+        if (pointer === childId) {
+          appError("INVENTORY_CONTAINMENT_CYCLE", "Cannot create cyclical asset containment.");
+        }
+        if (++hops > MAX_BATCH_ITEMS) {
+          appError("INVENTORY_CONTAINMENT_CYCLE", "Cannot create cyclical asset containment.");
+        }
         const next = await ctx.db.get(pointer);
         pointer = next?.containedInAssetId;
       }
@@ -693,6 +729,7 @@ export const replaceContainedAssets = mutation({
       });
       await cascadeLocationToDescendants(ctx, childId, container.storageLocationId);
     }
+    });
   },
 });
 
