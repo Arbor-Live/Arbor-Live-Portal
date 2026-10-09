@@ -51,6 +51,7 @@ import {
   syncGlobalRoleFromMemberships,
   upsertOrgMembership,
 } from "./users";
+import { appError, withReportableErrors } from "./lib/errors";
 
 const applicationStatusValue = v.union(
   v.literal("submitted"),
@@ -110,7 +111,7 @@ async function requireStaffAdmin(ctx: QueryCtx | MutationCtx): Promise<AuthUser>
 
 function trimRequired(value: string, label: string) {
   const trimmed = value.trim();
-  if (!trimmed) throw new Error(`${label} is required.`);
+  if (!trimmed) appError("APPLICATION_FIELD_REQUIRED", `${label} is required.`);
   return trimmed;
 }
 
@@ -195,7 +196,7 @@ export const submitPublic = mutation({
   returns: v.object({ applicationId: v.id("crewApplications") }),
   handler: async (ctx, args) => {
     if (args.website?.trim()) {
-      throw new Error("Unable to submit application.");
+      appError("APPLICATION_SUBMIT_BLOCKED", "Unable to submit application.");
     }
 
     const name = trimRequired(args.name, "Name");
@@ -205,38 +206,51 @@ export const submitPublic = mutation({
     const experience = trimRequired(args.experience, "What excites you about joining");
 
     if (!isStanfordEmail(email)) {
-      throw new Error("Use a @stanford.edu email address.");
+      appError("APPLICATION_STANFORD_EMAIL", "Use a @stanford.edu email address.");
     }
 
     const specialtyRequired = verticalRequiresDiscipline(args.vertical);
     if (specialtyRequired) {
       if (!args.discipline) {
-        throw new Error("Select a specialty, or “I’m not sure”.");
+        appError("CREW_SPECIALTY_REQUIRED", "Select a specialty, or “I’m not sure”.");
       }
       const allowed = DISCIPLINES_BY_VERTICAL[args.vertical] as readonly string[];
       if (args.discipline !== "unsure" && !allowed.includes(args.discipline)) {
-        throw new Error(`Specialty ${args.discipline} is not available for ${args.vertical}.`);
+        appError(
+          "CREW_SPECIALTY_NOT_ALLOWED",
+          `Specialty ${args.discipline} is not available for ${args.vertical}.`,
+        );
       }
     } else if (args.discipline) {
-      throw new Error("Specialty applies only when the vertical has specialties.");
+      appError(
+        "CREW_SPECIALTY_NOT_APPLICABLE",
+        "Specialty applies only when the vertical has specialties.",
+      );
     }
 
     if (args.vertical === "Crew") {
       const days = [...new Set(args.crewAvailabilityDays ?? [])];
       if (days.length === 0) {
-        throw new Error("Select at least one availability day (Friday and/or Saturday).");
+        appError(
+          "CREW_AVAILABILITY_REQUIRED",
+          "Select at least one availability day (Friday and/or Saturday).",
+        );
       }
     }
 
     if (args.stanfordPosition !== "other") {
       if (args.gradYear === undefined || !Number.isFinite(args.gradYear)) {
-        throw new Error("Graduation year is required.");
+        appError("CREW_GRAD_YEAR_REQUIRED", "Graduation year is required.");
       }
     }
 
+    // The limiter stays outside the reportable wrapper: a throttled caller is
+    // not an incident. Validation above it runs first so form errors never
+    // burn the submitter's small hourly cap.
     await enforceRateLimit(ctx, `crewApply:${email}`, { limit: 3, windowMs: HOUR_MS });
     await enforceRateLimit(ctx, "crewApply:global", { limit: 40, windowMs: HOUR_MS });
 
+    return await withReportableErrors("crewApplications.submitPublic", async () => {
     const now = Date.now();
     const applicationId = await ctx.db.insert("crewApplications", {
       status: "submitted",
@@ -277,6 +291,7 @@ export const submitPublic = mutation({
     });
 
     return { applicationId };
+    });
   },
 });
 
@@ -379,15 +394,17 @@ export const setAssignee = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireStaffAdmin(ctx);
+    return await withReportableErrors("crewApplications.setAssignee", async () => {
     const application = await ctx.db.get(args.applicationId);
-    if (!application) throw new Error("Application not found.");
+    if (!application) appError("APPLICATION_NOT_FOUND", "Application not found.");
     const assigneeUserId = args.assigneeUserId?.trim() || undefined;
     if (assigneeUserId) {
       const users = await findAuthUsersByIds(ctx, [assigneeUserId]);
-      if (!users.has(assigneeUserId)) throw new Error("Owner not found.");
+      if (!users.has(assigneeUserId)) appError("CREW_ASSIGNEE_NOT_FOUND", "Owner not found.");
     }
     await ctx.db.patch(application._id, { assigneeUserId, updatedAt: Date.now() });
     return null;
+    });
   },
 });
 
@@ -404,11 +421,15 @@ export const setOutreachStage = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const admin = await requireStaffAdmin(ctx);
+    return await withReportableErrors("crewApplications.setOutreachStage", async () => {
     const adminId = getUserId(admin) || undefined;
     const application = await ctx.db.get(args.applicationId);
-    if (!application) throw new Error("Application not found.");
+    if (!application) appError("APPLICATION_NOT_FOUND", "Application not found.");
     if (application.status !== "submitted") {
-      throw new Error("Outreach applies only to submitted applications.");
+      appError(
+        "CREW_OUTREACH_REQUIRES_SUBMITTED",
+        "Outreach applies only to submitted applications.",
+      );
     }
     const now = Date.now();
     await ctx.db.patch(application._id, {
@@ -419,6 +440,7 @@ export const setOutreachStage = mutation({
       updatedAt: now,
     });
     return null;
+    });
   },
 });
 
@@ -440,14 +462,15 @@ export const close = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const admin = await requireStaffAdmin(ctx);
+    return await withReportableErrors("crewApplications.close", async () => {
     const adminId = getUserId(admin);
     const application = await ctx.db.get(args.applicationId);
-    if (!application) throw new Error("Application not found.");
+    if (!application) appError("APPLICATION_NOT_FOUND", "Application not found.");
     if (application.status === "converted") {
-      throw new Error("Converted applications cannot be closed.");
+      appError("CREW_CLOSE_REQUIRES_UNCONVERTED", "Converted applications cannot be closed.");
     }
     if (application.status === "closed") {
-      throw new Error("Application is already closed.");
+      appError("CREW_APPLICATION_CLOSED", "Application is already closed.");
     }
 
     const now = Date.now();
@@ -469,6 +492,7 @@ export const close = mutation({
     });
 
     return null;
+    });
   },
 });
 
@@ -477,21 +501,24 @@ export const remove = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireStaffAdmin(ctx);
+    return await withReportableErrors("crewApplications.remove", async () => {
     const application = await ctx.db.get(args.applicationId);
-    if (!application) throw new Error("Application not found.");
+    if (!application) appError("APPLICATION_NOT_FOUND", "Application not found.");
 
     const linkedShifts = await ctx.db
       .query("eventCrewShifts")
       .withIndex("by_crewApplicationId", (q) => q.eq("crewApplicationId", args.applicationId))
       .take(1);
     if (linkedShifts.length > 0) {
-      throw new Error(
+      appError(
+        "CREW_APPLICATION_HAS_SHIFTS",
         "This application is still assigned to event shifts. Remove those trainee shifts first.",
       );
     }
 
     await ctx.db.delete(args.applicationId);
     return null;
+    });
   },
 });
 
@@ -555,11 +582,15 @@ export const assignTraineeToEvent = mutation({
   returns: v.object({ shiftId: v.id("eventCrewShifts") }),
   handler: async (ctx, args) => {
     const admin = await requireStaffAdmin(ctx);
+    return await withReportableErrors("crewApplications.assignTraineeToEvent", async () => {
     const adminId = getUserId(admin);
     const application = await ctx.db.get(args.applicationId);
-    if (!application) throw new Error("Application not found.");
+    if (!application) appError("APPLICATION_NOT_FOUND", "Application not found.");
     if (application.status === "closed" || application.status === "converted") {
-      throw new Error("Only submitted or trainee applications can be assigned.");
+      appError(
+        "CREW_ASSIGN_REQUIRES_OPEN",
+        "Only submitted or trainee applications can be assigned.",
+      );
     }
 
     const ready = await assertTraineeIntroReady(ctx, {
@@ -675,6 +706,7 @@ export const assignTraineeToEvent = mutation({
     );
 
     return { shiftId };
+    });
   },
 });
 
@@ -691,26 +723,31 @@ export const convertToMember = mutation({
   handler: async (ctx, args) => {
     const admin = await requireStaffAdmin(ctx);
     const adminId = getUserId(admin);
-    if (!adminId) throw new Error("Unable to resolve admin user.");
 
     const application = await ctx.db.get(args.applicationId);
-    if (!application) throw new Error("Application not found.");
+    if (!application) appError("APPLICATION_NOT_FOUND", "Application not found.");
     if (application.status === "converted") {
-      throw new Error("Application is already converted.");
+      appError("CREW_APPLICATION_CONVERTED", "Application is already converted.");
     }
     if (application.status === "closed") {
-      throw new Error("Closed applications cannot be converted.");
+      appError("CREW_CONVERT_REQUIRES_OPEN", "Closed applications cannot be converted.");
     }
     if (args.rateMode === "custom") {
       if (args.customHourlyRateUsd === undefined || args.customHourlyRateUsd < 0) {
-        throw new Error("Custom hourly rate is required.");
+        appError("CREW_CUSTOM_RATE_REQUIRED", "Custom hourly rate is required.");
       }
     }
 
     const defaults = defaultVerticalsAndDisciplines(application);
     const verticals = args.verticals ?? defaults.verticals;
     const disciplines = args.disciplines ?? defaults.disciplines;
+    // `assertDisciplinesMatchVerticals` is shared with users.ts and keeps its
+    // plain Error, so it runs before the reportable wrapper: a bad pick stays
+    // a client error instead of an unexpected failure.
     assertDisciplinesMatchVerticals(verticals, disciplines);
+
+    return await withReportableErrors("crewApplications.convertToMember", async () => {
+    if (!adminId) throw new Error("Unable to resolve admin user.");
 
     const arborOrg = await resolveOrCreateOrganization(ctx, "Arbor Live");
     const email = normalizeEmail(application.email);
@@ -806,5 +843,6 @@ export const convertToMember = mutation({
     });
 
     return { invitationId, email };
+    });
   },
 });
