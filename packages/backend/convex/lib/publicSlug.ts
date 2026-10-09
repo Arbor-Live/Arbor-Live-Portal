@@ -1,4 +1,5 @@
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { appError } from "./errors";
 
 export function slugifyPublicSlugFromName(name: string) {
   const slug = name
@@ -39,7 +40,10 @@ export function normalizePublicSlug(raw: string | undefined) {
   const slug = raw?.trim().toLowerCase();
   if (!slug) return undefined;
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
-    throw new Error("Public slug must be lowercase letters/numbers with single dashes.");
+    appError(
+      "PUBLIC_SLUG_INVALID",
+      "Public slug must be lowercase letters/numbers with single dashes.",
+    );
   }
   return slug;
 }
@@ -55,7 +59,10 @@ export async function assertUniqueBandPublicSlug(
     .withIndex("by_publicSlug", (q) => q.eq("publicSlug", slug))
     .unique();
   if (match && (!excludeOrganizationId || match.organizationId !== excludeOrganizationId)) {
-    throw new Error("Public slug is already in use by another artist profile.");
+    appError(
+      "BAND_PUBLIC_SLUG_TAKEN",
+      "Public slug is already in use by another artist profile.",
+    );
   }
 }
 
@@ -70,6 +77,6 @@ export async function assertUniqueMarketingPostSlug(
     .withIndex("by_slug", (q) => q.eq("slug", slug))
     .unique();
   if (match && (!excludePostId || match._id !== excludePostId)) {
-    throw new Error("Public slug is already in use by another post.");
+    appError("MARKETING_POST_SLUG_TAKEN", "Public slug is already in use by another post.");
   }
 }
