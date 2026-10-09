@@ -1698,21 +1698,23 @@ export const updatePaymentContactsByToken = mutation({
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
     await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
+    // The public token is the caller's authorization: check it before the
+    // reportable wrapper, so only the write itself is reported.
+    const invoice = await ctx.db
+      .query("invoices")
+      .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
+      .unique();
+    if (!invoice) appError("QUOTE_NOT_FOUND", "Quote not found.");
+    if (invoice.sourceEventRequestId) {
+      appError(
+        "QUOTE_USE_BOOKING_LINK",
+        "Please review this quote from your booking request link.",
+      );
+    }
+    if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
+      appError("QUOTE_NOT_FOUND", "Quote not found.");
+    }
     return await withReportableErrors("invoices.updatePaymentContactsByToken", async () => {
-      const invoice = await ctx.db
-        .query("invoices")
-        .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
-        .unique();
-      if (!invoice) appError("QUOTE_NOT_FOUND", "Quote not found.");
-      if (invoice.sourceEventRequestId) {
-        appError(
-          "QUOTE_USE_BOOKING_LINK",
-          "Please review this quote from your booking request link.",
-        );
-      }
-      if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
-        appError("QUOTE_NOT_FOUND", "Quote not found.");
-      }
       const { token: _token, ...contactArgs } = args;
       await updateInvoicePaymentContacts(ctx, invoice, contactArgs);
       return { ok: true as const };
@@ -1733,21 +1735,23 @@ export const addEventContactByToken = mutation({
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
     await enforceRateLimit(ctx, `publicEventContacts:${args.token}`, { limit: 60, windowMs: HOUR_MS });
+    // The public token is the caller's authorization: check it before the
+    // reportable wrapper, so only the write itself is reported.
+    const invoice = await ctx.db
+      .query("invoices")
+      .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
+      .unique();
+    if (!invoice || invoice.status === "void") appError("QUOTE_NOT_FOUND", "Quote not found.");
+    if (invoice.sourceEventRequestId) {
+      appError(
+        "QUOTE_USE_BOOKING_LINK",
+        "Please review this quote from your booking request link.",
+      );
+    }
+    if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
+      appError("QUOTE_NOT_FOUND", "Quote not found.");
+    }
     return await withReportableErrors("invoices.addEventContactByToken", async () => {
-      const invoice = await ctx.db
-        .query("invoices")
-        .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
-        .unique();
-      if (!invoice || invoice.status === "void") appError("QUOTE_NOT_FOUND", "Quote not found.");
-      if (invoice.sourceEventRequestId) {
-        appError(
-          "QUOTE_USE_BOOKING_LINK",
-          "Please review this quote from your booking request link.",
-        );
-      }
-      if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
-        appError("QUOTE_NOT_FOUND", "Quote not found.");
-      }
       await requirePublicEditableEvent(ctx, invoice, args.eventId);
       await addPublicEventContact(ctx, args.eventId, {
         name: args.name,
@@ -1769,21 +1773,23 @@ export const deleteEventContactByToken = mutation({
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
     await enforceRateLimit(ctx, `publicEventContacts:${args.token}`, { limit: 60, windowMs: HOUR_MS });
+    // The public token is the caller's authorization: check it before the
+    // reportable wrapper, so only the write itself is reported.
+    const invoice = await ctx.db
+      .query("invoices")
+      .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
+      .unique();
+    if (!invoice || invoice.status === "void") appError("QUOTE_NOT_FOUND", "Quote not found.");
+    if (invoice.sourceEventRequestId) {
+      appError(
+        "QUOTE_USE_BOOKING_LINK",
+        "Please review this quote from your booking request link.",
+      );
+    }
+    if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
+      appError("QUOTE_NOT_FOUND", "Quote not found.");
+    }
     return await withReportableErrors("invoices.deleteEventContactByToken", async () => {
-      const invoice = await ctx.db
-        .query("invoices")
-        .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
-        .unique();
-      if (!invoice || invoice.status === "void") appError("QUOTE_NOT_FOUND", "Quote not found.");
-      if (invoice.sourceEventRequestId) {
-        appError(
-          "QUOTE_USE_BOOKING_LINK",
-          "Please review this quote from your booking request link.",
-        );
-      }
-      if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
-        appError("QUOTE_NOT_FOUND", "Quote not found.");
-      }
       await requirePublicEditableEvent(ctx, invoice, args.eventId);
       await deletePublicEventContact(ctx, args.eventId, args.contactId);
       return { ok: true as const };
