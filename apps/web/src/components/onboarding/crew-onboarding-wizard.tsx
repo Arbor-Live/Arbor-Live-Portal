@@ -6,9 +6,6 @@ import { useMutation, useQuery } from "convex/react";
 import type { QuestionnaireItemDefinition } from "@shadcn/react/questionnaire";
 import { api, type Id } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import {
   Questionnaire,
@@ -23,12 +20,7 @@ import {
   QuestionnaireWizardProgress,
 } from "@/components/ui/questionnaire-wizard";
 import { normalizeAvatarFile } from "@/lib/image-processing";
-import {
-  OnboardingAckCheckbox,
-  OnboardingLinkCard,
-  OnboardingSkipButton,
-} from "@/components/onboarding/onboarding-ui";
-import { CONTRACTOR_PAY_INFO, ONBOARDING_LINKS } from "@/lib/onboarding-links";
+import { OnboardingSkipButton } from "@/components/onboarding/onboarding-ui";
 import { pacificDateAndTimeToMs, pacificDateKey } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useDevPreviewReady } from "@/hooks/use-dev-preview";
@@ -42,6 +34,10 @@ import { InstagramStep } from "./crew/steps/instagram-step";
 import { FwsStep } from "./crew/steps/fws-step";
 import { TrainingStep } from "./crew/steps/training-step";
 import { GettingPaidStep } from "./crew/steps/getting-paid-step";
+import { HoursStep } from "./crew/steps/hours-step";
+import { ContractorPayStep } from "./crew/steps/contractor-pay-step";
+import { SignatureStep } from "./crew/steps/signature-step";
+import { ThankYouStep } from "./crew/steps/thank-you-step";
 
 export function CrewOnboardingWizard() {
   const router = useRouter();
@@ -599,94 +595,16 @@ function StepBody({
       return <GettingPaidStep form={form} patch={patch} fieldError={fieldError} />;
 
     case "hours":
-      return (
-        <div className="space-y-4">
-          <p className="text-sm text-foreground/70">
-            Log your worked hours in Sequoia after every shift so payroll stays accurate.
-          </p>
-          <OnboardingLinkCard
-            href={ONBOARDING_LINKS.sequoiaTimecardHelp}
-            title="Sequoia Time Card guide"
-            description="How to enter time, effort, and absences"
-          />
-          <OnboardingAckCheckbox
-            checked={form.timecardAcknowledged}
-            onChange={(next) => patch({ timecardAcknowledged: next })}
-            label="I understand how to log my hours in Sequoia."
-          />
-          {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
-        </div>
-      );
+      return <HoursStep form={form} patch={patch} fieldError={fieldError} />;
 
     case "contractorPay":
-      return (
-        <div className="space-y-4">
-          <p className="text-sm text-foreground/70">
-            You&apos;re set up on external payroll. Email a completed W9 to{" "}
-            <a
-              className="font-medium text-primary underline-offset-4 hover:underline"
-              href={`mailto:${CONTRACTOR_PAY_INFO.w9Email}`}
-            >
-              {CONTRACTOR_PAY_INFO.w9Email}
-            </a>
-            , then submit an invoice for your worked hours {CONTRACTOR_PAY_INFO.invoiceCadence} to
-            the same address.
-          </p>
-          <ol className="list-decimal space-y-2 pl-4 text-sm text-foreground/70">
-            <li>
-              Complete a W9 and email it to{" "}
-              <span className="font-medium text-foreground">{CONTRACTOR_PAY_INFO.w9Email}</span>.
-            </li>
-            <li>
-              Every two weeks, email an invoice for hours worked (include dates, hours, and rate)
-              to the same address.
-            </li>
-          </ol>
-          <OnboardingAckCheckbox
-            checked={form.contractorPayAcknowledged}
-            onChange={(next) => patch({ contractorPayAcknowledged: next })}
-            label="I understand I need to submit a W9 and invoice Arbor Live every two weeks."
-          />
-          {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
-        </div>
-      );
+      return <ContractorPayStep form={form} patch={patch} fieldError={fieldError} />;
 
     case "signature":
-      return (
-        <div className="space-y-4">
-          <p className="text-sm text-foreground/70">
-            Review the full onboarding agreement, then sign below to complete onboarding.
-          </p>
-          <OnboardingLinkCard href={ONBOARDING_LINKS.onboardingDoc} title="Review the onboarding agreement" />
-
-          <div className="space-y-2">
-            <Label htmlFor="crew-signature">Type your full legal name to sign</Label>
-            <Input
-              id="crew-signature"
-              value={form.signatureLegalName}
-              onChange={(event) => patch({ signatureLegalName: event.target.value })}
-              placeholder="Full legal name"
-              autoFocus
-            />
-          </div>
-
-          <OnboardingAckCheckbox
-            checked={form.agreedToDoc}
-            onChange={(next) => patch({ agreedToDoc: next })}
-            label="I agree to the onboarding terms and expectations above."
-          />
-
-          {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
-        </div>
-      );
+      return <SignatureStep form={form} patch={patch} fieldError={fieldError} />;
 
     case "thankYou":
-      return (
-        <div className="space-y-4 text-sm text-foreground/70">
-          <p>Welcome to the crew! Your onboarding is complete.</p>
-          <Button onClick={onGoToDashboard}>Go to dashboard</Button>
-        </div>
-      );
+      return <ThankYouStep onGoToDashboard={onGoToDashboard} />;
 
     default:
       return null;
