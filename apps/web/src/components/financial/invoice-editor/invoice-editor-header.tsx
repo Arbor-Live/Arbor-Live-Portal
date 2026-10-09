@@ -337,21 +337,6 @@ export function InvoiceEditorHeader({
         back={{
           href: "/dashboard/ops-center/invoices",
           label: "Invoices",
-          onClick: (event) => {
-            // Modified clicks (new tab/window) leave this page as it is.
-            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-            if (!draft.isDraftDirty) return;
-            event.preventDefault();
-            void (async () => {
-              const ok = await confirm({
-                title: "Discard unsaved changes to this quote?",
-                description: "What you've typed that hasn't been saved will be lost.",
-                confirmLabel: "Discard changes",
-                destructive: true,
-              });
-              if (ok) router.push("/dashboard/ops-center/invoices");
-            })();
-          },
         }}
         actions={primaryAction}
         menu={menu}

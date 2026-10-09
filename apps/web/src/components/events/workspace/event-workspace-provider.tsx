@@ -45,6 +45,7 @@ import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import type { SaveStatus } from "@/hooks/use-convex-form";
 import { useBeforeUnload } from "@/hooks/use-before-unload";
+import { useNavigationGuard } from "@/hooks/use-navigation-guard";
 import {
   buildEventUpdatePatch,
   changedDraftKeys,
@@ -269,6 +270,13 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
   useBeforeUnload(
     dirty.size > 0 && canEdit,
     "You have unsaved changes on this event. Leaving the page will lose them.",
+  );
+  // The editor's own tab routes keep this provider mounted (the draft survives
+  // them), so only links out of /dashboard/events/[id] are guarded.
+  useNavigationGuard(
+    dirty.size > 0 && canEdit,
+    "Discard unsaved changes to this event?",
+    { surfacePrefix: `/dashboard/events/${eventId}` },
   );
 
   const dayCount = useMemo(() => {
