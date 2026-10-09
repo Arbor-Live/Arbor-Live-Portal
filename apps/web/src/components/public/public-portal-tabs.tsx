@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +29,11 @@ export function PublicPortalTabs({
   children: ReactNode;
 }) {
   const reduceMotion = useReducedMotion();
+  // Stable per instance, so the tab/panel ids survive re-renders and two
+  // tab bars on one page don't collide.
+  const idBase = useId();
+  const tabId = (id: string) => `${idBase}-tab-${id}`;
+  const panelId = (id: string) => `${idBase}-panel-${id}`;
 
   return (
     <>
@@ -45,7 +50,9 @@ export function PublicPortalTabs({
                 key={tab.id}
                 type="button"
                 role="tab"
+                id={tabId(tab.id)}
                 aria-selected={active}
+                aria-controls={panelId(tab.id)}
                 onClick={() => onSelect(tab.id)}
                 className={cn(
                   "relative shrink-0 px-0.5 pt-4 pb-3 text-sm font-medium transition-colors outline-none",
@@ -84,6 +91,10 @@ export function PublicPortalTabs({
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={activeTab}
+            role="tabpanel"
+            id={panelId(activeTab)}
+            aria-labelledby={tabId(activeTab)}
+            tabIndex={0}
             initial={reduceMotion ? false : { opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
