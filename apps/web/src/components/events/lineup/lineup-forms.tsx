@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Label } from "@/components/ui/label";
@@ -95,6 +95,7 @@ export function InviteBandForm({
   eventId,
   needId,
   embedded = false,
+  onDirtyChange,
   onSaved,
   onCancel,
 }: {
@@ -103,6 +104,8 @@ export function InviteBandForm({
   needId?: Id<"eventArtistNeeds">;
   /** Inside a dialog or side panel: no card border or heading. */
   embedded?: boolean;
+  /** Reports whether the form holds input that hasn't been sent yet. */
+  onDirtyChange?: (dirty: boolean) => void;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -116,6 +119,24 @@ export function InviteBandForm({
   const [memberCount, setMemberCount] = useState("4");
   const [fixedTotalUsd, setFixedTotalUsd] = useState("0");
   const [busy, setBusy] = useState(false);
+
+  const formSignature = JSON.stringify({
+    email,
+    artistName,
+    role,
+    pricingMode,
+    ratePerMemberPerHourUsd,
+    performanceHours,
+    memberCount,
+    fixedTotalUsd,
+  });
+  // Sent values become the new baseline: a delivered invite is no longer uncommitted.
+  const [baseline, setBaseline] = useState(formSignature);
+  const isDirty = formSignature !== baseline;
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const computedTotal = useMemo(() => {
     if (pricingMode === "fixed_total") return Number(fixedTotalUsd || "0");
@@ -161,6 +182,7 @@ export function InviteBandForm({
           parsed.data.pricingMode === "fixed_total" ? parsed.data.fixedTotalUsd : computedTotal,
       });
       notify.success(`Invite sent to ${parsed.data.email}.`);
+      setBaseline(formSignature);
       onSaved();
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
@@ -286,6 +308,7 @@ export function AddBandForm({
   hidePosition = false,
   excludedOrganizationIds,
   embedded = false,
+  onDirtyChange,
   onSaved,
   onCancel,
 }: {
@@ -299,6 +322,8 @@ export function AddBandForm({
   excludedOrganizationIds: string[];
   /** Inside a dialog or side panel: no card border or heading. */
   embedded?: boolean;
+  /** Reports whether the form holds a selection that hasn't been booked yet. */
+  onDirtyChange?: (dirty: boolean) => void;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -308,6 +333,15 @@ export function AddBandForm({
   const [role, setRole] = useState<ParticipationRole>("headliner");
   const [needId, setNeedId] = useState(defaultNeedId ?? "");
   const [busy, setBusy] = useState(false);
+
+  const formSignature = JSON.stringify({ organizationId, role, needId });
+  // Booked values become the new baseline: a confirmed booking is no longer uncommitted.
+  const [baseline, setBaseline] = useState(formSignature);
+  const isDirty = formSignature !== baseline;
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const bandOptions = useMemo(
     () => artistSelectOptions(bands, { excludeOrganizationIds: excludedOrganizationIds }),
@@ -327,6 +361,7 @@ export function AddBandForm({
         role,
         needId: (needId || undefined) as Id<"eventArtistNeeds"> | undefined,
       });
+      setBaseline(formSignature);
       onSaved();
     } catch (error) {
       notify.error(getConvexErrorMessage(error));

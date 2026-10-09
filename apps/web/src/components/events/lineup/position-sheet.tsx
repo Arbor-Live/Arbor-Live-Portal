@@ -183,12 +183,23 @@ function PositionSheetBody({
   const serverDraft = slot ? toSlotDraft(slot) : null;
   const [draft, setDraft] = useState<SlotDraft | null>(serverDraft);
   const slotDirty = Boolean(serverDraft && draft && !slotDraftsEqual(draft, serverDraft));
-  const [externalName, setExternalName] = useState(slot?.externalArtistName ?? "");
+  const savedName = slot?.externalArtistName ?? "";
+  const [externalName, setExternalName] = useState(savedName);
+  const [savedNameBaseline, setSavedNameBaseline] = useState(savedName);
   const [editingPayout, setEditingPayout] = useState(false);
-  const externalNameDirty = Boolean(slot && externalName.trim() !== slot.externalArtistName);
+  // The saved name can change under us (filled from Fill this position, or
+  // reopened): follow it unless the user has typed their own.
+  if (savedName !== savedNameBaseline) {
+    const untouched = externalName.trim() === savedNameBaseline;
+    setSavedNameBaseline(savedName);
+    if (untouched) setExternalName(savedName);
+  }
+  const externalNameDirty = Boolean(slot && externalName.trim() !== savedName);
+  const [timesDirty, setTimesDirty] = useState(false);
+  const [fillDirty, setFillDirty] = useState(false);
   useEffect(() => {
-    onDirtyChange(slotDirty || externalNameDirty);
-  }, [slotDirty, externalNameDirty, onDirtyChange]);
+    onDirtyChange(slotDirty || externalNameDirty || timesDirty || fillDirty);
+  }, [slotDirty, externalNameDirty, timesDirty, fillDirty, onDirtyChange]);
 
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
@@ -284,6 +295,7 @@ function PositionSheetBody({
             eventEndAt={eventEndAt}
             busy={busy}
             onSave={(times) => run(() => handlers.saveTimes(row, times))}
+            onDirtyChange={setTimesDirty}
           />
         </SheetSection>
       ) : null}
@@ -332,6 +344,7 @@ function PositionSheetBody({
             excludedOrganizationIds={excludedOrganizationIds}
             busy={busy}
             onOutside={(name) => run(() => handlers.saveExternal(slot, name))}
+            onDirtyChange={setFillDirty}
           />
         ) : null}
       </SheetSection>
@@ -526,15 +539,23 @@ function FillPosition({
   excludedOrganizationIds,
   busy,
   onOutside,
+  onDirtyChange,
 }: {
   slot: SlotRow;
   eventId: Id<"events">;
   excludedOrganizationIds: string[];
   busy: boolean;
   onOutside: (name: string) => Promise<void>;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   const [mode, setMode] = useState<FillMode>("existing");
   const [name, setName] = useState("");
+  const [formDirty, setFormDirty] = useState(false);
+  const isDirty = name.trim() !== "" || formDirty;
+  useEffect(() => {
+    onDirtyChange(isDirty);
+  }, [isDirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   return (
     <div className="space-y-3">
       <ToggleGroup
@@ -565,6 +586,7 @@ function FillPosition({
           positionOptions={[]}
           defaultNeedId={slot.needId}
           excludedOrganizationIds={excludedOrganizationIds}
+          onDirtyChange={setFormDirty}
           onSaved={() => undefined}
           onCancel={() => undefined}
         />
@@ -573,6 +595,7 @@ function FillPosition({
           embedded
           eventId={eventId}
           needId={slot.needId}
+          onDirtyChange={setFormDirty}
           onSaved={() => undefined}
           onCancel={() => setMode("existing")}
         />
@@ -613,6 +636,7 @@ function PerformanceTimes({
   eventEndAt,
   busy,
   onSave,
+  onDirtyChange,
 }: {
   eventId: Id<"events">;
   set: Window;
@@ -621,9 +645,16 @@ function PerformanceTimes({
   eventEndAt?: number;
   busy: boolean;
   onSave: (times: ActTimesPatch) => void;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   // Times only: the date comes from the event (a day picker appears on multi-day events).
   const dayKeys = eventStartAt != null ? eventDayKeys(eventStartAt, eventEndAt) : [];
+  const [setDirty, setSetDirty] = useState(false);
+  const [soundcheckDirty, setSoundcheckDirty] = useState(false);
+  useEffect(() => {
+    onDirtyChange(setDirty || soundcheckDirty);
+  }, [setDirty, soundcheckDirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   return (
     <div className="space-y-3">
       <TimeWindowField
@@ -632,6 +663,7 @@ function PerformanceTimes({
         dayKeys={dayKeys}
         busy={busy}
         onChange={([setStartsAt, setEndsAt]) => onSave({ setStartsAt, setEndsAt })}
+        onDirtyChange={setSetDirty}
       />
       <TimeWindowField
         label="Soundcheck"
@@ -641,6 +673,7 @@ function PerformanceTimes({
         onChange={([soundcheckStartsAt, soundcheckEndsAt]) =>
           onSave({ soundcheckStartsAt, soundcheckEndsAt })
         }
+        onDirtyChange={setSoundcheckDirty}
       />
       <Link
         href={getEventEditorTabPath(eventId, "schedule")}
@@ -656,6 +689,16 @@ function timeOf(ms: number | null) {
   return ms != null ? toPacificDateTimeInput(ms).slice(11, 16) : "";
 }
 
+/** The committed window as the field's text inputs show it. */
+function windowDraft(value: Window, dayKeys: string[]): { day: string; start: string; end: string } {
+  const [start, end] = value;
+  return {
+    day: start != null ? dayKeyForStart(start, dayKeys) : "",
+    start: timeOf(start),
+    end: timeOf(end),
+  };
+}
+
 function dayLabel(dayKey: string, index: number) {
   const date = pacificDateAndTimeToMs(dayKey, "12:00");
   return `Day ${index + 1}${date != null ? ` · ${formatDate(date)}` : ""}`;
@@ -667,20 +710,27 @@ function TimeWindowField({
   dayKeys,
   busy,
   onChange,
+  onDirtyChange,
 }: {
   label: string;
   value: Window;
   dayKeys: string[];
   busy: boolean;
   onChange: (next: Window) => void;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   const [start, end] = value;
-  // A draft while typing: nothing saves until both times are filled in.
-  const [draft, setDraft] = useState({
-    day: start != null ? dayKeyForStart(start, dayKeys) : "",
-    start: timeOf(start),
-    end: timeOf(end),
-  });
+  // A draft while typing: nothing saves until both times are filled in. The
+  // field remounts whenever the saved window changes (PerformanceTimes is keyed
+  // on it), so this snapshot is what's saved for the life of the field.
+  const [savedDraft] = useState(() => windowDraft(value, dayKeys));
+  const [draft, setDraft] = useState(savedDraft);
+  const isDirty =
+    draft.day !== savedDraft.day || draft.start !== savedDraft.start || draft.end !== savedDraft.end;
+  useEffect(() => {
+    onDirtyChange(isDirty);
+  }, [isDirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   // The event can load after the panel opens (a deep link): until the user
   // picks a day, use the saved start's day or the event's first day.
   const day = draft.day || (start != null ? dayKeyForStart(start, dayKeys) : (dayKeys[0] ?? ""));
