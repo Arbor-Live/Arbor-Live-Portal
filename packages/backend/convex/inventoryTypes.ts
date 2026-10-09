@@ -19,6 +19,7 @@ import {
   diffReleasedR2Keys,
   releaseR2KeysIfUnreferenced,
 } from "./lib/r2Lifecycle";
+import { appError, withReportableErrors } from "./lib/errors";
 import { scheduleInventoryTypeSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 import { ensureDefaultCategories } from "./inventoryCategories";
 
@@ -90,7 +91,10 @@ async function validateCapabilities(
       .withIndex("by_key", (q) => q.eq("key", capability))
       .unique();
     if (!definition || !definition.active) {
-      throw new Error(`Unknown or inactive capability key: ${capability}`);
+      appError(
+        "INVENTORY_TYPE_CAPABILITY_UNKNOWN",
+        `Unknown or inactive capability key: ${capability}`,
+      );
     }
   }
 }
@@ -111,7 +115,7 @@ async function validateCategory(ctx: MutationCtx, category: string) {
       .unique();
   }
   if (!existing || !existing.active) {
-    throw new Error(`Unknown or inactive category key: ${category}`);
+    appError("INVENTORY_TYPE_CATEGORY_UNKNOWN", `Unknown or inactive category key: ${category}`);
   }
 }
 
@@ -119,7 +123,10 @@ function normalizePublicSlug(raw: string | undefined) {
   const slug = raw?.trim().toLowerCase();
   if (!slug) return undefined;
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
-    throw new Error("Public slug must be lowercase letters/numbers with single dashes.");
+    appError(
+      "INVENTORY_TYPE_SLUG_INVALID",
+      "Public slug must be lowercase letters/numbers with single dashes.",
+    );
   }
   return slug;
 }
@@ -135,7 +142,10 @@ async function assertUniqueTypePublicSlug(
     .withIndex("by_publicSlug", (q) => q.eq("publicSlug", slug))
     .unique();
   if (match && (!excludeId || match._id !== excludeId)) {
-    throw new Error("Public slug is already in use by another inventory type.");
+    appError(
+      "INVENTORY_TYPE_SLUG_TAKEN",
+      "Public slug is already in use by another inventory type.",
+    );
   }
 }
 
@@ -424,6 +434,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("inventoryTypes.create", async () => {
     const now = Date.now();
     const capabilities = (args.capabilities ?? []).map((cap) => cap.trim().toLowerCase());
     await validateCapabilities(ctx, capabilities);
@@ -448,7 +459,7 @@ export const create = mutation({
         .withIndex("by_publicSlug", (q) => q.eq("publicSlug", publicSlug))
         .unique();
       if (packageSlug) {
-        throw new Error("Public slug is already in use by a package.");
+        appError("INVENTORY_TYPE_SLUG_PACKAGE_TAKEN", "Public slug is already in use by a package.");
       }
     }
 
@@ -480,6 +491,7 @@ export const create = mutation({
     }
 
     return typeId;
+    });
   },
 });
 
@@ -508,8 +520,9 @@ export const update = mutation({
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("inventoryTypes.update", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Type not found.");
+    if (!existing) appError("INVENTORY_TYPE_NOT_FOUND", "Type not found.");
 
     const capabilities = (args.capabilities ?? []).map((cap) => cap.trim().toLowerCase());
     await validateCapabilities(ctx, capabilities);
@@ -539,7 +552,7 @@ export const update = mutation({
         .withIndex("by_publicSlug", (q) => q.eq("publicSlug", publicSlug))
         .unique();
       if (packageSlug) {
-        throw new Error("Public slug is already in use by a package.");
+        appError("INVENTORY_TYPE_SLUG_PACKAGE_TAKEN", "Public slug is already in use by a package.");
       }
     }
 
@@ -599,6 +612,7 @@ export const update = mutation({
     if (publicListing || existing.publicListing) {
       await scheduleInventoryTypeSiteRevalidation(ctx);
     }
+    });
   },
 });
 
@@ -611,11 +625,15 @@ export const bulkUpdateVisibility = mutation({
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("inventoryTypes.bulkUpdateVisibility", async () => {
     if (!args.ids.length) {
       return { updated: 0 };
     }
     if (args.publicListing === undefined && args.publicProfile === undefined) {
-      throw new Error("Specify at least one visibility field to update.");
+      appError(
+        "INVENTORY_TYPE_VISIBILITY_FIELDS_REQUIRED",
+        "Specify at least one visibility field to update.",
+      );
     }
 
     const now = Date.now();
@@ -647,6 +665,7 @@ export const bulkUpdateVisibility = mutation({
     }
 
     return { updated };
+    });
   },
 });
 
@@ -655,15 +674,19 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("inventoryTypes.remove", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Type not found.");
+    if (!existing) appError("INVENTORY_TYPE_NOT_FOUND", "Type not found.");
 
     const linkedItem = await ctx.db
       .query("inventoryItems")
       .withIndex("by_typeId", (q) => q.eq("typeId", args.id))
       .first();
     if (linkedItem) {
-      throw new Error("Cannot delete type with linked inventory items.");
+      appError(
+        "INVENTORY_TYPE_HAS_ITEMS",
+        "Cannot delete type with linked inventory items.",
+      );
     }
 
     const linkedPackageItem = await ctx.db
@@ -671,7 +694,7 @@ export const remove = mutation({
       .withIndex("by_typeId", (q) => q.eq("typeId", args.id))
       .first();
     if (linkedPackageItem) {
-      throw new Error("Cannot delete type used in packages.");
+      appError("INVENTORY_TYPE_IN_PACKAGE", "Cannot delete type used in packages.");
     }
 
     const keysToRelease = collectKeysFromInventoryType(existing);
@@ -681,5 +704,6 @@ export const remove = mutation({
     if (existing.publicListing) {
       await scheduleInventoryTypeSiteRevalidation(ctx);
     }
+    });
   },
 });
