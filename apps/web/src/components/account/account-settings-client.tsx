@@ -1,5 +1,6 @@
 "use client";
 
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { Id } from "backend/convex/_generated/dataModel";
@@ -216,7 +217,7 @@ export function AccountSettingsClient() {
       await refetchSession();
       setAvatarMessage("Profile photo updated.");
     } catch (error) {
-      setAvatarError(error instanceof Error ? error.message : "Unable to update profile photo.");
+      setAvatarError(getConvexErrorMessage(error, "Unable to update profile photo."));
     } finally {
       setAvatarBusy(false);
     }
@@ -237,7 +238,7 @@ export function AccountSettingsClient() {
       await refetchSession();
       setAvatarMessage("Profile photo removed.");
     } catch (error) {
-      setAvatarError(error instanceof Error ? error.message : "Unable to remove profile photo.");
+      setAvatarError(getConvexErrorMessage(error, "Unable to remove profile photo."));
     } finally {
       setAvatarBusy(false);
     }
