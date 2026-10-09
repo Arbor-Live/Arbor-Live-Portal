@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { isValidEmail } from "./bandOrgInvite";
+import { appError } from "./errors";
 import { listEventsLinkedToInvoice } from "./invoiceEvents";
 
 /**
@@ -17,11 +18,14 @@ export async function requirePublicEditableEvent(
   eventId: Id<"events">,
 ): Promise<Doc<"events">> {
   if ((invoice.clientApprovalStatus ?? "pending") !== "approved") {
-    throw new Error("You can edit contacts once your quote is approved.");
+    appError(
+      "QUOTE_CONTACTS_REQUIRES_APPROVAL",
+      "You can edit contacts once your quote is approved.",
+    );
   }
   const events = await listEventsLinkedToInvoice(ctx, invoice._id);
   const event = events.find((row) => row._id === eventId);
-  if (!event) throw new Error("Event not found on this quote.");
+  if (!event) appError("EVENT_NOT_ON_QUOTE", "Event not found on this quote.");
   return event;
 }
 
@@ -36,10 +40,10 @@ export async function addPublicEventContact(
   },
 ): Promise<Id<"eventContacts">> {
   const name = input.name.trim();
-  if (!name) throw new Error("Contact name is required.");
+  if (!name) appError("CONTACT_NAME_REQUIRED", "Contact name is required.");
   const email = input.email?.trim() || undefined;
   if (email && !isValidEmail(email)) {
-    throw new Error("Enter a valid email address.");
+    appError("CONTACT_EMAIL_INVALID", "Enter a valid email address.");
   }
 
   const existing = await ctx.db
@@ -47,7 +51,10 @@ export async function addPublicEventContact(
     .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
     .take(MAX_PUBLIC_EVENT_CONTACTS + 1);
   if (existing.length >= MAX_PUBLIC_EVENT_CONTACTS) {
-    throw new Error(`This event already has the maximum of ${MAX_PUBLIC_EVENT_CONTACTS} contacts.`);
+    appError(
+      "CONTACT_LIMIT",
+      `This event already has the maximum of ${MAX_PUBLIC_EVENT_CONTACTS} contacts.`,
+    );
   }
   const maxSortOrder = existing.reduce((max, row) => Math.max(max, row.sortOrder), -1);
 
@@ -73,7 +80,7 @@ export async function deletePublicEventContact(
 ): Promise<void> {
   const contact = await ctx.db.get(contactId);
   if (!contact || contact.eventId !== eventId) {
-    throw new Error("Contact not found.");
+    appError("CONTACT_NOT_FOUND", "Contact not found.");
   }
   await ctx.db.delete(contactId);
   await ctx.db.patch(eventId, { eventContactsUpdatedAt: Date.now() });
