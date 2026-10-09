@@ -49,141 +49,21 @@ import {
   BAND_PAYEE_MAILING_ADDRESS_HINT,
   BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER,
   DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
-  type BandPayeePayoutMethod,
 } from "@/lib/band-payout-copy";
 import { useDevPreviewReady } from "@/hooks/use-dev-preview";
 import { trimOptional } from "@/lib/band-profile-lists";
 import { slugifyBandName } from "@/lib/validations/bands";
-
-type StepId =
-  | "welcome"
-  | "identity"
-  | "passkey"
-  | "hero"
-  | "socials"
-  | "members"
-  | "rates"
-  | "payment"
-  | "thankYou";
-
-const QUESTION_STEPS: StepId[] = [
-  "welcome",
-  "identity",
-  "passkey",
-  "hero",
-  "socials",
-  "members",
-  "rates",
-  "payment",
-];
-
-const STEP_ORDER: StepId[] = [...QUESTION_STEPS, "thankYou"];
-
-const STEP_HEADLINES: Record<StepId, string> = {
-  welcome: "Welcome to Arbor Live",
-  identity: "Tell us about your artist profile",
-  passkey: "Secure your account",
-  hero: "Add a hero photo",
-  socials: "Where can people find you?",
-  members: "Who's in the group?",
-  rates: "Rates & payout details",
-  payment: "How payouts work",
-  thankYou: "You're all set!",
-};
-
-type FormState = {
-  displayName: string;
-  bio: string;
-  publicHeroImageUrl: string;
-  artistLinks: Array<{ label: string; url: string; icon?: string }>;
-  organizationType: string;
-  demoURL: string;
-  publicListing: boolean;
-  publicSlug: string;
-  performerHourlyRateUsd: number;
-  designatedPayeeUserId: string;
-  designatedPayeeName: string;
-  designatedPayeeEmail: string;
-  designatedPayeeMailingAddress: string;
-  designatedPayeePayoutMethod: BandPayeePayoutMethod;
-  inviteDraft: string;
-  inviteRoleDraft: string;
-  inviteEmails: Array<{ email: string; bandRole: string }>;
-  isSolo: boolean;
-  paymentExplainedAck: boolean;
-};
-
-const EMPTY_FORM: FormState = {
-  displayName: "",
-  bio: "",
-  publicHeroImageUrl: "",
-  artistLinks: [],
-  organizationType: "",
-  demoURL: "",
-  publicListing: false,
-  publicSlug: "",
-  performerHourlyRateUsd: 0,
-  designatedPayeeUserId: "",
-  designatedPayeeName: "",
-  designatedPayeeEmail: "",
-  designatedPayeeMailingAddress: "",
-  designatedPayeePayoutMethod: DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
-  inviteDraft: "",
-  inviteRoleDraft: "",
-  inviteEmails: [],
-  isSolo: false,
-  paymentExplainedAck: false,
-};
-
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
-
-function isValidEmail(email: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-const PENDING_PAYEE_PREFIX = "pending:";
-
-
-function firstIncompleteStepIndex(onboarding: {
-  identityCompletedAt?: number;
-  heroCompletedAt?: number;
-  socialsCompletedAt?: number;
-  membersCompletedAt?: number;
-  soloAcknowledgedAt?: number;
-  ratesPayeeCompletedAt?: number;
-  paymentExplainedAt?: number;
-}): number {
-  const done = {
-    identity: Boolean(onboarding.identityCompletedAt),
-    hero: Boolean(onboarding.heroCompletedAt),
-    socials: Boolean(onboarding.socialsCompletedAt),
-    members: Boolean(onboarding.membersCompletedAt || onboarding.soloAcknowledgedAt),
-    rates: Boolean(onboarding.ratesPayeeCompletedAt),
-    payment: Boolean(onboarding.paymentExplainedAt),
-  };
-  const hasProgress = Object.values(done).some(Boolean);
-  for (let i = 0; i < STEP_ORDER.length; i += 1) {
-    const id = STEP_ORDER[i]!;
-    if (id === "welcome") {
-      if (hasProgress) continue;
-      return i;
-    }
-    if (id === "thankYou") return i;
-    // No persisted completion flag — never force a returning user back to it.
-    if (id === "passkey") continue;
-    if (id === "identity" && done.identity) continue;
-    if (id === "hero" && done.hero) continue;
-    if (id === "socials" && done.socials) continue;
-    if (id === "members" && done.members) continue;
-    if (id === "rates" && done.rates) continue;
-    if (id === "payment" && done.payment) continue;
-    return i;
-  }
-  return 0;
-}
-
+import {
+  EMPTY_FORM,
+  PENDING_PAYEE_PREFIX,
+  QUESTION_STEPS,
+  STEP_HEADLINES,
+  STEP_ORDER,
+  firstIncompleteStepIndex,
+  isValidEmail,
+  normalizeEmail,
+} from "./artist/constants";
+import type { FormState, StepId } from "./artist/types";
 
 export function BandOnboardingWizard() {
   const router = useRouter();
