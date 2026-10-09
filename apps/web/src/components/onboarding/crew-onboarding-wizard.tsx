@@ -22,34 +22,23 @@ import {
   QuestionnaireWizardFooter,
   QuestionnaireWizardProgress,
 } from "@/components/ui/questionnaire-wizard";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { AvatarUploadField } from "@/components/account/avatar-upload-field";
 import { normalizeAvatarFile } from "@/lib/image-processing";
 import {
   OnboardingAckCheckbox,
   OnboardingLinkCard,
-  OnboardingPasskeyStep,
   OnboardingSkipButton,
-  OnboardingTextarea,
   OnboardingYesNoChoice,
 } from "@/components/onboarding/onboarding-ui";
 import { CONTRACTOR_PAY_INFO, FWS_JOB_INFO, ONBOARDING_LINKS } from "@/lib/onboarding-links";
-import {
-  STANFORD_POSITION_LABELS,
-  STANFORD_POSITION_OPTIONS,
-  type StanfordPositionOption,
-} from "@/lib/validations/users";
 import { pacificDateAndTimeToMs, pacificDateKey } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useDevPreviewReady } from "@/hooks/use-dev-preview";
 import { EMPTY_FORM, QUESTION_STEPS, STEP_HEADLINES, stepOrderForPayroll } from "./crew/constants";
 import type { FormState, StepId } from "./crew/types";
+import { WelcomeStep } from "./crew/steps/welcome-step";
+import { ProfileStep } from "./crew/steps/profile-step";
+import { PasskeyStep } from "./crew/steps/passkey-step";
+import { WhatsappStep } from "./crew/steps/whatsapp-step";
 
 export function CrewOnboardingWizard() {
   const router = useRouter();
@@ -572,160 +561,27 @@ function StepBody({
 
   switch (stepId) {
     case "welcome":
-      return (
-        <div className="space-y-4 text-sm text-foreground/70">
-          <p>
-            We&apos;re glad you&apos;re joining the crew. This short walkthrough covers everything
-            you need before your first shift: our WhatsApp and Instagram, required safety
-            training, Federal Work Study, how to get paid, and logging your hours.
-          </p>
-          <p>It takes about 10 minutes. You can leave anytime and pick up where you left off.</p>
-        </div>
-      );
+      return <WelcomeStep />;
 
     case "profile":
       return (
-        <div className="space-y-4">
-          <AvatarUploadField
-            name={form.name || "Crew member"}
-            email={avatarSeedEmail}
-            imageUrl={avatarUrl || null}
-            buttonLabel="Upload photo"
-            busy={avatarBusy}
-            previewOnly={previewOnly}
-            onSelected={(file) => void onAvatarSelected(file)}
-          />
-          <p className="text-xs text-muted-foreground">PNG or JPG, up to 2 MB. Optional.</p>
-
-          <div className="space-y-2">
-            <Label htmlFor="crew-name">Full name</Label>
-            <Input
-              id="crew-name"
-              value={form.name}
-              onChange={(event) => patch({ name: event.target.value })}
-              placeholder="Your full name"
-              autoFocus
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="crew-username">Username (optional)</Label>
-            <Input
-              id="crew-username"
-              value={form.username}
-              onChange={(event) => patch({ username: event.target.value })}
-              placeholder="jane_doe"
-              autoComplete="username"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="crew-phone">Phone number</Label>
-            <Input
-              id="crew-phone"
-              type="tel"
-              value={form.phone}
-              onChange={(event) => patch({ phone: event.target.value })}
-              placeholder="Your phone number"
-              autoComplete="tel"
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="crew-pronouns">Pronouns (optional)</Label>
-              <Input
-                id="crew-pronouns"
-                value={form.pronouns}
-                onChange={(event) => patch({ pronouns: event.target.value })}
-                placeholder="she/her"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="crew-grad-year">Graduation year (optional)</Label>
-              <Input
-                id="crew-grad-year"
-                inputMode="numeric"
-                value={form.gradYear}
-                onChange={(event) => patch({ gradYear: event.target.value })}
-                placeholder="2027"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="crew-student-type">Student type</Label>
-            <Select
-              value={form.stanfordPosition || undefined}
-              onValueChange={(value) =>
-                patch({ stanfordPosition: value as StanfordPositionOption })
-              }
-            >
-              <SelectTrigger id="crew-student-type">
-                <SelectValue placeholder="Select a student type" />
-              </SelectTrigger>
-              <SelectContent>
-                {STANFORD_POSITION_OPTIONS.map((position) => (
-                  <SelectItem key={position} value={position}>
-                    {STANFORD_POSITION_LABELS[position]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="crew-calendar-email">Calendar invite email (optional)</Label>
-            <Input
-              id="crew-calendar-email"
-              type="email"
-              value={form.calendarInviteEmail}
-              onChange={(event) => patch({ calendarInviteEmail: event.target.value })}
-              placeholder="Leave blank to use your account email"
-            />
-          </div>
-
-          <OnboardingAckCheckbox
-            checked={form.showOnPublicCrewPage}
-            onChange={(next) => patch({ showOnPublicCrewPage: next })}
-            label="List me on the public crew page with a short blurb."
-          />
-
-          {form.showOnPublicCrewPage ? (
-            <OnboardingTextarea
-              value={form.publicCrewDescription}
-              onChange={(event) => patch({ publicCrewDescription: event.target.value })}
-              placeholder="A sentence or two about yourself…"
-            />
-          ) : null}
-
-          {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
-        </div>
+        <ProfileStep
+          form={form}
+          patch={patch}
+          fieldError={fieldError}
+          avatarBusy={avatarBusy}
+          avatarUrl={avatarUrl}
+          avatarSeedEmail={avatarSeedEmail}
+          onAvatarSelected={onAvatarSelected}
+          previewOnly={previewOnly}
+        />
       );
 
     case "passkey":
-      return <OnboardingPasskeyStep onAdded={onPasskeyAdded} />;
+      return <PasskeyStep onPasskeyAdded={onPasskeyAdded} />;
 
     case "whatsapp":
-      return (
-        <div className="space-y-4">
-          <p className="text-sm text-foreground/70">
-            Crew coordination, shift reminders, and last-minute changes all happen in our WhatsApp
-            group, <span className="font-medium">{ONBOARDING_LINKS.whatsappGroupName}</span>.
-          </p>
-          <OnboardingLinkCard
-            href={ONBOARDING_LINKS.whatsappInvite}
-            title="Join the WhatsApp group"
-            description={ONBOARDING_LINKS.whatsappGroupName}
-          />
-          <OnboardingAckCheckbox
-            checked={form.whatsappAcknowledged}
-            onChange={(next) => patch({ whatsappAcknowledged: next })}
-            label="I've joined the Arbor WhatsApp group."
-          />
-          {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
-        </div>
-      );
+      return <WhatsappStep form={form} patch={patch} fieldError={fieldError} />;
 
     case "instagram":
       return (
