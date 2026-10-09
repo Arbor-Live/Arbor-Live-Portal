@@ -7,7 +7,7 @@ vi.mock("@sentry/nextjs", () => ({
   captureException: (...args: unknown[]) => captureException(...args),
 }));
 
-import { getConvexAppErrorData, getConvexErrorMessage } from "./convex-error";
+import { getConvexAppErrorData, getConvexErrorMessage, reportConvexClientError } from "./convex-error";
 
 describe("getConvexErrorMessage", () => {
   beforeEach(() => {
@@ -96,5 +96,43 @@ describe("getConvexAppErrorData", () => {
       message: "Quote not found.",
       report: false,
     });
+  });
+});
+
+describe("reportConvexClientError", () => {
+  beforeEach(() => {
+    captureException.mockClear();
+  });
+
+  it("captures a reportable error once with convex_code and convex_function tags", () => {
+    const error = new ConvexError({
+      code: "UNEXPECTED",
+      message: "Something went wrong. Please try again.",
+      report: true,
+      function: "events.update",
+      causeName: "TypeError",
+    });
+    reportConvexClientError(error);
+    reportConvexClientError(error);
+    expect(captureException).toHaveBeenCalledTimes(1);
+    expect(captureException.mock.calls[0]?.[1]).toMatchObject({
+      tags: {
+        convex_code: "UNEXPECTED",
+        convex_function: "events.update",
+        convex_cause: "TypeError",
+      },
+    });
+  });
+
+  it("does not capture expected errors with report false", () => {
+    reportConvexClientError(
+      new ConvexError({
+        code: "EVENT_NOT_FOUND",
+        message: "Event not found.",
+        report: false,
+      }),
+    );
+    reportConvexClientError(new Error("Event not found."));
+    expect(captureException).not.toHaveBeenCalled();
   });
 });
