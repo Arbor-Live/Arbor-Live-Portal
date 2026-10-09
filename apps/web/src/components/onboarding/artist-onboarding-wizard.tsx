@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
-import { PlusIcon, XIcon } from "@phosphor-icons/react";
 import type { QuestionnaireItemDefinition } from "@shadcn/react/questionnaire";
 import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -11,15 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
-import { MarketingLinksEditor } from "@/components/marketing/marketing-links-editor";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ARTIST_TYPES, ARTIST_TYPE_LABELS } from "@/lib/artist-types";
+import { UserSelect } from "@/components/users/user-select";
+import { toUserSelectOption } from "@/lib/user-select-description";
+import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import {
   Questionnaire,
@@ -33,10 +26,6 @@ import {
   QuestionnaireWizardFooter,
   QuestionnaireWizardProgress,
 } from "@/components/ui/questionnaire-wizard";
-import { BandHeroUploadField } from "@/components/files/file-upload-field";
-import { UserSelect } from "@/components/users/user-select";
-import { toUserSelectOption } from "@/lib/user-select-description";
-import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
 import {
   OnboardingAckCheckbox,
   OnboardingSkipButton,
@@ -66,6 +55,9 @@ import type { FormState, StepId } from "./artist/types";
 import { WelcomeStep } from "./artist/steps/welcome-step";
 import { IdentityStep } from "./artist/steps/identity-step";
 import { PasskeyStep } from "./artist/steps/passkey-step";
+import { HeroStep } from "./artist/steps/hero-step";
+import { SocialsStep } from "./artist/steps/socials-step";
+import { MembersStep } from "./artist/steps/members-step";
 
 export function BandOnboardingWizard() {
   const router = useRouter();
@@ -567,37 +559,7 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.hero}
                 </QuestionnaireTitle>
-                <div className="space-y-4">
-                  <p className="text-sm text-foreground/70">
-                    Add a hero photo for your public artist page. You can skip this and add one
-                    later.
-                  </p>
-                  {profile ? (
-                    <BandHeroUploadField
-                      organizationId={profile.organizationId}
-                      currentUrl={form.publicHeroImageUrl}
-                      urlValue={form.publicHeroImageUrl}
-                      onUploaded={(url) => patch({ publicHeroImageUrl: url })}
-                      onUrlChange={(url) => patch({ publicHeroImageUrl: url })}
-                      onClear={() => patch({ publicHeroImageUrl: "" })}
-                    />
-                  ) : (
-                    <p className="rounded-md border border-dashed border-border/80 px-3 py-6 text-center text-sm text-muted-foreground">
-                      Hero upload needs an active artist org — paste a URL below for UI preview.
-                    </p>
-                  )}
-                  {!profile ? (
-                    <div className="space-y-2">
-                      <Label htmlFor="band-hero-url">Hero image URL</Label>
-                      <Input
-                        id="band-hero-url"
-                        value={form.publicHeroImageUrl}
-                        onChange={(event) => patch({ publicHeroImageUrl: event.target.value })}
-                        placeholder="https://…"
-                      />
-                    </div>
-                  ) : null}
-                </div>
+                <HeroStep form={form} patch={patch} profile={profile} />
                 <MarkStepAnswered />
                 <QuestionnaireFieldError className="text-sm">
                   {currentStep === "hero" ? fieldError : null}
@@ -611,68 +573,7 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.socials}
                 </QuestionnaireTitle>
-                <div className="space-y-4">
-                  <MarketingLinksEditor
-                    idPrefix="band-onboarding-links"
-                    links={form.artistLinks}
-                    onLinksChange={(links) => patch({ artistLinks: links })}
-                    label="Links"
-                  />
-
-                  <div className="space-y-2">
-                    <Label>Artist type</Label>
-                    <Select
-                      value={form.organizationType || undefined}
-                      onValueChange={(value) => patch({ organizationType: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ARTIST_TYPES.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {ARTIST_TYPE_LABELS[type]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="band-demo">Demo / listening link</Label>
-                    <Input
-                      id="band-demo"
-                      value={form.demoURL}
-                      onChange={(event) => patch({ demoURL: event.target.value })}
-                      placeholder="SoundCloud, Drive…"
-                    />
-                  </div>
-<OnboardingAckCheckbox
-                    checked={form.publicListing}
-                    onChange={(next) => {
-                      const nextSlug =
-                        next && !form.publicSlug.trim()
-                          ? slugifyBandName(form.displayName)
-                          : form.publicSlug;
-                      patch({
-                        publicListing: next,
-                        ...(nextSlug !== form.publicSlug ? { publicSlug: nextSlug } : {}),
-                      });
-                    }}
-                    label="List us on the public artists page."
-                  />
-                  {form.publicListing ? (
-                    <div className="space-y-2">
-                      <Label htmlFor="band-slug">Public URL slug</Label>
-                      <Input
-                        id="band-slug"
-                        value={form.publicSlug}
-                        onChange={(event) => patch({ publicSlug: event.target.value })}
-                        placeholder="my-artist-name"
-                      />
-                    </div>
-                  ) : null}
-                </div>
+                <SocialsStep form={form} patch={patch} />
                 <MarkStepAnswered />
                 <QuestionnaireFieldError className="text-sm">
                   {currentStep === "socials" ? fieldError : null}
@@ -686,123 +587,14 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.members}
                 </QuestionnaireTitle>
-                <div className="space-y-4">
-                  <p className="text-sm text-foreground/70">
-                    Invite members now so you can designate one of them as the payee on the next
-                    step. You can invite multiple people.
-                  </p>
-                  <OnboardingAckCheckbox
-                    checked={form.isSolo}
-                    onChange={(next) =>
-                      patch({
-                        isSolo: next,
-                        inviteDraft: next ? "" : form.inviteDraft,
-                        inviteEmails: next ? [] : form.inviteEmails,
-                      })
-                    }
-                    label="I'm performing solo — no other members to invite."
-                  />
-                  {!form.isSolo ? (
-                    <div className="space-y-3">
-                      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-                        <div className="min-w-0 space-y-2">
-                          <Label htmlFor="band-invite-email">Member email</Label>
-                          <Input
-                            id="band-invite-email"
-                            type="email"
-                            value={form.inviteDraft}
-                            onChange={(event) => patch({ inviteDraft: event.target.value })}
-                            onKeyDown={(event) => {
-                              if (event.key !== "Enter") return;
-                              event.preventDefault();
-                              event.stopPropagation();
-                              addInviteEmail();
-                            }}
-                            placeholder="name@example.com"
-                          />
-                        </div>
-                        <div className="min-w-0 space-y-2">
-                          <Label htmlFor="band-invite-role">Role</Label>
-                          <Input
-                            id="band-invite-role"
-                            value={form.inviteRoleDraft}
-                            onChange={(event) => patch({ inviteRoleDraft: event.target.value })}
-                            onKeyDown={(event) => {
-                              if (event.key !== "Enter") return;
-                              event.preventDefault();
-                              event.stopPropagation();
-                              addInviteEmail();
-                            }}
-                            placeholder="Guitarist, Manager…"
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="shrink-0 gap-1.5 sm:mb-0"
-                          onClick={addInviteEmail}
-                        >
-                          <PlusIcon className="size-4" weight="bold" />
-                          Add
-                        </Button>
-                      </div>
-
-                      {displayedInviteEmails.length > 0 ? (
-                        <ul className="space-y-2">
-                          {displayedInviteEmails.map((row) => {
-                            const alreadySent = sentInviteEmails.includes(row.email) || row.pending;
-                            return (
-                              <li
-                                key={row.email}
-                                className="flex items-center justify-between gap-2 border border-border/50 bg-background/50 px-3 py-2 text-sm"
-                              >
-                                <span className="min-w-0 truncate">
-                                  {row.email}
-                                  {row.bandRole ? (
-                                    <span className="ml-2 text-xs text-muted-foreground">
-                                      {row.bandRole}
-                                    </span>
-                                  ) : null}
-                                  {alreadySent ? (
-                                    <span className="ml-2 text-xs text-muted-foreground">
-                                      invited
-                                    </span>
-                                  ) : null}
-                                </span>
-                                {!alreadySent ? (
-                                  <button
-                                    type="button"
-                                    className="shrink-0 text-muted-foreground hover:text-foreground"
-                                    onClick={() =>
-                                      patch({
-                                        inviteEmails: form.inviteEmails.filter(
-                                          (entry) => entry.email !== row.email,
-                                        ),
-                                      })
-                                    }
-                                    aria-label={`Remove ${row.email}`}
-                                  >
-                                    <XIcon className="size-4" weight="bold" />
-                                  </button>
-                                ) : null}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          Add each member&apos;s email and role, then continue. Invites send when
-                          you click Next.
-                        </p>
-                      )}
-                    </div>
-                  ) : null}
-                  {inviteConfirmation ? (
-                    <Alert>
-                      <AlertDescription>{inviteConfirmation}</AlertDescription>
-                    </Alert>
-                  ) : null}
-                </div>
+                <MembersStep
+                  form={form}
+                  patch={patch}
+                  addInviteEmail={addInviteEmail}
+                  displayedInviteEmails={displayedInviteEmails}
+                  sentInviteEmails={sentInviteEmails}
+                  inviteConfirmation={inviteConfirmation}
+                />
                 <MarkStepAnswered />
                 <QuestionnaireFieldError className="text-sm">
                   {currentStep === "members" ? fieldError : null}
