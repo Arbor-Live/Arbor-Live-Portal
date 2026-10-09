@@ -26,6 +26,7 @@ import {
   scheduleBookingRequestReceivedEmail,
 } from "./email/bookingRequestEmails";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
+import { appError, withReportableErrors } from "./lib/errors";
 import { allocateRequestNumber } from "./lib/publicReferenceIds";
 import { resolveContactNameParts } from "./lib/contactName";
 import { isRequestPublicTokenExpired } from "./lib/requestToken";
@@ -592,6 +593,8 @@ export const recordPublicQuoteViewByRequestToken = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await enforceRateLimit(ctx, `requestQuoteView:${args.token}`, { limit: 120, windowMs: HOUR_MS });
+    // The request token is the caller's authorization: check it before the
+    // reportable wrapper, so only the write itself is reported.
     const request = await ctx.db
       .query("eventRequests")
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
@@ -600,8 +603,10 @@ export const recordPublicQuoteViewByRequestToken = mutation({
     if (isRequestPublicTokenExpired(request)) return null;
     const invoice = await ctx.db.get(request.linkedInvoiceId);
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) return null;
-    await incrementPublicQuoteView(ctx, invoice);
-    return null;
+    return await withReportableErrors("eventRequests.recordPublicQuoteViewByRequestToken", async () => {
+      await incrementPublicQuoteView(ctx, invoice);
+      return null;
+    });
   },
 });
 
@@ -616,19 +621,25 @@ export const approveQuoteByRequestToken = mutation({
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
     await enforceRateLimit(ctx, `requestToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
+    // The request token is the caller's authorization: check it before the
+    // reportable wrapper, so only the write itself is reported.
     const request = await ctx.db
       .query("eventRequests")
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
       .unique();
-    if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
-    if (isRequestPublicTokenExpired(request)) throw new Error("This request link has expired.");
+    if (!request?.linkedInvoiceId) appError("QUOTE_NOT_FOUND", "Quote not found.");
+    if (isRequestPublicTokenExpired(request)) {
+      appError("REQUEST_LINK_EXPIRED", "This request link has expired.");
+    }
 
     const invoice = await ctx.db.get(request.linkedInvoiceId);
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
-      throw new Error("Quote is not ready for review yet.");
+      appError("QUOTE_NOT_READY_FOR_REVIEW", "Quote is not ready for review yet.");
     }
-    await approveInvoiceQuote(ctx, invoice, args);
-    return { ok: true as const };
+    return await withReportableErrors("eventRequests.approveQuoteByRequestToken", async () => {
+      await approveInvoiceQuote(ctx, invoice, args);
+      return { ok: true as const };
+    });
   },
 });
 
@@ -637,19 +648,25 @@ export const requestQuoteChangesByRequestToken = mutation({
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
     await enforceRateLimit(ctx, `requestToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
+    // The request token is the caller's authorization: check it before the
+    // reportable wrapper, so only the write itself is reported.
     const request = await ctx.db
       .query("eventRequests")
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
       .unique();
-    if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
-    if (isRequestPublicTokenExpired(request)) throw new Error("This request link has expired.");
+    if (!request?.linkedInvoiceId) appError("QUOTE_NOT_FOUND", "Quote not found.");
+    if (isRequestPublicTokenExpired(request)) {
+      appError("REQUEST_LINK_EXPIRED", "This request link has expired.");
+    }
 
     const invoice = await ctx.db.get(request.linkedInvoiceId);
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
-      throw new Error("Quote is not ready for review yet.");
+      appError("QUOTE_NOT_READY_FOR_REVIEW", "Quote is not ready for review yet.");
     }
-    await requestInvoiceQuoteChanges(ctx, invoice, args.note);
-    return { ok: true as const };
+    return await withReportableErrors("eventRequests.requestQuoteChangesByRequestToken", async () => {
+      await requestInvoiceQuoteChanges(ctx, invoice, args.note);
+      return { ok: true as const };
+    });
   },
 });
 
@@ -663,20 +680,26 @@ export const updatePaymentContactsByRequestToken = mutation({
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
     await enforceRateLimit(ctx, `requestToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
+    // The request token is the caller's authorization: check it before the
+    // reportable wrapper, so only the write itself is reported.
     const request = await ctx.db
       .query("eventRequests")
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
       .unique();
-    if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
-    if (isRequestPublicTokenExpired(request)) throw new Error("This request link has expired.");
+    if (!request?.linkedInvoiceId) appError("QUOTE_NOT_FOUND", "Quote not found.");
+    if (isRequestPublicTokenExpired(request)) {
+      appError("REQUEST_LINK_EXPIRED", "This request link has expired.");
+    }
 
     const invoice = await ctx.db.get(request.linkedInvoiceId);
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
-      throw new Error("Quote is not ready for review yet.");
+      appError("QUOTE_NOT_READY_FOR_REVIEW", "Quote is not ready for review yet.");
     }
-    const { token: _token, ...contactArgs } = args;
-    await updateInvoicePaymentContacts(ctx, invoice, contactArgs);
-    return { ok: true as const };
+    return await withReportableErrors("eventRequests.updatePaymentContactsByRequestToken", async () => {
+      const { token: _token, ...contactArgs } = args;
+      await updateInvoicePaymentContacts(ctx, invoice, contactArgs);
+      return { ok: true as const };
+    });
   },
 });
 
@@ -693,24 +716,30 @@ export const addEventContactByRequestToken = mutation({
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
     await enforceRateLimit(ctx, `requestToken:${args.token}`, { limit: 60, windowMs: HOUR_MS });
+    // The request token is the caller's authorization: check it before the
+    // reportable wrapper, so only the write itself is reported.
     const request = await ctx.db
       .query("eventRequests")
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
       .unique();
-    if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
-    if (isRequestPublicTokenExpired(request)) throw new Error("This request link has expired.");
+    if (!request?.linkedInvoiceId) appError("QUOTE_NOT_FOUND", "Quote not found.");
+    if (isRequestPublicTokenExpired(request)) {
+      appError("REQUEST_LINK_EXPIRED", "This request link has expired.");
+    }
     const invoice = await ctx.db.get(request.linkedInvoiceId);
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
-      throw new Error("Quote is not ready for review yet.");
+      appError("QUOTE_NOT_READY_FOR_REVIEW", "Quote is not ready for review yet.");
     }
     await requirePublicEditableEvent(ctx, invoice, args.eventId);
-    await addPublicEventContact(ctx, args.eventId, {
-      name: args.name,
-      position: args.position,
-      email: args.email,
-      phone: args.phone,
+    return await withReportableErrors("eventRequests.addEventContactByRequestToken", async () => {
+      await addPublicEventContact(ctx, args.eventId, {
+        name: args.name,
+        position: args.position,
+        email: args.email,
+        phone: args.phone,
+      });
+      return { ok: true as const };
     });
-    return { ok: true as const };
   },
 });
 
@@ -723,19 +752,25 @@ export const deleteEventContactByRequestToken = mutation({
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
     await enforceRateLimit(ctx, `requestToken:${args.token}`, { limit: 60, windowMs: HOUR_MS });
+    // The request token is the caller's authorization: check it before the
+    // reportable wrapper, so only the write itself is reported.
     const request = await ctx.db
       .query("eventRequests")
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
       .unique();
-    if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
-    if (isRequestPublicTokenExpired(request)) throw new Error("This request link has expired.");
+    if (!request?.linkedInvoiceId) appError("QUOTE_NOT_FOUND", "Quote not found.");
+    if (isRequestPublicTokenExpired(request)) {
+      appError("REQUEST_LINK_EXPIRED", "This request link has expired.");
+    }
     const invoice = await ctx.db.get(request.linkedInvoiceId);
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
-      throw new Error("Quote is not ready for review yet.");
+      appError("QUOTE_NOT_READY_FOR_REVIEW", "Quote is not ready for review yet.");
     }
     await requirePublicEditableEvent(ctx, invoice, args.eventId);
-    await deletePublicEventContact(ctx, args.eventId, args.contactId);
-    return { ok: true as const };
+    return await withReportableErrors("eventRequests.deleteEventContactByRequestToken", async () => {
+      await deletePublicEventContact(ctx, args.eventId, args.contactId);
+      return { ok: true as const };
+    });
   },
 });
 
@@ -748,47 +783,50 @@ export const submitPublic = mutation({
   }),
   handler: async (ctx, args) => {
     if (args.website?.trim()) {
-      throw new Error("Unable to submit request.");
+      appError("REQUEST_SUBMIT_BLOCKED", "Unable to submit request.");
     }
     const firstName = args.firstName.trim();
     const lastName = args.lastName.trim();
     const email = args.email.trim().toLowerCase();
     const phone = args.phone.trim();
     if (!isStanfordEmail(email)) {
-      throw new Error("Please use a valid Stanford email address.");
+      appError("REQUEST_STANFORD_EMAIL_REQUIRED", "Please use a valid Stanford email address.");
     }
     if (!firstName || !lastName || !phone) {
-      throw new Error("Contact information is required.");
+      appError("REQUEST_CONTACT_REQUIRED", "Contact information is required.");
     }
     if (!args.eventDateText.trim() || !args.eventStartTimeText.trim() || !args.eventEndTimeText.trim()) {
-      throw new Error("Event timing is required.");
+      appError("REQUEST_TIMING_REQUIRED", "Event timing is required.");
     }
     if (
       args.eventStartAtMs !== undefined &&
       args.eventEndAtMs !== undefined &&
       args.eventEndAtMs <= args.eventStartAtMs
     ) {
-      throw new Error("Event end time must be after start time.");
+      appError("EVENT_END_BEFORE_START", "Event end time must be after start time.");
     }
     if (!args.earliestSetupText.trim() && !args.flexibleSetupTime) {
-      throw new Error("Earliest setup availability is required.");
+      appError("REQUEST_SETUP_TIME_REQUIRED", "Earliest setup availability is required.");
     }
     if (!args.eventCategory.trim()) {
-      throw new Error("Event type is required.");
+      appError("REQUEST_EVENT_TYPE_REQUIRED", "Event type is required.");
     }
     const eventName = args.eventName.trim();
     if (!eventName) {
-      throw new Error("Event name is required.");
+      appError("REQUEST_EVENT_NAME_REQUIRED", "Event name is required.");
     }
     if (!args.crewOrRental.trim()) {
-      throw new Error("Please select crewed or rental.");
+      appError("REQUEST_CREW_OR_RENTAL_REQUIRED", "Please select crewed or rental.");
     }
     const hasLightingService = args.servicesNeeded.includes("Lighting");
     if (hasLightingService && !args.lightingPreference?.trim()) {
-      throw new Error("Lighting preference is required when lighting is selected.");
+      appError(
+        "REQUEST_LIGHTING_PREFERENCE_REQUIRED",
+        "Lighting preference is required when lighting is selected.",
+      );
     }
     if (!Number.isFinite(args.expectedTurnout) || args.expectedTurnout <= 0) {
-      throw new Error("Expected turnout must be a positive number.");
+      appError("REQUEST_TURNOUT_INVALID", "Expected turnout must be a positive number.");
     }
     if (args.expectedTurnout >= 200) {
       // Major events are allowed but flagged in notes for staff follow-up.
@@ -797,14 +835,21 @@ export const submitPublic = mutation({
     const organization = trimOptional(args.organization);
     const groupType = mapSponsorTypeToGroupType(args.sponsorType);
     if (groupType !== "individual" && !args.invoiceGroupId && !organization) {
-      throw new Error("Organization or group name is required for non-individual requests.");
+      appError(
+        "REQUEST_ORGANIZATION_REQUIRED",
+        "Organization or group name is required for non-individual requests.",
+      );
     }
 
     // Throttle before the first billing-table write. Per-email caps a single
     // submitter; the global key is a backstop against a spray of addresses.
+    // The limiter stays outside the reportable wrapper: a throttled caller is
+    // not an incident. Validation above it runs first so form errors never
+    // burn the submitter's small hourly cap.
     await enforceRateLimit(ctx, `submitPublic:${email}`, { limit: 5, windowMs: HOUR_MS });
     await enforceRateLimit(ctx, "submitPublic:global", { limit: 60, windowMs: HOUR_MS });
 
+    return await withReportableErrors("eventRequests.submitPublic", async () => {
     const billingProfile = await provisionBillingProfileFromRequest(ctx, {
       organization,
       sponsorType: args.sponsorType.trim(),
@@ -877,6 +922,7 @@ export const submitPublic = mutation({
     }
 
     return { id, publicToken, requestNumber };
+    });
   },
 });
 
@@ -994,6 +1040,7 @@ export const updateBookingRequestSettings = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventRequests.updateBookingRequestSettings", async () => {
     const settings = await getOrCreateBookingRequestSettings(ctx);
     const uniqueIds = [...new Set(args.roundRobinUserIds.map((id) => id.trim()).filter(Boolean))];
     const cursor =
@@ -1006,6 +1053,7 @@ export const updateBookingRequestSettings = mutation({
       updatedAt: Date.now(),
     });
     return { ok: true as const };
+    });
   },
 });
 
@@ -1018,18 +1066,20 @@ export const setAssignee = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventRequests.setAssignee", async () => {
     const request = await ctx.db.get(args.id);
-    if (!request) throw new Error("Request not found.");
+    if (!request) appError("REQUEST_NOT_FOUND", "Request not found.");
     const assigneeUserId = args.assigneeUserId?.trim() || undefined;
     if (assigneeUserId) {
       const users = await findAuthUsersByIds(ctx, [assigneeUserId]);
-      if (!users.has(assigneeUserId)) throw new Error("Assignee user not found.");
+      if (!users.has(assigneeUserId)) appError("REQUEST_ASSIGNEE_NOT_FOUND", "Assignee user not found.");
     }
     await ctx.db.patch(args.id, {
       assigneeUserId,
       updatedAt: Date.now(),
     });
     return { ok: true as const };
+    });
   },
 });
 
@@ -1043,13 +1093,15 @@ export const setStaffNotes = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventRequests.setStaffNotes", async () => {
     const request = await ctx.db.get(args.id);
-    if (!request) throw new Error("Request not found.");
+    if (!request) appError("REQUEST_NOT_FOUND", "Request not found.");
     await ctx.db.patch(args.id, {
       staffNotes: trimOptional(args.staffNotes),
       updatedAt: Date.now(),
     });
     return null;
+    });
   },
 });
 
@@ -1229,16 +1281,17 @@ export const updateStatus = mutation({
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventRequests.updateStatus", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Request not found.");
+    if (!existing) appError("REQUEST_NOT_FOUND", "Request not found.");
     if (existing.status === "converted") {
-      throw new Error("Converted requests cannot be updated.");
+      appError("REQUEST_ALREADY_CONVERTED", "Converted requests cannot be updated.");
     }
     if (existing.status === "declined" && args.status !== "declined") {
-      throw new Error("Declined requests cannot be reopened from here.");
+      appError("REQUEST_DECLINED_FINAL", "Declined requests cannot be reopened from here.");
     }
     if (args.status === "declined" && !args.declineReasonCode) {
-      throw new Error("Select a decline reason.");
+      appError("REQUEST_DECLINE_REASON_REQUIRED", "Select a decline reason.");
     }
     const now = Date.now();
     const actorUserId = getUserId(user);
@@ -1277,6 +1330,7 @@ export const updateStatus = mutation({
       if (updated) await scheduleBookingRequestDeclinedEmail(ctx, updated);
     }
     return null;
+    });
   },
 });
 
@@ -1290,8 +1344,9 @@ export const convertToEvent = mutation({
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventRequests.convertToEvent", async () => {
     const request = await ctx.db.get(args.id);
-    if (!request) throw new Error("Request not found.");
+    if (!request) appError("REQUEST_NOT_FOUND", "Request not found.");
 
     const existingPrimaryEventId = primaryConvertedEventId(request);
     if (existingPrimaryEventId && request.linkedInvoiceId) {
@@ -1437,5 +1492,6 @@ export const convertToEvent = mutation({
       eventIds,
       invoiceId,
     };
+    });
   },
 });
