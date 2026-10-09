@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import schema from "./schema";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { appError, withReportableErrors } from "./lib/errors";
 import { requireEventEditAccess } from "./lib/eventAccess";
 import { calculateCrewCost, syncEventCrewCostUsd } from "./lib/crewCost";
 import {
@@ -120,16 +121,21 @@ export const upsertShifts = mutation({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     await requireEventEditAccess(ctx, args.eventId);
+    return await withReportableErrors("eventCrew.upsertShifts", async () => {
     for (const shift of args.shifts) {
-      if (shift.endsAt <= shift.startsAt) throw new Error("Shift end must be after shift start.");
+      if (shift.endsAt <= shift.startsAt) {
+        appError("SHIFT_END_BEFORE_START", "Shift end must be after shift start.");
+      }
       if (shift.expenseReportId) {
         const report = await ctx.db.get(shift.expenseReportId);
-        if (!report || report.eventId !== args.eventId) throw new Error("Shift has invalid expense report link.");
+        if (!report || report.eventId !== args.eventId) {
+          appError("SHIFT_EXPENSE_REPORT_INVALID", "Shift has invalid expense report link.");
+        }
       }
       if (shift.scheduleBlockId) {
         const block = await ctx.db.get(shift.scheduleBlockId);
         if (!block || block.eventId !== args.eventId) {
-          throw new Error("Shift has invalid schedule block link.");
+          appError("SHIFT_SCHEDULE_BLOCK_INVALID", "Shift has invalid schedule block link.");
         }
       }
     }
@@ -142,7 +148,7 @@ export const upsertShifts = mutation({
     const existingById = new Map(existing.map((row) => [row._id, row]));
     for (const shift of args.shifts) {
       if (shift.id && !existingIds.has(shift.id)) {
-        throw new Error("Crew shift does not belong to this event.");
+        appError("SHIFT_NOT_ON_EVENT", "Crew shift does not belong to this event.");
       }
     }
     const previousShifts = existing.map((row) => ({
@@ -266,6 +272,7 @@ export const upsertShifts = mutation({
       inviteSequence,
     );
     return null;
+    });
   },
 });
 
@@ -276,7 +283,7 @@ export const deleteUnassignedShifts = mutation({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     await requireEventEditAccess(ctx, args.eventId);
-
+    return await withReportableErrors("eventCrew.deleteUnassignedShifts", async () => {
     const existing = await ctx.db
       .query("eventCrewShifts")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
@@ -320,6 +327,7 @@ export const deleteUnassignedShifts = mutation({
     await syncEventCrewCostUsd(ctx, args.eventId, now);
 
     return { deletedCount: unlinked.length };
+    });
   },
 });
 

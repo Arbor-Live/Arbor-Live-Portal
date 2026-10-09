@@ -1,5 +1,6 @@
 "use client";
 
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation } from "convex/react";
@@ -84,7 +85,7 @@ export function NewsletterPreferences({
     } catch (error) {
       setState("idle");
       notify.error(
-        error instanceof Error ? error.message : "Could not unsubscribe. Try again.",
+        getConvexErrorMessage(error, "Could not unsubscribe. Try again."),
       );
     }
   }

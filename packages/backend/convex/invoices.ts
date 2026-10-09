@@ -252,7 +252,7 @@ async function computeLineAmount(
   billableOccurrenceCount: number,
 ) {
   if (line.section !== "external_rental" && line.quantity < 0) {
-    throw new Error("Line quantity cannot be negative.");
+    appError("LINE_QUANTITY_NEGATIVE", "Line quantity cannot be negative.");
   }
   let rate = line.rateUsd;
   let packageOriginalRateUsd: number | undefined;
@@ -260,7 +260,7 @@ async function computeLineAmount(
 
   if (line.section === "equipment_package" && line.packageId) {
     const pkg = await ctx.db.get(line.packageId);
-    if (!pkg) throw new Error("Package line references a missing package.");
+    if (!pkg) appError("LINE_PACKAGE_MISSING", "Package line references a missing package.");
     const originalRate =
       equipmentPricingMode === "subsidized"
         ? (pkg.subsidizedPackagePriceUsd ?? pkg.nonSubsidizedPackagePriceUsd ?? pkg.packagePriceCents / 100)
@@ -283,7 +283,7 @@ async function computeLineAmount(
 
   if (line.section === "equipment_type" && line.typeId) {
     const type = await ctx.db.get(line.typeId);
-    if (!type) throw new Error("Type line references a missing type.");
+    if (!type) appError("LINE_TYPE_MISSING", "Type line references a missing type.");
     rate = typeRentalRate(type, equipmentPricingMode);
   }
 
@@ -738,7 +738,10 @@ async function replaceLineItems(
     );
     const orphan = artistEventIds.find((eventId) => !linkedEventIds.has(eventId));
     if (orphan) {
-      throw new Error("Artist line is linked to an event that is not on this invoice.");
+      appError(
+        "LINE_ARTIST_EVENT_NOT_ON_INVOICE",
+        "Artist line is linked to an event that is not on this invoice.",
+      );
     }
   }
   const existing = await ctx.db
@@ -1608,19 +1611,24 @@ export const regeneratePublicApprovalToken = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Invoice not found.");
-    if (existing.sourceEventRequestId) {
-      throw new Error("Booking-request quotes are reviewed on the request portal, not via a standalone link.");
-    }
-    const now = Date.now();
-    const token = await generateUniquePublicApprovalToken(ctx);
-    await ctx.db.patch(args.id, {
-      publicApprovalToken: token,
-      publicApprovalTokenExpiresAt: publicApprovalTokenExpiry(now),
-      updatedAt: now,
+    return await withReportableErrors("invoices.regeneratePublicApprovalToken", async () => {
+      const existing = await ctx.db.get(args.id);
+      if (!existing) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+      if (existing.sourceEventRequestId) {
+        appError(
+          "QUOTE_USE_REQUEST_PORTAL",
+          "Booking-request quotes are reviewed on the request portal, not via a standalone link.",
+        );
+      }
+      const now = Date.now();
+      const token = await generateUniquePublicApprovalToken(ctx);
+      await ctx.db.patch(args.id, {
+        publicApprovalToken: token,
+        publicApprovalTokenExpiresAt: publicApprovalTokenExpiry(now),
+        updatedAt: now,
+      });
+      return { token };
     });
-    return { token };
   },
 });
 
@@ -1690,20 +1698,27 @@ export const updatePaymentContactsByToken = mutation({
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
     await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
+    // The public token is the caller's authorization: check it before the
+    // reportable wrapper, so only the write itself is reported.
     const invoice = await ctx.db
       .query("invoices")
       .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
       .unique();
-    if (!invoice) throw new Error("Quote not found.");
+    if (!invoice) appError("QUOTE_NOT_FOUND", "Quote not found.");
     if (invoice.sourceEventRequestId) {
-      throw new Error("Please review this quote from your booking request link.");
+      appError(
+        "QUOTE_USE_BOOKING_LINK",
+        "Please review this quote from your booking request link.",
+      );
     }
     if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
-      throw new Error("Quote not found.");
+      appError("QUOTE_NOT_FOUND", "Quote not found.");
     }
-    const { token: _token, ...contactArgs } = args;
-    await updateInvoicePaymentContacts(ctx, invoice, contactArgs);
-    return { ok: true as const };
+    return await withReportableErrors("invoices.updatePaymentContactsByToken", async () => {
+      const { token: _token, ...contactArgs } = args;
+      await updateInvoicePaymentContacts(ctx, invoice, contactArgs);
+      return { ok: true as const };
+    });
   },
 });
 
@@ -1720,25 +1735,32 @@ export const addEventContactByToken = mutation({
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
     await enforceRateLimit(ctx, `publicEventContacts:${args.token}`, { limit: 60, windowMs: HOUR_MS });
+    // The public token is the caller's authorization: check it before the
+    // reportable wrapper, so only the write itself is reported.
     const invoice = await ctx.db
       .query("invoices")
       .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
       .unique();
-    if (!invoice || invoice.status === "void") throw new Error("Quote not found.");
+    if (!invoice || invoice.status === "void") appError("QUOTE_NOT_FOUND", "Quote not found.");
     if (invoice.sourceEventRequestId) {
-      throw new Error("Please review this quote from your booking request link.");
+      appError(
+        "QUOTE_USE_BOOKING_LINK",
+        "Please review this quote from your booking request link.",
+      );
     }
     if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
-      throw new Error("Quote not found.");
+      appError("QUOTE_NOT_FOUND", "Quote not found.");
     }
-    await requirePublicEditableEvent(ctx, invoice, args.eventId);
-    await addPublicEventContact(ctx, args.eventId, {
-      name: args.name,
-      position: args.position,
-      email: args.email,
-      phone: args.phone,
+    return await withReportableErrors("invoices.addEventContactByToken", async () => {
+      await requirePublicEditableEvent(ctx, invoice, args.eventId);
+      await addPublicEventContact(ctx, args.eventId, {
+        name: args.name,
+        position: args.position,
+        email: args.email,
+        phone: args.phone,
+      });
+      return { ok: true as const };
     });
-    return { ok: true as const };
   },
 });
 
@@ -1751,20 +1773,27 @@ export const deleteEventContactByToken = mutation({
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
     await enforceRateLimit(ctx, `publicEventContacts:${args.token}`, { limit: 60, windowMs: HOUR_MS });
+    // The public token is the caller's authorization: check it before the
+    // reportable wrapper, so only the write itself is reported.
     const invoice = await ctx.db
       .query("invoices")
       .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
       .unique();
-    if (!invoice || invoice.status === "void") throw new Error("Quote not found.");
+    if (!invoice || invoice.status === "void") appError("QUOTE_NOT_FOUND", "Quote not found.");
     if (invoice.sourceEventRequestId) {
-      throw new Error("Please review this quote from your booking request link.");
+      appError(
+        "QUOTE_USE_BOOKING_LINK",
+        "Please review this quote from your booking request link.",
+      );
     }
     if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
-      throw new Error("Quote not found.");
+      appError("QUOTE_NOT_FOUND", "Quote not found.");
     }
-    await requirePublicEditableEvent(ctx, invoice, args.eventId);
-    await deletePublicEventContact(ctx, args.eventId, args.contactId);
-    return { ok: true as const };
+    return await withReportableErrors("invoices.deleteEventContactByToken", async () => {
+      await requirePublicEditableEvent(ctx, invoice, args.eventId);
+      await deletePublicEventContact(ctx, args.eventId, args.contactId);
+      return { ok: true as const };
+    });
   },
 });
 
@@ -1779,14 +1808,16 @@ export const updatePaymentSubmitter = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const invoice = await ctx.db.get(args.id);
-    if (!invoice) throw new Error("Invoice not found.");
-    await updateInvoicePaymentContacts(ctx, invoice, {
-      clientIsPaymentSubmitter: args.clientIsPaymentSubmitter,
-      paymentSubmitterName: args.paymentSubmitterName,
-      paymentSubmitterEmail: args.paymentSubmitterEmail,
+    return await withReportableErrors("invoices.updatePaymentSubmitter", async () => {
+      const invoice = await ctx.db.get(args.id);
+      if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+      await updateInvoicePaymentContacts(ctx, invoice, {
+        clientIsPaymentSubmitter: args.clientIsPaymentSubmitter,
+        paymentSubmitterName: args.paymentSubmitterName,
+        paymentSubmitterEmail: args.paymentSubmitterEmail,
+      });
+      return { ok: true as const };
     });
-    return { ok: true as const };
   },
 });
 
@@ -1796,26 +1827,34 @@ export const resendPayingPartyNotification = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const invoice = await ctx.db.get(args.id);
-    if (!invoice) throw new Error("Invoice not found.");
-    if ((invoice.clientApprovalStatus ?? "pending") !== "approved") {
-      throw new Error("Quote must be approved before notifying the paying party.");
-    }
-    if (invoice.clientIsPaymentSubmitter) {
-      throw new Error("The client is listed as the payment submitter.");
-    }
-    const email = invoice.paymentSubmitterEmail?.trim().toLowerCase();
-    if (!email) throw new Error("No paying party email is set.");
+    return await withReportableErrors("invoices.resendPayingPartyNotification", async () => {
+      const invoice = await ctx.db.get(args.id);
+      if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+      if ((invoice.clientApprovalStatus ?? "pending") !== "approved") {
+        appError(
+          "PAYMENT_NOTIFY_REQUIRES_APPROVAL",
+          "Quote must be approved before notifying the paying party.",
+        );
+      }
+      if (invoice.clientIsPaymentSubmitter) {
+        appError(
+          "PAYMENT_SUBMITTER_IS_CLIENT",
+          "The client is listed as the payment submitter.",
+        );
+      }
+      const email = invoice.paymentSubmitterEmail?.trim().toLowerCase();
+      if (!email) appError("PAYING_PARTY_EMAIL_MISSING", "No paying party email is set.");
 
-    await schedulePayingPartyAddedEmail(ctx, {
-      invoice,
-      payingPartyEmail: email,
-      payingPartyName: invoice.paymentSubmitterName,
-      approvedByName: invoice.clientApprovalSignedName ?? invoice.clientContactName ?? "The client",
-      idempotencySuffix: `resend:${Date.now()}`,
+      await schedulePayingPartyAddedEmail(ctx, {
+        invoice,
+        payingPartyEmail: email,
+        payingPartyName: invoice.paymentSubmitterName,
+        approvedByName: invoice.clientApprovalSignedName ?? invoice.clientContactName ?? "The client",
+        idempotencySuffix: `resend:${Date.now()}`,
+      });
+      await markPayingPartyNotified(ctx, invoice._id, email);
+      return { ok: true as const };
     });
-    await markPayingPartyNotified(ctx, invoice._id, email);
-    return { ok: true as const };
   },
 });
 
@@ -1824,10 +1863,12 @@ export const resetApprovalToPending = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const invoice = await ctx.db.get(args.id);
-    if (!invoice) throw new Error("Invoice not found.");
-    await resetInvoiceApproval(ctx, invoice, Date.now());
-    return { ok: true };
+    return await withReportableErrors("invoices.resetApprovalToPending", async () => {
+      const invoice = await ctx.db.get(args.id);
+      if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+      await resetInvoiceApproval(ctx, invoice, Date.now());
+      return { ok: true };
+    });
   },
 });
 
@@ -2321,59 +2362,66 @@ export const createDraftForSeries = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const series = await ctx.db.get(args.seriesId);
-    if (!series) throw new Error("Event series not found.");
-    if (isMultiDayGroup(series)) {
-      throw new Error("A multi-day booking is billed through its days' invoice.");
-    }
-    if (series.invoiceId) throw new Error("This series already has a linked invoice.");
+    return await withReportableErrors("invoices.createDraftForSeries", async () => {
+      const series = await ctx.db.get(args.seriesId);
+      if (!series) appError("EVENT_SERIES_NOT_FOUND", "Event series not found.");
+      if (isMultiDayGroup(series)) {
+        appError(
+          "SERIES_MULTI_DAY_USE_DAY_INVOICE",
+          "A multi-day booking is billed through its days' invoice.",
+        );
+      }
+      if (series.invoiceId) {
+        appError("SERIES_INVOICE_ALREADY_LINKED", "This series already has a linked invoice.");
+      }
 
-    const publicApprovalToken = await generateUniquePublicApprovalToken(ctx);
-    const now = Date.now();
-    const issueDate = new Date().toISOString().slice(0, 10);
-    const id = await ctx.db.insert("invoices", {
-      invoiceNumber: await allocateInvoiceNumber(ctx),
-      status: "draft",
-      issueDate,
-      managerUserId: args.managerUserId,
-      managerName: args.managerName.trim(),
-      managerEmail: trimOptional(args.managerEmail),
-      equipmentPricingMode: "nonSubsidized",
-      crewRateMode: "normal",
-      discountType: "amount",
-      discountValue: 0,
-      discountAmountUsd: 0,
-      equipmentSubtotalUsd: 0,
-      externalRentalsSubtotalUsd: 0,
-      artistsSubtotalUsd: 0,
-      crewSubtotalUsd: 0,
-      feesSubtotalUsd: 0,
-      subtotalUsd: 0,
-      totalUsd: 0,
-      clientApprovalStatus: "pending",
-      publicApprovalToken,
-      publicApprovalTokenExpiresAt: publicApprovalTokenExpiry(now),
-      createdAt: now,
-      updatedAt: now,
+      const publicApprovalToken = await generateUniquePublicApprovalToken(ctx);
+      const now = Date.now();
+      const issueDate = new Date().toISOString().slice(0, 10);
+      const id = await ctx.db.insert("invoices", {
+        invoiceNumber: await allocateInvoiceNumber(ctx),
+        status: "draft",
+        issueDate,
+        managerUserId: args.managerUserId,
+        managerName: args.managerName.trim(),
+        managerEmail: trimOptional(args.managerEmail),
+        equipmentPricingMode: "nonSubsidized",
+        crewRateMode: "normal",
+        discountType: "amount",
+        discountValue: 0,
+        discountAmountUsd: 0,
+        equipmentSubtotalUsd: 0,
+        externalRentalsSubtotalUsd: 0,
+        artistsSubtotalUsd: 0,
+        crewSubtotalUsd: 0,
+        feesSubtotalUsd: 0,
+        subtotalUsd: 0,
+        totalUsd: 0,
+        clientApprovalStatus: "pending",
+        publicApprovalToken,
+        publicApprovalTokenExpiresAt: publicApprovalTokenExpiry(now),
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await ctx.db.patch(args.seriesId, { invoiceId: id, updatedAt: now });
+      const occurrences = await ctx.db
+        .query("events")
+        .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", args.seriesId))
+        .take(200);
+      for (const occurrence of occurrences) {
+        if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
+        await ctx.db.patch(occurrence._id, { invoiceId: id, updatedAt: now });
+        await syncEventStatusForLinkedInvoice(ctx, occurrence._id, id, occurrence.status);
+      }
+
+      const billableCount = await resolveBillableOccurrenceCount(ctx, id);
+      await ctx.db.patch(id, {
+        billableOccurrenceCountAtSave: billableCount > 0 ? billableCount : undefined,
+      });
+
+      return { id, publicApprovalToken };
     });
-
-    await ctx.db.patch(args.seriesId, { invoiceId: id, updatedAt: now });
-    const occurrences = await ctx.db
-      .query("events")
-      .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", args.seriesId))
-      .take(200);
-    for (const occurrence of occurrences) {
-      if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
-      await ctx.db.patch(occurrence._id, { invoiceId: id, updatedAt: now });
-      await syncEventStatusForLinkedInvoice(ctx, occurrence._id, id, occurrence.status);
-    }
-
-    const billableCount = await resolveBillableOccurrenceCount(ctx, id);
-    await ctx.db.patch(id, {
-      billableOccurrenceCountAtSave: billableCount > 0 ? billableCount : undefined,
-    });
-
-    return { id, publicApprovalToken };
   },
 });
 

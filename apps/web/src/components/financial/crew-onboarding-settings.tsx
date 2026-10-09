@@ -1,5 +1,6 @@
 "use client";
 
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
@@ -28,7 +29,7 @@ export function CrewOnboardingSettings() {
       setLocalPayroll(null);
       notify.success("Crew onboarding settings saved.");
     } catch (error) {
-      notify.error(error instanceof Error ? error.message : "Failed to save settings.");
+      notify.error(getConvexErrorMessage(error, "Failed to save settings."));
     } finally {
       setSaving(false);
     }

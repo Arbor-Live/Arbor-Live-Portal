@@ -2,6 +2,7 @@ import { pacificDayIndexFromAnchor } from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { syncEventCrewCostUsd } from "./crewCost";
+import { appError } from "./errors";
 import {
   applyPositionTemplates,
   blocksToTemplates,
@@ -42,7 +43,7 @@ export type GroupTemplateParts = {
 /** Throw unless the zero-based day index is a non-negative integer. */
 export function assertValidReferenceIndex(referenceIndex: number) {
   if (!Number.isInteger(referenceIndex) || referenceIndex < 0) {
-    throw new Error("Pick a day to apply from.");
+    appError("REFERENCE_INDEX_INVALID", "Pick a day to apply from.");
   }
 }
 
@@ -130,7 +131,10 @@ const MAX_DAY_ROWS = 500;
  */
 function withinCap<T>(rows: T[], what: string, max: number = MAX_DAY_ROWS): T[] {
   if (rows.length > max) {
-    throw new Error(`This day has more than ${max} ${what}, too many to use as a template.`);
+    appError(
+      "TEMPLATE_CAPTURE_LIMIT",
+      `This day has more than ${max} ${what}, too many to use as a template.`,
+    );
   }
   return rows;
 }

@@ -8,6 +8,7 @@ import {
   requireAuth,
   type AuthUser,
 } from "./lib/auth";
+import { appError, withReportableErrors } from "./lib/errors";
 import {
   eligibleCrewProfilesForEvent,
   getActiveCrewProfiles,
@@ -678,7 +679,7 @@ export const listPendingCrewForEvent = query({
 function assertWindowOrder(windows: Array<{ startsAt: number; endsAt: number }>, label: string) {
   for (const window of windows) {
     if (window.endsAt <= window.startsAt) {
-      throw new Error(`${label} must end after they start.`);
+      appError("AVAILABILITY_WINDOW_ORDER", `${label} must end after they start.`);
     }
   }
 }
@@ -695,29 +696,36 @@ export const submitResponse = mutation({
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventCrewAvailability.submitResponse", async () => {
     const userId = getUserId(user);
 
     const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
+    if (!event) appError("EVENT_NOT_FOUND", "Event not found.");
     if (!isCrewedEventType(event.eventType)) {
-      throw new Error("This event type does not require crew availability.");
+      appError(
+        "AVAILABILITY_NOT_REQUIRED",
+        "This event type does not require crew availability.",
+      );
     }
     if (normalizeEventStatus(event.status) === "cancelled") {
-      throw new Error("Cannot respond to a cancelled event.");
+      appError("AVAILABILITY_EVENT_CANCELLED", "Cannot respond to a cancelled event.");
     }
 
     const profile = await getCurrentUserProfile(ctx, userId);
     if (resolveUserStatus(profile) !== "active") {
-      throw new Error("Reactivate your account before responding to availability.");
+      appError(
+        "AVAILABILITY_ACCOUNT_INACTIVE",
+        "Reactivate your account before responding to availability.",
+      );
     }
     if (!profileHasCrewSpecialty(profile ?? {})) {
-      throw new Error("Availability is limited to crew specialties.");
+      appError("AVAILABILITY_CREW_ONLY", "Availability is limited to crew specialties.");
     }
     const userDisciplines = getDisciplinesForEventMatching(
       resolveProfileMembership(profile ?? {}).disciplines,
     );
     if (!eventMatchesUserTeams(event.teamsInterested, userDisciplines)) {
-      throw new Error("This event is not in your crew team scope.");
+      appError("AVAILABILITY_TEAM_SCOPE", "This event is not in your crew team scope.");
     }
 
     const blocks = await ctx.db
@@ -730,17 +738,23 @@ export const submitResponse = mutation({
     if (isPartial) {
       const windows = args.partialWindows ?? [];
       if (windows.length === 0) {
-        throw new Error("Pick at least one section you can work.");
+        appError("AVAILABILITY_PARTIAL_NEEDS_SECTION", "Pick at least one section you can work.");
       }
       assertWindowOrder(windows, "Available times");
       for (const window of windows) {
         if (window.scheduleBlockId && !blockIds.has(window.scheduleBlockId)) {
-          throw new Error("That section is no longer on this event. Reload and try again.");
+          appError(
+            "AVAILABILITY_SECTION_MISSING",
+            "That section is no longer on this event. Reload and try again.",
+          );
         }
       }
       assertWindowOrder(args.busyWindows ?? [], "Busy times");
     } else if (args.partialWindows?.length || args.busyWindows?.length) {
-      throw new Error("Sections and busy times only apply when you can work part of the event.");
+      appError(
+        "AVAILABILITY_WINDOWS_WITH_FULL",
+        "Sections and busy times only apply when you can work part of the event.",
+      );
     }
 
     const now = Date.now();
@@ -773,6 +787,7 @@ export const submitResponse = mutation({
     return await ctx.db.insert("eventCrewAvailabilityResponses", {
       ...payload,
       createdAt: now,
+    });
     });
   },
 });

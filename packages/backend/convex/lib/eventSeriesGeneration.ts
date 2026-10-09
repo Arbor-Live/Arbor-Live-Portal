@@ -9,6 +9,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { syncEventCrewCostUsd } from "./crewCost";
 import { isTraineeShift } from "./crewShiftKinds";
+import { appError } from "./errors";
 import { detachInvoiceFromAdditionalLinks } from "./eventInvoiceLinks";
 import {
   normalizeEventStatus,
@@ -376,7 +377,8 @@ export async function listOccurrencePositions(ctx: MutationCtx, eventId: Id<"eve
     .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
     .take(MAX_OCCURRENCE_POSITIONS + 1);
   if (slots.length > MAX_OCCURRENCE_POSITIONS) {
-    throw new Error(
+    appError(
+      "OCCURRENCE_POSITION_LIMIT",
       `An occurrence can have at most ${MAX_OCCURRENCE_POSITIONS} positions for templates to apply, got more.`,
     );
   }
@@ -400,7 +402,8 @@ async function lockedPositionIds(
     .take(MAX_OCCURRENCE_ACTS + 1);
   if (participations.length > MAX_OCCURRENCE_ACTS) {
     // Can't tell which positions are filled: refuse rather than risk changing one.
-    throw new Error(
+    appError(
+      "OCCURRENCE_ACT_LIMIT",
       `An occurrence can have at most ${MAX_OCCURRENCE_ACTS} acts for templates to apply, got more.`,
     );
   }

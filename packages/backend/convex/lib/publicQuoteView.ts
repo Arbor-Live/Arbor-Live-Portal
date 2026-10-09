@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { syncBookingRequestStatusFromInvoice } from "./bookingRequestStatus";
+import { appError } from "./errors";
 import { syncLinkedEventStatusFromInvoice } from "./eventStatus";
 import { listEventsLinkedToInvoice } from "./invoiceEvents";
 import { getEventArtists } from "./eventArtists";
@@ -287,7 +288,7 @@ export async function incrementPublicQuoteView(ctx: MutationCtx, invoice: Doc<"i
 
 function normalizeSignedName(raw: string) {
   const trimmed = raw.trim().replace(/\s+/g, " ");
-  if (trimmed.length < 2) throw new Error("Type your full name to electronically sign.");
+  if (trimmed.length < 2) appError("QUOTE_SIGN_NAME_REQUIRED", "Type your full name to electronically sign.");
   return trimmed;
 }
 
@@ -303,9 +304,9 @@ export async function approveInvoiceQuote(
   invoice: Doc<"invoices">,
   details: QuoteApprovalDetails,
 ) {
-  if (invoice.status === "void") throw new Error("Quote not found.");
+  if (invoice.status === "void") appError("QUOTE_NOT_FOUND", "Quote not found.");
   if ((invoice.clientApprovalStatus ?? "pending") !== "pending") {
-    throw new Error("Quote decision already submitted.");
+    appError("QUOTE_DECISION_ALREADY_SUBMITTED", "Quote decision already submitted.");
   }
 
   const signedName = normalizeSignedName(details.signedName);
@@ -319,11 +320,11 @@ export async function approveInvoiceQuote(
   } else {
     paymentSubmitterName = details.paymentSubmitterName?.trim();
     if (!paymentSubmitterName) {
-      throw new Error("Enter the Financial Officer or Paying party name.");
+      appError("PAYING_PARTY_NAME_REQUIRED", "Enter the Financial Officer or Paying party name.");
     }
     paymentSubmitterEmail = normalizeFinanceContactEmail(details.paymentSubmitterEmail);
     if (!paymentSubmitterEmail) {
-      throw new Error("Enter the Financial Officer or Paying party email.");
+      appError("PAYING_PARTY_EMAIL_REQUIRED", "Enter the Financial Officer or Paying party email.");
     }
   }
 
@@ -388,9 +389,12 @@ export async function updateInvoicePaymentContacts(
     paymentSubmitterEmail?: string;
   },
 ) {
-  if (invoice.status === "void") throw new Error("Quote not found.");
+  if (invoice.status === "void") appError("QUOTE_NOT_FOUND", "Quote not found.");
   if ((invoice.clientApprovalStatus ?? "pending") !== "approved") {
-    throw new Error("Payment submitter can be updated after the quote is approved.");
+    appError(
+      "PAYMENT_SUBMITTER_REQUIRES_APPROVAL",
+      "Payment submitter can be updated after the quote is approved.",
+    );
   }
 
   const patch: Partial<Doc<"invoices">> = {
@@ -408,26 +412,29 @@ export async function updateInvoicePaymentContacts(
       patch.paymentSubmitterEmail = normalizeFinanceContactEmail(invoice.clientEmail);
     } else {
       const name = args.paymentSubmitterName?.trim();
-      if (!name) throw new Error("Enter the Financial Officer or Paying party name.");
+      if (!name) appError("PAYING_PARTY_NAME_REQUIRED", "Enter the Financial Officer or Paying party name.");
       patch.paymentSubmitterName = name;
       patch.paymentSubmitterEmail = normalizeFinanceContactEmail(args.paymentSubmitterEmail);
       if (!patch.paymentSubmitterEmail) {
-        throw new Error("Enter the Financial Officer or Paying party email.");
+        appError("PAYING_PARTY_EMAIL_REQUIRED", "Enter the Financial Officer or Paying party email.");
       }
     }
   } else if (args.paymentSubmitterName !== undefined || args.paymentSubmitterEmail !== undefined) {
     if (invoice.clientIsPaymentSubmitter) {
-      throw new Error('Check "I will be submitting the payment" to update your own contact details.');
+      appError(
+        "PAYMENT_SUBMITTER_SELF_EDIT",
+        'Check "I will be submitting the payment" to update your own contact details.',
+      );
     }
     if (args.paymentSubmitterName !== undefined) {
       const name = args.paymentSubmitterName.trim();
-      if (!name) throw new Error("Enter the Financial Officer or Paying party name.");
+      if (!name) appError("PAYING_PARTY_NAME_REQUIRED", "Enter the Financial Officer or Paying party name.");
       patch.paymentSubmitterName = name;
     }
     if (args.paymentSubmitterEmail !== undefined) {
       patch.paymentSubmitterEmail = normalizeFinanceContactEmail(args.paymentSubmitterEmail);
       if (!patch.paymentSubmitterEmail) {
-        throw new Error("Enter the Financial Officer or Paying party email.");
+        appError("PAYING_PARTY_EMAIL_REQUIRED", "Enter the Financial Officer or Paying party email.");
       }
     }
   }
@@ -464,10 +471,10 @@ export async function requestInvoiceQuoteChanges(
   note: string,
 ) {
   const trimmed = note.trim();
-  if (!trimmed) throw new Error("Please include a note.");
-  if (invoice.status === "void") throw new Error("Quote not found.");
+  if (!trimmed) appError("QUOTE_CHANGE_NOTE_REQUIRED", "Please include a note.");
+  if (invoice.status === "void") appError("QUOTE_NOT_FOUND", "Quote not found.");
   if ((invoice.clientApprovalStatus ?? "pending") !== "pending") {
-    throw new Error("Quote decision already submitted.");
+    appError("QUOTE_DECISION_ALREADY_SUBMITTED", "Quote decision already submitted.");
   }
 
   const now = Date.now();

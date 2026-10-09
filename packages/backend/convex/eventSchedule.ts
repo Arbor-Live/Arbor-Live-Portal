@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { appError, withReportableErrors } from "./lib/errors";
 import { requireEventEditAccess } from "./lib/eventAccess";
 import {
   scheduleBlocksContentFingerprint,
@@ -60,11 +61,12 @@ export const upsertBlocks = mutation({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     await requireEventEditAccess(ctx, args.eventId);
+    return await withReportableErrors("eventSchedule.upsertBlocks", async () => {
     const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
+    if (!event) appError("EVENT_NOT_FOUND", "Event not found.");
     for (const block of args.blocks) {
       if (block.endsAt <= block.startsAt) {
-        throw new Error("Schedule block end must be after start.");
+        appError("SCHEDULE_BLOCK_END_BEFORE_START", "Schedule block end must be after start.");
       }
     }
     // Overlapping blocks are allowed: the timeline renders overlaps on
@@ -77,7 +79,7 @@ export const upsertBlocks = mutation({
     const existingById = new Map(existing.map((row) => [row._id, row]));
     for (const block of args.blocks) {
       if (block.id && !existingById.has(block.id)) {
-        throw new Error("Schedule block does not belong to this event.");
+        appError("SCHEDULE_BLOCK_NOT_ON_EVENT", "Schedule block does not belong to this event.");
       }
     }
     const editsActBlocks = args.editsActBlocks === true;
@@ -91,23 +93,23 @@ export const upsertBlocks = mutation({
       const act = row ? actRefOf(row) : actRefOf(block);
       if (!act) continue;
       if (!row && !editsActBlocks) {
-        throw new Error("Add soundchecks and sets from the Run of Show.");
+        appError("SCHEDULE_ACT_BLOCKS_FROM_RUN_OF_SHOW", "Add soundchecks and sets from the Run of Show.");
       }
       const key = actKey(act);
       if (!actNames.has(key)) {
         const loaded = await loadAct(ctx, act);
         if (!loaded || loaded.eventId !== args.eventId) {
-          throw new Error("That act is not on this event's lineup.");
+          appError("SCHEDULE_ACT_NOT_ON_LINEUP", "That act is not on this event's lineup.");
         }
         actNames.set(key, loaded.name);
       }
       const blockType = row?.blockType ?? block.blockType;
       if (blockType !== "soundcheck" && blockType !== "set") {
-        throw new Error("Only soundchecks and sets can belong to an act.");
+        appError("SCHEDULE_ACT_BLOCK_TYPE_INVALID", "Only soundchecks and sets can belong to an act.");
       }
       const slotKey = `${key}:${blockType}`;
       if (actSlots.has(slotKey)) {
-        throw new Error(`${actNames.get(key)} already has a ${blockType}.`);
+        appError("SCHEDULE_ACT_BLOCK_DUPLICATE", `${actNames.get(key)} already has a ${blockType}.`);
       }
       actSlots.add(slotKey);
     }
@@ -215,5 +217,6 @@ export const upsertBlocks = mutation({
     // here — that overwrote persisted custom windows when blocks saved first.
 
     return savedBlocks;
+    });
   },
 });

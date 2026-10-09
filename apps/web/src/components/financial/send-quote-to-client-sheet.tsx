@@ -1,5 +1,6 @@
 "use client";
 
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,7 +63,7 @@ export function SendQuoteToClientSheet({
       await onSend(trimmed);
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send quote email.");
+      setError(getConvexErrorMessage(err, "Failed to send quote email."));
     }
   }
 

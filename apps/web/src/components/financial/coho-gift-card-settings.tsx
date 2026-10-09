@@ -1,5 +1,6 @@
 "use client";
 
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
@@ -39,7 +40,7 @@ export function CohoGiftCardSettings() {
       setLocalRecipients(null);
       notify.success("CoHo gift card settings saved.");
     } catch (error) {
-      notify.error(error instanceof Error ? error.message : "Failed to save settings.");
+      notify.error(getConvexErrorMessage(error, "Failed to save settings."));
     } finally {
       setSaving(false);
     }
@@ -54,7 +55,7 @@ export function CohoGiftCardSettings() {
       setNewToken("");
       notify.success("Card added — fetching its balance now.");
     } catch (error) {
-      notify.error(error instanceof Error ? error.message : "Failed to add card.");
+      notify.error(getConvexErrorMessage(error, "Failed to add card."));
     } finally {
       setAddingCard(false);
     }
@@ -163,7 +164,7 @@ function CardRow({
       setToken("");
       notify.success("Token replaced — refreshing now.");
     } catch (error) {
-      notify.error(error instanceof Error ? error.message : "Failed to replace token.");
+      notify.error(getConvexErrorMessage(error, "Failed to replace token."));
     } finally {
       setBusy(false);
     }
@@ -182,7 +183,7 @@ function CardRow({
       await removeCard({ cardId: card._id });
       notify.success("Card removed.");
     } catch (error) {
-      notify.error(error instanceof Error ? error.message : "Failed to remove card.");
+      notify.error(getConvexErrorMessage(error, "Failed to remove card."));
     } finally {
       setBusy(false);
     }

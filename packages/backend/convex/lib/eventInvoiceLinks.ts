@@ -1,5 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { appError } from "./errors";
 
 /**
  * Extra invoices on an event, beyond `events.invoiceId` (the primary).
@@ -42,7 +43,8 @@ export function splitPrimaryAndAdditional(
   if (!primary) return { primary: undefined, additional: [] };
   const additional = deduped.filter((invoiceId) => invoiceId !== primary);
   if (additional.length > MAX_ADDITIONAL_INVOICES_PER_EVENT) {
-    throw new Error(
+    appError(
+      "ADDITIONAL_INVOICES_LIMIT",
       `Additional invoices max ${MAX_ADDITIONAL_INVOICES_PER_EVENT}, got ${additional.length}.`,
     );
   }
@@ -62,7 +64,8 @@ export function normalizeAdditionalInvoiceIds(
     next.push(invoiceId);
   }
   if (next.length > MAX_ADDITIONAL_INVOICES_PER_EVENT) {
-    throw new Error(
+    appError(
+      "ADDITIONAL_INVOICES_LIMIT",
       `Additional invoices max ${MAX_ADDITIONAL_INVOICES_PER_EVENT}, got ${next.length}.`,
     );
   }
@@ -168,7 +171,7 @@ export async function replaceAdditionalInvoiceLinks(
   const nextIds = normalizeAdditionalInvoiceIds(invoiceIds, undefined);
   for (const invoiceId of nextIds) {
     const invoice = await ctx.db.get(invoiceId);
-    if (!invoice) throw new Error("Invoice not found.");
+    if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
   }
   const existing = await ctx.db
     .query("eventInvoiceLinks")

@@ -1,5 +1,6 @@
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { appError } from "./errors";
 
 /** Open Mic runner is open from this long before event start until this long after event end. */
 export const OPEN_MIC_RUNNER_PAD_MS = 60 * 60 * 1000;
@@ -39,7 +40,8 @@ export async function assertNoOpenMicOverlap(
     return windowsOverlap(mine, runnerWindowFor(other.startAt, other.endAt));
   });
   if (conflict) {
-    throw new Error(
+    appError(
+      "OPEN_MIC_OVERLAP",
       `Open Mic window overlaps with "${conflict.title}" (${new Date(
         conflict.startAt,
       ).toLocaleString()}). Runner windows (1h before start to 1h after end) can't overlap.`,

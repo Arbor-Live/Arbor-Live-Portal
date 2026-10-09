@@ -7,6 +7,7 @@ import {
 } from "./assetScan";
 import { listFulfillmentPackageBom } from "./packageBom";
 import { isShortLinkExpired } from "./shortLinks";
+import { appError } from "./errors";
 import { normalizeShortLinkSlug } from "./shortLinkSlug";
 
 export type OutboundStatus = Doc<"eventRentalUnits">["outboundStatus"];
@@ -14,7 +15,7 @@ export type ReturnStatus = NonNullable<Doc<"eventRentalUnits">["returnStatus"]>;
 
 export async function requireEvent(ctx: QueryCtx | MutationCtx, eventId: Id<"events">) {
   const event = await ctx.db.get(eventId);
-  if (!event) throw new Error("Event not found.");
+  if (!event) appError("EVENT_NOT_FOUND", "Event not found.");
   return event;
 }
 

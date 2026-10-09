@@ -1,5 +1,6 @@
 "use client";
 
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/lib/convex-api";
@@ -40,7 +41,7 @@ export function NewsletterSignupForm({
     } catch (error) {
       setStatus("idle");
       notify.error(
-        error instanceof Error ? error.message : "Could not subscribe. Try again.",
+        getConvexErrorMessage(error, "Could not subscribe. Try again."),
       );
     }
   }

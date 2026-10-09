@@ -1,5 +1,6 @@
 "use client";
 
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
@@ -158,7 +159,7 @@ export function FinancialHubSettings() {
                 setCrewBufferOverride(null);
                 notify.success("Crew cost buffer saved.");
               } catch (error) {
-                notify.error(error instanceof Error ? error.message : "Failed to save crew cost buffer.");
+                notify.error(getConvexErrorMessage(error, "Failed to save crew cost buffer."));
               }
             }}
           >

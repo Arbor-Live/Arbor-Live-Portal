@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { EVENT_TIMEZONE } from "../email/constants";
+import { appError } from "./errors";
 import {
   computeLateFeeSummary,
   getPaymentDueAt,
@@ -164,7 +165,7 @@ export function resolvePaymentSubmitterEmail(invoice: Pick<
 export function normalizeFinanceContactEmail(raw: string | undefined) {
   const trimmed = raw?.trim().toLowerCase();
   if (!trimmed) return undefined;
-  if (!isValidEmail(trimmed)) throw new Error("Email address is invalid.");
+  if (!isValidEmail(trimmed)) appError("EMAIL_INVALID", "Email address is invalid.");
   return trimmed;
 }
 
