@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { appError, withReportableErrors } from "./lib/errors";
 
 function normalizeName(name: string) {
   return name.trim();
@@ -34,13 +35,14 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("storageLocations.create", async () => {
     const now = Date.now();
     const name = normalizeName(args.name);
 
     let path = name;
     if (args.parentId) {
       const parent = await ctx.db.get(args.parentId);
-      if (!parent) throw new Error("Parent storage location not found.");
+      if (!parent) appError("STORAGE_PARENT_NOT_FOUND", "Parent storage location not found.");
       path = `${parent.path} > ${name}`;
     }
 
@@ -50,6 +52,7 @@ export const create = mutation({
       path,
       createdAt: now,
       updatedAt: now,
+    });
     });
   },
 });
@@ -76,23 +79,27 @@ export const update = mutation({
   },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("storageLocations.update", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Storage location not found.");
+    if (!existing) appError("STORAGE_LOCATION_NOT_FOUND", "Storage location not found.");
 
     const name = normalizeName(args.name);
 
     if (args.parentId === args.id) {
-      throw new Error("Location cannot be its own parent.");
+      appError("STORAGE_LOCATION_SELF_PARENT", "Location cannot be its own parent.");
     }
 
     if (args.parentId && (await isDescendant(ctx, args.parentId, args.id))) {
-      throw new Error("Cannot move location under one of its descendants.");
+      appError(
+        "STORAGE_LOCATION_DESCENDANT_PARENT",
+        "Cannot move location under one of its descendants.",
+      );
     }
 
     let path = name;
     if (args.parentId) {
       const parent = await ctx.db.get(args.parentId);
-      if (!parent) throw new Error("Parent storage location not found.");
+      if (!parent) appError("STORAGE_PARENT_NOT_FOUND", "Parent storage location not found.");
       path = `${parent.path} > ${name}`;
     }
 
@@ -119,6 +126,7 @@ export const update = mutation({
         updatedAt: Date.now(),
       });
     }
+    });
   },
 });
 
@@ -126,15 +134,16 @@ export const remove = mutation({
   args: { id: v.id("storageLocations") },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("storageLocations.remove", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Storage location not found.");
+    if (!existing) appError("STORAGE_LOCATION_NOT_FOUND", "Storage location not found.");
 
     const child = await ctx.db
       .query("storageLocations")
       .withIndex("by_parentId", (q) => q.eq("parentId", args.id))
       .first();
     if (child) {
-      throw new Error("Cannot delete location with child locations.");
+      appError("STORAGE_LOCATION_HAS_CHILDREN", "Cannot delete location with child locations.");
     }
 
     const linkedInventory = await ctx.db
@@ -142,9 +151,10 @@ export const remove = mutation({
       .withIndex("by_storageLocationId", (q) => q.eq("storageLocationId", args.id))
       .first();
     if (linkedInventory) {
-      throw new Error("Cannot delete location used by inventory items.");
+      appError("STORAGE_LOCATION_IN_USE", "Cannot delete location used by inventory items.");
     }
 
     await ctx.db.delete(args.id);
+    });
   },
 });
