@@ -157,7 +157,7 @@ export function OrganizationsTab() {
             </p>
             <p className="text-xs text-muted-foreground">
               The clients we invoice are{" "}
-              <Link href="/dashboard/financial-hub/organizations" className="underline underline-offset-2">
+              <Link href="/dashboard/ops-center/organizations" className="underline underline-offset-2">
                 billing hosts
               </Link>{" "}
               in the Ops Center. Artist profiles and riders are edited under{" "}

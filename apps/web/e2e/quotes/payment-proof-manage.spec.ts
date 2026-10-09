@@ -20,7 +20,7 @@ type Seeded = {
   paymentReference: string;
 };
 
-const PAYMENTS = "/dashboard/financial-hub/invoices/payments";
+const PAYMENTS = "/dashboard/ops-center/invoices/payments";
 
 /**
  * Open the Payments tab on the seeded invoice's side panel (the `?invoice=`

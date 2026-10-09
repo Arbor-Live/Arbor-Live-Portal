@@ -185,7 +185,7 @@ export function EventWorkspaceHeader() {
           ) : null}
           {canSeeBilling && linkedInvoice ? (
             <Link
-              href={`/dashboard/financial-hub/invoices/${linkedInvoice._id}`}
+              href={`/dashboard/ops-center/invoices/${linkedInvoice._id}`}
               className="inline-flex h-7 items-center gap-1.5 border px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
               data-testid="event-invoice-link"
             >

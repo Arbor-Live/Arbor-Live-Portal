@@ -337,7 +337,7 @@ function EntryDetails({ entry }: { entry: Entry }) {
           <ul className="space-y-3 text-sm">
             {entry.requests.map((request) => (
               <li key={request._id}>
-                <Link className="font-medium underline-offset-4 hover:underline" href={`/dashboard/financial-hub/requests/${request._id}`}>
+                <Link className="font-medium underline-offset-4 hover:underline" href={`/dashboard/ops-center/requests/${request._id}`}>
                   {request.requestNumber}
                 </Link>
                 {request.eventName ? <span className="text-muted-foreground"> · {request.eventName}</span> : null}
@@ -346,7 +346,7 @@ function EntryDetails({ entry }: { entry: Entry }) {
             {entry.invoices.map((invoice) => (
               <li key={invoice._id} className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <Link className="font-medium underline-offset-4 hover:underline" href={`/dashboard/financial-hub/invoices/${invoice._id}`}>
+                  <Link className="font-medium underline-offset-4 hover:underline" href={`/dashboard/ops-center/invoices/${invoice._id}`}>
                     {invoice.invoiceNumber}
                   </Link>
                   <span className="text-muted-foreground">
@@ -486,7 +486,7 @@ function PayoutLine({
       <div className="min-w-0">
         <Link
           className="font-medium underline-offset-4 hover:underline"
-          href={`/dashboard/financial-hub/artist-payouts?payout=${payout._id}`}
+          href={`/dashboard/ops-center/artist-payouts?payout=${payout._id}`}
         >
           {payout.payeeName ?? "Artist payout"}
         </Link>

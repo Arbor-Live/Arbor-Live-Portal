@@ -38,7 +38,7 @@ test.describe("invoice line items and totals", () => {
     const rentalLabel = `E2E Rental ${stamp}`;
     const feeLabel = `E2E Fee ${stamp}`;
 
-    await page.goto("/dashboard/financial-hub/invoices/new");
+    await page.goto("/dashboard/ops-center/invoices/new");
     await expect(page.getByText("Create invoice").first()).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(/E2E Admin/i).first()).toBeVisible({ timeout: 25_000 });
 

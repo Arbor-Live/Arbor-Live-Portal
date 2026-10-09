@@ -28,7 +28,7 @@ test.describe("admin cascade delete of a booking request", () => {
   });
 
   test("deleting a converted request removes its quote and event", async ({ page }) => {
-    const path = `/dashboard/financial-hub/requests/${seeded.requestId}`;
+    const path = `/dashboard/ops-center/requests/${seeded.requestId}`;
     await page.goto(path);
     await expect(page.getByText(seeded.requestNumber).first()).toBeVisible({ timeout: 25_000 });
 
@@ -60,6 +60,6 @@ test.describe("admin cascade delete of a booking request", () => {
     // The confirm navigates back to the inbox (client-side push; poll the URL).
     await expect
       .poll(async () => page.url(), { timeout: 25_000 })
-      .toContain("/dashboard/financial-hub/requests");
+      .toContain("/dashboard/ops-center/requests");
   });
 });

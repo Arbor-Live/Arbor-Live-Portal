@@ -13,7 +13,7 @@ test.describe("event header invoice link", () => {
     await expect(link).toHaveText(`Invoice ${seeded.invoiceNumber}`);
     await expect(link).toHaveAttribute(
       "href",
-      `/dashboard/financial-hub/invoices/${seeded.invoiceId}`,
+      `/dashboard/ops-center/invoices/${seeded.invoiceId}`,
     );
     await page.screenshot({ path: testInfo.outputPath("header-invoice-link.png") });
   });

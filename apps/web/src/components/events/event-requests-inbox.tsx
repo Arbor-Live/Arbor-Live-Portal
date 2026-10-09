@@ -20,7 +20,7 @@ import { StatusPill } from "@/components/page-header";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const REQUESTS_BASE = "/dashboard/financial-hub/requests";
+const REQUESTS_BASE = "/dashboard/ops-center/requests";
 
 type RequestStatus = "submitted" | "action_required" | "pending_client" | "converted" | "declined";
 

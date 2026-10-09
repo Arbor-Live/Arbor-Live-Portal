@@ -11,7 +11,7 @@ export const INSIGHTS_TAB_LABELS: Record<InsightsTabId, string> = {
   feedback: "Feedback",
 };
 
-export const INSIGHTS_BASE_PATH = "/dashboard/financial-hub/insights";
+export const INSIGHTS_BASE_PATH = "/dashboard/ops-center/insights";
 
 /** Finances is the landing tab; the others are `/insights/<tab>`. */
 export function getInsightsTabPath(tab: InsightsTabId) {

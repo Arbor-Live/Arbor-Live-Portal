@@ -80,7 +80,7 @@ test.describe("invoice host organizations and contacts", () => {
     const contactLast = "Testerly";
     const contactEmail = `e2e-host-${stamp}@example.com`;
 
-    await page.goto("/dashboard/financial-hub/organizations");
+    await page.goto("/dashboard/ops-center/organizations");
     await expect(page.getByText("Billing hosts").first()).toBeVisible({ timeout: 25_000 });
 
     // Create the host as non-subsidized so its pricing mode is distinguishable
@@ -119,7 +119,7 @@ test.describe("invoice host organizations and contacts", () => {
     expect(withContact.contacts.some((contact) => contact.email === contactEmail)).toBe(true);
 
     // Now bill an invoice to them through the editor's pickers.
-    await page.goto("/dashboard/financial-hub/invoices/new");
+    await page.goto("/dashboard/ops-center/invoices/new");
     await expect(page.getByText("Create invoice").first()).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(/E2E Admin/i).first()).toBeVisible({ timeout: 25_000 });
 
@@ -168,7 +168,7 @@ test.describe("invoice host organizations and contacts", () => {
     expect(billed.equipmentPricingMode).toBe("nonSubsidized");
 
     // Archiving drops the host out of the default (active-only) list.
-    await page.goto("/dashboard/financial-hub/organizations");
+    await page.goto("/dashboard/ops-center/organizations");
     await page.getByRole("button").filter({ hasText: hostName }).first().click();
     const editCard = page.locator("[data-slot='card']").filter({ hasText: `Edit host: ${hostName}` });
     await expect(editCard).toBeVisible({ timeout: 25_000 });
@@ -208,7 +208,7 @@ test.describe("invoice host organizations and contacts", () => {
     const survivorName = `E2E Merge Survivor ${stamp}`;
     const victimName = `E2E Merge Victim ${stamp}`;
 
-    await page.goto("/dashboard/financial-hub/organizations");
+    await page.goto("/dashboard/ops-center/organizations");
     await expect(page.getByText("Billing hosts").first()).toBeVisible({ timeout: 25_000 });
 
     const createForm = page.locator("form").filter({ has: page.getByPlaceholder("New host name") });

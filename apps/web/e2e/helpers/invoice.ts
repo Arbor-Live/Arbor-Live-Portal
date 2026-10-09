@@ -67,7 +67,7 @@ export async function createDraftInvoiceWithArtistLine(
   page: Page,
   options: { label: string; quantity?: string; rate?: string },
 ): Promise<string> {
-  await page.goto("/dashboard/financial-hub/invoices/new");
+  await page.goto("/dashboard/ops-center/invoices/new");
   await expect(page.getByText("Create invoice").first()).toBeVisible({ timeout: 25_000 });
   await expect(page.getByText(/E2E Admin/i).first()).toBeVisible({ timeout: 25_000 });
 
@@ -91,7 +91,7 @@ export async function createDraftInvoiceWithArtistLine(
   // component, so there is nothing on the pre-remount page to wait for. One
   // explicit load collapses that into a single hydration this helper can wait
   // out.
-  await page.goto(`/dashboard/financial-hub/invoices/${invoiceId}`);
+  await page.goto(`/dashboard/ops-center/invoices/${invoiceId}`);
   await expect(invoiceEditorHeading(page)).toBeVisible({
     timeout: 60_000,
   });
@@ -117,7 +117,7 @@ export async function waitForInvoiceEditorUrl(page: Page) {
   });
   await expect
     .poll(() => page.url(), { timeout: 30_000 })
-    .toMatch(/\/dashboard\/financial-hub\/invoices\/(?!new$)[^/?#]+/);
+    .toMatch(/\/dashboard\/ops-center\/invoices\/(?!new$)[^/?#]+/);
 
   // Wait for the post-save hydration pass to land before returning. Once the
   // saved invoice arrives over the Convex subscription the editor rewrites its
@@ -170,7 +170,7 @@ export async function clientApprovedQuote(page: Page, browser: Browser, label: s
   expect(approved.revisions[0]).toMatchObject({ number: 1, kind: "approved", totalUsd: 150, recordedLate: false });
   expect(approved.approvedTotalUsd).toBe(150);
 
-  await page.goto(`/dashboard/financial-hub/invoices/${invoiceId}`);
+  await page.goto(`/dashboard/ops-center/invoices/${invoiceId}`);
   await expect(invoiceEditorHeading(page)).toBeVisible({ timeout: 25_000 });
   await expect(page.getByTestId("invoice-versions-card")).toContainText("Approved", { timeout: 25_000 });
   return { invoiceId, publicPath: drafted.publicPath! };

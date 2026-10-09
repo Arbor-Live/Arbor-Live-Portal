@@ -178,7 +178,7 @@ export const quoteChangesRequestedPreviewProps: QuoteChangesRequestedEmailProps 
   clientContactName: "Jordan Lee",
   clientGroupName: "Stanford Concert Network",
   changeNote: "Please reduce crew hours and swap the wireless package for wired mics.",
-  invoiceUrl: `${ARBOR_WEBSITE_URL}/dashboard/financial-hub/invoices/demo`,
+  invoiceUrl: `${ARBOR_WEBSITE_URL}/dashboard/ops-center/invoices/demo`,
 };
 
 export const bandPaymentConfirmationPreviewProps: BandPaymentConfirmationEmailProps = {

@@ -7,7 +7,7 @@ import { DashboardWidget, WidgetRows } from "@/components/dashboard/dashboard-wi
 import { RowCell, RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 
-const PAYOUTS_HREF = "/dashboard/financial-hub/artist-payouts";
+const PAYOUTS_HREF = "/dashboard/ops-center/artist-payouts";
 
 export function AdminPayoutQueueWidget() {
   const counts = useQuery(api.bandPayments.getQueueCounts, {});

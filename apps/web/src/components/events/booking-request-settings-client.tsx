@@ -48,7 +48,7 @@ export function BookingRequestSettingsClient() {
   return (
     <div className="space-y-4">
       <Button asChild variant="outline" size="sm">
-        <Link href="/dashboard/financial-hub/requests">Back to requests</Link>
+        <Link href="/dashboard/ops-center/requests">Back to requests</Link>
       </Button>
 
       <div className="rounded-md border p-4 space-y-3">

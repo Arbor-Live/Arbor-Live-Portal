@@ -14,13 +14,13 @@ export default function EventRequestsPage() {
   return (
     <div className="space-y-4 pb-24">
       <PageHeader
-        back={{ href: "/dashboard/financial-hub", label: "Ops Center" }}
+        back={{ href: "/dashboard/ops-center", label: "Ops Center" }}
         title="Booking requests"
         description="Inbound booking requests, from first ask to event. Answer what needs you, and convert accepted requests into tentative events."
         actions={
           <>
             <Button asChild size="sm" variant="outline">
-              <Link href="/dashboard/financial-hub/requests/settings">
+              <Link href="/dashboard/ops-center/requests/settings">
                 <SlidersHorizontalIcon />
                 Round-robin settings
               </Link>

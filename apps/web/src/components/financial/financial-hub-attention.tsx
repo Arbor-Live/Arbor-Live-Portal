@@ -159,7 +159,7 @@ export function FinancialHubAttention() {
       const name = `${request.firstName} ${request.lastName}`.trim();
       return {
         id: request._id,
-        href: `/dashboard/financial-hub/requests/${request._id}`,
+        href: `/dashboard/ops-center/requests/${request._id}`,
         title: request.eventName?.trim() || name || request.requestNumber,
         subtitle: [request.requestNumber, name, request.venueName].filter(Boolean).join(" · "),
         trailing: daysLabel(request.submittedAt, nowMs),
@@ -176,7 +176,7 @@ export function FinancialHubAttention() {
         label: "New",
         tone: "amber",
         count: newest.length,
-        href: "/dashboard/financial-hub/requests",
+        href: "/dashboard/ops-center/requests",
         emptyLabel: "No new booking requests.",
         items: newest.slice(0, 3).map(toItem),
       },
@@ -185,7 +185,7 @@ export function FinancialHubAttention() {
         label: "Action required",
         tone: "amber",
         count: action.length,
-        href: "/dashboard/financial-hub/requests",
+        href: "/dashboard/ops-center/requests",
         emptyLabel: "No booking requests flagged for follow-up.",
         items: action.slice(0, 3).map(toItem),
       },
@@ -208,7 +208,7 @@ export function FinancialHubAttention() {
 
     const toItem = (invoice: InvoiceRow, at: number): AttentionItem => ({
       id: invoice._id,
-      href: `/dashboard/financial-hub/invoices/${invoice._id}`,
+      href: `/dashboard/ops-center/invoices/${invoice._id}`,
       title: invoice.invoiceNumber,
       subtitle: invoice.clientGroupName ?? invoice.linkedEventTitle ?? invoice.managerName,
       amountUsd: invoice.totalUsd,
@@ -221,7 +221,7 @@ export function FinancialHubAttention() {
         label: "Awaiting client approval",
         tone: "blue",
         count: awaiting.length,
-        href: "/dashboard/financial-hub/invoices",
+        href: "/dashboard/ops-center/invoices",
         emptyLabel: "No quotes are waiting on the client.",
         items: awaiting
           .slice(0, 3)
@@ -232,7 +232,7 @@ export function FinancialHubAttention() {
         label: "Changes requested",
         tone: "amber",
         count: changes.length,
-        href: "/dashboard/financial-hub/invoices",
+        href: "/dashboard/ops-center/invoices",
         emptyLabel: "No quotes have requested changes.",
         items: changes
           .slice(0, 3)
@@ -257,11 +257,11 @@ export function FinancialHubAttention() {
         label: "Past due",
         tone: "rose",
         count: overdue.length,
-        href: "/dashboard/financial-hub/invoices",
+        href: "/dashboard/ops-center/invoices",
         emptyLabel: "No invoices are past due.",
         items: overdue.slice(0, 3).map((invoice): AttentionItem => ({
           id: invoice._id,
-          href: `/dashboard/financial-hub/invoices/${invoice._id}`,
+          href: `/dashboard/ops-center/invoices/${invoice._id}`,
           title: invoice.invoiceNumber,
           subtitle: invoice.clientGroupName ?? invoice.linkedEventTitle ?? invoice.managerName,
           amountUsd: invoice.totalUsd,
@@ -273,11 +273,11 @@ export function FinancialHubAttention() {
         label: "Payment proof to verify",
         tone: "blue",
         count: proofRows.length,
-        href: "/dashboard/financial-hub/invoices/payments",
+        href: "/dashboard/ops-center/invoices/payments",
         emptyLabel: "No payment proof is waiting to be verified.",
         items: proofRows.slice(0, 3).map((row): AttentionItem => ({
           id: row.invoiceId,
-          href: `/dashboard/financial-hub/invoices/payments?invoice=${row.invoiceId}`,
+          href: `/dashboard/ops-center/invoices/payments?invoice=${row.invoiceId}`,
           title: row.invoiceNumber,
           subtitle: row.clientContactName ?? row.clientEmail ?? row.eventTitle,
           amountUsd: row.totalUsd,
@@ -297,7 +297,7 @@ export function FinancialHubAttention() {
         .map(
           (row): AttentionItem => ({
             id: row._id,
-            href: `/dashboard/financial-hub/artist-payouts?payout=${row._id}`,
+            href: `/dashboard/ops-center/artist-payouts?payout=${row._id}`,
             title: row.bandName,
             subtitle: row.eventTitle,
             amountUsd: row.totalUsd,
@@ -316,7 +316,7 @@ export function FinancialHubAttention() {
         tone: "amber",
         count: readyCount,
         totalUsd: payoutCounts?.totalsUsd.ready_to_pay,
-        href: "/dashboard/financial-hub/artist-payouts#payout-stage-ready_to_pay",
+        href: "/dashboard/ops-center/artist-payouts#payout-stage-ready_to_pay",
         emptyLabel: "No signed payouts are ready to pay.",
         items: stageItems("ready_to_pay"),
       },
@@ -328,7 +328,7 @@ export function FinancialHubAttention() {
         totalUsd:
           (payoutCounts?.totalsUsd.needs_onboarding ?? 0) +
           (payoutCounts?.totalsUsd.needs_payee ?? 0),
-        href: "/dashboard/financial-hub/artist-payouts#payout-stage-waiting_on_artist",
+        href: "/dashboard/ops-center/artist-payouts#payout-stage-waiting_on_artist",
         emptyLabel: "No payouts are waiting on the artist.",
         items: stageItems("waiting_on_artist"),
       },

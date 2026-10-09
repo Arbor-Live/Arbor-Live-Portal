@@ -8,7 +8,7 @@ import { RowCell, RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 import { formatUsd } from "@/lib/format";
 
-const INSIGHTS = "/dashboard/financial-hub/insights";
+const INSIGHTS = "/dashboard/ops-center/insights";
 
 function formatRate(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "—";

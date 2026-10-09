@@ -32,7 +32,7 @@ type TotalsState = {
 };
 
 /**
- * Fee definitions (`/dashboard/financial-hub/settings` "Fee definitions" card).
+ * Fee definitions (`/dashboard/ops-center/settings` "Fee definitions" card).
  *
  * The card is the source of the invoice editor's fee picker: a definition's
  * `defaultAmountUsd` pre-fills the rate when a fee row selects it, and the
@@ -60,7 +60,7 @@ test.describe("invoice fee definitions", () => {
   });
 
   test("admin adds, edits, disables, and deletes a fee definition", async ({ page }) => {
-    await page.goto("/dashboard/financial-hub/settings");
+    await page.goto("/dashboard/ops-center/settings");
     await expect(page.getByText("Fee definitions").first()).toBeVisible({ timeout: 25_000 });
 
     // Add via the card's form.
@@ -128,7 +128,7 @@ test.describe("invoice fee definitions", () => {
     const rate = 75;
 
     // Create the definition through the settings card, then drive the editor.
-    await page.goto("/dashboard/financial-hub/settings");
+    await page.goto("/dashboard/ops-center/settings");
     await expect(page.getByText("Fee definitions").first()).toBeVisible({ timeout: 25_000 });
     await page.getByPlaceholder("Key (e.g. labor_fee)").fill(integrationKey);
     await page.getByPlaceholder("Label").fill(integrationLabel);
@@ -141,7 +141,7 @@ test.describe("invoice fee definitions", () => {
       (row) => row?.active === true,
     );
 
-    await page.goto("/dashboard/financial-hub/invoices/new");
+    await page.goto("/dashboard/ops-center/invoices/new");
     await expect(page.getByText("Create invoice").first()).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(/E2E Admin/i).first()).toBeVisible({ timeout: 25_000 });
 

@@ -897,7 +897,7 @@ export function useInvoiceDraft({
         const result = await createDraft(payload);
         setActiveInvoiceId(result.id);
         setApprovalToken(result.publicApprovalToken ?? "");
-        router.replace(`/dashboard/financial-hub/invoices/${result.id}`);
+        router.replace(`/dashboard/ops-center/invoices/${result.id}`);
       }
       setLastSavedSignature(signature);
       if (requestId === saveRequestIdRef.current) {

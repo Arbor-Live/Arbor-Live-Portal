@@ -6,5 +6,5 @@ export default async function InvoicePrintPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  redirect(`/dashboard/financial-hub/invoices/${id}`);
+  redirect(`/dashboard/ops-center/invoices/${id}`);
 }

@@ -42,7 +42,7 @@ function seedPayment(status: "pending_email" | "confirmed", label: string): Seed
 
 /** Open the payouts pipeline and return the row for one seeded payment. */
 async function openPayoutRow(page: Page, eventTitle: string) {
-  await page.goto("/dashboard/financial-hub/artist-payouts");
+  await page.goto("/dashboard/ops-center/artist-payouts");
   await expect(page.getByTestId("payout-pipeline")).toBeVisible({ timeout: 30_000 });
 
   // Search narrows the pipeline to the seeded payout(s).

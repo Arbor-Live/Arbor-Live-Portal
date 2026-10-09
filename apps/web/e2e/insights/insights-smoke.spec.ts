@@ -7,7 +7,7 @@ test.describe("insights dashboard", () => {
   }) => {
     test.setTimeout(120_000);
 
-    await page.goto("/dashboard/financial-hub/insights");
+    await page.goto("/dashboard/ops-center/insights");
     const insights = page.getByTestId("insights-page");
     await expect(insights).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole("heading", { name: "Insights", level: 1 })).toBeVisible();
@@ -79,7 +79,7 @@ test.describe("insights dashboard", () => {
   });
 
   test("a custom range uses the date pickers, not native inputs", async ({ page }) => {
-    await page.goto("/dashboard/financial-hub/insights/demand?from=2026-01-01&to=2026-03-31");
+    await page.goto("/dashboard/ops-center/insights/demand?from=2026-01-01&to=2026-03-31");
     const range = page.getByTestId("insights-range");
     await expect(range).toBeVisible({ timeout: 30_000 });
     await expect(range.getByRole("radio", { name: "Custom" })).toHaveAttribute("aria-checked", "true");
@@ -88,10 +88,10 @@ test.describe("insights dashboard", () => {
     await expect(page.getByTestId("insights-demand-panel")).toBeVisible({ timeout: 30_000 });
   });
 
-  test("Financial Hub shows live Revenue/Expenses cards and links to Insights", async ({
+  test("Ops Center shows live Revenue/Expenses cards and links to Insights", async ({
     page,
   }) => {
-    await page.goto("/dashboard/financial-hub");
+    await page.goto("/dashboard/ops-center");
     await expect(page.getByText("Coming soon.")).toHaveCount(0, { timeout: 30_000 });
 
     const revenueCard = page.locator("[data-slot='card']").filter({ hasText: "Revenue" }).first();
@@ -106,7 +106,7 @@ test.describe("insights dashboard", () => {
     ).toBeVisible({ timeout: 30_000 });
 
     await page.getByRole("link", { name: "Insights", exact: true }).first().click();
-    await page.waitForURL(/\/dashboard\/financial-hub\/insights/, { timeout: 30_000 });
+    await page.waitForURL(/\/dashboard\/ops-center\/insights/, { timeout: 30_000 });
     await expect(page.getByTestId("insights-page")).toBeVisible({ timeout: 30_000 });
   });
 
@@ -127,7 +127,7 @@ test.describe("insights dashboard", () => {
       comments: string;
     };
 
-    await page.goto("/dashboard/financial-hub/insights");
+    await page.goto("/dashboard/ops-center/insights");
     const insights = page.getByTestId("insights-page");
     await expect(insights).toBeVisible({ timeout: 30_000 });
 
@@ -155,7 +155,7 @@ test.describe("insights dashboard", () => {
       whatCouldImprove: string;
     };
 
-    await page.goto("/dashboard/financial-hub/insights");
+    await page.goto("/dashboard/ops-center/insights");
     const insights = page.getByTestId("insights-page");
     await expect(insights).toBeVisible({ timeout: 30_000 });
 
