@@ -39,7 +39,6 @@ import { toUserSelectOption } from "@/lib/user-select-description";
 import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
 import {
   OnboardingAckCheckbox,
-  OnboardingPasskeyStep,
   OnboardingSkipButton,
   OnboardingTextarea,
 } from "@/components/onboarding/onboarding-ui";
@@ -64,6 +63,9 @@ import {
   normalizeEmail,
 } from "./artist/constants";
 import type { FormState, StepId } from "./artist/types";
+import { WelcomeStep } from "./artist/steps/welcome-step";
+import { IdentityStep } from "./artist/steps/identity-step";
+import { PasskeyStep } from "./artist/steps/passkey-step";
 
 export function BandOnboardingWizard() {
   const router = useRouter();
@@ -529,16 +531,7 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.welcome}
                 </QuestionnaireTitle>
-                <div className="space-y-3 text-sm text-foreground/70">
-                  <p>
-                    Welcome! Before you get booked, let&apos;s set up your artist profile:
-                    who you are, where to find you, your members, rates, and who gets paid.
-                  </p>
-                  <p>
-                    Arbor Live pays artists directly through a designated payee — no promoter or
-                    middleman needed.
-                  </p>
-                </div>
+                <WelcomeStep />
                 <MarkStepAnswered />
               </QuestionnaireItem>
 
@@ -549,27 +542,7 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.identity}
                 </QuestionnaireTitle>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="band-display-name">Artist name</Label>
-                    <Input
-                      id="band-display-name"
-                      value={form.displayName}
-                      onChange={(event) => patch({ displayName: event.target.value })}
-                      placeholder="Your artist name"
-                      autoFocus
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="band-bio">Bio</Label>
-                    <OnboardingTextarea
-                      id="band-bio"
-                      value={form.bio}
-                      onChange={(event) => patch({ bio: event.target.value })}
-                      placeholder="A short description of your sound and style…"
-                    />
-                  </div>
-                </div>
+                <IdentityStep form={form} patch={patch} />
                 <MarkStepAnswered />
                 <QuestionnaireFieldError className="text-sm">
                   {currentStep === "identity" ? fieldError : null}
@@ -583,7 +556,7 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.passkey}
                 </QuestionnaireTitle>
-                <OnboardingPasskeyStep onAdded={() => setHasAddedPasskey(true)} />
+                <PasskeyStep onPasskeyAdded={() => setHasAddedPasskey(true)} />
                 <MarkStepAnswered />
               </QuestionnaireItem>
 
