@@ -30,6 +30,7 @@ import {
   withContentsSuffix,
 } from "./lib/rentalFulfillment";
 import { normalizeAssetScanInput } from "./lib/assetScan";
+import { appError, withReportableErrors } from "./lib/errors";
 
 const outboundStatusValue = v.union(
   v.literal("pending"),
@@ -438,6 +439,7 @@ export const startOutbound = mutation({
   returns: v.object({ fulfillmentId: v.id("eventRentalFulfillments") }),
   handler: async (ctx, args) => {
     await requireCrew(ctx);
+    return await withReportableErrors("eventRentalFulfillment.startOutbound", async () => {
     await requireEvent(ctx, args.eventId);
     const existing = await getActiveFulfillment(ctx, args.eventId, "outbound");
     if (existing) {
@@ -446,7 +448,7 @@ export const startOutbound = mutation({
     }
     const completed = await getLatestCompletedOutbound(ctx, args.eventId);
     if (completed) {
-      throw new Error("Outbound already completed for this event. Start a return instead.");
+      appError("OUTBOUND_ALREADY_COMPLETED", "Outbound already completed for this event. Start a return instead.");
     }
     const fulfillmentId = await ctx.db.insert("eventRentalFulfillments", {
       eventId: args.eventId,
@@ -456,6 +458,7 @@ export const startOutbound = mutation({
     });
     await ensurePendingUnitsForOutbound(ctx, args.eventId, fulfillmentId);
     return { fulfillmentId };
+    });
   },
 });
 
@@ -475,14 +478,15 @@ export const scanOutboundAsset = mutation({
   }),
   handler: async (ctx, args) => {
     await requireCrew(ctx);
+    return await withReportableErrors("eventRentalFulfillment.scanOutboundAsset", async () => {
     const event = await requireEvent(ctx, args.eventId);
     const fulfillment = await getActiveFulfillment(ctx, args.eventId, "outbound");
-    if (!fulfillment) throw new Error("Start outbound fulfillment first.");
+    if (!fulfillment) appError("OUTBOUND_NOT_STARTED", "Start outbound fulfillment first.");
 
     const root = await resolveInventoryItemByScan(ctx, args.raw);
     if (!root) {
       const normalized = normalizeAssetScanInput(args.raw);
-      throw new Error(
+      appError("ASSET_SCAN_UNRESOLVED", 
         normalized
           ? `No inventory item matches “${normalized}”. Check the tag and try again.`
           : "Couldn’t read that scan. Try typing the asset tag (for example ALE-0041).",
@@ -572,7 +576,7 @@ export const scanOutboundAsset = mutation({
     }
 
     if (!primaryUnitId || checkedOffCount + addedCount === 0) {
-      throw new Error(
+      appError("OUTBOUND_PACK_UNRESOLVED", 
         skippedAlreadyCount > 0
           ? `${subject} ${bundle.length > 1 ? "are" : "is"} already packed.`
           : `Couldn’t pack ${subject}. Try scanning again.`,
@@ -591,6 +595,7 @@ export const scanOutboundAsset = mutation({
       addedCount,
       skippedAlreadyCount,
     };
+    });
   },
 });
 
@@ -602,15 +607,16 @@ export const setOutboundDisposition = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireCrew(ctx);
+    return await withReportableErrors("eventRentalFulfillment.setOutboundDisposition", async () => {
     const unit = await ctx.db.get(args.unitId);
-    if (!unit) throw new Error("Rental unit not found.");
+    if (!unit) appError("RENTAL_UNIT_NOT_FOUND", "Rental unit not found.");
     const fulfillment = await ctx.db.get(unit.fulfillmentId);
     if (!fulfillment || fulfillment.direction !== "outbound" || fulfillment.status !== "in_progress") {
-      throw new Error("Outbound fulfillment is not in progress.");
+      appError("OUTBOUND_NOT_IN_PROGRESS", "Outbound fulfillment is not in progress.");
     }
     if (unit.outboundStatus !== "pending" && unit.outboundStatus !== args.status) {
       if (unit.outboundStatus === "scanned") {
-        throw new Error("Scanned units cannot be reassigned with a disposition.");
+        appError("OUTBOUND_SCANNED_IMMUTABLE", "Scanned units cannot be reassigned with a disposition.");
       }
     }
     const now = Date.now();
@@ -626,6 +632,7 @@ export const setOutboundDisposition = mutation({
       await listUnitsForFulfillment(ctx, unit.fulfillmentId),
     );
     return null;
+    });
   },
 });
 
@@ -635,11 +642,12 @@ export const undoOutboundUnit = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireCrew(ctx);
+    return await withReportableErrors("eventRentalFulfillment.undoOutboundUnit", async () => {
     const unit = await ctx.db.get(args.unitId);
-    if (!unit) throw new Error("Rental unit not found.");
+    if (!unit) appError("RENTAL_UNIT_NOT_FOUND", "Rental unit not found.");
     const fulfillment = await ctx.db.get(unit.fulfillmentId);
     if (!fulfillment || fulfillment.direction !== "outbound" || fulfillment.status !== "in_progress") {
-      throw new Error("Outbound fulfillment is not in progress.");
+      appError("OUTBOUND_NOT_IN_PROGRESS", "Outbound fulfillment is not in progress.");
     }
     if (unit.outboundStatus === "pending") {
       return null;
@@ -669,6 +677,7 @@ export const undoOutboundUnit = mutation({
       await listUnitsForFulfillment(ctx, unit.fulfillmentId),
     );
     return null;
+    });
   },
 });
 
@@ -682,14 +691,15 @@ export const completeOutbound = mutation({
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventRentalFulfillment.completeOutbound", async () => {
     const event = await requireEvent(ctx, args.eventId);
     const fulfillment = await getActiveFulfillment(ctx, args.eventId, "outbound");
-    if (!fulfillment) throw new Error("No outbound fulfillment in progress.");
+    if (!fulfillment) appError("OUTBOUND_NOT_IN_PROGRESS", "No outbound fulfillment in progress.");
 
     const units = await listUnitsForFulfillment(ctx, fulfillment._id);
     const pending = units.filter((unit) => unit.outboundStatus === "pending");
     if (pending.length > 0) {
-      throw new Error(
+      appError("OUTBOUND_ITEMS_PENDING", 
         `Resolve ${pending.length} unchecked item${pending.length === 1 ? "" : "s"} with replace, no tag, or removed before completing.`,
       );
     }
@@ -717,6 +727,7 @@ export const completeOutbound = mutation({
         : `Delivery completed, but the client was not emailed. ${emailResult.emailWarning ?? ""}`.trim(),
       rentedCount: rented.length,
     };
+    });
   },
 });
 
@@ -728,12 +739,14 @@ export const resendOutboundClientEmail = mutation({
   }),
   handler: async (ctx, args) => {
     await requireCrew(ctx);
+    return await withReportableErrors("eventRentalFulfillment.resendOutboundClientEmail", async () => {
     const event = await requireEvent(ctx, args.eventId);
     const fulfillment = await getLatestCompletedOutbound(ctx, args.eventId);
-    if (!fulfillment) throw new Error("No completed outbound to notify for.");
+    if (!fulfillment) appError("OUTBOUND_NONE_COMPLETED", "No completed outbound to notify for.");
     const units = await listUnitsForFulfillment(ctx, fulfillment._id);
     return await enqueueOutboundPackedEmail(ctx, event, fulfillment, units, {
       forceResend: true,
+    });
     });
   },
 });
@@ -743,6 +756,7 @@ export const startReturn = mutation({
   returns: v.object({ fulfillmentId: v.id("eventRentalFulfillments") }),
   handler: async (ctx, args) => {
     await requireCrew(ctx);
+    return await withReportableErrors("eventRentalFulfillment.startReturn", async () => {
     await requireEvent(ctx, args.eventId);
     const existing = await getActiveFulfillment(ctx, args.eventId, "return");
     if (existing) return { fulfillmentId: existing._id };
@@ -754,16 +768,16 @@ export const startReturn = mutation({
       )
       .take(20);
     if (returnRows.some((row) => row.status === "completed")) {
-      throw new Error("Return already completed for this event.");
+      appError("RETURN_ALREADY_COMPLETED", "Return already completed for this event.");
     }
 
     const outbound = await getLatestCompletedOutbound(ctx, args.eventId);
-    if (!outbound) throw new Error("Complete outbound delivery before starting a return.");
+    if (!outbound) appError("RETURN_NEEDS_COMPLETED_OUTBOUND", "Complete outbound delivery before starting a return.");
 
     const rented = (await listUnitsForFulfillment(ctx, outbound._id)).filter((unit) =>
       isActiveRentedOutbound(unit.outboundStatus),
     );
-    if (!rented.length) throw new Error("No rented equipment to return.");
+    if (!rented.length) appError("RETURN_NOTHING_RENTED", "No rented equipment to return.");
 
     // Workspace treats missing returnStatus as "pending" — no per-unit patches needed
     // (those writes were saturating subscriptions right as Start return ran).
@@ -775,6 +789,7 @@ export const startReturn = mutation({
     });
 
     return { fulfillmentId };
+    });
   },
 });
 
@@ -793,17 +808,18 @@ export const scanReturnAsset = mutation({
   }),
   handler: async (ctx, args) => {
     await requireCrew(ctx);
+    return await withReportableErrors("eventRentalFulfillment.scanReturnAsset", async () => {
     await requireEvent(ctx, args.eventId);
     const returnSession = await getActiveFulfillment(ctx, args.eventId, "return");
-    if (!returnSession) throw new Error("Start return fulfillment first.");
+    if (!returnSession) appError("RETURN_NOT_STARTED", "Start return fulfillment first.");
 
     const outbound = await getLatestCompletedOutbound(ctx, args.eventId);
-    if (!outbound) throw new Error("No completed outbound found.");
+    if (!outbound) appError("OUTBOUND_NONE_COMPLETED", "No completed outbound found.");
 
     const root = await resolveInventoryItemByScan(ctx, args.raw);
     if (!root) {
       const normalized = normalizeAssetScanInput(args.raw);
-      throw new Error(
+      appError("ASSET_SCAN_UNRESOLVED", 
         normalized
           ? `No inventory item matches “${normalized}”. Check the tag and try again.`
           : "Couldn’t read that scan. Try typing the asset tag (for example ALE-0041).",
@@ -852,20 +868,20 @@ export const scanReturnAsset = mutation({
 
     if (!primaryUnitId || checkedInCount === 0) {
       if (skippedAlreadyCount > 0) {
-        throw new Error(
+        appError("RETURN_ALREADY_CHECKED_IN", 
           bundle.length > 1
             ? `${subject} are already checked in.`
             : `${subject} is already checked in.`,
         );
       }
       if (skippedNotOnListCount > 0) {
-        throw new Error(
+        appError("RETURN_NOT_ON_LIST", 
           bundle.length > 1
             ? `${subject} aren’t on this return — they weren’t packed for this rental (or went out as “no tag”). Use Remaining to mark No tag / Missing instead of scanning.`
             : `${subject} isn’t on this return — it wasn’t packed for this rental (or went out as “no tag”). Use Remaining to mark No tag / Missing instead of scanning.`,
         );
       }
-      throw new Error(`Couldn’t check in ${subject}. Try scanning again.`);
+      appError("RETURN_CHECKIN_UNRESOLVED", `Couldn’t check in ${subject}. Try scanning again.`);
     }
 
     return {
@@ -876,6 +892,7 @@ export const scanReturnAsset = mutation({
       skippedAlreadyCount,
       skippedNotOnListCount,
     };
+    });
   },
 });
 
@@ -893,15 +910,16 @@ export const setReturnDisposition = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireCrew(ctx);
+    return await withReportableErrors("eventRentalFulfillment.setReturnDisposition", async () => {
     const unit = await ctx.db.get(args.unitId);
-    if (!unit) throw new Error("Rental unit not found.");
+    if (!unit) appError("RENTAL_UNIT_NOT_FOUND", "Rental unit not found.");
     const returnSession = await getActiveFulfillment(ctx, unit.eventId, "return");
-    if (!returnSession) throw new Error("Return fulfillment is not in progress.");
+    if (!returnSession) appError("RETURN_NOT_IN_PROGRESS", "Return fulfillment is not in progress.");
     if (!isActiveRentedOutbound(unit.outboundStatus)) {
-      throw new Error("Unit is not part of the active rented set.");
+      appError("UNIT_NOT_RENTED", "Unit is not part of the active rented set.");
     }
     if (args.status === "damaged" && !args.damageReportId) {
-      throw new Error("Damaged disposition requires a damage report.");
+      appError("DAMAGE_REPORT_REQUIRED", "Damaged disposition requires a damage report.");
     }
     await ctx.db.patch(unit._id, {
       returnStatus: args.status,
@@ -909,6 +927,7 @@ export const setReturnDisposition = mutation({
       updatedAt: Date.now(),
     });
     return null;
+    });
   },
 });
 
@@ -918,12 +937,13 @@ export const undoReturnUnit = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireCrew(ctx);
+    return await withReportableErrors("eventRentalFulfillment.undoReturnUnit", async () => {
     const unit = await ctx.db.get(args.unitId);
-    if (!unit) throw new Error("Rental unit not found.");
+    if (!unit) appError("RENTAL_UNIT_NOT_FOUND", "Rental unit not found.");
     const returnSession = await getActiveFulfillment(ctx, unit.eventId, "return");
-    if (!returnSession) throw new Error("Return fulfillment is not in progress.");
+    if (!returnSession) appError("RETURN_NOT_IN_PROGRESS", "Return fulfillment is not in progress.");
     if (!isActiveRentedOutbound(unit.outboundStatus)) {
-      throw new Error("Unit is not part of the active rented set.");
+      appError("UNIT_NOT_RENTED", "Unit is not part of the active rented set.");
     }
     if ((unit.returnStatus ?? "pending") === "pending") {
       return null;
@@ -934,6 +954,7 @@ export const undoReturnUnit = mutation({
       updatedAt: Date.now(),
     });
     return null;
+    });
   },
 });
 
@@ -946,19 +967,20 @@ export const completeReturn = mutation({
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventRentalFulfillment.completeReturn", async () => {
     const event = await requireEvent(ctx, args.eventId);
     const returnSession = await getActiveFulfillment(ctx, args.eventId, "return");
-    if (!returnSession) throw new Error("No return fulfillment in progress.");
+    if (!returnSession) appError("RETURN_NOT_IN_PROGRESS", "No return fulfillment in progress.");
 
     const outbound = await getLatestCompletedOutbound(ctx, args.eventId);
-    if (!outbound) throw new Error("No completed outbound found.");
+    if (!outbound) appError("OUTBOUND_NONE_COMPLETED", "No completed outbound found.");
 
     const units = (await listUnitsForFulfillment(ctx, outbound._id)).filter((unit) =>
       isActiveRentedOutbound(unit.outboundStatus),
     );
     const pending = units.filter((unit) => (unit.returnStatus ?? "pending") === "pending");
     if (pending.length > 0) {
-      throw new Error(
+      appError("RETURN_ITEMS_PENDING", 
         `Resolve ${pending.length} unchecked item${pending.length === 1 ? "" : "s"} before completing the return.`,
       );
     }
@@ -977,6 +999,7 @@ export const completeReturn = mutation({
         ? undefined
         : `Return completed, but the client was not emailed. ${emailResult.emailWarning ?? ""}`.trim(),
     };
+    });
   },
 });
 
@@ -988,9 +1011,10 @@ export const resendReturnClientEmail = mutation({
   }),
   handler: async (ctx, args) => {
     await requireCrew(ctx);
+    return await withReportableErrors("eventRentalFulfillment.resendReturnClientEmail", async () => {
     const event = await requireEvent(ctx, args.eventId);
     const outbound = await getLatestCompletedOutbound(ctx, args.eventId);
-    if (!outbound) throw new Error("No completed outbound found.");
+    if (!outbound) appError("OUTBOUND_NONE_COMPLETED", "No completed outbound found.");
     const returnRows = await ctx.db
       .query("eventRentalFulfillments")
       .withIndex("by_eventId_and_direction", (q) =>
@@ -998,12 +1022,13 @@ export const resendReturnClientEmail = mutation({
       )
       .take(20);
     const returnSession = returnRows.find((row) => row.status === "completed");
-    if (!returnSession) throw new Error("No completed return to notify for.");
+    if (!returnSession) appError("RETURN_NONE_COMPLETED", "No completed return to notify for.");
     const units = (await listUnitsForFulfillment(ctx, outbound._id)).filter((unit) =>
       isActiveRentedOutbound(unit.outboundStatus),
     );
     return await enqueueReturnProcessedEmail(ctx, event, returnSession, units, {
       forceResend: true,
+    });
     });
   },
 });

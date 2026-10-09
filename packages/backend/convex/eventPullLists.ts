@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { appError, withReportableErrors } from "./lib/errors";
 import {
   perOccurrencePullQuantity,
   resolveBillableOccurrenceCount,
@@ -207,9 +208,9 @@ async function validatePullListItemInput(
 ) {
   const quantityRequired = Math.max(0, Math.floor(item.quantityRequired));
   if (item.lineKind === "package") {
-    if (!item.packageId) throw new Error("Package lines require a package.");
+    if (!item.packageId) appError("PULL_LIST_PACKAGE_REQUIRED", "Package lines require a package.");
     const pkg = await ctx.db.get(item.packageId);
-    if (!pkg) throw new Error("Inventory package not found.");
+    if (!pkg) appError("PULL_LIST_PACKAGE_NOT_FOUND", "Inventory package not found.");
     return {
       lineKind: "package" as const,
       packageId: item.packageId,
@@ -218,9 +219,9 @@ async function validatePullListItemInput(
       quantityRequired,
     };
   }
-  if (!item.typeId) throw new Error("Type lines require an inventory type.");
+  if (!item.typeId) appError("PULL_LIST_TYPE_REQUIRED", "Type lines require an inventory type.");
   const type = await ctx.db.get(item.typeId);
-  if (!type) throw new Error("Inventory type not found.");
+  if (!type) appError("PULL_LIST_TYPE_NOT_FOUND", "Inventory type not found.");
   return {
     lineKind: "type" as const,
     typeId: item.typeId,
@@ -378,8 +379,9 @@ export const upsertItems = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventPullLists.upsertItems", async () => {
     const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
+    if (!event) appError("EVENT_NOT_FOUND", "Event not found.");
 
     const existing = await ctx.db
       .query("eventPullListItems")
@@ -390,7 +392,9 @@ export const upsertItems = mutation({
     const now = Date.now();
 
     for (const item of args.items) {
-      if (item.quantityRequired < 0) throw new Error("Quantity required cannot be negative.");
+      if (item.quantityRequired < 0) {
+        appError("PULL_LIST_QUANTITY_NEGATIVE", "Quantity required cannot be negative.");
+      }
       const validated = await validatePullListItemInput(ctx, {
         lineKind: item.lineKind,
         typeId: item.typeId,
@@ -448,6 +452,7 @@ export const upsertItems = mutation({
           .take(500)
       ),
     );
+    });
   },
 });
 
@@ -456,9 +461,11 @@ export const removeItem = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventPullLists.removeItem", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Pull list item not found.");
+    if (!existing) appError("PULL_LIST_ITEM_NOT_FOUND", "Pull list item not found.");
     await ctx.db.delete(args.id);
+    });
   },
 });
 
@@ -467,9 +474,12 @@ export const scaffoldFromInvoice = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventPullLists.scaffoldFromInvoice", async () => {
     const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
-    if (!event.invoiceId) throw new Error("Link an invoice to this event before scaffolding.");
+    if (!event) appError("EVENT_NOT_FOUND", "Event not found.");
+    if (!event.invoiceId) {
+      appError("PULL_LIST_NEEDS_INVOICE", "Link an invoice to this event before scaffolding.");
+    }
 
     // Match getInvoiceSyncStatus: split "total" quantities across sibling days /
     // series occurrences so sync comparison stays stable after scaffolding.
@@ -547,6 +557,7 @@ export const scaffoldFromInvoice = mutation({
       insertedCount: scaffoldRows.length,
       summary: summarizePullList(items),
     };
+    });
   },
 });
 
