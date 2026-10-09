@@ -11,7 +11,7 @@ import { runConvex } from "../helpers/convex";
 const adminRoutes = [
   { path: "/dashboard/users", label: "users" },
   { path: "/dashboard/users/crew-applications", label: "crew applications" },
-  { path: "/dashboard/financial-hub/settings", label: "ops center settings" },
+  { path: "/dashboard/ops-center/settings", label: "ops center settings" },
   { path: "/dashboard/inventory/types", label: "inventory types" },
   { path: "/dashboard/inventory/import", label: "inventory import" },
 ] as const;
@@ -19,8 +19,8 @@ const adminRoutes = [
 /** Admins and the Operations team (`OperationsOrAdminGuard`). */
 const operationsRoutes = [
   { path: "/dashboard/users/artist-applications", label: "band applications" },
-  { path: "/dashboard/financial-hub", label: "financial hub" },
-  { path: "/dashboard/financial-hub/insights", label: "insights" },
+  { path: "/dashboard/ops-center", label: "ops center" },
+  { path: "/dashboard/ops-center/insights", label: "insights" },
   { path: "/dashboard/events/crew-scheduling", label: "crew scheduling" },
   { path: "/dashboard/events/venues", label: "venues" },
 ] as const;

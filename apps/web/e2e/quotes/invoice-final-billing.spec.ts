@@ -103,7 +103,7 @@ test.describe("approved estimate → final invoice", () => {
       clientGroupName: `E2E Final Proof ${Date.now()}`,
     }) as { invoiceId: string };
 
-    await page.goto(`/dashboard/financial-hub/invoices/${seeded.invoiceId}`);
+    await page.goto(`/dashboard/ops-center/invoices/${seeded.invoiceId}`);
     const billing = page.getByTestId("invoice-billing-state");
     await expect(billing).toContainText("Final invoice since", { timeout: 25_000 });
     await expect(billing.getByTestId("invoice-billing-proof-pending")).toContainText(

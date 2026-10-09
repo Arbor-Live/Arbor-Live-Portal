@@ -26,7 +26,7 @@ export default function FinancialHubPage() {
             actions={
               <AdminOnlyContent>
                 <Button asChild variant="outline" size="sm">
-                  <Link href="/dashboard/financial-hub/settings">
+                  <Link href="/dashboard/ops-center/settings">
                     <SlidersHorizontalIcon />
                     Settings
                   </Link>

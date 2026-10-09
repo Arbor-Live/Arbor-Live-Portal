@@ -120,7 +120,7 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
     return (
       <div className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
         Request not found. It may have been deleted.{" "}
-        <Link href="/dashboard/financial-hub/requests" className="underline underline-offset-2">
+        <Link href="/dashboard/ops-center/requests" className="underline underline-offset-2">
           Back to requests
         </Link>
       </div>
@@ -172,7 +172,7 @@ function EventRequestDetail({ request }: { request: EventRequest }) {
   const notesDirty = staffNotes.trim() !== (request.staffNotes ?? "").trim();
   const trackHref = request.publicToken ? `/request/track/${request.publicToken}` : null;
   const quoteHref = request.linkedInvoiceId
-    ? `/dashboard/financial-hub/invoices/${request.linkedInvoiceId}`
+    ? `/dashboard/ops-center/invoices/${request.linkedInvoiceId}`
     : null;
   const events =
     request.convertedEvents.length > 0
@@ -199,7 +199,7 @@ function EventRequestDetail({ request }: { request: EventRequest }) {
     setSaving(true);
     try {
       const result = await convertToEvent({ id: requestId });
-      router.push(`/dashboard/financial-hub/invoices/${result.invoiceId}`);
+      router.push(`/dashboard/ops-center/invoices/${result.invoiceId}`);
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
       setSaving(false);
@@ -335,7 +335,7 @@ function EventRequestDetail({ request }: { request: EventRequest }) {
   return (
     <div className="space-y-4 pb-24" data-testid="event-request-detail">
       <PageHeader
-        back={{ href: "/dashboard/financial-hub/requests", label: "Requests" }}
+        back={{ href: "/dashboard/ops-center/requests", label: "Requests" }}
         actions={primaryAction}
         menuLabel="More request actions"
         menu={menu}
@@ -517,7 +517,7 @@ function EventRequestDetail({ request }: { request: EventRequest }) {
         preview={deletePreview ?? null}
         onConfirm={async (cascade) => {
           await deleteRequestAdmin({ id: requestId, cascade });
-          router.push("/dashboard/financial-hub/requests");
+          router.push("/dashboard/ops-center/requests");
         }}
       />
     </div>

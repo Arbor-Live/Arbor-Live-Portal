@@ -165,7 +165,7 @@ export function EventGroupBudgetTab({
                 Linked invoice: <span className="font-medium">{linkedInvoiceNumber}</span>
               </p>
               <Button type="button" variant="outline" size="sm" asChild>
-                <Link href={`/dashboard/financial-hub/invoices/${series.invoiceId}`}>Open invoice</Link>
+                <Link href={`/dashboard/ops-center/invoices/${series.invoiceId}`}>Open invoice</Link>
               </Button>
               {!multiDay ? (
                 <>
@@ -220,7 +220,7 @@ export function EventGroupBudgetTab({
                     managerName: shell?.account?.name ?? "Manager",
                     managerEmail: shell?.account?.email ?? undefined,
                   })
-                    .then((result) => router.push(`/dashboard/financial-hub/invoices/${result.id}`))
+                    .then((result) => router.push(`/dashboard/ops-center/invoices/${result.id}`))
                     .catch((error) =>
                       notify.error(getConvexErrorMessage(error, "Failed to create invoice.")),
                     );

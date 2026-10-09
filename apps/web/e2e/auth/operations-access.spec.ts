@@ -52,7 +52,7 @@ test.describe("Operations team access", () => {
 
   test("ops gets the Ops Center and booking areas, not the admin ones", async ({ page }) => {
     await signInAsOps(page);
-    await page.goto("/dashboard/financial-hub");
+    await page.goto("/dashboard/ops-center");
     await expect(page.getByTestId("attention-booking-requests")).toBeVisible({ timeout: 30_000 });
     // Crew payroll and settings stay admin-only.
     await expect(page.getByTestId("attention-timecards")).toHaveCount(0);

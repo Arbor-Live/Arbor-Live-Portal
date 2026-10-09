@@ -8,7 +8,7 @@ test.describe("staff payment proof verify", () => {
       invoiceNumber: string;
     };
 
-    await page.goto("/dashboard/financial-hub/invoices/payments");
+    await page.goto("/dashboard/ops-center/invoices/payments");
     const row = page.getByTestId("payment-group-pending").getByTestId(`payment-row-${seeded.invoiceId}`);
     await expect(row).toBeVisible({ timeout: 30_000 });
     await row.getByRole("button", { name: "Mark received", exact: true }).click();
@@ -32,8 +32,8 @@ test.describe("staff payment proof verify", () => {
   });
 
   test("the old Payments URL lands on the Payments tab", async ({ page }) => {
-    await page.goto("/dashboard/financial-hub/payments");
-    await expect(page).toHaveURL(/\/dashboard\/financial-hub\/invoices\/payments/, { timeout: 30_000 });
+    await page.goto("/dashboard/ops-center/payments");
+    await expect(page).toHaveURL(/\/dashboard\/ops-center\/invoices\/payments/, { timeout: 30_000 });
     await expect(page.getByTestId("payments-board")).toBeVisible({ timeout: 30_000 });
   });
 });

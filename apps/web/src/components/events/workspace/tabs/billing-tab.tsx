@@ -252,7 +252,7 @@ export function BillingTab() {
                 <div className="flex h-9 items-center justify-between gap-2 border bg-muted/30 px-3 text-sm">
                   <span className="truncate">{invoicePrimaryHostName || "Set a host on the linked invoice."}</span>
                   <Link
-                    href={`/dashboard/financial-hub/invoices/${draft.invoiceId}`}
+                    href={`/dashboard/ops-center/invoices/${draft.invoiceId}`}
                     className="inline-flex shrink-0 items-center gap-1 text-xs text-primary hover:underline"
                   >
                     Edit on invoice

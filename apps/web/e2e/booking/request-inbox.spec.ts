@@ -46,7 +46,7 @@ test.describe("booking request inbox", () => {
   test("open view lists follow-up requests, collapses pending client, hides completed", async ({
     page,
   }) => {
-    await page.goto("/dashboard/financial-hub/requests");
+    await page.goto("/dashboard/ops-center/requests");
 
     await expect(page.getByText(seeds.submitted.requestNumber).first()).toBeVisible({
       timeout: 25_000,
@@ -63,7 +63,7 @@ test.describe("booking request inbox", () => {
   });
 
   test("declined filter shows only the declined request", async ({ page }) => {
-    await page.goto("/dashboard/financial-hub/requests");
+    await page.goto("/dashboard/ops-center/requests");
     await expect(page.getByText(seeds.submitted.requestNumber).first()).toBeVisible({
       timeout: 25_000,
     });
@@ -82,7 +82,7 @@ test.describe("booking request inbox", () => {
   });
 
   test("all statuses includes terminal requests", async ({ page }) => {
-    await page.goto("/dashboard/financial-hub/requests");
+    await page.goto("/dashboard/ops-center/requests");
     await expect(page.getByText(seeds.submitted.requestNumber).first()).toBeVisible({
       timeout: 25_000,
     });

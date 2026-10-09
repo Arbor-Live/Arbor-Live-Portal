@@ -42,7 +42,7 @@ export type NavItem = {
 export const navItems: NavItem[] = [
   { title: "Home", url: "/dashboard", icon: HouseIcon },
   { title: "Events", url: "/dashboard/events", icon: CalendarDotsIcon },
-  { title: "Ops Center", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, opsOnly: true },
+  { title: "Ops Center", url: "/dashboard/ops-center", icon: CurrencyDollarIcon, opsOnly: true },
   { title: "Users", url: "/dashboard/users", icon: UsersIcon, adminOnly: true },
   {
     title: "Artists",
@@ -69,17 +69,17 @@ const inventorySubItems: NavSubItem[] = [
 ];
 
 const financialHubSubItems: NavSubItem[] = [
-  { title: "Overview", url: "/dashboard/financial-hub" },
-  { title: "Insights", url: "/dashboard/financial-hub/insights" },
-  { title: "Booking requests", url: "/dashboard/financial-hub/requests" },
-  { title: "Invoices", url: "/dashboard/financial-hub/invoices" },
-  { title: "Artist payouts", url: "/dashboard/financial-hub/artist-payouts" },
-  { title: "GrantED ledger", url: "/dashboard/financial-hub/granted" },
+  { title: "Overview", url: "/dashboard/ops-center" },
+  { title: "Insights", url: "/dashboard/ops-center/insights" },
+  { title: "Booking requests", url: "/dashboard/ops-center/requests" },
+  { title: "Invoices", url: "/dashboard/ops-center/invoices" },
+  { title: "Artist payouts", url: "/dashboard/ops-center/artist-payouts" },
+  { title: "GrantED ledger", url: "/dashboard/ops-center/granted" },
   { title: "Crew timecards", url: "/dashboard/timecards", adminOnly: true },
   { title: "My timecards", url: "/dashboard/timecards/mine" },
-  { title: "Billing hosts", url: "/dashboard/financial-hub/organizations" },
-  { title: "Create invoice", url: "/dashboard/financial-hub/invoices/new" },
-  { title: "Settings", url: "/dashboard/financial-hub/settings", adminOnly: true },
+  { title: "Billing hosts", url: "/dashboard/ops-center/organizations" },
+  { title: "Create invoice", url: "/dashboard/ops-center/invoices/new" },
+  { title: "Settings", url: "/dashboard/ops-center/settings", adminOnly: true },
 ];
 
 const eventsSubItems: NavSubItem[] = [
@@ -123,7 +123,7 @@ const bandsSubItems: NavSubItem[] = [
 
 export const sectionSubItems: Record<string, NavSubItem[]> = {
   "/dashboard/events": eventsSubItems,
-  "/dashboard/financial-hub": financialHubSubItems,
+  "/dashboard/ops-center": financialHubSubItems,
   "/dashboard/inventory": inventorySubItems,
   "/dashboard/users": usersSubItems,
   "/dashboard/marketing": marketingSubItems,
@@ -150,7 +150,7 @@ export function sectionLabelForPath(
         ? pathname === item.url
         : matchesPath(item.url, pathname) ||
           // Like the sidebar's active section: the timecards pages hang off Ops Center.
-          (item.url === "/dashboard/financial-hub" && pathname.startsWith("/dashboard/timecards")),
+          (item.url === "/dashboard/ops-center" && pathname.startsWith("/dashboard/timecards")),
     )
     .sort((a, b) => b.url.length - a.url.length)[0];
   if (!section) return "Dashboard";

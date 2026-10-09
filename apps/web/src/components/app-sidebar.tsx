@@ -205,7 +205,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         return pendingAvailabilityCount ?? 0
       case "/dashboard/events/post-event":
         return pendingPostEventWorkCount ?? 0
-      case "/dashboard/financial-hub/requests":
+      case "/dashboard/ops-center/requests":
         return pendingBookingRequestsCount ?? 0
       case "/dashboard/events/crew-scheduling":
         return unconfirmedEventCount
@@ -219,9 +219,9 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         return pendingEquipmentBorrowRequestsCount ?? 0
       case "/dashboard/artists/payments":
         return pendingBandPaymentActionsCount ?? 0
-      case "/dashboard/financial-hub/invoices":
+      case "/dashboard/ops-center/invoices":
         return quoteChangesRequestedCount ?? 0
-      case "/dashboard/financial-hub/artist-payouts":
+      case "/dashboard/ops-center/artist-payouts":
         return artistPayoutActionsCount ?? 0
       default:
         return 0
@@ -325,7 +325,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             const isParentActive =
               pathname === item.url ||
               pathname.startsWith(`${item.url}/`) ||
-              (item.url === "/dashboard/financial-hub" &&
+              (item.url === "/dashboard/ops-center" &&
                 pathname.startsWith("/dashboard/timecards"))
             const sectionOpen = hasCollapsibleSubItems
               ? isParentActive || (openSections[item.url] ?? false)

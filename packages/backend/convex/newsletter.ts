@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -229,43 +230,27 @@ const adminSubscriberValue = v.object({
   createdAt: v.number(),
 });
 
+/** The subscriber list, newest first. Pages of subscribers, one status filter at a time. */
 export const listSubscribers = query({
   args: {
     status: v.optional(subscriberStatusValue),
-    limit: v.optional(v.number()),
+    paginationOpts: paginationOptsValidator,
   },
-  returns: v.object({
-    subscribers: v.array(adminSubscriberValue),
-    counts: v.object({
-      subscribed: v.number(),
-      unsubscribed: v.number(),
-    }),
-  }),
+  returns: paginationResultValidator(adminSubscriberValue),
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
 
-    const counts = { subscribed: 0, unsubscribed: 0 };
-    for (const status of ["subscribed", "unsubscribed"] as const) {
-      // Bounded sample is enough to render the badges; the subscriber list is
-      // small (campus mailing list) so a full count scan is not a concern yet.
-      const rows = await ctx.db
-        .query("newsletterSubscribers")
-        .withIndex("by_status", (q) => q.eq("status", status))
-        .take(1000);
-      counts[status] = rows.length;
-    }
-
-    const limit = Math.min(Math.max(args.limit ?? 200, 1), 500);
-    const rows = args.status
-      ? await ctx.db
+    const rowsQuery = args.status
+      ? ctx.db
           .query("newsletterSubscribers")
           .withIndex("by_status", (q) => q.eq("status", args.status!))
           .order("desc")
-          .take(limit)
-      : await ctx.db.query("newsletterSubscribers").order("desc").take(limit);
+      : ctx.db.query("newsletterSubscribers").order("desc");
+    const result = await rowsQuery.paginate(args.paginationOpts);
 
     return {
-      subscribers: rows.map((row) => ({
+      ...result,
+      page: result.page.map((row) => ({
         subscriberId: row._id,
         email: row.email,
         name: row.name,
@@ -276,8 +261,33 @@ export const listSubscribers = query({
         syncError: row.syncError,
         createdAt: row.createdAt,
       })),
-      counts,
     };
+  },
+});
+
+/** Admin: totals behind the summary line and the Send now gate. */
+export const subscriberCounts = query({
+  args: {},
+  returns: v.object({
+    subscribed: v.number(),
+    unsubscribed: v.number(),
+    syncErrors: v.number(),
+  }),
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+
+    const counts = { subscribed: 0, unsubscribed: 0, syncErrors: 0 };
+    for (const status of ["subscribed", "unsubscribed"] as const) {
+      // Bounded sample is enough to render the badges; the subscriber list is
+      // small (campus mailing list) so a full count scan is not a concern yet.
+      const rows = await ctx.db
+        .query("newsletterSubscribers")
+        .withIndex("by_status", (q) => q.eq("status", status))
+        .take(1000);
+      counts[status] = rows.length;
+      counts.syncErrors += rows.filter((row) => row.syncError).length;
+    }
+    return counts;
   },
 });
 

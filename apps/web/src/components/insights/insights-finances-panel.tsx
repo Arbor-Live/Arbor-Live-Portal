@@ -107,7 +107,7 @@ export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelP
           loading={ar === undefined}
           value={formatUsdCompact(ar?.openTotalUsd ?? 0)}
           detail={ar ? `${formatUsd(overdueUsd)} past due · right now` : null}
-          link={{ href: "/dashboard/financial-hub/invoices/payments", label: "Payments" }}
+          link={{ href: "/dashboard/ops-center/invoices/payments", label: "Payments" }}
         />
         <StatTile
           label="Booked ahead (next 90 days)"
@@ -217,7 +217,7 @@ export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelP
                     {ar.oldest.map((row) => (
                       <InsightLinkRow
                         key={row.invoiceId}
-                        href={`/dashboard/financial-hub/invoices/${row.invoiceId}`}
+                        href={`/dashboard/ops-center/invoices/${row.invoiceId}`}
                         eyebrow={row.invoiceNumber}
                         title={row.title}
                         detail={`Due ${formatDate(row.dueAt)}`}

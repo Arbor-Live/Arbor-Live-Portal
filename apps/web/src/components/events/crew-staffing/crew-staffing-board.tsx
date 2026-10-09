@@ -134,7 +134,8 @@ export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
     api.eventCrew.listCrewConflictsForEvent,
     shiftUserIds.length > 0 || askAvailability ? { eventId, userIds: shiftUserIds } : "skip",
   );
-  const conflicts: CrewConflict[] = useMemo(() => conflictsResult ?? [], [conflictsResult]);
+  const conflicts: CrewConflict[] = useMemo(() => conflictsResult?.conflicts ?? [], [conflictsResult]);
+  const uncheckedUserIds = conflictsResult?.uncheckedUserIds ?? [];
 
   // Every key a shift can link to a block by (client ref or stored block id),
   // so "not linked to a section" is one Set lookup per shift instead of a
@@ -262,6 +263,15 @@ export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
             pending={pending}
           />
         ) : null}
+        {/* Mounted up front so the notice is announced when it appears. */}
+        <div aria-live="polite">
+          {uncheckedUserIds.length > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Double bookings weren&apos;t checked for {uncheckedUserIds.length}{" "}
+              {uncheckedUserIds.length === 1 ? "person" : "people"}.
+            </p>
+          ) : null}
+        </div>
         {assignedUsers.length > 0 ? (
           <div className="space-y-1">
             {assignedUsers.map((person) => (

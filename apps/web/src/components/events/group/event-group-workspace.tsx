@@ -101,7 +101,7 @@ function EventGroupHeader() {
       actions={
         series.invoiceId ? (
           <Button type="button" size="sm" variant="outline" asChild>
-            <Link href={`/dashboard/financial-hub/invoices/${series.invoiceId}`}>Open invoice</Link>
+            <Link href={`/dashboard/ops-center/invoices/${series.invoiceId}`}>Open invoice</Link>
           </Button>
         ) : null
       }

@@ -27,7 +27,7 @@ type ReviewState = {
 };
 
 /**
- * Terms templates (`/dashboard/financial-hub/settings` "Terms templates" card).
+ * Terms templates (`/dashboard/ops-center/settings` "Terms templates" card).
  *
  * The card is the source of the invoice editor's Terms checkboxes and, through
  * `loadInvoiceTerms`, of the terms block on the public quote page. The spec
@@ -53,7 +53,7 @@ test.describe("invoice terms templates", () => {
   });
 
   test("admin adds, edits, disables, and deletes a terms template", async ({ page }) => {
-    await page.goto("/dashboard/financial-hub/settings");
+    await page.goto("/dashboard/ops-center/settings");
     await expect(page.getByText("Terms templates").first()).toBeVisible({ timeout: 25_000 });
 
     // Add via the card's form. These fields have real labels, so the form
@@ -125,7 +125,7 @@ test.describe("invoice terms templates", () => {
     const markdown = "Payment terms: net 14 days from invoice date.";
 
     // Create the template through the settings card, then drive the editor.
-    await page.goto("/dashboard/financial-hub/settings");
+    await page.goto("/dashboard/ops-center/settings");
     await expect(page.getByText("Terms templates").first()).toBeVisible({ timeout: 25_000 });
     await formField(page, /^Label/).fill(integrationLabel);
     await formField(page, "Version").fill("v2");
@@ -138,7 +138,7 @@ test.describe("invoice terms templates", () => {
       (row) => row?.active === true,
     );
 
-    await page.goto("/dashboard/financial-hub/invoices/new");
+    await page.goto("/dashboard/ops-center/invoices/new");
     await expect(page.getByText("Create invoice").first()).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(/E2E Admin/i).first()).toBeVisible({ timeout: 25_000 });
 

@@ -11,7 +11,7 @@ import { runConvex } from "../helpers/convex";
 const arborOnlyRoutes = [
   "/dashboard/events/venues",
   "/dashboard/users/crew-applications",
-  "/dashboard/financial-hub",
+  "/dashboard/ops-center",
 ] as const;
 
 /** Payments stay band-org-only; profile/riders are shared with portal admins. */

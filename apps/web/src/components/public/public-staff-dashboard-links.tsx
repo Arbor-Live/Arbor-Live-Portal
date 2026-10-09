@@ -29,13 +29,13 @@ export function PublicStaffDashboardLinks({
   const links: { href: string; label: string }[] = [];
   if (requestId) {
     links.push({
-      href: `/dashboard/financial-hub/requests/${requestId}`,
+      href: `/dashboard/ops-center/requests/${requestId}`,
       label: "Open booking request",
     });
   }
   if (invoiceId) {
     links.push({
-      href: `/dashboard/financial-hub/invoices/${invoiceId}`,
+      href: `/dashboard/ops-center/invoices/${invoiceId}`,
       label: "Open invoice",
     });
   }

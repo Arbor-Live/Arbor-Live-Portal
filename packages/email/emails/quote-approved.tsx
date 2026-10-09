@@ -61,7 +61,7 @@ QuoteApprovedEmail.PreviewProps = {
   quoteTotalUsd: 2450,
   clientContactName: "Jordan Lee",
   clientGroupName: "Stanford Concert Network",
-  invoiceUrl: "http://localhost:3000/dashboard/financial-hub/invoices/demo",
+  invoiceUrl: "http://localhost:3000/dashboard/ops-center/invoices/demo",
 } satisfies QuoteApprovedEmailProps;
 
 export default QuoteApprovedEmail;

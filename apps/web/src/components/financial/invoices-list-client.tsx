@@ -183,7 +183,7 @@ export function InvoicesListClient() {
   async function duplicate(invoice: InvoiceRow) {
     try {
       const result = await duplicateInvoice({ id: invoice._id });
-      router.push(`/dashboard/financial-hub/invoices/${result.id}`);
+      router.push(`/dashboard/ops-center/invoices/${result.id}`);
     } catch (error) {
       notify.error(getConvexErrorMessage(error, "Could not duplicate the invoice."));
     }
@@ -258,7 +258,7 @@ export function InvoicesListClient() {
                   </Button>
                 ) : (
                   <Button asChild size="sm" variant="outline">
-                    <Link href="/dashboard/financial-hub/invoices/new">Create an invoice</Link>
+                    <Link href="/dashboard/ops-center/invoices/new">Create an invoice</Link>
                   </Button>
                 )
               }
@@ -294,7 +294,7 @@ export function InvoicesListClient() {
                           <RowMenu label={`More for ${invoice.invoiceNumber}`}>
                             <DropdownMenuItem onSelect={() => setSelectedId(invoice._id)}>Open details</DropdownMenuItem>
                             <DropdownMenuItem asChild>
-                              <Link href={`/dashboard/financial-hub/invoices/${invoice._id}`}>Open invoice</Link>
+                              <Link href={`/dashboard/ops-center/invoices/${invoice._id}`}>Open invoice</Link>
                             </DropdownMenuItem>
                             {invoice.publicApprovalToken ? (
                               <DropdownMenuItem onSelect={() => void copyQuoteLink(invoice.publicApprovalToken!)}>

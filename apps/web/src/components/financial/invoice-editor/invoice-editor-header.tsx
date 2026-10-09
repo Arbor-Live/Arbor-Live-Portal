@@ -278,7 +278,7 @@ export function InvoiceEditorHeader({
           void (async () => {
             try {
               const result = await duplicateInvoice({ id: activeInvoiceId });
-              router.push(`/dashboard/financial-hub/invoices/${result.id}`);
+              router.push(`/dashboard/ops-center/invoices/${result.id}`);
             } catch (error) {
               notify.error(getConvexErrorMessage(error, "Could not duplicate the invoice."));
             }
@@ -335,23 +335,8 @@ export function InvoiceEditorHeader({
     <>
       <PageHeader
         back={{
-          href: "/dashboard/financial-hub/invoices",
+          href: "/dashboard/ops-center/invoices",
           label: "Invoices",
-          onClick: (event) => {
-            // Modified clicks (new tab/window) leave this page as it is.
-            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-            if (!draft.isDraftDirty) return;
-            event.preventDefault();
-            void (async () => {
-              const ok = await confirm({
-                title: "Discard unsaved changes to this quote?",
-                description: "What you've typed that hasn't been saved will be lost.",
-                confirmLabel: "Discard changes",
-                destructive: true,
-              });
-              if (ok) router.push("/dashboard/financial-hub/invoices");
-            })();
-          },
         }}
         actions={primaryAction}
         menu={menu}
@@ -371,7 +356,7 @@ export function InvoiceEditorHeader({
                 </StatusPill>
               ) : null}
               {sourceRequest ? (
-                <Link href={`/dashboard/financial-hub/requests/${sourceRequest._id}`} className={LINK_PILL}>
+                <Link href={`/dashboard/ops-center/requests/${sourceRequest._id}`} className={LINK_PILL}>
                   <EnvelopeSimpleIcon className="size-3.5" aria-hidden />
                   Request {sourceRequest.requestNumber}
                 </Link>
@@ -454,7 +439,7 @@ export function InvoiceEditorHeader({
         onConfirm={async (cascade) => {
           if (!activeInvoiceId) return;
           await deleteInvoiceAdmin({ id: activeInvoiceId, cascade });
-          router.push("/dashboard/financial-hub/invoices");
+          router.push("/dashboard/ops-center/invoices");
         }}
       />
     </>

@@ -37,7 +37,7 @@ async function crewCheaperAndSave(page: Page) {
     clientGroupName: `E2E Discount Lower ${Date.now()}`,
     crewName: LONG_CREW_NAME,
   }) as { invoiceId: string };
-  await page.goto(`/dashboard/financial-hub/invoices/${invoiceId}`);
+  await page.goto(`/dashboard/ops-center/invoices/${invoiceId}`);
   await expect(invoiceEditorHeading(page)).toBeVisible({ timeout: 60_000 });
   const hours = page.getByTestId("invoice-row-crew-0").getByLabel("Hours");
   await expect(hours).toHaveValue("5", { timeout: 30_000 });

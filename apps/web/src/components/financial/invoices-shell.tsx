@@ -7,7 +7,7 @@ import { PageHeader, PageTabs } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/convex-api";
 
-const BASE = "/dashboard/financial-hub/invoices";
+const BASE = "/dashboard/ops-center/invoices";
 
 export type InvoicesTab = "all" | "payments";
 

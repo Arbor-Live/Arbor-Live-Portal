@@ -92,7 +92,7 @@ export function eventArtistsUrl(eventId: string) {
 }
 
 export function invoiceDashboardUrl(invoiceId: string) {
-  return `${SITE_URL}/dashboard/financial-hub/invoices/${invoiceId}`;
+  return `${SITE_URL}/dashboard/ops-center/invoices/${invoiceId}`;
 }
 
 /** Deep link that opens the damage queue with the report's detail sheet open. */
@@ -133,8 +133,8 @@ export function crewApplicationsAdminUrl() {
 }
 
 export function bookingRequestsAdminUrl(requestId?: string) {
-  if (requestId) return `${SITE_URL}/dashboard/financial-hub/requests/${requestId}`;
-  return `${SITE_URL}/dashboard/financial-hub/requests`;
+  if (requestId) return `${SITE_URL}/dashboard/ops-center/requests/${requestId}`;
+  return `${SITE_URL}/dashboard/ops-center/requests`;
 }
 
 export function requestTrackingUrl(token: string) {

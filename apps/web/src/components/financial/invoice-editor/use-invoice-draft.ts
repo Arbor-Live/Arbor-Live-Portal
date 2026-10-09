@@ -19,6 +19,7 @@ import { getConvexAppErrorData, getConvexErrorMessage } from "@/lib/convex-error
 import { formatUsd } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { useBeforeUnload } from "@/hooks/use-before-unload";
+import { useNavigationGuard } from "@/hooks/use-navigation-guard";
 import { computeInvoiceDraftTotals } from "@/lib/compute-invoice-draft-totals";
 import {
   arborEarnedRevenueUsd,
@@ -897,7 +898,7 @@ export function useInvoiceDraft({
         const result = await createDraft(payload);
         setActiveInvoiceId(result.id);
         setApprovalToken(result.publicApprovalToken ?? "");
-        router.replace(`/dashboard/financial-hub/invoices/${result.id}`);
+        router.replace(`/dashboard/ops-center/invoices/${result.id}`);
       }
       setLastSavedSignature(signature);
       if (requestId === saveRequestIdRef.current) {
@@ -974,6 +975,7 @@ export function useInvoiceDraft({
   // Warn on unload while anything is unsaved, including a draft whose
   // autosave is still debouncing: leaving now would drop that save.
   useBeforeUnload(isDraftDirty, "You have unsaved changes to this quote.");
+  useNavigationGuard(isDraftDirty, "Discard unsaved changes to this quote?");
 
   return {
     invoiceId,

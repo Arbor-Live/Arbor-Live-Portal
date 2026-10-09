@@ -11,7 +11,7 @@ export default function FinancialHubSettingsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        back={{ href: "/dashboard/financial-hub", label: "Ops Center" }}
+        back={{ href: "/dashboard/ops-center", label: "Ops Center" }}
         title="Ops Center settings"
         description="Fee definitions, terms templates, crew cost defaults, and the CoHo gift card alert."
       />

@@ -33,7 +33,7 @@ test.describe("linked invoice margin and crew rate copy", () => {
       clientGroupName: `E2E Crew Rate Host ${Date.now()}`,
     }) as { invoiceId: string };
 
-    await page.goto(`/dashboard/financial-hub/invoices/${seeded.invoiceId}`);
+    await page.goto(`/dashboard/ops-center/invoices/${seeded.invoiceId}`);
     await expect(invoiceEditorHeading(page)).toBeVisible({
       timeout: 60_000,
     });

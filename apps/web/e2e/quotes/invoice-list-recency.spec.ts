@@ -20,7 +20,7 @@ test.describe("invoice list recency", () => {
     seedBulk("seedInvoices", stamp, INVOICE_COUNT);
     const target = newestLabel(stamp, INVOICE_COUNT);
 
-    await page.goto("/dashboard/financial-hub/invoices");
+    await page.goto("/dashboard/ops-center/invoices");
     await page.getByPlaceholder("Invoice, client, series…").fill(target);
 
     const invoiceNumber = `ALINV-BULK-${stamp}-${INVOICE_COUNT - 1}`;
@@ -34,7 +34,7 @@ test.describe("invoice list recency", () => {
     const sheet = page.getByTestId("invoice-sheet");
     await expect(sheet.getByText(invoiceNumber).first()).toBeVisible({ timeout: 25_000 });
     await sheet.getByRole("link", { name: "Open invoice" }).click();
-    await expect(page).toHaveURL(/\/dashboard\/financial-hub\/invoices\/[^/?]+$/, {
+    await expect(page).toHaveURL(/\/dashboard\/ops-center\/invoices\/[^/?]+$/, {
       timeout: 25_000,
     });
   });

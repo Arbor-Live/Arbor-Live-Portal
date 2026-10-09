@@ -17,7 +17,7 @@ export function AdminBookingRequestsWidget() {
     <DashboardWidget
       icon={ClipboardTextIcon}
       title="Booking requests"
-      link={{ href: "/dashboard/financial-hub/requests", label: "Open queue" }}
+      link={{ href: "/dashboard/ops-center/requests", label: "Open queue" }}
       testId="home-booking-requests"
     >
       <WidgetRows
@@ -25,7 +25,7 @@ export function AdminBookingRequestsWidget() {
         empty={requests?.length === 0 ? "No open booking requests right now." : null}
       >
         {requests?.map((request) => (
-          <ListRow key={request._id} href={`/dashboard/financial-hub/requests/${request._id}`}>
+          <ListRow key={request._id} href={`/dashboard/ops-center/requests/${request._id}`}>
             <RowText
               eyebrow={`Submitted ${formatDateTime(request.submittedAt)}`}
               title={request.eventName?.trim() || request.organization?.trim() || request.requestNumber}

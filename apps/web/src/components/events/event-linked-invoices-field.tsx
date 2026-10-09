@@ -110,7 +110,7 @@ export function EventLinkedInvoicesField({
                     </Button>
                   ) : null}
                   <Button asChild type="button" variant="outline" size="sm">
-                    <Link href={`/dashboard/financial-hub/invoices/${invoiceId}`}>Open</Link>
+                    <Link href={`/dashboard/ops-center/invoices/${invoiceId}`}>Open</Link>
                   </Button>
                   <Button
                     type="button"

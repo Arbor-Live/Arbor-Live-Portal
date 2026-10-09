@@ -1433,7 +1433,7 @@ export const seedSubmittedBookingRequest = mutation({
       requestId: seeded.requestId,
       requestNumber: seeded.requestNumber,
       publicToken: seeded.publicToken,
-      path: `/dashboard/financial-hub/requests/${seeded.requestId}`,
+      path: `/dashboard/ops-center/requests/${seeded.requestId}`,
       trackPath: `/request/track/${seeded.publicToken}`,
     };
   },
@@ -3629,7 +3629,7 @@ export const seedBandPaymentForEsign = mutation({
       confirmationToken,
       status,
       eventTitle,
-      adminPath: "/dashboard/financial-hub/artist-payouts",
+      adminPath: "/dashboard/ops-center/artist-payouts",
       bandPath: "/dashboard/artists/payments",
     };
   },
@@ -4069,7 +4069,7 @@ export const getLatestBookingRequestByEmail = query({
       publicToken: match.publicToken ?? null,
       eventName: match.eventName ?? null,
       email: match.email,
-      path: `/dashboard/financial-hub/requests/${match._id}`,
+      path: `/dashboard/ops-center/requests/${match._id}`,
     };
   },
 });
@@ -5810,7 +5810,7 @@ export const seedRequestLinkedDraftQuote = mutation({
       requestNumber: seeded.requestNumber,
       publicToken: seeded.publicToken,
       trackPath: `/request/track/${seeded.publicToken}`,
-      editorPath: `/dashboard/financial-hub/invoices/${invoiceId}`,
+      editorPath: `/dashboard/ops-center/invoices/${invoiceId}`,
     };
   },
 });

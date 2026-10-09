@@ -64,7 +64,7 @@ export function InsightsOpsPanel({ startMs, endMs }: InsightsOpsPanelProps) {
           loading={queueAging === undefined}
           value={formatUsdCompact(owedUsd)}
           detail={`${plural(owedCount, "payout")} not yet paid, upcoming shows included · right now`}
-          link={{ href: "/dashboard/financial-hub/artist-payouts", label: "Artist payouts" }}
+          link={{ href: "/dashboard/ops-center/artist-payouts", label: "Artist payouts" }}
           testId="insights-stat-owed-artists"
         />
         <StatTile
@@ -101,7 +101,7 @@ export function InsightsOpsPanel({ startMs, endMs }: InsightsOpsPanelProps) {
           {queueAging ? (
             <RowList joined>
               {queueAging.queues.map((row) => (
-                <ListRow key={row.status} href="/dashboard/financial-hub/artist-payouts">
+                <ListRow key={row.status} href="/dashboard/ops-center/artist-payouts">
                   <span className="min-w-0 flex-1 truncate">{QUEUE_LABELS[row.status] ?? row.status}</span>
                   <RowCell className="w-20" hideBelow="sm" muted>
                     {row.status === "draft" ? "" : formatDays(row.medianAgeDays)}

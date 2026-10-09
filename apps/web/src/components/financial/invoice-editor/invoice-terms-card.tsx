@@ -42,7 +42,7 @@ export function InvoiceTermsCard({ draft }: { draft: InvoiceDraft }) {
                 {catalogEnabled || fields.termsIds.length > 0 ? "Loading terms…" : "Hover to load terms templates."}
               </p>
             ) : termsDefinitions.length === 0 ? (
-              <p className="text-muted-foreground">No active terms templates. Add them in Financial hub settings.</p>
+              <p className="text-muted-foreground">No active terms templates. Add them in Ops Center settings.</p>
             ) : (
               termsDefinitions.map((row) => {
                 const checked = fields.termsIds.includes(row._id);

@@ -303,7 +303,7 @@ function InvoiceSheetBody({
           </Button>
         ) : null}
         <Button asChild size="sm">
-          <Link href={`/dashboard/financial-hub/invoices/${invoiceId}`}>
+          <Link href={`/dashboard/ops-center/invoices/${invoiceId}`}>
             Open invoice
           </Link>
         </Button>

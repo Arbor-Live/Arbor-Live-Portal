@@ -39,7 +39,7 @@ export function InvoiceRequestSummary({ request }: { request: SourceRequest }) {
           </button>
         </CollapsibleTrigger>
         <Button type="button" variant="outline" size="sm" asChild>
-          <Link href={`/dashboard/financial-hub/requests/${request._id}`}>Open request</Link>
+          <Link href={`/dashboard/ops-center/requests/${request._id}`}>Open request</Link>
         </Button>
       </div>
       <CollapsibleContent>

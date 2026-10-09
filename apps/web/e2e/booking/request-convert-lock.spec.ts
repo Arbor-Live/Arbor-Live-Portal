@@ -33,7 +33,7 @@ test.describe("converted booking request lock", () => {
   });
 
   test("staff actions are hidden once a request is converted", async ({ page }) => {
-    const path = `/dashboard/financial-hub/requests/${seeded.requestId}`;
+    const path = `/dashboard/ops-center/requests/${seeded.requestId}`;
     await page.goto(path);
     await expect(page.getByText(seeded.requestNumber).first()).toBeVisible({ timeout: 25_000 });
     await expect(page.getByTestId("request-status")).toHaveText("Converted", { timeout: 25_000 });
@@ -49,7 +49,7 @@ test.describe("converted booking request lock", () => {
   });
 
   test("the backend refuses to update a converted request", async ({ page }) => {
-    await page.goto(`/dashboard/financial-hub/requests/${seeded.requestId}`);
+    await page.goto(`/dashboard/ops-center/requests/${seeded.requestId}`);
     await expect(page.getByText(seeded.requestNumber).first()).toBeVisible({ timeout: 25_000 });
 
     const result = await callConvexAs(page, "mutation", "eventRequests:updateStatus", {

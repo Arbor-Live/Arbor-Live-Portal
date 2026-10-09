@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useFormContext, useFormState } from "react-hook-form";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
@@ -38,6 +38,15 @@ export function OrganizationSearchField() {
   const matches = useMemo(() => results ?? [], [results]);
   const selectedMatch = matches.find((row) => row.groupId === invoiceGroupId);
   const organizationError = errors.organization?.message;
+  const listId = useId();
+  const listOpen = matches.length > 0 && !invoiceGroupId;
+  // Announced by screen readers as the search resolves; silent until it does.
+  const matchMessage =
+    debounced.length >= 2 && !invoiceGroupId && results !== undefined
+      ? matches.length === 0
+        ? "No matches"
+        : `${matches.length} matching organization${matches.length === 1 ? "" : "s"}`
+      : "";
 
   function selectMatch(match: HostMatch) {
     setValue("invoiceGroupId", match.groupId, { shouldDirty: true, shouldValidate: true });
@@ -73,14 +82,19 @@ export function OrganizationSearchField() {
         onChange={(e) => onQueryChange(e.target.value)}
         placeholder="Search or type a new name"
         aria-invalid={Boolean(organizationError)}
+        aria-expanded={listOpen}
+        aria-controls={listId}
       />
       {invoiceGroupId && selectedMatch ? (
         <p className="text-xs text-muted-foreground">
           Matched existing host: <span className="font-medium">{selectedMatch.name}</span>
         </p>
       ) : null}
-      {matches.length > 0 && !invoiceGroupId ? (
-        <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-1">
+      <p className="sr-only" aria-live="polite">
+        {matchMessage}
+      </p>
+      {listOpen ? (
+        <ul id={listId} className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-1">
           {matches.map((match) => (
             <li key={match.groupId}>
               <button

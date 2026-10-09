@@ -11,7 +11,7 @@ export default function FinancialHubOrganizationsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        back={{ href: "/dashboard/financial-hub", label: "Ops Center" }}
+        back={{ href: "/dashboard/ops-center", label: "Ops Center" }}
         title="Billing hosts"
         description="The clients we invoice and host events for, with their contacts, aliases, and merges. Portal organizations (Arbor Live, artists) are under Users."
       />

@@ -43,7 +43,7 @@ export function FinancialHubRevenueCard() {
         <p className="text-xs text-muted-foreground">Partial data (scan limit reached).</p>
       ) : null}
       <Button asChild variant="outline" size="sm">
-        <Link href="/dashboard/financial-hub/insights">Open Insights</Link>
+        <Link href="/dashboard/ops-center/insights">Open Insights</Link>
       </Button>
     </div>
   );
@@ -79,7 +79,7 @@ export function FinancialHubExpensesCard() {
         <p className="text-xs text-muted-foreground">Partial data (scan limit reached).</p>
       ) : null}
       <Button asChild variant="outline" size="sm">
-        <Link href="/dashboard/financial-hub/insights">Open Insights</Link>
+        <Link href="/dashboard/ops-center/insights">Open Insights</Link>
       </Button>
     </div>
   );

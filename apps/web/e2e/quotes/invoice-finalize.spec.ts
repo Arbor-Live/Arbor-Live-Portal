@@ -7,7 +7,7 @@ test.describe("staff invoice create", () => {
     const stamp = Date.now();
     const artistLabel = `E2E Artist ${stamp}`;
 
-    await page.goto("/dashboard/financial-hub/invoices/new");
+    await page.goto("/dashboard/ops-center/invoices/new");
     await expect(page.getByText("Create invoice").first()).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(/E2E Admin/i).first()).toBeVisible({ timeout: 25_000 });
 
@@ -22,7 +22,7 @@ test.describe("staff invoice create", () => {
     await page.keyboard.press("Escape");
     await saveButton.click();
 
-    await page.waitForURL(/\/dashboard\/financial-hub\/invoices\/(?!new$)[^/?#]+/, {
+    await page.waitForURL(/\/dashboard\/ops-center\/invoices\/(?!new$)[^/?#]+/, {
       timeout: 60_000,
     });
     await expect(invoiceEditorHeading(page)).toBeVisible({

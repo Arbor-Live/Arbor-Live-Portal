@@ -17,7 +17,7 @@ test.describe("booking staff convert", () => {
     await expect(page.getByTestId("request-status")).toHaveText("Submitted");
 
     await page.getByRole("button", { name: "Create quote & tentative event" }).click();
-    await page.waitForURL(/\/dashboard\/financial-hub\/invoices\//, { timeout: 45_000 });
+    await page.waitForURL(/\/dashboard\/ops-center\/invoices\//, { timeout: 45_000 });
 
     // Leave the invoice editor immediately — assert conversion via helpers + request detail.
     await page.goto(seeded.path);

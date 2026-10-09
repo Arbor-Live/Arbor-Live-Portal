@@ -360,20 +360,24 @@ export const listCrewConflictsForEvent = query({
     eventId: v.id("events"),
     userIds: v.array(v.string()),
   },
-  returns: v.array(
-    v.object({
-      userId: v.string(),
-      eventId: v.id("events"),
-      eventTitle: v.string(),
-      startsAt: v.number(),
-      endsAt: v.number(),
-    }),
-  ),
+  returns: v.object({
+    conflicts: v.array(
+      v.object({
+        userId: v.string(),
+        eventId: v.id("events"),
+        eventTitle: v.string(),
+        startsAt: v.number(),
+        endsAt: v.number(),
+      }),
+    ),
+    /** People past the cap the overlap scan never reached. */
+    uncheckedUserIds: v.array(v.string()),
+  }),
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const event = await ctx.db.get(args.eventId);
-    if (!event) return [];
+    if (!event) return { conflicts: [], uncheckedUserIds: [] };
 
     const blocks = await ctx.db
       .query("eventScheduleBlocks")
@@ -394,7 +398,9 @@ export const listCrewConflictsForEvent = query({
     const responderIds = [...new Set(responses.map((response) => response.userId))]
       .filter((id) => !assigneeSet.has(id))
       .sort();
-    const userIds = [...assigneeIds, ...responderIds].slice(0, CONFLICT_USER_CAP);
+    const allUserIds = [...assigneeIds, ...responderIds];
+    const userIds = allUserIds.slice(0, CONFLICT_USER_CAP);
+    const uncheckedUserIds = allUserIds.slice(CONFLICT_USER_CAP);
     const perUser = await Promise.all(
       userIds.map((userId) =>
         ctx.db
@@ -422,7 +428,7 @@ export const listCrewConflictsForEvent = query({
         .map((row) => [row._id, row]),
     );
 
-    return overlapping.flatMap((shift) => {
+    const conflicts = overlapping.flatMap((shift) => {
       const other = otherEvents.get(shift.eventId);
       if (!other || normalizeEventStatus(other.status) === "cancelled" || !shift.userId) return [];
       return [
@@ -435,5 +441,6 @@ export const listCrewConflictsForEvent = query({
         },
       ];
     });
+    return { conflicts, uncheckedUserIds };
   },
 });

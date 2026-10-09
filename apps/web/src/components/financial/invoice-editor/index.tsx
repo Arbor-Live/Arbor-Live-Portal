@@ -21,7 +21,7 @@ import { InvoiceVersionsCard } from "./invoice-versions-card";
 import { useInvoiceDraft, type InvoiceDraft } from "./use-invoice-draft";
 
 /**
- * The quote / invoice editor (`/dashboard/financial-hub/invoices/[id]` and
+ * The quote / invoice editor (`/dashboard/ops-center/invoices/[id]` and
  * `/new`). Reads like the document it produces: header and client workflow on
  * top, one line-items table, and a summary rail with the total. State lives in
  * `useInvoiceDraft`; each section edits its own rows.

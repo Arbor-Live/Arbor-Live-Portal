@@ -549,7 +549,7 @@ export function FinancialHubBandPayoutsClient() {
   return (
     <div className="space-y-4" data-testid="payouts-page">
       <PageHeader
-        back={{ href: "/dashboard/financial-hub", label: "Ops Center" }}
+        back={{ href: "/dashboard/ops-center", label: "Ops Center" }}
         title="Artist payouts"
         description="Every artist payout from the end of the show to the GrantEd transfer. What Arbor needs to do comes first; everything else is waiting on the show or the artist. Payouts are added from an event's Lineup."
         pills={
