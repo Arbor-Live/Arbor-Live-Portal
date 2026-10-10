@@ -6,7 +6,9 @@ import {
   type SectionForAvailability,
 } from "@/lib/crew-availability";
 import {
+  compareHours,
   conflictsDuring,
+  quarterHoursSortKey,
   type AssignableResponder,
   type CrewConflict,
   type QuarterHoursById,
@@ -48,7 +50,7 @@ export function annotateOptionsForWindow(args: {
   askAvailability: boolean;
   quarterHours?: QuarterHoursById;
 }): UserSelectOption[] {
-  const hoursOf = (option: UserSelectOption) => args.quarterHours?.get(option.value) ?? 0;
+  const hoursOf = (option: UserSelectOption) => quarterHoursSortKey(args.quarterHours, option.value);
   const withHours = (option: UserSelectOption): UserSelectOption => {
     const hours = option.value ? args.quarterHours?.get(option.value) : undefined;
     if (hours === undefined) return option;
@@ -58,7 +60,9 @@ export function annotateOptionsForWindow(args: {
     };
   };
   const byFit = (a: { option: UserSelectOption; rank: number }, b: { option: UserSelectOption; rank: number }) =>
-    a.rank - b.rank || hoursOf(a.option) - hoursOf(b.option) || a.option.label.localeCompare(b.option.label);
+    a.rank - b.rank ||
+    compareHours(hoursOf(a.option), hoursOf(b.option)) ||
+    a.option.label.localeCompare(b.option.label);
 
   if (!args.askAvailability || !args.window) {
     if (!args.quarterHours) return args.options;

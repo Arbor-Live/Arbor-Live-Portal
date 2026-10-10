@@ -92,7 +92,8 @@ export const getCard = query({
 /**
  * Hours each person is on shifts in one window (a quarter), across every
  * event. The staffing picker sorts by it so work spreads to whoever has had
- * the least.
+ * the least. Only the first 200 distinct ids are looked up; callers must treat
+ * anyone missing from the result as unknown (sorted last), not as 0h.
  */
 export const listShiftHours = query({
   args: {

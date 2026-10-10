@@ -274,7 +274,12 @@ export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
               size="sm"
               variant="outline"
               className="sm:ml-auto"
-              disabled={staffing.open === 0 || responders.length === 0}
+              disabled={
+                staffing.open === 0 ||
+                responders.length === 0 ||
+                // Wait for quarter hours so the fill picks the fewest-hours people.
+                (quarter !== null && hoursUserIds.length > 0 && quarterHours === undefined)
+              }
               title="Put available crew on open slots, section by section. Skips anyone booked elsewhere."
               onClick={fillOpenSlots}
             >

@@ -56,6 +56,11 @@ export type SectionCandidate = {
 
 type GetBlockRef = (block: TimelineBlockDraft) => string | undefined;
 
+/** Ascending, with Infinity - Infinity treated as a tie rather than NaN. */
+export function compareHours(a: number, b: number) {
+  return a === b ? 0 : a - b;
+}
+
 export function hoursBetweenLocal(startsAt: string, endsAt: string) {
   const start = localDateTimeInputToMs(startsAt);
   const end = localDateTimeInputToMs(endsAt);
@@ -95,6 +100,15 @@ export function conflictsDuring(
 
 /** Saved shift hours per person this quarter (from `userCards.listShiftHours`). */
 export type QuarterHoursById = ReadonlyMap<string, number>;
+
+/**
+ * Sort key for quarter hours. Someone missing from the map (the lookup caps
+ * how many people it returns) sorts after everyone known, never as 0h.
+ */
+export function quarterHoursSortKey(quarterHours: QuarterHoursById | undefined, userId: string) {
+  if (!quarterHours) return 0;
+  return quarterHours.get(userId) ?? Number.POSITIVE_INFINITY;
+}
 
 /**
  * Everyone who could go on this section, best fit first: availability, then
@@ -146,7 +160,7 @@ export function rankCandidatesForSection(args: {
       (a, b) =>
         SECTION_AVAILABILITY_RANK[a.level] - SECTION_AVAILABILITY_RANK[b.level] ||
         a.conflicts.length - b.conflicts.length ||
-        (args.quarterHours?.get(a.userId) ?? 0) - (args.quarterHours?.get(b.userId) ?? 0) ||
+        compareHours(quarterHoursSortKey(args.quarterHours, a.userId), quarterHoursSortKey(args.quarterHours, b.userId)) ||
         hoursFor(a.userId) - hoursFor(b.userId) ||
         (a.responder?.respondedAt ?? Infinity) - (b.responder?.respondedAt ?? Infinity) ||
         a.name.localeCompare(b.name),

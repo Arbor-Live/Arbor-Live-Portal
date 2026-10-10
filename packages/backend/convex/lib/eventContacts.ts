@@ -171,10 +171,11 @@ export async function buildEventTeamContacts(
     if (!key) continue;
     const person = crew.get(key) ?? {
       userId,
-      applicationId: userId ? undefined : shift.crewApplicationId,
+      applicationId: shift.crewApplicationId,
       name: shift.personName?.trim() || undefined,
       roles: [],
     };
+    person.applicationId ??= shift.crewApplicationId;
     const role = shift.role.trim();
     if (role && !person.roles.includes(role)) person.roles.push(role);
     crew.set(key, person);
@@ -197,21 +198,24 @@ export async function buildEventTeamContacts(
   const leadIds = new Set(leads.map((lead) => lead.userId));
 
   for (const person of crew.values()) {
+    if (person.userId && leadIds.has(person.userId)) continue;
+    // A user-backed shift may also carry its crew application: its phone/email
+    // is the fallback when the portal profile has neither.
+    const application = person.applicationId ? await ctx.db.get(person.applicationId) : null;
+    const applicationContact = application?.phone?.trim() || application?.email?.trim() || undefined;
     if (person.userId) {
-      if (leadIds.has(person.userId)) continue;
       const user = userByKey.get(person.userId);
       rows.push({
         roleLabel: person.roles.join(", ") || "Crew",
         person: person.name || user?.name?.trim() || user?.email?.trim() || "Crew",
-        contact: phoneByUserId.get(person.userId) || user?.email?.trim() || undefined,
+        contact: phoneByUserId.get(person.userId) || user?.email?.trim() || applicationContact,
       });
       continue;
     }
-    const application = person.applicationId ? await ctx.db.get(person.applicationId) : null;
     rows.push({
       roleLabel: "Trainee",
       person: person.name || application?.name?.trim() || "Trainee",
-      contact: application?.phone?.trim() || application?.email?.trim() || undefined,
+      contact: applicationContact,
     });
   }
   return rows;

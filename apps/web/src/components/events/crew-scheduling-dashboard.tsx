@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserHoverCard } from "@/components/users/user-hover-card";
 import { useCrewHoursWindows } from "@/hooks/use-crew-hours-windows";
 import { formatHours } from "@/lib/crew-hours-windows";
+import { compareHours } from "@/lib/crew-shift-assign";
 import {
   ADMIN_CREW_SCHEDULING_DEFAULT_WEEKS,
   adminSchedulingRangeFromDateInputs,
@@ -204,7 +205,10 @@ function ResponsesList({ row }: { row: BoardRow }) {
   const responders = [...row.responders].sort(
     (a, b) =>
       RESPONSE_ORDER[a.responseStatus] - RESPONSE_ORDER[b.responseStatus] ||
-      (hoursById.get(a.userId) ?? 0) - (hoursById.get(b.userId) ?? 0) ||
+      compareHours(
+        hoursById.get(a.userId) ?? Number.POSITIVE_INFINITY,
+        hoursById.get(b.userId) ?? Number.POSITIVE_INFINITY,
+      ) ||
       a.name.localeCompare(b.name),
   );
   return (

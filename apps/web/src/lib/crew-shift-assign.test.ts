@@ -176,6 +176,20 @@ describe("rankCandidatesForSection", () => {
     expect(ranked.map((candidate) => candidate.userId)).toEqual(["gus", "alex", "cam"]);
   });
 
+  it("sorts people with unknown quarter hours after everyone known", () => {
+    const gus: AssignableResponder = { userId: "gus", name: "Gus", responseStatus: "yes", respondedAt: 0 };
+    const ranked = rankCandidatesForSection({
+      block: setup,
+      people: [gus, alex],
+      responders: [gus, alex],
+      shifts: [],
+      conflicts: [],
+      getBlockRef,
+      quarterHours: new Map([["alex", 40]]),
+    });
+    expect(ranked.map((candidate) => candidate.userId)).toEqual(["alex", "gus"]);
+  });
+
   it("leaves out people already on the section", () => {
     const ranked = rankCandidatesForSection({
       block: setup,
