@@ -12,6 +12,7 @@ export type {
   PortAssignment,
   ShowBandInput,
   ShowFileDocument,
+  ShowDesk,
   ShowTarget,
   SlotFamily,
   SnakeGroup,
@@ -21,7 +22,7 @@ export type {
   StageBoxPort,
   WingSnap,
 } from "./types";
-export { SHOW_TARGETS, SHOW_TARGET_LABEL } from "./palette";
+export { SHOW_TARGETS, SHOW_TARGET_LABEL, showTargetDesk } from "./palette";
 export { buildX32Scene } from "./x32";
 export type { ConsoleScene } from "./x32";
 export { buildXAirScene } from "./xair";

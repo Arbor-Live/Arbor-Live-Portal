@@ -3,8 +3,14 @@ import { DEFAULT_PATCH_PLAN, allocateEventPatch, sortBandsForShow } from "./allo
 import { BOX_CAPACITY, aes50PortFor } from "./slots";
 import { buildShowFile, fileStem, showFileName } from "./show";
 import { buildBandSnap, buildNightSnap } from "./snap";
-import { buildX32Scene } from "./x32";
-import { buildXAirScene } from "./xair";
+import { buildX32Scene, x32Channels } from "./x32";
+import { buildXAirScene, xairChannels } from "./xair";
+import {
+  buildMixingStationScene,
+  type MsDesk,
+  type MsInputChannel,
+} from "./mixing-station";
+import { showTargetDesk, x32ColorIndex } from "./palette";
 import { buildPatchDiffPlan, buildStageBoxDiagramModel } from "./diagram";
 import { loadDefaultTemplate } from "./template";
 import type {
@@ -13,6 +19,7 @@ import type {
   PatchDiffPlan,
   PatchPlan,
   ShowBandInput,
+  ShowDesk,
   ShowTarget,
   SnakeId,
   StageBoxDiagramModel,
@@ -37,12 +44,15 @@ export type BuildShowPackageResult = {
 const ARCHIVE_EXT: Record<ShowTarget, string> = {
   wing: "show",
   x32: "x32",
+  "x32-ms": "x32-mixing-station",
   xair: "xr18",
+  "xair-ms": "xr18-mixing-station",
 };
 
 /**
  * Build a show package for an event, for the desk the crew actually has:
- * a WING show, an X32/M32 scene, or an X Air/XR18 scene.
+ * a WING show, or X32/M32 and X Air/XR18 scenes — as `.scn` for the desk’s
+ * own editor, or as `.msz` for Mixing Station.
  * Skips bands with no inputs. Throws if nothing remains to generate.
  */
 export function buildShowPackage(args: {
@@ -59,6 +69,8 @@ export function buildShowPackage(args: {
   archive?: boolean;
 }): BuildShowPackageResult {
   const target = args.target ?? "wing";
+  const desk = showTargetDesk(target);
+  const mixingStation = target !== desk;
   const bandsWithInputs = sortBandsForShow(
     args.bands.filter((band) => band.inputs.length > 0),
   ).map((band) => ({
@@ -95,7 +107,7 @@ export function buildShowPackage(args: {
       });
       files[`${band.fileStem}.snap`] = strToU8(serializeSnap(snap));
     });
-  } else if (target === "x32") {
+  } else if (desk === "x32") {
     const night = buildX32Scene({
       template,
       allocation,
@@ -103,7 +115,7 @@ export function buildShowPackage(args: {
       sceneName: "Default",
     });
     warnings.push(...night.warnings);
-    files["Default.scn"] = strToU8(night.text);
+    if (!mixingStation) files["Default.scn"] = strToU8(night.text);
     bandsWithInputs.forEach((band, index) => {
       const scene = buildX32Scene({
         template,
@@ -114,7 +126,7 @@ export function buildShowPackage(args: {
         scope,
       });
       warnings.push(...scene.warnings);
-      files[`${band.fileStem}.scn`] = strToU8(scene.text);
+      if (!mixingStation) files[`${band.fileStem}.scn`] = strToU8(scene.text);
     });
   } else {
     const night = buildXAirScene({
@@ -124,7 +136,7 @@ export function buildShowPackage(args: {
       sceneName: "Default",
     });
     warnings.push(...night.warnings);
-    files["Default.scn"] = strToU8(night.text);
+    if (!mixingStation) files["Default.scn"] = strToU8(night.text);
     for (const band of bandsWithInputs) {
       const scene = buildXAirScene({
         template,
@@ -133,7 +145,30 @@ export function buildShowPackage(args: {
         sceneName: band.bandName,
       });
       warnings.push(...scene.warnings);
-      files[`${band.fileStem}.scn`] = strToU8(scene.text);
+      if (!mixingStation) files[`${band.fileStem}.scn`] = strToU8(scene.text);
+    }
+  }
+
+  // The same night for Mixing Station, which X Air/X32 crews mix from on a
+  // phone or tablet: one `.msz` per scene, opened straight into the app. The
+  // `.scn` builds above still run, for the warnings they raise.
+  if (desk !== "wing" && mixingStation) {
+    const msDesk: MsDesk = desk === "x32" ? "x32" : "xr18";
+    const scenes: Array<{ stem: string; name: string; fileStem: string | null }> = [
+      { stem: "Default", name: "Default", fileStem: null },
+      ...bandsWithInputs.map((band) => ({
+        stem: band.fileStem,
+        name: band.bandName,
+        fileStem: band.fileStem,
+      })),
+    ];
+    for (const scene of scenes) {
+      files[`${scene.stem}.msz`] = buildMixingStationScene({
+        desk: msDesk,
+        channels: msChannels(desk, template, allocation, scene.fileStem),
+        sceneName: scene.name,
+        headamps: scene.fileStem === null,
+      });
     }
   }
 
@@ -152,15 +187,30 @@ export function buildShowPackage(args: {
     sceneNames: ["Default", ...bandsWithInputs.map((b) => b.bandName)],
     // The same loss is named once per band scene; the report wants it once.
     warnings: [...new Set(warnings)],
-    preview: previewRows(allocation, bandsWithInputs, target),
+    preview: previewRows(allocation, bandsWithInputs, desk),
   };
+}
+
+/** The `.scn` channel plan for this desk, in Mixing Station’s terms. */
+function msChannels(
+  desk: "x32" | "xair",
+  template: WingSnap,
+  allocation: EventPatchAllocation,
+  fileStem: string | null,
+): Map<number, MsInputChannel> {
+  if (desk === "xair") return xairChannels(template, allocation, fileStem);
+  const out = new Map<number, MsInputChannel>();
+  for (const [n, c] of x32Channels(template, allocation, fileStem)) {
+    out.set(n, { ...c, color: x32ColorIndex(c.color) });
+  }
+  return out;
 }
 
 /** How each used channel reads on the target desk, for the report panel. */
 function previewRows(
   allocation: EventPatchAllocation,
   bands: ShowBandInput[],
-  target: ShowTarget,
+  target: ShowDesk,
 ): ConsolePreviewRow[] {
   const byKey = new Map(
     allocation.ports.map((port) => [`${port.snake}:${port.port}`, port]),

@@ -15,7 +15,13 @@ import { action } from "./_generated/server";
 type EventRiderRow = FunctionReturnType<typeof api.bandRiders.listForEvent>[number];
 
 const targetValidator = v.optional(
-  v.union(v.literal("wing"), v.literal("x32"), v.literal("xair")),
+  v.union(
+    v.literal("wing"),
+    v.literal("x32"),
+    v.literal("x32-ms"),
+    v.literal("xair"),
+    v.literal("xair-ms"),
+  ),
 );
 
 const previewRowValidator = v.object({
@@ -107,7 +113,13 @@ export const previewByEventId = action({
     target: targetValidator,
   },
   returns: v.object({
-    target: v.union(v.literal("wing"), v.literal("x32"), v.literal("xair")),
+    target: v.union(
+      v.literal("wing"),
+      v.literal("x32"),
+      v.literal("x32-ms"),
+      v.literal("xair"),
+      v.literal("xair-ms"),
+    ),
     warnings: v.array(v.string()),
     scenes: v.array(v.string()),
     preview: v.array(previewRowValidator),

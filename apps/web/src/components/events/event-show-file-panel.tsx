@@ -101,7 +101,7 @@ export function EventShowFilePanel({ eventId }: { eventId: Id<"events"> }) {
             value={target}
             onValueChange={(value) => onTargetChange(value as ShowTarget)}
           >
-            <SelectTrigger className="h-8 w-[170px]" aria-label="Console">
+            <SelectTrigger className="h-8 w-[250px]" aria-label="Console">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
