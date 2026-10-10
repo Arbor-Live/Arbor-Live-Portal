@@ -6,6 +6,19 @@ import { buildShowPackage, loadDefaultTemplate } from "./node";
 import { buildX32Scene } from "./x32";
 import { buildXAirScene } from "./xair";
 
+/** A `.msz` is a zip: an empty marker file plus one MS Scene json. */
+function readMsz(bytes: Uint8Array) {
+  const inner = unzipSync(bytes);
+  expect(Object.keys(inner)).toHaveLength(2);
+  expect(inner["preset_meta_info.json"]?.byteLength).toBe(0);
+  const json = Object.entries(inner).find(([name]) => name !== "preset_meta_info.json")!;
+  const scene = JSON.parse(strFromU8(json[1]));
+  type Ch = { ref: { offset: number; type: number }; data: Record<string, any> };
+  const ch = (n: number) =>
+    (scene.ch as Ch[]).find((c) => c.ref.type === 0 && c.ref.offset === n - 1)!.data;
+  return { scene, ch };
+}
+
 function input(
   partial: Partial<RiderInputChannel> &
     Pick<RiderInputChannel, "id" | "channel" | "source">,
@@ -203,5 +216,75 @@ describe("buildShowPackage targets", () => {
     expect(result.fileName).toBe("Day N Mayfield-xr18.zip");
     const files = unzipSync(result.zipBytes);
     expect(strFromU8(files["Default.scn"]!).startsWith("/config/chlink")).toBe(true);
+  });
+
+  it("packs a Mixing Station .msz per X Air scene, named, coloured and muted like the .scn", () => {
+    const result = buildShowPackage({
+      eventName: "Day N Mayfield",
+      bands: [openers, headliners],
+      target: "xair-ms",
+    });
+    expect(result.fileName).toBe("Day N Mayfield-xr18-mixing-station.zip");
+    const files = unzipSync(result.zipBytes);
+    expect(Object.keys(files)).toEqual(["Default.msz", "Openers.msz", "Headliners.msz"]);
+    // Same desk, same report as the .scn download.
+    const scn = buildShowPackage({ eventName: "E", bands: [openers, headliners], target: "xair" });
+    expect(result.preview).toEqual(scn.preview);
+    expect(result.warnings).toEqual(scn.warnings);
+
+    const night = readMsz(files["Default.msz"]!);
+    expect(night.scene.meta).toMatchObject({ name: "Default", type: "scene" });
+    expect(night.scene.consoleMeta).toMatchObject({ model: "XR18" });
+    expect(night.ch(1).name.generic).toMatchObject({ name: "Sam", color: 6 });
+    expect(night.ch(3).name.generic.name).toBe("OH L");
+    expect(night.ch(4).name.generic.name).toBe("OH R");
+    expect(night.ch(3).link.generic.linked).toBe(true);
+    expect(night.ch(3).headamp["+48v"]).toBe(true);
+    expect(night.ch(2).headamp["+48v"]).toBe(false);
+    expect(night.ch(4).main.generic["mix.pan"]).toBe(100);
+    // The night baseline is all muted, faders down; In n feeds channel n.
+    expect(night.ch(1).main.generic["mix.rawOn"]).toBe(false);
+    expect(night.ch(1).main.generic["mix.lvl"]).toBe(-90);
+    expect(night.ch(5).routing.mixer["cfg.in.0.sink.0.src"]).toBe(5);
+    // An unused slot is written blank, not left with the template's name.
+    expect(night.ch(16).name.generic).toMatchObject({ name: "", color: 0 });
+
+    const headliners_ = readMsz(files["Headliners.msz"]!);
+    expect(headliners_.scene.meta.name).toBe("Headliners");
+    expect(headliners_.ch(2).main.generic).toMatchObject({ "mix.rawOn": true, "mix.lvl": 0 });
+    // Only the night baseline carries gain/48V; a band recall leaves them be.
+    expect(headliners_.ch(3).headamp).toBeUndefined();
+  });
+
+  it("keeps the Default baseline when a band is also called Default", () => {
+    const named = { ...openers, bandName: "Default", fileStem: "Default" };
+    const result = buildShowPackage({ eventName: "E", bands: [named, headliners], target: "xair-ms" });
+    const files = unzipSync(result.zipBytes);
+    expect(Object.keys(files)).toEqual(["Default.msz", "Default (2).msz", "Headliners.msz"]);
+    // The baseline (all muted, carries 48V) is still the first file.
+    expect(readMsz(files["Default.msz"]!).ch(1).main.generic["mix.rawOn"]).toBe(false);
+    expect(readMsz(files["Default (2).msz"]!).ch(1).main.generic["mix.rawOn"]).toBe(true);
+  });
+
+  it("builds no .msz bytes for a preview", () => {
+    const result = buildShowPackage({ eventName: "E", bands: [openers, headliners], target: "x32-ms", archive: false });
+    expect(result.zipBytes.byteLength).toBe(0);
+    expect(result.preview.length).toBeGreaterThan(0);
+  });
+
+  it("routes the X32 .msz inputs from AES50 A, both snakes", () => {
+    const result = buildShowPackage({
+      eventName: "E",
+      bands: [openers, headliners],
+      target: "x32-ms",
+    });
+    const files = unzipSync(result.zipBytes);
+    expect(Object.keys(files)).toEqual(["Default.msz", "Openers.msz", "Headliners.msz"]);
+    const night = readMsz(files["Default.msz"]!);
+    expect(night.scene.consoleMeta).toMatchObject({ model: "X32/M32" });
+    const blocks = night.scene.console.inputRouting.mixer;
+    expect([0, 1, 2, 3].map((b) => blocks[`routing.inBlocks.${b}`])).toEqual([4, 5, 6, 7]);
+    expect(night.ch(2).name.generic).toMatchObject({ name: "Kick", color: 5 });
+    expect(night.ch(32).routing.mixer["cfg.in.0.sink.0.src"]).toBe(32);
   });
 });

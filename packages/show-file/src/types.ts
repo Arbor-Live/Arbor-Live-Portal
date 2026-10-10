@@ -16,7 +16,11 @@ import type { MonitorBus } from "./monitors";
  * - `x32`   — Behringer X32 / Midas M32 `.scn` scene.
  * - `xair`  — Behringer X Air / Midas MR `.scn` scene (XR12/16/18).
  */
-export type ShowTarget = "wing" | "x32" | "xair";
+/** A desk, and for X32/X Air, which app the scenes are for. */
+export type ShowTarget = "wing" | "x32" | "xair" | "x32-ms" | "xair-ms";
+
+/** The physical console a target builds for. */
+export type ShowDesk = "wing" | "x32" | "xair";
 
 /** One channel as it lands on a target desk, for the pre-download report. */
 export type ConsolePreviewRow = {

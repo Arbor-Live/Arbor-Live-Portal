@@ -1,4 +1,4 @@
-import type { ShowTarget } from "./types";
+import type { ShowDesk, ShowTarget } from "./types";
 
 /**
  * Console colour and icon translation.
@@ -13,13 +13,20 @@ import type { ShowTarget } from "./types";
  * the X32 hues under palette indexes instead of mnemonics.
  */
 
-export const SHOW_TARGETS: ShowTarget[] = ["wing", "x32", "xair"];
+export const SHOW_TARGETS: ShowTarget[] = ["wing", "x32", "x32-ms", "xair", "xair-ms"];
 
 export const SHOW_TARGET_LABEL: Record<ShowTarget, string> = {
   wing: "Behringer WING",
   x32: "X32 / M32",
+  "x32-ms": "X32 / M32 · Mixing Station",
   xair: "X Air / XR18",
+  "xair-ms": "X Air / XR18 · Mixing Station",
 };
+
+/** Mixing Station targets build for the same desk as their `.scn` sibling. */
+export function showTargetDesk(target: ShowTarget): ShowDesk {
+  return target === "x32-ms" ? "x32" : target === "xair-ms" ? "xair" : target;
+}
 
 /** WING `col` → X32 colour mnemonic. Several WING colours collapse onto one. */
 export const WING_COL_TO_X32: Record<number, string> = {
@@ -38,7 +45,12 @@ export function wingColToX32(wingCol: number | undefined): string {
 }
 
 export function wingColToXAir(wingCol: number | undefined): number {
-  return X32_CODE_TO_XAIR[wingColToX32(wingCol)] ?? 0;
+  return x32ColorIndex(wingColToX32(wingCol));
+}
+
+/** X32 mnemonic → palette index (Mixing Station and the X Air share it). */
+export function x32ColorIndex(code: string): number {
+  return X32_CODE_TO_XAIR[code] ?? 0;
 }
 
 /**

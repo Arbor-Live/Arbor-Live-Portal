@@ -27,7 +27,7 @@ const MAX_CH = 32;
 const EQ_DEFAULT_HPF = "OFF 24 20.0";
 
 /** One console channel, already placed on the X32’s 1–32 mono slots. */
-type X32Channel = {
+export type X32Channel = {
   ch: number;
   width: 1 | 2;
   name: string;
@@ -88,7 +88,7 @@ export function buildX32Scene(args: {
   }
 
   const fileStem = band?.fileStem ?? null;
-  const current = buildChannels(template, allocation, fileStem);
+  const current = x32Channels(template, allocation, fileStem);
   const full = fileStem === null || args.scope === false;
   const lines: string[] = [`#4.0# ${sceneName(args.sceneName)} "" %000000000 1`];
 
@@ -114,7 +114,7 @@ export function buildX32Scene(args: {
       }
     }
   } else {
-    const before = buildChannels(
+    const before = x32Channels(
       template,
       allocation,
       previous?.fileStem ?? null,
@@ -145,7 +145,7 @@ function blankChannel(n: number): X32Channel {
 }
 
 /** The X32’s own name for “no colour” is OFF; a WING colour maps through. */
-function buildChannels(
+export function x32Channels(
   template: WingSnap,
   allocation: EventPatchAllocation,
   fileStem: string | null,

@@ -28,7 +28,7 @@ const FX_SENDS = 4;
 const DCAS = 4;
 const MUTE_GROUPS = 4;
 
-type XAirChannel = {
+export type XAirChannel = {
   ch: number;
   width: 1 | 2;
   name: string;
@@ -56,7 +56,7 @@ export function buildXAirScene(args: {
   }
 
   const fileStem = args.band?.fileStem ?? null;
-  const channels = buildChannels(args.template, args.allocation, fileStem);
+  const channels = xairChannels(args.template, args.allocation, fileStem);
   const lines: string[] = [];
 
   const chlink = Array<boolean>(MAX_CH / 2).fill(false);
@@ -169,7 +169,8 @@ function blankChannel(n: number): XAirChannel {
   return { ch: n, width: 1, name: "", used: false, muted: true, color: 0, phantom: false };
 }
 
-function buildChannels(
+/** Snake A on the X Air’s 16 local inputs; `fileStem` null is the muted night. */
+export function xairChannels(
   template: WingSnap,
   allocation: EventPatchAllocation,
   fileStem: string | null,
