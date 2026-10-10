@@ -417,6 +417,72 @@ export function mergeServerActBlocks<T extends ShiftBlockLink & EventShiftDraft>
   };
 }
 
+function traineeShiftKey(shift: ShiftBlockLink & EventShiftDraft) {
+  return [
+    shift.id,
+    shift.scheduleBlockId,
+    shift.crewApplicationId,
+    shift.personName,
+    shift.startsAt,
+    shift.endsAt,
+  ].join("|");
+}
+
+/**
+ * Three-way merge of trainee shifts. Trainees are assigned by their own
+ * mutation (intro email, calendar invite), which writes straight to the server;
+ * pull those rows into the draft so the next schedule save doesn't delete them.
+ * Local edits to a trainee row win, as in `mergeServerActBlocks`. Returns null
+ * when nothing changed.
+ */
+export function mergeServerTraineeShifts<T extends ShiftBlockLink & EventShiftDraft>(
+  state: ScheduleState<T>,
+  baseline: ScheduleState<T>,
+  serverTraineeShifts: T[],
+): { state: ScheduleState<T>; baseline: ScheduleState<T> } | null {
+  const byId = (shifts: T[]) =>
+    new Map(
+      shifts
+        .filter((shift) => shift.id && shift.crewApplicationId && !shift.userId)
+        .map((shift) => [shift.id!, shift]),
+    );
+  const server = byId(serverTraineeShifts);
+  const base = byId(baseline.shifts);
+  const local = byId(state.shifts);
+
+  let nextState = state.shifts;
+  let nextBase = baseline.shifts;
+  const replace = (shifts: T[], id: string, next: T | null) => {
+    const index = shifts.findIndex((shift) => shift.id === id);
+    if (index === -1) return next ? [...shifts, next] : shifts;
+    return next
+      ? shifts.map((shift, i) => (i === index ? next : shift))
+      : shifts.filter((_, i) => i !== index);
+  };
+
+  for (const id of new Set([...server.keys(), ...base.keys()])) {
+    const s = server.get(id);
+    const b = base.get(id);
+    const l = local.get(id);
+    if (s && !b) {
+      nextBase = replace(nextBase, id, s);
+      if (!l) nextState = replace(nextState, id, s);
+    } else if (!s && b) {
+      // Gone on the server: drop it even if edited, since saving its id would fail.
+      nextBase = replace(nextBase, id, null);
+      nextState = replace(nextState, id, null);
+    } else if (s && b && traineeShiftKey(s) !== traineeShiftKey(b)) {
+      nextBase = replace(nextBase, id, s);
+      if (l && traineeShiftKey(l) === traineeShiftKey(b)) nextState = replace(nextState, id, s);
+    }
+  }
+  if (nextState === state.shifts && nextBase === baseline.shifts) return null;
+  return {
+    state: { blocks: state.blocks, shifts: nextState },
+    baseline: { blocks: baseline.blocks, shifts: nextBase },
+  };
+}
+
 /**
  * Act soundcheck/set blocks are written by the lineup, not this editor. Pull the
  * server's current set into a schedule draft without touching staff edits: add,

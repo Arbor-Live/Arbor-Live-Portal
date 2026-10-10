@@ -288,7 +288,12 @@ Event types (drive which workspace tabs and quick-add blocks appear):
 - **Trainees** (shifts with `crewApplicationId` and no `userId`) shadow: they
   never fill a slot, never count toward staffing, crew cost, or invoice crew
   lines, and are never removed by "Delete unlinked shifts". Editors that don't
-  send `crewApplicationId` back keep it (`eventCrew.upsertShifts`).
+  send `crewApplicationId` back keep it (`eventCrew.upsertShifts`). Staff
+  admins can assign one from the event's Run of Show tab (Trainees → Assign
+  trainee): same `assignTraineeToEvent` mutation and readiness check as Crew
+  applications, saved right away. The event workspace pulls server trainee
+  shifts into its schedule draft (`mergeServerTraineeShifts`) so a later
+  schedule save doesn't delete them.
 - **Timezone:** the whole portal uses Pacific Time (`America/Los_Angeles` /
   `PORTAL_TIMEZONE` in `@arbor/format`). Display, input hydration/save, day
   keys, and FullCalendar grids must go through that package (or
