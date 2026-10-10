@@ -1,6 +1,15 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
 import {
@@ -18,6 +27,7 @@ import { useDashboardNav, type DashboardNavSection } from "@/hooks/use-dashboard
 import { UserAvatar } from "@/components/account/user-avatar";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Command,
   CommandDialog,
@@ -26,7 +36,6 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandShortcut,
 } from "@/components/ui/command";
 
 /** Mirrors `MIN_GLOBAL_SEARCH_CHARS` in convex/globalSearch.ts. */
@@ -48,6 +57,18 @@ function pageEntries(sections: DashboardNavSection[]): PageEntry[] {
       icon: item.icon,
     }));
   });
+}
+
+/** Pages under their sidebar section; top-level pages (Home, Camera…) under "General". */
+function groupPages(pages: PageEntry[]) {
+  const groups: { heading: string; pages: PageEntry[] }[] = [];
+  for (const page of pages) {
+    const heading = page.section ?? "General";
+    const group = groups.find((candidate) => candidate.heading === heading);
+    if (group) group.pages.push(page);
+    else groups.push({ heading, pages: [page] });
+  }
+  return groups;
 }
 
 function matchesPage(page: PageEntry, words: string[]) {
@@ -109,7 +130,42 @@ export function CommandPalette() {
 
   const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const matchingPages = words.length ? pages.filter((page) => matchesPage(page, words)) : pages;
-  const shown = searching ? results : undefined;
+  // Skeleton rows stand in while a query settles, so Enter never opens a
+  // result from the previous query.
+  const shown = searching && !pending ? results : undefined;
+  // Browsing: pages under their section. Searching: one "Pages" group, so its
+  // headings never repeat the result sections (Events, Artists).
+  // The list fits its content and glides between sizes. While a search
+  // settles it holds its height (the skeleton fills it), then glides once to
+  // the results, instead of collapsing and regrowing on every keystroke.
+  const pendingRef = useRef(pending);
+  const listElement = useRef<HTMLDivElement | null>(null);
+  const listRef = useCallback((list: HTMLDivElement | null) => {
+    listElement.current = list;
+    const sizer = list?.querySelector<HTMLElement>("[cmdk-list-sizer]");
+    if (!list || !sizer) return;
+    const fit = () => {
+      if (!pendingRef.current) list.style.height = `${sizer.offsetHeight}px`;
+    };
+    // No synchronous fit: cmdk re-attaches this ref on renders, before the
+    // layout effect below has recorded `pending`. The observer's first callback
+    // runs after it.
+    const observer = new ResizeObserver(fit);
+    observer.observe(sizer);
+    return () => observer.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    pendingRef.current = pending;
+    const list = listElement.current;
+    const sizer = list?.querySelector<HTMLElement>("[cmdk-list-sizer]");
+    if (!pending && list && sizer) list.style.height = `${sizer.offsetHeight}px`;
+  }, [pending]);
+
+  const pageGroups = (
+    words.length ? [{ heading: "Pages", pages: matchingPages }] : groupPages(matchingPages)
+  )
+    // While a search settles the skeleton stands alone; pages join the results after.
+    .filter((group) => group.pages.length > 0 && !pending);
 
   function go(url: string) {
     setOpen(false);
@@ -139,126 +195,191 @@ export function CommandPalette() {
         }}
         title="Search"
         description="Jump to a page, or find an event, invoice, person or artist."
-        className="sm:max-w-xl"
+        className="sm:max-w-2xl"
       >
         {/* Results already match on the server; cmdk only orders keyboard focus. */}
         <Command shouldFilter={false}>
           <CommandInput
             value={search}
             onValueChange={setSearch}
-            // 16px on phones so iOS does not zoom into the field.
-            className="text-base sm:text-xs"
             placeholder={
-              isArborContext ? "Search pages, events, invoices, people…" : "Search pages…"
+              isArborContext ? "Search events, invoices, people, pages…" : "Search pages…"
             }
-          />
-          <CommandList className="max-h-[min(28rem,60vh)]">
-            {pending ? null : (
-              <CommandEmpty>No results for “{search.trim()}”.</CommandEmpty>
+          >
+            <Kbd className="hidden sm:inline-flex">esc</Kbd>
+          </CommandInput>
+          {/* Height is set by listRef. The padding sits on cmdk's sizer so the
+              measured height includes it (otherwise the list always scrolls). */}
+          <CommandList
+            ref={listRef}
+            className="max-h-[min(30rem,60vh)] p-0 transition-[height] duration-200 ease-out motion-reduce:transition-none [&>[cmdk-list-sizer]]:p-2"
+          >
+            {pending ? <ResultsSkeleton /> : (
+              <CommandEmpty className="flex flex-col items-center justify-center gap-2 py-12">
+                <MagnifyingGlassIcon className="size-6 text-muted-foreground" />
+                <span className="text-sm">No results for “{search.trim()}”</span>
+                <span className="text-xs text-muted-foreground">
+                  Try an event name, an invoice number, or a person.
+                </span>
+              </CommandEmpty>
             )}
             {shown?.events.length ? (
               <CommandGroup heading="Events">
                 {shown.events.map((event) => (
-                  <CommandItem
+                  <PaletteItem
                     key={event._id}
                     value={`event-${event._id}`}
                     onSelect={() => go(`/dashboard/events/${event._id}`)}
-                  >
-                    <CalendarDotsIcon />
-                    <span className="truncate">{event.title}</span>
-                    <CommandShortcut className="max-w-[50%] truncate tracking-normal">
-                      {[
-                        formatDate(event.startAt),
-                        event.venueName,
-                        event.status === "cancelled" ? formatEventStatusLabel(event.status) : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </CommandShortcut>
-                  </CommandItem>
+                    leading={<IconTile icon={CalendarDotsIcon} />}
+                    title={event.title}
+                    detail={[
+                      formatDate(event.startAt),
+                      event.venueName,
+                      event.status === "cancelled" ? formatEventStatusLabel(event.status) : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  />
                 ))}
               </CommandGroup>
             ) : null}
             {shown?.invoices.length ? (
               <CommandGroup heading="Invoices">
                 {shown.invoices.map((invoice) => (
-                  <CommandItem
+                  <PaletteItem
                     key={invoice._id}
                     value={`invoice-${invoice._id}`}
                     onSelect={() => go(`/dashboard/ops-center/invoices/${invoice._id}`)}
-                  >
-                    <ReceiptIcon />
-                    <span className="truncate">{invoice.clientGroupName || "No host"}</span>
-                    <CommandShortcut className="shrink-0 tracking-normal">
-                      {invoice.status === "void" ? "Void · " : ""}
-                      {invoice.invoiceNumber}
-                    </CommandShortcut>
-                  </CommandItem>
+                    leading={<IconTile icon={ReceiptIcon} />}
+                    title={invoice.clientGroupName || "No host"}
+                    detail={`${invoice.invoiceNumber}${invoice.status === "void" ? " · Void" : ""}`}
+                  />
                 ))}
               </CommandGroup>
             ) : null}
             {shown?.people.length ? (
               <CommandGroup heading="People">
                 {shown.people.map((person) => (
-                  <CommandItem
+                  <PaletteItem
                     key={person.id}
                     value={`person-${person.id}`}
                     onSelect={() => go(`/dashboard/users?user=${encodeURIComponent(person.id)}`)}
-                  >
-                    <UserAvatar
-                      name={person.name}
-                      email={person.email}
-                      userId={person.id}
-                      imageUrl={person.image}
-                      size="sm"
-                      pixelSize={20}
-                      className="size-5"
-                    />
-                    <span className="truncate">{person.name}</span>
-                    <CommandShortcut className="truncate tracking-normal">{person.email}</CommandShortcut>
-                  </CommandItem>
+                    leading={
+                      <UserAvatar
+                        name={person.name}
+                        email={person.email}
+                        userId={person.id}
+                        imageUrl={person.image}
+                        size="sm"
+                        pixelSize={32}
+                        className="size-8"
+                      />
+                    }
+                    title={person.name}
+                    detail={person.email}
+                  />
                 ))}
               </CommandGroup>
             ) : null}
             {shown?.artists.length ? (
               <CommandGroup heading="Artists">
                 {shown.artists.map((artist) => (
-                  <CommandItem
+                  <PaletteItem
                     key={artist.organizationId}
                     value={`artist-${artist.organizationId}`}
                     onSelect={() =>
                       go(`/dashboard/artists/directory?artist=${encodeURIComponent(artist.organizationId)}`)
                     }
-                  >
-                    <GuitarIcon />
-                    <span className="truncate">{artist.name}</span>
-                  </CommandItem>
+                    leading={<IconTile icon={GuitarIcon} />}
+                    title={artist.name}
+                    detail="Artist directory"
+                  />
                 ))}
               </CommandGroup>
             ) : null}
-            {matchingPages.length ? (
-              <CommandGroup heading="Pages">
-                {matchingPages.map((page) => (
-                  <CommandItem key={page.url} value={`page-${page.url}`} onSelect={() => go(page.url)}>
-                    <page.icon />
-                    <span className="truncate">
-                      {page.section ? (
-                        <span className="text-muted-foreground">{page.section} / </span>
-                      ) : null}
-                      {page.title}
-                    </span>
-                  </CommandItem>
+            {pageGroups.map((group) => (
+              <CommandGroup key={group.heading} value={`pages-${group.heading}`} heading={group.heading}>
+                {group.pages.map((page) => (
+                  <PaletteItem
+                    key={page.url}
+                    value={`page-${page.url}`}
+                    onSelect={() => go(page.url)}
+                    leading={<IconTile icon={page.icon} compact={!words.length} />}
+                    title={page.title}
+                    detail={words.length ? page.section : undefined}
+                  />
                 ))}
               </CommandGroup>
-            ) : null}
-            {pending ? (
-              <div className="px-2 py-3 text-xs text-muted-foreground" role="status">
-                Searching…
-              </div>
-            ) : null}
+            ))}
           </CommandList>
+          <div className="hidden items-center gap-4 border-t px-4 py-2.5 text-xs text-muted-foreground sm:flex">
+            <span className="flex items-center gap-1.5">
+              <Kbd>↑</Kbd>
+              <Kbd>↓</Kbd>
+              Navigate
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Kbd>↵</Kbd>
+              Open
+            </span>
+            <span className="ml-auto flex items-center gap-1.5">
+              <Kbd>{isMac ? "⌘K" : "Ctrl K"}</Kbd>
+              Toggle
+            </span>
+          </div>
         </Command>
       </CommandDialog>
     </>
+  );
+}
+
+/** Placeholder rows, shaped like results, while a search settles. */
+function ResultsSkeleton() {
+  return (
+    <div aria-hidden className="px-2 pt-2">
+      <Skeleton className="mb-3 h-2.5 w-16" />
+      {[0.55, 0.4, 0.48].map((width) => (
+        <div key={width} className="flex items-center gap-3 py-2">
+          <Skeleton className="size-8 shrink-0" />
+          <div className="flex flex-1 flex-col gap-1.5">
+            <Skeleton className="h-3.5" style={{ width: `${width * 100}%` }} />
+            <Skeleton className="h-2.5 w-1/4" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function IconTile({ icon: TileIcon, compact }: { icon: Icon; compact?: boolean }) {
+  return (
+    <span
+      data-compact={compact || undefined}
+      className="flex size-8 shrink-0 data-compact:size-7 items-center justify-center border bg-muted/40 text-muted-foreground group-data-selected/command-item:border-foreground/15 group-data-selected/command-item:bg-background group-data-selected/command-item:text-foreground"
+    >
+      <TileIcon className="size-4" />
+    </span>
+  );
+}
+
+function PaletteItem({
+  leading,
+  title,
+  detail,
+  ...props
+}: Omit<ComponentProps<typeof CommandItem>, "title"> & {
+  leading: ReactNode;
+  title: string;
+  detail?: string;
+}) {
+  return (
+    <CommandItem {...props}>
+      {leading}
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate font-medium">{title}</span>
+        {detail ? <span className="truncate text-xs text-muted-foreground">{detail}</span> : null}
+      </span>
+      <Kbd className="opacity-0 group-data-selected/command-item:opacity-100">↵</Kbd>
+    </CommandItem>
   );
 }

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { crewAuthFile } from "../helpers/auth";
+import { bandAuthFile, crewAuthFile } from "../helpers/auth";
 import { runConvex } from "../helpers/convex";
 
 async function openPalette(page: Page) {
@@ -23,6 +23,8 @@ test.describe("command palette", () => {
 
     let input = await openPalette(page);
     await input.fill("venues");
+    // Options appear once the search settles (a skeleton shows meanwhile).
+    await expect(page.getByRole("option", { name: /Venues/ })).toBeVisible({ timeout: 15_000 });
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/dashboard\/events\/venues$/);
 
@@ -60,6 +62,27 @@ test.describe("command palette", () => {
         page.getByRole("option", { name: new RegExp(`Palette Crew Night ${stamp}`) }),
       ).toHaveCount(1, { timeout: 15_000 });
       await expect(page.getByRole("dialog").getByText("Invoices", { exact: true })).toHaveCount(0);
+    });
+  });
+
+  test.describe("artist", () => {
+    test.use({ storageState: bandAuthFile });
+
+    test("only jumps to its own pages, never Arbor records", async ({ page }) => {
+      const stamp = Date.now();
+      runConvex("e2eHelpers:seedCrewedEventWithSchedule", { title: `Palette Band Night ${stamp}` });
+
+      const input = await openPalette(page);
+      await expect(page.getByRole("group", { name: "Your act" })).toBeVisible();
+      await expect(page.getByRole("group", { name: "Ops Center" })).toHaveCount(0);
+      await expect(page.getByRole("option", { name: /Crew scheduling/ })).toHaveCount(0);
+
+      await input.fill(`Palette Band Night ${stamp}`);
+      await expect(page.getByRole("dialog").getByText(/No results for/)).toBeVisible({
+        timeout: 15_000,
+      });
+      // No section is left behind as an empty heading.
+      await expect(page.getByRole("dialog").getByRole("group")).toHaveCount(0);
     });
   });
 });

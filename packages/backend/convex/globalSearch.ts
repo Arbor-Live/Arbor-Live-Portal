@@ -27,6 +27,8 @@ const INVOICE_LIMIT = 6;
 const PEOPLE_LIMIT = 6;
 const ARTIST_LIMIT = 6;
 const MAX_QUERY_LENGTH = 100;
+/** Convex full-text search rejects more terms than this. */
+const MAX_SEARCH_TERMS = 16;
 
 const ARTIST_TYPES: ArtistOrganizationType[] = ["band", "dj", "singer_songwriter", "other"];
 const ARTIST_PROFILE_SCAN_LIMIT = 1_000;
@@ -134,7 +136,25 @@ async function searchArtists(ctx: QueryCtx, lowered: string) {
         .take(ARTIST_PROFILE_SCAN_LIMIT),
     ),
   ]);
-  return matchArtists(organizations, profilesByType.flat(), lowered, ARTIST_LIMIT);
+  const profiles = profilesByType.flat();
+  // Past the scan cap, look the rest up one by one so no act loses its display
+  // name or archived flag. Normally a no-op.
+  if (profilesByType.some((rows) => rows.length === ARTIST_PROFILE_SCAN_LIMIT)) {
+    const scanned = new Set(profiles.map((profile) => profile.organizationId));
+    const missing = organizations
+      .map((org) => org.id ?? org._id ?? "")
+      .filter((organizationId) => organizationId && !scanned.has(organizationId));
+    const extra = await Promise.all(
+      missing.map((organizationId) =>
+        ctx.db
+          .query("organizationProfiles")
+          .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+          .unique(),
+      ),
+    );
+    profiles.push(...extra.filter((profile) => profile !== null));
+  }
+  return matchArtists(organizations, profiles, lowered, ARTIST_LIMIT);
 }
 
 export const search = query({
@@ -151,7 +171,12 @@ export const search = query({
     artists: v.array(artistResultValue),
   }),
   handler: async (ctx, args) => {
-    const search = args.query.trim().slice(0, MAX_QUERY_LENGTH);
+    const search = args.query
+      .trim()
+      .slice(0, MAX_QUERY_LENGTH)
+      .split(/\s+/)
+      .slice(0, MAX_SEARCH_TERMS)
+      .join(" ");
     if (search.length < MIN_GLOBAL_SEARCH_CHARS) return EMPTY;
     const user = await getCurrentUserOrNull(ctx);
     if (!user || user.banned) return EMPTY;
