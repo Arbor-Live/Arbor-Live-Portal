@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
-import { useConvex, useMutation, useQuery } from "convex/react";
+import { useConvex } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -18,8 +18,6 @@ import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
 import { getConvexAppErrorData, getConvexErrorMessage } from "@/lib/convex-error";
 import { formatUsd } from "@/lib/format";
 import { notify } from "@/lib/notify";
-import { useBeforeUnload } from "@/hooks/use-before-unload";
-import { useNavigationGuard } from "@/hooks/use-navigation-guard";
 import { computeInvoiceDraftTotals } from "@/lib/compute-invoice-draft-totals";
 import {
   arborEarnedRevenueUsd,
@@ -46,6 +44,8 @@ import {
   type InvoiceDraftFields,
   type InvoiceDraftLines,
 } from "./invoice-draft-model";
+import { useInvoiceDraftData } from "./use-invoice-draft-data";
+import { useInvoiceDraftAutosave } from "./use-invoice-draft-autosave";
 
 type SaveState = { status: "idle" | "saving" | "saved" | "error"; error: string | null };
 
@@ -104,64 +104,32 @@ export function useInvoiceDraft({
   const crewRowsByEventRef = useRef<Map<string, InvoiceCrewRow[]>>(new Map());
   const crewBucketsHydratedInvoiceRef = useRef<string | null>(null);
 
-  const managerList = useQuery(api.invoices.listManagers, {});
-  const groups = useQuery(api.invoiceGroups.list, { activeOnly: true });
-  const settings = useQuery(api.invoiceSettings.get, {});
-  const invoiceData = useQuery(api.invoices.get, invoiceId ? { id: invoiceId } : "skip");
-  const contacts = useQuery(api.invoiceContacts.list, {
-    activeOnly: true,
-    ...(fields.groupId ? { groupId: fields.groupId as Id<"invoiceGroups"> } : {}),
+  const {
+    managerList,
+    groups,
+    settings,
+    invoiceData,
+    contacts,
+    linkedEvent,
+    linkedSeries,
+    linkedDayEvents,
+    seriesCostData,
+    pullListSyncStatus,
+    bandsForArtists,
+    eventPerformers,
+    createDraft,
+    updateDraft,
+    scaffoldPullListFromInvoice,
+    packages,
+    types,
+    packageById,
+    typeById,
+  } = useInvoiceDraftData({
+    invoiceId,
+    activeInvoiceId,
+    groupId: fields.groupId,
+    lines,
   });
-  const linkedEvent = useQuery(
-    api.events.getByInvoiceId,
-    activeInvoiceId ? { invoiceId: activeInvoiceId } : "skip",
-  );
-  const linkedSeries = invoiceData?.series ?? linkedEvent?.series ?? null;
-  const linkedDayEvents = useMemo(() => linkedEvent?.linkedEvents ?? [], [linkedEvent?.linkedEvents]);
-  const seriesCostData = useQuery(
-    api.eventSeries.get,
-    linkedSeries?.seriesId ? { id: linkedSeries.seriesId } : "skip",
-  );
-  const pullListSyncStatus = useQuery(
-    api.eventPullLists.getInvoiceSyncStatus,
-    linkedEvent && !linkedSeries ? { eventId: linkedEvent._id } : "skip",
-  );
-  const bandsForArtists = useQuery(api.users.listBandsForInvoiceLines, {});
-  const eventPerformers = useQuery(
-    api.eventBands.listPerformersForEvents,
-    linkedEvent && !linkedSeries ? { eventIds: linkedDayEvents.map((day) => day._id) } : "skip",
-  );
-
-  const createDraft = useMutation(api.invoices.createDraft);
-  const updateDraft = useMutation(api.invoices.updateDraft);
-  const scaffoldPullListFromInvoice = useMutation(api.eventPullLists.scaffoldFromInvoice);
-
-  const selectedPackageIds = useMemo(
-    () => lines.equipmentPackages.map((row) => row.refId).filter(Boolean) as Id<"inventoryPackages">[],
-    [lines.equipmentPackages],
-  );
-  const selectedTypeIds = useMemo(
-    () => lines.equipmentTypes.map((row) => row.refId).filter(Boolean) as Id<"inventoryTypes">[],
-    [lines.equipmentTypes],
-  );
-  const packages = useQuery(
-    api.inventoryPackages.getOptionsByIds,
-    selectedPackageIds.length ? { ids: selectedPackageIds } : "skip",
-  );
-  const types = useQuery(
-    api.inventoryTypes.getOptionsByIds,
-    selectedTypeIds.length ? { ids: selectedTypeIds } : "skip",
-  );
-  const packageById = useMemo(() => {
-    const map = new Map<string, NonNullable<typeof packages>[number]>();
-    for (const pkg of packages ?? []) map.set(pkg._id, pkg);
-    return map;
-  }, [packages]);
-  const typeById = useMemo(() => {
-    const map = new Map<string, NonNullable<typeof types>[number]>();
-    for (const type of types ?? []) map.set(type._id, type);
-    return map;
-  }, [types]);
 
   const primaryLinkedEventIds = new Set<string>(linkedDayEvents.map((day) => day._id));
   if (linkedEvent?._id) primaryLinkedEventIds.add(linkedEvent._id);
@@ -951,31 +919,17 @@ export function useInvoiceDraft({
     return true;
   }
 
-  // Autosave only while the quote is an unsent draft. Once the client can see
-  // it (sent, or approved), every change is an explicit save.
-  const invoiceDoc = invoiceData?.invoice;
-  const autosaveEnabled = Boolean(
-    invoiceDoc &&
-      invoiceDoc.status === "draft" &&
-      (invoiceDoc.clientApprovalStatus ?? "pending") !== "approved" &&
-      !invoiceDoc.clientReviewReadyAt,
-  );
-
-  useEffect(() => {
-    if (!autosaveEnabled) return;
-    if (!activeInvoiceId || !invoiceFieldsHydrated || !editorBaselineReady || !isDraftDirty) return;
-    if (saving || saveState.status === "saving") return;
-    const timer = window.setTimeout(() => {
-      void persistDraft();
-    }, 2500);
-    return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- persistDraft is recreated each render; draftSignature covers content changes
-  }, [draftSignature, autosaveEnabled, activeInvoiceId, invoiceFieldsHydrated, editorBaselineReady, isDraftDirty, saving, saveState.status]);
-
-  // Warn on unload while anything is unsaved, including a draft whose
-  // autosave is still debouncing: leaving now would drop that save.
-  useBeforeUnload(isDraftDirty, "You have unsaved changes to this quote.");
-  useNavigationGuard(isDraftDirty, "Discard unsaved changes to this quote?");
+  const { autosaveEnabled } = useInvoiceDraftAutosave({
+    invoiceData,
+    persistDraft,
+    draftSignature,
+    activeInvoiceId,
+    invoiceFieldsHydrated,
+    editorBaselineReady,
+    isDraftDirty,
+    saving,
+    saveStatus: saveState.status,
+  });
 
   return {
     invoiceId,

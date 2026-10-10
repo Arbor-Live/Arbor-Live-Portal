@@ -1,25 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { useMutation, useQuery } from "convex/react";
-import { PlusIcon, XIcon } from "@phosphor-icons/react";
-import type { QuestionnaireItemDefinition } from "@shadcn/react/questionnaire";
-import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { NumberInput } from "@/components/ui/number-input";
-import { Label } from "@/components/ui/label";
-import { MarketingLinksEditor } from "@/components/marketing/marketing-links-editor";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ARTIST_TYPES, ARTIST_TYPE_LABELS } from "@/lib/artist-types";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import {
   Questionnaire,
@@ -33,509 +14,46 @@ import {
   QuestionnaireWizardFooter,
   QuestionnaireWizardProgress,
 } from "@/components/ui/questionnaire-wizard";
-import { BandHeroUploadField } from "@/components/files/file-upload-field";
-import { UserSelect } from "@/components/users/user-select";
-import { toUserSelectOption } from "@/lib/user-select-description";
-import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
-import {
-  OnboardingAckCheckbox,
-  OnboardingPasskeyStep,
-  OnboardingSkipButton,
-  OnboardingTextarea,
-} from "@/components/onboarding/onboarding-ui";
-import { getConvexErrorMessage } from "@/lib/convex-error";
-import {
-  BAND_PAYEE_1099_NOTICE,
-  BAND_PAYEE_MAILING_ADDRESS_HINT,
-  BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER,
-  DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
-  type BandPayeePayoutMethod,
-} from "@/lib/band-payout-copy";
-import { useDevPreviewReady } from "@/hooks/use-dev-preview";
-import { trimOptional } from "@/lib/band-profile-lists";
-import { slugifyBandName } from "@/lib/validations/bands";
-
-type StepId =
-  | "welcome"
-  | "identity"
-  | "passkey"
-  | "hero"
-  | "socials"
-  | "members"
-  | "rates"
-  | "payment"
-  | "thankYou";
-
-const QUESTION_STEPS: StepId[] = [
-  "welcome",
-  "identity",
-  "passkey",
-  "hero",
-  "socials",
-  "members",
-  "rates",
-  "payment",
-];
-
-const STEP_ORDER: StepId[] = [...QUESTION_STEPS, "thankYou"];
-
-const STEP_HEADLINES: Record<StepId, string> = {
-  welcome: "Welcome to Arbor Live",
-  identity: "Tell us about your artist profile",
-  passkey: "Secure your account",
-  hero: "Add a hero photo",
-  socials: "Where can people find you?",
-  members: "Who's in the group?",
-  rates: "Rates & payout details",
-  payment: "How payouts work",
-  thankYou: "You're all set!",
-};
-
-type FormState = {
-  displayName: string;
-  bio: string;
-  publicHeroImageUrl: string;
-  artistLinks: Array<{ label: string; url: string; icon?: string }>;
-  organizationType: string;
-  demoURL: string;
-  publicListing: boolean;
-  publicSlug: string;
-  performerHourlyRateUsd: number;
-  designatedPayeeUserId: string;
-  designatedPayeeName: string;
-  designatedPayeeEmail: string;
-  designatedPayeeMailingAddress: string;
-  designatedPayeePayoutMethod: BandPayeePayoutMethod;
-  inviteDraft: string;
-  inviteRoleDraft: string;
-  inviteEmails: Array<{ email: string; bandRole: string }>;
-  isSolo: boolean;
-  paymentExplainedAck: boolean;
-};
-
-const EMPTY_FORM: FormState = {
-  displayName: "",
-  bio: "",
-  publicHeroImageUrl: "",
-  artistLinks: [],
-  organizationType: "",
-  demoURL: "",
-  publicListing: false,
-  publicSlug: "",
-  performerHourlyRateUsd: 0,
-  designatedPayeeUserId: "",
-  designatedPayeeName: "",
-  designatedPayeeEmail: "",
-  designatedPayeeMailingAddress: "",
-  designatedPayeePayoutMethod: DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
-  inviteDraft: "",
-  inviteRoleDraft: "",
-  inviteEmails: [],
-  isSolo: false,
-  paymentExplainedAck: false,
-};
-
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
-
-function isValidEmail(email: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-const PENDING_PAYEE_PREFIX = "pending:";
-
-
-function firstIncompleteStepIndex(onboarding: {
-  identityCompletedAt?: number;
-  heroCompletedAt?: number;
-  socialsCompletedAt?: number;
-  membersCompletedAt?: number;
-  soloAcknowledgedAt?: number;
-  ratesPayeeCompletedAt?: number;
-  paymentExplainedAt?: number;
-}): number {
-  const done = {
-    identity: Boolean(onboarding.identityCompletedAt),
-    hero: Boolean(onboarding.heroCompletedAt),
-    socials: Boolean(onboarding.socialsCompletedAt),
-    members: Boolean(onboarding.membersCompletedAt || onboarding.soloAcknowledgedAt),
-    rates: Boolean(onboarding.ratesPayeeCompletedAt),
-    payment: Boolean(onboarding.paymentExplainedAt),
-  };
-  const hasProgress = Object.values(done).some(Boolean);
-  for (let i = 0; i < STEP_ORDER.length; i += 1) {
-    const id = STEP_ORDER[i]!;
-    if (id === "welcome") {
-      if (hasProgress) continue;
-      return i;
-    }
-    if (id === "thankYou") return i;
-    // No persisted completion flag — never force a returning user back to it.
-    if (id === "passkey") continue;
-    if (id === "identity" && done.identity) continue;
-    if (id === "hero" && done.hero) continue;
-    if (id === "socials" && done.socials) continue;
-    if (id === "members" && done.members) continue;
-    if (id === "rates" && done.rates) continue;
-    if (id === "payment" && done.payment) continue;
-    return i;
-  }
-  return 0;
-}
-
+import { OnboardingSkipButton } from "@/components/onboarding/onboarding-ui";
+import { STEP_HEADLINES, isValidEmail, normalizeEmail } from "./artist/constants";
+import type { FormState } from "./artist/types";
+import { useArtistOnboardingForm } from "./artist/use-artist-onboarding-form";
+import { WelcomeStep } from "./artist/steps/welcome-step";
+import { IdentityStep } from "./artist/steps/identity-step";
+import { PasskeyStep } from "./artist/steps/passkey-step";
+import { HeroStep } from "./artist/steps/hero-step";
+import { SocialsStep } from "./artist/steps/socials-step";
+import { MembersStep } from "./artist/steps/members-step";
+import { RatesStep } from "./artist/steps/rates-step";
+import { PaymentStep } from "./artist/steps/payment-step";
+import { ThankYouStep } from "./artist/steps/thank-you-step";
 
 export function BandOnboardingWizard() {
-  const router = useRouter();
-  const { ready: previewReady, devPreview } = useDevPreviewReady();
-  const onboarding = useQuery(api.onboarding.getMyBandOnboarding, {});
-  const profile = useQuery(api.users.getActiveBandProfile, {});
-  const members = useQuery(api.users.listMembersForActiveOrganization, {});
-  const pendingInvites = useQuery(api.users.listPendingInvitesForActiveOrganization, {});
-  const updateActiveBandProfile = useMutation(api.users.updateActiveBandProfile);
-  const inviteMember = useMutation(api.users.inviteMemberToActiveOrganization);
-  const saveBandOnboardingStep = useMutation(api.onboarding.saveBandOnboardingStep);
-  const completeBandOnboarding = useMutation(api.onboarding.completeBandOnboarding);
-
-  const [item, setItem] = useState<StepId | null>(null);
-  const [done, setDone] = useState(false);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [fieldError, setFieldError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [inviteConfirmation, setInviteConfirmation] = useState<string | null>(null);
-  const [hasAddedPasskey, setHasAddedPasskey] = useState(false);
-  /** Emails invited this session (beyond server pending invites). */
-  const [sessionSentEmails, setSessionSentEmails] = useState<string[]>([]);
-  const hydratedRef = useRef(false);
-
-  useEffect(() => {
-    if (!profile || hydratedRef.current) return;
-    hydratedRef.current = true;
-    setForm((prev) => ({
-      ...prev,
-      displayName: profile.displayName ?? "",
-      bio: profile.bio ?? "",
-      publicHeroImageUrl: profile.publicHeroImageUrl ?? "",
-      artistLinks: profile.artistLinks ?? [],
-      organizationType: profile.organizationType ?? "",
-      demoURL: profile.demoURL ?? "",
-      publicListing: profile.publicListing ?? false,
-      publicSlug: profile.publicSlug ?? "",
-      performerHourlyRateUsd: profile.performerHourlyRateUsd ?? 0,
-      designatedPayeeUserId: profile.designatedPayeeUserId ?? "",
-      designatedPayeeName: profile.designatedPayeeName ?? "",
-      designatedPayeeEmail: profile.designatedPayeeEmail ?? "",
-      designatedPayeeMailingAddress: profile.designatedPayeeMailingAddress ?? "",
-      designatedPayeePayoutMethod:
-        profile.designatedPayeePayoutMethod === "pickup" ||
-        profile.designatedPayeePayoutMethod === "delivery"
-          ? profile.designatedPayeePayoutMethod
-          : DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
-    }));
-  }, [profile]);
-
-  const pendingEmails = useMemo(
-    () =>
-      (pendingInvites ?? [])
-        .map((invite) => normalizeEmail(invite.email))
-        .filter(Boolean),
-    [pendingInvites],
-  );
-  const sentInviteEmails = useMemo(
-    () => Array.from(new Set([...pendingEmails, ...sessionSentEmails])),
-    [pendingEmails, sessionSentEmails],
-  );
-  const displayedInviteEmails = useMemo(
-    () =>
-      Array.from(
-        new Map(
-          [
-            ...form.inviteEmails.map((row) => ({
-              email: normalizeEmail(row.email),
-              bandRole: row.bandRole,
-              pending: false,
-            })),
-            ...pendingEmails.map((email) => ({
-              email,
-              bandRole:
-                pendingInvites?.find((invite) => normalizeEmail(invite.email) === email)?.bandRole ??
-                "",
-              pending: true,
-            })),
-          ].map((row) => [row.email, row]),
-        ).values(),
-      ),
-    [form.inviteEmails, pendingEmails, pendingInvites],
-  );
-
-  useEffect(() => {
-    if (!previewReady || devPreview) return;
-    if (onboarding === null) {
-      router.replace("/dashboard");
-      return;
-    }
-    if (onboarding && (onboarding.status === "completed" || onboarding.status === "waived")) {
-      router.replace("/dashboard");
-    }
-  }, [onboarding, router, previewReady, devPreview]);
-
-  const resumeStep: StepId = onboarding
-    ? (STEP_ORDER[firstIncompleteStepIndex(onboarding)] ?? "welcome")
-    : "welcome";
-  const currentStep: StepId =
-    item ?? (resumeStep === "thankYou" ? "payment" : resumeStep);
-  const finished = done || (item === null && resumeStep === "thankYou");
-  const items = useMemo<QuestionnaireItemDefinition[]>(
-    () => QUESTION_STEPS.map((name) => ({ name, required: true })),
-    [],
-  );
-
-  const goToDashboard = useCallback(() => router.push("/dashboard"), [router]);
-
-  // Walk the UI without writing when previewing without a band onboarding row.
-  const previewOnly = Boolean(devPreview && onboarding === null);
-
-  const tryAdvance = useCallback(async (): Promise<boolean> => {
-    setFieldError(null);
-    setError(null);
-
-    try {
-      if (currentStep === "welcome") {
-        return true;
-      }
-
-      if (currentStep === "identity") {
-        if (!form.displayName.trim()) {
-          setFieldError("Enter your display name.");
-          return false;
-        }
-        if (previewOnly) return true;
-        setIsSubmitting(true);
-        await updateActiveBandProfile({
-          displayName: form.displayName.trim(),
-          bio: trimOptional(form.bio),
-        });
-        await saveBandOnboardingStep({ identityCompleted: true });
-        return true;
-      }
-
-      if (currentStep === "hero") {
-        if (previewOnly) return true;
-        setIsSubmitting(true);
-        await updateActiveBandProfile({
-          publicHeroImageUrl: trimOptional(form.publicHeroImageUrl),
-        });
-        await saveBandOnboardingStep({ heroCompleted: true });
-        return true;
-      }
-
-      if (currentStep === "socials") {
-        let publicSlug = form.publicSlug.trim();
-        if (form.publicListing && !publicSlug) {
-          publicSlug = slugifyBandName(form.displayName);
-          if (!publicSlug) {
-            setFieldError("Add a public URL slug to list on the artists page.");
-            return false;
-          }
-        }
-        if (previewOnly) return true;
-        setIsSubmitting(true);
-        await updateActiveBandProfile({
-          artistLinks: form.artistLinks
-            .map((link) => ({
-              label: link.label.trim(),
-              url: link.url.trim(),
-              icon: link.icon,
-            }))
-            .filter((link) => link.label && link.url),
-          demoURL: trimOptional(form.demoURL),
-          organizationType: form.organizationType
-            ? (form.organizationType as "band" | "dj" | "singer_songwriter" | "other")
-            : undefined,
-          publicListing: form.publicListing,
-          publicSlug: trimOptional(publicSlug),
-        });
-        await saveBandOnboardingStep({ socialsCompleted: true });
-        return true;
-      }
-
-      if (currentStep === "members") {
-        const queued = Array.from(
-          new Map(
-            [
-              ...form.inviteEmails.map((row) => ({
-                email: normalizeEmail(row.email),
-                bandRole: row.bandRole.trim(),
-              })),
-              ...pendingEmails.map((email) => ({ email, bandRole: "" })),
-            ]
-              .filter((row) => row.email)
-              .map((row) => [row.email, row]),
-          ).values(),
-        );
-        const sentSet = new Set(sentInviteEmails);
-        const hasPendingOrSent = queued.length > 0 || sentSet.size > 0;
-        if (!form.isSolo && !hasPendingOrSent) {
-          setFieldError("Add at least one member email, or confirm you're performing solo.");
-          return false;
-        }
-        if (previewOnly) return true;
-        setIsSubmitting(true);
-        if (form.isSolo) {
-          await saveBandOnboardingStep({ soloAcknowledged: true });
-          setInviteConfirmation(null);
-        } else {
-          const toSend = queued.filter((row) => !sentSet.has(row.email));
-          for (const row of toSend) {
-            await inviteMember({
-              email: row.email,
-              role: "org_member",
-              bandRole: row.bandRole || undefined,
-            });
-          }
-          if (toSend.length > 0) {
-            setSessionSentEmails((prev) => [
-              ...prev,
-              ...toSend.map((row) => row.email),
-            ]);
-            setInviteConfirmation(
-              toSend.length === 1
-                ? `Invitation sent to ${toSend[0]!.email}.`
-                : `Invitations sent to ${toSend.length} members.`,
-            );
-          }
-          await saveBandOnboardingStep({ membersCompleted: true });
-        }
-        return true;
-      }
-
-      if (currentStep === "rates") {
-        if (form.performerHourlyRateUsd < 0) {
-          setFieldError("Hourly rate must be 0 or greater.");
-          return false;
-        }
-        if (!form.designatedPayeeName.trim() || !form.designatedPayeeEmail.trim()) {
-          setFieldError("Choose or enter a designated payee name and email.");
-          return false;
-        }
-        if (!form.designatedPayeeMailingAddress.trim()) {
-          setFieldError("Enter a mailing address (required for Stanford / GrantEd).");
-          return false;
-        }
-        if (previewOnly) return true;
-        setIsSubmitting(true);
-        await updateActiveBandProfile({
-          performerHourlyRateUsd: form.performerHourlyRateUsd,
-          designatedPayeeUserId: trimOptional(form.designatedPayeeUserId),
-          designatedPayeeName: trimOptional(form.designatedPayeeName),
-          designatedPayeeEmail: trimOptional(form.designatedPayeeEmail),
-          designatedPayeeMailingAddress: trimOptional(form.designatedPayeeMailingAddress),
-          designatedPayeePayoutMethod: form.designatedPayeePayoutMethod,
-        });
-        await saveBandOnboardingStep({ ratesPayeeCompleted: true });
-        return true;
-      }
-
-      if (currentStep === "payment") {
-        if (!form.paymentExplainedAck) {
-          setFieldError("Check the box to confirm you understand how payouts work.");
-          return false;
-        }
-        if (previewOnly) return true;
-        setIsSubmitting(true);
-        await saveBandOnboardingStep({ paymentExplained: true });
-        await completeBandOnboarding({});
-        return true;
-      }
-
-      return true;
-    } catch (submitError) {
-      setError(getConvexErrorMessage(submitError));
-      return false;
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [
-    completeBandOnboarding,
-    currentStep,
+  const {
+    onboarding,
+    profile,
+    members,
+    devPreview,
     form,
-    inviteMember,
-    pendingEmails,
-    previewOnly,
-    saveBandOnboardingStep,
+    setForm,
+    fieldError,
+    setFieldError,
+    error,
+    isSubmitting,
+    inviteConfirmation,
+    hasAddedPasskey,
+    setHasAddedPasskey,
+    currentStep,
+    finished,
+    items,
+    goToDashboard,
+    handleItemChange,
+    handleSubmit,
+    payeeOptions,
+    payeeSelectValue,
+    displayedInviteEmails,
     sentInviteEmails,
-    updateActiveBandProfile,
-  ]);
-
-  const handleItemChange = useCallback(
-    async (next: string) => {
-      const currentIndex = QUESTION_STEPS.indexOf(currentStep);
-      const requestedIndex = QUESTION_STEPS.indexOf(next as StepId);
-      const goingBack = requestedIndex !== -1 && requestedIndex < currentIndex;
-      if (goingBack) {
-        setFieldError(null);
-        setItem(next as StepId);
-        return;
-      }
-      if (await tryAdvance()) setItem(next as StepId);
-    },
-    [currentStep, tryAdvance],
-  );
-
-  const handleSubmit = useCallback(
-    async (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      if (await tryAdvance()) setDone(true);
-    },
-    [tryAdvance],
-  );
-
-  const payeeOptions = useMemo(() => {
-    const memberOptions = (members ?? []).map((user) =>
-      toUserSelectOption({
-        id: user.userId,
-        name: user.name,
-        email: user.email,
-        avatarUrl: user.avatarUrl,
-        image: user.image,
-      }),
-    );
-    const memberEmails = new Set(
-      memberOptions.map((option) => normalizeEmail(option.email ?? "")).filter(Boolean),
-    );
-
-    const pendingEmails = new Set<string>();
-    for (const invite of pendingInvites ?? []) {
-      const email = normalizeEmail(invite.email);
-      if (email) pendingEmails.add(email);
-    }
-    for (const row of form.inviteEmails) {
-      const normalized = normalizeEmail(row.email);
-      if (normalized) pendingEmails.add(normalized);
-    }
-    for (const email of sentInviteEmails) {
-      if (email) pendingEmails.add(email);
-    }
-
-    const pendingOptions = Array.from(pendingEmails)
-      .filter((email) => !memberEmails.has(email))
-      .sort((a, b) => a.localeCompare(b))
-      .map((email) => ({
-        value: `${PENDING_PAYEE_PREFIX}${email}`,
-        label: email,
-        email,
-        description: "Pending invite",
-      }));
-
-    return [...memberOptions, ...pendingOptions];
-  }, [form.inviteEmails, members, pendingInvites, sentInviteEmails]);
-
-  const payeeSelectValue = form.designatedPayeeUserId
-    ? form.designatedPayeeUserId
-    : form.designatedPayeeEmail
-      ? `${PENDING_PAYEE_PREFIX}${normalizeEmail(form.designatedPayeeEmail)}`
-      : "";
+  } = useArtistOnboardingForm();
 
   if (onboarding === undefined || profile === undefined) {
     return (
@@ -635,10 +153,7 @@ export function BandOnboardingWizard() {
                 <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
                   {STEP_HEADLINES.thankYou}
                 </h1>
-                <div className="space-y-4 text-sm text-foreground/70">
-                  <p>Your artist profile is ready. We&apos;ll be in touch about booking!</p>
-                  <Button onClick={goToDashboard}>Go to dashboard</Button>
-                </div>
+                <ThankYouStep onGoToDashboard={goToDashboard} />
               </div>
             ) : (
               <>
@@ -649,16 +164,7 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.welcome}
                 </QuestionnaireTitle>
-                <div className="space-y-3 text-sm text-foreground/70">
-                  <p>
-                    Welcome! Before you get booked, let&apos;s set up your artist profile:
-                    who you are, where to find you, your members, rates, and who gets paid.
-                  </p>
-                  <p>
-                    Arbor Live pays artists directly through a designated payee — no promoter or
-                    middleman needed.
-                  </p>
-                </div>
+                <WelcomeStep />
                 <MarkStepAnswered />
               </QuestionnaireItem>
 
@@ -669,27 +175,7 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.identity}
                 </QuestionnaireTitle>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="band-display-name">Artist name</Label>
-                    <Input
-                      id="band-display-name"
-                      value={form.displayName}
-                      onChange={(event) => patch({ displayName: event.target.value })}
-                      placeholder="Your artist name"
-                      autoFocus
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="band-bio">Bio</Label>
-                    <OnboardingTextarea
-                      id="band-bio"
-                      value={form.bio}
-                      onChange={(event) => patch({ bio: event.target.value })}
-                      placeholder="A short description of your sound and style…"
-                    />
-                  </div>
-                </div>
+                <IdentityStep form={form} patch={patch} />
                 <MarkStepAnswered />
                 <QuestionnaireFieldError className="text-sm">
                   {currentStep === "identity" ? fieldError : null}
@@ -703,7 +189,7 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.passkey}
                 </QuestionnaireTitle>
-                <OnboardingPasskeyStep onAdded={() => setHasAddedPasskey(true)} />
+                <PasskeyStep onPasskeyAdded={() => setHasAddedPasskey(true)} />
                 <MarkStepAnswered />
               </QuestionnaireItem>
 
@@ -714,37 +200,7 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.hero}
                 </QuestionnaireTitle>
-                <div className="space-y-4">
-                  <p className="text-sm text-foreground/70">
-                    Add a hero photo for your public artist page. You can skip this and add one
-                    later.
-                  </p>
-                  {profile ? (
-                    <BandHeroUploadField
-                      organizationId={profile.organizationId}
-                      currentUrl={form.publicHeroImageUrl}
-                      urlValue={form.publicHeroImageUrl}
-                      onUploaded={(url) => patch({ publicHeroImageUrl: url })}
-                      onUrlChange={(url) => patch({ publicHeroImageUrl: url })}
-                      onClear={() => patch({ publicHeroImageUrl: "" })}
-                    />
-                  ) : (
-                    <p className="rounded-md border border-dashed border-border/80 px-3 py-6 text-center text-sm text-muted-foreground">
-                      Hero upload needs an active artist org — paste a URL below for UI preview.
-                    </p>
-                  )}
-                  {!profile ? (
-                    <div className="space-y-2">
-                      <Label htmlFor="band-hero-url">Hero image URL</Label>
-                      <Input
-                        id="band-hero-url"
-                        value={form.publicHeroImageUrl}
-                        onChange={(event) => patch({ publicHeroImageUrl: event.target.value })}
-                        placeholder="https://…"
-                      />
-                    </div>
-                  ) : null}
-                </div>
+                <HeroStep form={form} patch={patch} profile={profile} />
                 <MarkStepAnswered />
                 <QuestionnaireFieldError className="text-sm">
                   {currentStep === "hero" ? fieldError : null}
@@ -758,68 +214,7 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.socials}
                 </QuestionnaireTitle>
-                <div className="space-y-4">
-                  <MarketingLinksEditor
-                    idPrefix="band-onboarding-links"
-                    links={form.artistLinks}
-                    onLinksChange={(links) => patch({ artistLinks: links })}
-                    label="Links"
-                  />
-
-                  <div className="space-y-2">
-                    <Label>Artist type</Label>
-                    <Select
-                      value={form.organizationType || undefined}
-                      onValueChange={(value) => patch({ organizationType: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ARTIST_TYPES.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {ARTIST_TYPE_LABELS[type]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="band-demo">Demo / listening link</Label>
-                    <Input
-                      id="band-demo"
-                      value={form.demoURL}
-                      onChange={(event) => patch({ demoURL: event.target.value })}
-                      placeholder="SoundCloud, Drive…"
-                    />
-                  </div>
-<OnboardingAckCheckbox
-                    checked={form.publicListing}
-                    onChange={(next) => {
-                      const nextSlug =
-                        next && !form.publicSlug.trim()
-                          ? slugifyBandName(form.displayName)
-                          : form.publicSlug;
-                      patch({
-                        publicListing: next,
-                        ...(nextSlug !== form.publicSlug ? { publicSlug: nextSlug } : {}),
-                      });
-                    }}
-                    label="List us on the public artists page."
-                  />
-                  {form.publicListing ? (
-                    <div className="space-y-2">
-                      <Label htmlFor="band-slug">Public URL slug</Label>
-                      <Input
-                        id="band-slug"
-                        value={form.publicSlug}
-                        onChange={(event) => patch({ publicSlug: event.target.value })}
-                        placeholder="my-artist-name"
-                      />
-                    </div>
-                  ) : null}
-                </div>
+                <SocialsStep form={form} patch={patch} />
                 <MarkStepAnswered />
                 <QuestionnaireFieldError className="text-sm">
                   {currentStep === "socials" ? fieldError : null}
@@ -833,123 +228,14 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.members}
                 </QuestionnaireTitle>
-                <div className="space-y-4">
-                  <p className="text-sm text-foreground/70">
-                    Invite members now so you can designate one of them as the payee on the next
-                    step. You can invite multiple people.
-                  </p>
-                  <OnboardingAckCheckbox
-                    checked={form.isSolo}
-                    onChange={(next) =>
-                      patch({
-                        isSolo: next,
-                        inviteDraft: next ? "" : form.inviteDraft,
-                        inviteEmails: next ? [] : form.inviteEmails,
-                      })
-                    }
-                    label="I'm performing solo — no other members to invite."
-                  />
-                  {!form.isSolo ? (
-                    <div className="space-y-3">
-                      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-                        <div className="min-w-0 space-y-2">
-                          <Label htmlFor="band-invite-email">Member email</Label>
-                          <Input
-                            id="band-invite-email"
-                            type="email"
-                            value={form.inviteDraft}
-                            onChange={(event) => patch({ inviteDraft: event.target.value })}
-                            onKeyDown={(event) => {
-                              if (event.key !== "Enter") return;
-                              event.preventDefault();
-                              event.stopPropagation();
-                              addInviteEmail();
-                            }}
-                            placeholder="name@example.com"
-                          />
-                        </div>
-                        <div className="min-w-0 space-y-2">
-                          <Label htmlFor="band-invite-role">Role</Label>
-                          <Input
-                            id="band-invite-role"
-                            value={form.inviteRoleDraft}
-                            onChange={(event) => patch({ inviteRoleDraft: event.target.value })}
-                            onKeyDown={(event) => {
-                              if (event.key !== "Enter") return;
-                              event.preventDefault();
-                              event.stopPropagation();
-                              addInviteEmail();
-                            }}
-                            placeholder="Guitarist, Manager…"
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="shrink-0 gap-1.5 sm:mb-0"
-                          onClick={addInviteEmail}
-                        >
-                          <PlusIcon className="size-4" weight="bold" />
-                          Add
-                        </Button>
-                      </div>
-
-                      {displayedInviteEmails.length > 0 ? (
-                        <ul className="space-y-2">
-                          {displayedInviteEmails.map((row) => {
-                            const alreadySent = sentInviteEmails.includes(row.email) || row.pending;
-                            return (
-                              <li
-                                key={row.email}
-                                className="flex items-center justify-between gap-2 border border-border/50 bg-background/50 px-3 py-2 text-sm"
-                              >
-                                <span className="min-w-0 truncate">
-                                  {row.email}
-                                  {row.bandRole ? (
-                                    <span className="ml-2 text-xs text-muted-foreground">
-                                      {row.bandRole}
-                                    </span>
-                                  ) : null}
-                                  {alreadySent ? (
-                                    <span className="ml-2 text-xs text-muted-foreground">
-                                      invited
-                                    </span>
-                                  ) : null}
-                                </span>
-                                {!alreadySent ? (
-                                  <button
-                                    type="button"
-                                    className="shrink-0 text-muted-foreground hover:text-foreground"
-                                    onClick={() =>
-                                      patch({
-                                        inviteEmails: form.inviteEmails.filter(
-                                          (entry) => entry.email !== row.email,
-                                        ),
-                                      })
-                                    }
-                                    aria-label={`Remove ${row.email}`}
-                                  >
-                                    <XIcon className="size-4" weight="bold" />
-                                  </button>
-                                ) : null}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          Add each member&apos;s email and role, then continue. Invites send when
-                          you click Next.
-                        </p>
-                      )}
-                    </div>
-                  ) : null}
-                  {inviteConfirmation ? (
-                    <Alert>
-                      <AlertDescription>{inviteConfirmation}</AlertDescription>
-                    </Alert>
-                  ) : null}
-                </div>
+                <MembersStep
+                  form={form}
+                  patch={patch}
+                  addInviteEmail={addInviteEmail}
+                  displayedInviteEmails={displayedInviteEmails}
+                  sentInviteEmails={sentInviteEmails}
+                  inviteConfirmation={inviteConfirmation}
+                />
                 <MarkStepAnswered />
                 <QuestionnaireFieldError className="text-sm">
                   {currentStep === "members" ? fieldError : null}
@@ -963,92 +249,13 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.rates}
                 </QuestionnaireTitle>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="band-rate">Rate per person per hour (USD)</Label>
-                    <NumberInput
-                      id="band-rate"
-                      min={0}
-                      value={form.performerHourlyRateUsd}
-                      onValueChange={(performerHourlyRateUsd) => patch({ performerHourlyRateUsd })}
-                      autoFocus
-                    />
-                  </div>
-
-                  <div className="space-y-2 border-t border-border/50 pt-4">
-                    <p className="text-sm font-medium text-foreground">Designated payee</p>
-                    <p className="text-xs text-muted-foreground">
-                      One person who receives and distributes payment on behalf of the artist. You can
-                      pick a current member or a pending invite — fill in their name and mailing
-                      address below if needed.
-                    </p>
-                    <UserSelect
-                      value={payeeSelectValue}
-                      onChange={(value) => {
-                        if (value.startsWith(PENDING_PAYEE_PREFIX)) {
-                          const email = normalizeEmail(value.slice(PENDING_PAYEE_PREFIX.length));
-                          const localPart = email.split("@")[0] ?? email;
-                          patch({
-                            designatedPayeeUserId: "",
-                            designatedPayeeEmail: email,
-                            designatedPayeeName:
-                              form.designatedPayeeName.trim() || localPart || email,
-                          });
-                          return;
-                        }
-                        const user = (members ?? []).find((row) => row.userId === value);
-                        patch({
-                          designatedPayeeUserId: value,
-                          designatedPayeeName: user?.name ?? form.designatedPayeeName,
-                          designatedPayeeEmail: user?.email ?? form.designatedPayeeEmail,
-                        });
-                      }}
-                      options={payeeOptions}
-                      placeholder="Select member or pending invite…"
-                      emptyLabel="Select payee"
-                    />
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label htmlFor="band-payee-name">Payee name</Label>
-                        <Input
-                          id="band-payee-name"
-                          value={form.designatedPayeeName}
-                          onChange={(event) => patch({ designatedPayeeName: event.target.value })}
-                          placeholder="Payee name"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="band-payee-email">Payee email</Label>
-                        <Input
-                          id="band-payee-email"
-                          type="email"
-                          value={form.designatedPayeeEmail}
-                          onChange={(event) => patch({ designatedPayeeEmail: event.target.value })}
-                          placeholder="Payee email"
-                        />
-                      </div>
-                    </div>
-                    <BandPayeePayoutMethodField
-                      value={form.designatedPayeePayoutMethod}
-                      onChange={(method) => patch({ designatedPayeePayoutMethod: method })}
-                      idPrefix="band-onboarding"
-                    />
-                    <div className="space-y-1">
-                      <Label htmlFor="band-payee-mailing-address">Mailing address</Label>
-                      <OnboardingTextarea
-                        id="band-payee-mailing-address"
-                        value={form.designatedPayeeMailingAddress}
-                        onChange={(event) =>
-                          patch({ designatedPayeeMailingAddress: event.target.value })
-                        }
-                        placeholder={BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        {BAND_PAYEE_MAILING_ADDRESS_HINT}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <RatesStep
+                  form={form}
+                  patch={patch}
+                  members={members}
+                  payeeOptions={payeeOptions}
+                  payeeSelectValue={payeeSelectValue}
+                />
                 <MarkStepAnswered />
                 <QuestionnaireFieldError className="text-sm">
                   {currentStep === "rates" ? fieldError : null}
@@ -1062,24 +269,7 @@ export function BandOnboardingWizard() {
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.payment}
                 </QuestionnaireTitle>
-                <div className="space-y-4">
-                  <div className="space-y-3 text-sm text-foreground/70">
-                    <p>
-                      After your event, Arbor Live pays your designated payee directly by the
-                      performer hourly rate on file, multiplied by the hours you performed.
-                    </p>
-                    <p>
-                      Your payee is responsible for distributing payment to the rest of the members.
-                      You can update your payee or rate anytime from your artist settings.
-                    </p>
-                    <p>{BAND_PAYEE_1099_NOTICE}</p>
-                  </div>
-                  <OnboardingAckCheckbox
-                    checked={form.paymentExplainedAck}
-                    onChange={(next) => patch({ paymentExplainedAck: next })}
-                    label="I understand how payouts work for this artist."
-                  />
-                </div>
+                <PaymentStep form={form} patch={patch} />
                 <MarkStepAnswered />
                 <QuestionnaireFieldError className="text-sm">
                   {currentStep === "payment" ? fieldError : null}
