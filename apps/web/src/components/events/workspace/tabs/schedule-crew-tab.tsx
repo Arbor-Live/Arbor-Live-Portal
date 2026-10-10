@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { ListChecksIcon, RepeatIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CrewStaffingBoard } from "@/components/events/crew-staffing/crew-staffing-board";
@@ -17,6 +18,23 @@ import {
 } from "@/lib/event-schedule-draft";
 import { localDateTimeInputToMs } from "@/lib/crew-availability";
 import { useEventWorkspace } from "@/components/events/workspace/event-workspace-provider";
+import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
+
+/**
+ * Keeps the previous array while its items are the same objects, so editing a
+ * moment's name (which leaves every section untouched) doesn't hand the
+ * memoized crew board a new `sectionBlocks`.
+ */
+function useStableItems(items: TimelineBlockDraft[]) {
+  const [stable, setStable] = useState(items);
+  const same =
+    stable.length === items.length && stable.every((item, index) => item === items[index]);
+  if (!same) {
+    setStable(items);
+    return items;
+  }
+  return stable;
+}
 
 export function ScheduleCrewTab() {
   const {
@@ -50,7 +68,15 @@ export function ScheduleCrewTab() {
         : "Quick Add: Setup + Show + Strike";
 
   // Crew are scheduled per section; soundchecks, sets, and other moments sit inside one.
-  const sectionBlocks = blocks.filter((block) => isSectionBlockType(block.blockType));
+  const sectionBlocks = useStableItems(
+    blocks.filter((block) => isSectionBlockType(block.blockType)),
+  );
+  // Stable handler for the memoized board; always calls the latest version.
+  const removeUnlinkedRef = useRef(removeUnlinkedShifts);
+  useLayoutEffect(() => {
+    removeUnlinkedRef.current = removeUnlinkedShifts;
+  });
+  const onDeleteUnlinked = useCallback(() => void removeUnlinkedRef.current(), []);
 
   return (
     <fieldset disabled={readOnly} className="space-y-4">
@@ -127,7 +153,7 @@ export function ScheduleCrewTab() {
             userSelectOptions={userSelectOptions}
             askAvailability={hasCrew}
             readOnly={readOnly}
-            onDeleteUnlinked={() => void removeUnlinkedShifts()}
+            onDeleteUnlinked={onDeleteUnlinked}
           />
         </CardContent>
       </Card>

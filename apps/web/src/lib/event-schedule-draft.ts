@@ -214,13 +214,18 @@ export function syncShiftsToBlockTimes<T extends ShiftBlockLink & EventShiftDraf
   shifts: T[],
   blocks: TimelineBlockDraft[],
 ): T[] {
-  return shifts.map((shift) => {
+  let changed = false;
+  const next = shifts.map((shift) => {
     if (shift.timesOverridden) return shift;
     const block = blocks.find((candidate) => shiftBelongsToBlock(shift, candidate));
     if (!block) return shift;
     if (shiftTimesMatchBlock(shift, block)) return shift;
+    changed = true;
     return { ...shift, startsAt: block.startsAt, endsAt: block.endsAt };
   });
+  // Same array when nothing moved, so a keystroke in the run of show doesn't
+  // invalidate everything memoized on `shifts` (the whole crew board).
+  return changed ? next : shifts;
 }
 
 /**

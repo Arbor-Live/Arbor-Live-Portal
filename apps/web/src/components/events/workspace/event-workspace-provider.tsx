@@ -62,6 +62,11 @@ import { isSectionBlockType } from "@/lib/schedule-block-types";
 
 type SavedSchedule = { blocks: TimelineBlockDraft[]; shifts: ShiftDraft[] };
 
+/** Module-level so it's one stable reference for the memoized crew board. */
+function getBlockRef(block: TimelineBlockDraft) {
+  return block.id ?? block.clientId;
+}
+
 function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTabId) {
   const router = useRouter();
   const { confirm } = useAppDialog();
@@ -228,10 +233,6 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     return nextBlocks.map((block) =>
       block.id || block.clientId ? block : { ...block, clientId: makeLocalBlockRef() },
     );
-  }
-
-  function getBlockRef(block: TimelineBlockDraft) {
-    return block.id ?? block.clientId;
   }
 
   // A shift is unlinked when it matches no current schedule block — including a
