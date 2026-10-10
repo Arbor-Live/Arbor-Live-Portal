@@ -154,6 +154,42 @@ test.describe("crew application triage", () => {
     expect(state.traineeShiftEventIds).toContain(seededEvent.eventId);
   });
 
+  test("admin can assign a trainee from the event's crew board", async ({ page }) => {
+    const seededEvent = runConvex("e2eHelpers:seedCrewedEventWithSchedule", {
+      title: `E2E Event Trainee ${Date.now()}`,
+      traineeReady: true,
+    }) as { eventId: string; title: string };
+    const seeded = seedApplication("Event Trainee");
+
+    await page.goto(`/dashboard/events/${seededEvent.eventId}/schedule`);
+    const trainees = page.getByTestId("crew-trainees");
+    await expect(trainees).toBeVisible({ timeout: 30_000 });
+    await trainees.getByRole("button", { name: "Assign trainee" }).click();
+
+    const dialog = page.getByTestId("assign-trainee-dialog");
+    await expect(dialog).toBeVisible({ timeout: 20_000 });
+    await dialog.getByTestId("searchable-select-trigger").first().click();
+    const menu = page.getByTestId("searchable-select-menu");
+    await expect(menu).toBeVisible({ timeout: 20_000 });
+    await fillSearchableSelectQuery(menu, seeded.name);
+    await menu.getByRole("option", { name: new RegExp(seeded.name) }).first().click();
+
+    await expect(dialog.getByTestId("date-time-picker")).not.toHaveAttribute("data-value", "", {
+      timeout: 30_000,
+    });
+    await dialog.getByRole("button", { name: "Assign trainee" }).click();
+
+    const state = await pollConvex<ApplicationState>(
+      "e2eHelpers:getCrewApplicationState",
+      { applicationId: seeded.applicationId },
+      (row) => row?.status === "trainee",
+    );
+    expect(state.traineeShiftEventIds).toContain(seededEvent.eventId);
+    await expect(dialog).toBeHidden({ timeout: 20_000 });
+    // Pulled into the board without a reload, and not left as an unsaved change.
+    await expect(trainees).toContainText(seeded.name, { timeout: 20_000 });
+  });
+
   test("an event missing its venue and lead is fixed from the dialog, then the trainee is assigned", async ({ page }) => {
     const stamp = Date.now();
     const seededEvent = runConvex("e2eHelpers:seedCrewedEventWithSchedule", {

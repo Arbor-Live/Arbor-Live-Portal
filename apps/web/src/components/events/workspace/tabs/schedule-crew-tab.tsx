@@ -50,6 +50,7 @@ export function ScheduleCrewTab() {
     getBlockRef,
     removeUnlinkedShifts,
     userSelectOptions,
+    isAdmin,
   } = useEventWorkspace();
   // Series costs, crew notes and the series pull list are recurring-only; a
   // multi-day booking's days bill and staff as ordinary linked days.
@@ -154,6 +155,7 @@ export function ScheduleCrewTab() {
             askAvailability={hasCrew}
             readOnly={readOnly}
             onDeleteUnlinked={onDeleteUnlinked}
+            canAssignTrainees={isAdmin}
           />
         </CardContent>
       </Card>
