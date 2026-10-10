@@ -4,9 +4,10 @@ import { query, type QueryCtx } from "./_generated/server";
 import {
   type ActiveOrganizationContext,
   getActiveOrganizationContextOrNull,
+  getCurrentUserOrNull,
   getUserId,
   hasOperationsAccess,
-  requireAdmin,
+  isStaffAdmin,
   requireAuth,
 } from "./lib/auth";
 import { isArtistOrganizationType } from "./lib/organizationType";
@@ -45,6 +46,20 @@ const BADGE_STATUS_TAKE = 50;
  * scheduling routes — counting it fans out events × shifts and dominated
  * Database I/O when subscribed on every dashboard page.
  */
+const EMPTY_NAV_BADGES = {
+  pendingAvailability: 0,
+  unconfirmedCrew: 0,
+  pendingBookingRequests: 0,
+  pendingBandApplications: 0,
+  pendingCrewApplications: 0,
+  pendingDamageReports: 0,
+  pendingBandPaymentActions: 0,
+  quoteChangesRequested: 0,
+  pendingEquipmentBorrowRequests: 0,
+  pendingPostEventWork: 0,
+  artistPayoutActions: 0,
+};
+
 export const getNavBadges = query({
   args: {
     now: v.number(),
@@ -73,7 +88,11 @@ export const getNavBadges = query({
     artistPayoutActions: v.number(),
   }),
   handler: async (ctx, args) => {
-    const user = await requireAuth(ctx);
+    // Badges are decoration on every page: never throw for auth. A missing
+    // session (token not loaded yet, or expired) shows no counts instead of
+    // taking the whole page down through the error boundary.
+    const user = await getCurrentUserOrNull(ctx);
+    if (!user) return EMPTY_NAV_BADGES;
     const orgContext = await getActiveOrganizationContextOrNull(ctx);
     const orgType = orgContext?.organizationType;
 
@@ -83,13 +102,12 @@ export const getNavBadges = query({
     const includeArborInternal =
       Boolean(args.includeArborInternal) && orgType === "arbor_internal";
     const includeBand = Boolean(args.includeBand) && isArtistOrganizationType(orgType);
-    const includeAdmin = Boolean(args.includeAdmin);
+    // Client flags can also be stale after a demotion: drop admin counts
+    // rather than throw.
+    const includeAdmin = Boolean(args.includeAdmin) && (await isStaffAdmin(ctx, user));
     const includeMyEventActions =
       Boolean(args.includeMyEventActions) && orgType === "arbor_internal";
 
-    if (includeAdmin) {
-      await requireAdmin(ctx);
-    }
     const includeOperations =
       includeAdmin ||
       (Boolean(args.includeOperations) &&
