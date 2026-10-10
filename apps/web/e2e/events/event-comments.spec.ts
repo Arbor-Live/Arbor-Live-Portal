@@ -83,6 +83,16 @@ test.describe("event comments and mentions", () => {
     const postedRow = page
       .getByTestId("comment-row")
       .filter({ hasText: String(stamp) });
+
+    // Hovering a mention or the author shows who they are.
+    const hoverCard = page.getByTestId("user-hover-card");
+    await postedRow.getByText(`@${mentionHandle}`).hover();
+    await expect(hoverCard).toContainText(e2eEnv.crewEmail, { timeout: 15_000 });
+    await page.mouse.move(0, 0);
+    await expect(hoverCard).toBeHidden({ timeout: 10_000 });
+    await postedRow.getByTestId("comment-author-avatar").hover();
+    await expect(hoverCard).toContainText(e2eEnv.adminEmail, { timeout: 15_000 });
+    await page.mouse.move(0, 0);
     await postedRow.getByTestId("comment-delete").click();
     await acceptAppDialog(page, "Delete");
     await expect(postedRow).toHaveCount(0, { timeout: 20_000 });

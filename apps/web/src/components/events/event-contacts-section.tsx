@@ -191,6 +191,17 @@ export function EventContactsSection({
           </div>
         ) : null}
 
+        {board?.team.length ? (
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground">Event team</p>
+            <div className="divide-y rounded-md border" data-testid="event-contacts-team">
+              {board.team.map((row, index) => (
+                <InheritedContactRow key={`team-${index}`} {...row} />
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div className="space-y-2">
           {drafts.map((draft) => (
             <div

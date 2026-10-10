@@ -2568,6 +2568,32 @@ export const seedCrewYesResponse = mutation({
   },
 });
 
+/** Test-only: set a portal user's profile phone (hover cards, brief, contacts). */
+export const setProfilePhone = mutation({
+  args: { userId: v.string(), phone: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const [profile] = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .take(1);
+    if (profile) {
+      await ctx.db.patch(profile._id, { phone: args.phone, updatedAt: now });
+    } else {
+      await ctx.db.insert("userAdminProfiles", {
+        userId: args.userId,
+        status: "active",
+        phone: args.phone,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    return null;
+  },
+});
+
 /**
  * Test-only: assign a crew user to every schedule block (avoids heavy schedule UI under local Convex).
  */

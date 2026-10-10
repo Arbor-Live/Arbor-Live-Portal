@@ -5,7 +5,15 @@ import {
   type SectionAvailabilityLevel,
   type SectionForAvailability,
 } from "@/lib/crew-availability";
-import { conflictsDuring, type AssignableResponder, type CrewConflict } from "@/lib/crew-shift-assign";
+import {
+  compareHours,
+  conflictsDuring,
+  quarterHoursSortKey,
+  type AssignableResponder,
+  type CrewConflict,
+  type QuarterHoursById,
+} from "@/lib/crew-shift-assign";
+import { formatHours } from "@/lib/crew-hours-windows";
 
 export const LEVEL_LABELS: Record<SectionAvailabilityLevel, string> = {
   available: "Available",
@@ -30,9 +38,9 @@ export const CONFLICT_CLASS =
   "border-status-rose-500/40 bg-status-rose-500/10 text-status-rose-700 dark:text-status-rose-200";
 
 /**
- * Person picker options for one section: availability badge on each person,
- * best fit first. With no availability asked (e.g. non-crewed event types),
- * the options come back unchanged.
+ * Person picker options for one section, best fit first: availability (when
+ * asked), then the fewest hours this quarter, then name. Each person shows
+ * their availability badge and quarter hours.
  */
 export function annotateOptionsForWindow(args: {
   options: UserSelectOption[];
@@ -40,8 +48,29 @@ export function annotateOptionsForWindow(args: {
   responderById: Map<string, AssignableResponder>;
   conflicts: CrewConflict[];
   askAvailability: boolean;
+  quarterHours?: QuarterHoursById;
 }): UserSelectOption[] {
-  if (!args.askAvailability || !args.window) return args.options;
+  const hoursOf = (option: UserSelectOption) => quarterHoursSortKey(args.quarterHours, option.value);
+  const withHours = (option: UserSelectOption): UserSelectOption => {
+    const hours = option.value ? args.quarterHours?.get(option.value) : undefined;
+    if (hours === undefined) return option;
+    return {
+      ...option,
+      description: [`${formatHours(hours)} this quarter`, option.description].filter(Boolean).join(" · "),
+    };
+  };
+  const byFit = (a: { option: UserSelectOption; rank: number }, b: { option: UserSelectOption; rank: number }) =>
+    a.rank - b.rank ||
+    compareHours(hoursOf(a.option), hoursOf(b.option)) ||
+    a.option.label.localeCompare(b.option.label);
+
+  if (!args.askAvailability || !args.window) {
+    if (!args.quarterHours) return args.options;
+    return args.options
+      .map((option) => ({ option, rank: option.value ? 0 : -1 }))
+      .sort(byFit)
+      .map((entry) => withHours(entry.option));
+  }
   const window = args.window;
   return args.options
     .map((option) => {
@@ -63,6 +92,6 @@ export function annotateOptionsForWindow(args: {
         rank: SECTION_AVAILABILITY_RANK[availability.level] + (booked.length ? 10 : 0),
       };
     })
-    .sort((a, b) => a.rank - b.rank || a.option.label.localeCompare(b.option.label))
-    .map((entry) => entry.option);
+    .sort(byFit)
+    .map((entry) => withHours(entry.option));
 }

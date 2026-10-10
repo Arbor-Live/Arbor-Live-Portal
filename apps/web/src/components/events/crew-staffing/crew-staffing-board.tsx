@@ -22,7 +22,9 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
+import { UserHoverCard } from "@/components/users/user-hover-card";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
+import { useCrewHoursWindows } from "@/hooks/use-crew-hours-windows";
 import {
   annotateOptionsForWindow,
   CONFLICT_CLASS,
@@ -45,8 +47,11 @@ import {
   setSectionHeadcount,
   type AssignableResponder,
   type CrewConflict,
+  type QuarterHoursById,
+  type SectionCandidate,
   type ShiftDraftForAssign,
 } from "@/lib/crew-shift-assign";
+import { formatHours } from "@/lib/crew-hours-windows";
 import { countStaffing, isOpenSlot, isTraineeShift } from "@/lib/crew-shift-kinds";
 import { shiftBelongsToBlock, shiftTimesMatchBlock } from "@/lib/event-schedule-draft";
 import { formatDate, formatDateTimeRange } from "@/lib/format";
@@ -137,6 +142,26 @@ export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
   const conflicts: CrewConflict[] = useMemo(() => conflictsResult?.conflicts ?? [], [conflictsResult]);
   const uncheckedUserIds = conflictsResult?.uncheckedUserIds ?? [];
 
+  // Hours this quarter for everyone pickable, so the fewest-hours people come
+  // first and work spreads out.
+  const { quarter } = useCrewHoursWindows();
+  const hoursUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const option of userSelectOptions) if (option.value) ids.add(option.value);
+    for (const responder of responders) ids.add(responder.userId);
+    return [...ids].sort();
+  }, [userSelectOptions, responders]);
+  const quarterHoursResult = useQuery(
+    api.userCards.listShiftHours,
+    quarter && hoursUserIds.length > 0
+      ? { userIds: hoursUserIds, window: { startMs: quarter.startMs, endMs: quarter.endMs } }
+      : "skip",
+  );
+  const quarterHours: QuarterHoursById | undefined = useMemo(
+    () => (quarterHoursResult ? new Map(quarterHoursResult.map((row) => [row.userId, row.hours])) : undefined),
+    [quarterHoursResult],
+  );
+
   // Every key a shift can link to a block by (client ref or stored block id),
   // so "not linked to a section" is one Set lookup per shift instead of a
   // scan over every block.
@@ -202,6 +227,7 @@ export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
       responders,
       conflicts,
       getBlockRef,
+      quarterHours,
     });
     if (result.filled === 0) {
       notify.info("No one who's available is free for the open slots. Pick people by hand.");
@@ -248,7 +274,12 @@ export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
               size="sm"
               variant="outline"
               className="sm:ml-auto"
-              disabled={staffing.open === 0 || responders.length === 0}
+              disabled={
+                staffing.open === 0 ||
+                responders.length === 0 ||
+                // Wait for quarter hours so the fill picks the fewest-hours people.
+                (quarter !== null && hoursUserIds.length > 0 && quarterHours === undefined)
+              }
               title="Put available crew on open slots, section by section. Skips anyone booked elsewhere."
               onClick={fillOpenSlots}
             >
@@ -308,6 +339,7 @@ export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
             responders={responders}
             responderById={responderById}
             conflicts={conflicts}
+            quarterHours={quarterHours}
             askAvailability={askAvailability}
             readOnly={readOnly}
             openSlotNote={openSlotNote}
@@ -388,6 +420,7 @@ export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
                 userSelectOptions={userSelectOptions}
                 responderById={responderById}
                 conflicts={conflicts}
+                quarterHours={quarterHours}
                 askAvailability={askAvailability}
                 readOnly={readOnly}
                 openSlotNote={openSlotNote}
@@ -505,6 +538,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
   responders,
   responderById,
   conflicts,
+  quarterHours,
   askAvailability,
   readOnly,
   openSlotNote,
@@ -522,6 +556,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
   responders: AssignableResponder[];
   responderById: Map<string, AssignableResponder>;
   conflicts: CrewConflict[];
+  quarterHours?: QuarterHoursById;
   askAvailability: boolean;
   readOnly: boolean;
   openSlotNote?: string;
@@ -548,6 +583,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
             shifts,
             conflicts,
             getBlockRef,
+            quarterHours,
           }).filter(
             (candidate) =>
               candidate.level === "available" ||
@@ -555,7 +591,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
               candidate.level === "backup",
           )
         : [],
-    [askAvailability, block, responders, shifts, conflicts, getBlockRef],
+    [askAvailability, block, responders, shifts, conflicts, getBlockRef, quarterHours],
   );
   const visibleCandidates = showAll ? candidates : candidates.slice(0, CHIP_LIMIT);
 
@@ -567,8 +603,9 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
       responderById,
       conflicts,
       askAvailability,
+      quarterHours,
     });
-  }, [rows, userSelectOptions, window, responderById, conflicts, askAvailability]);
+  }, [rows, userSelectOptions, window, responderById, conflicts, askAvailability, quarterHours]);
 
   function assign(person: { userId: string; name: string }) {
     setShifts((prev) => assignPersonToSection(prev, block, person, getBlockRef));
@@ -641,6 +678,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
               userSelectOptions={userSelectOptions}
               responderById={responderById}
               conflicts={conflicts}
+              quarterHours={quarterHours}
               askAvailability={askAvailability}
               readOnly={readOnly}
               openSlotNote={openSlotNote}
@@ -668,46 +706,15 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
                 <span className="text-xs text-muted-foreground">
                   {candidates.length > 0 ? "Can work this:" : "No one else has said they can work this."}
                 </span>
-                {visibleCandidates.map((candidate) => {
-                  const booked = candidate.conflicts.length > 0;
-                  const title = [
-                    LEVEL_LABELS[candidate.level],
-                    candidate.detail,
-                    booked
-                      ? `Booked on ${candidate.conflicts.map((conflict) => conflict.eventTitle).join(", ")}`
-                      : null,
-                    candidate.responder?.scheduleChanged ? "Answered before the schedule changed" : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ");
-                  return (
-                    <button
-                      key={candidate.userId}
-                      type="button"
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs hover:brightness-95",
-                        booked ? CONFLICT_CLASS : LEVEL_CLASSES[candidate.level],
-                      )}
-                      title={`Add to ${label}. ${title}`}
-                      data-testid="crew-candidate"
-                      onClick={() => assign({ userId: candidate.userId, name: candidate.name })}
-                    >
-                      {booked ? (
-                        <CalendarXIcon className="size-3.5" weight="bold" aria-hidden />
-                      ) : (
-                        <PlusIcon className="size-3" weight="bold" aria-hidden />
-                      )}
-                      {candidate.name}
-                      {booked ? (
-                        <span className="opacity-75">
-                          · booked {candidate.conflicts.map((conflict) => formatTimeWindow(conflict)).join(", ")}
-                        </span>
-                      ) : candidate.level !== "available" ? (
-                        <span className="opacity-75">· {LEVEL_LABELS[candidate.level].toLowerCase()}</span>
-                      ) : null}
-                    </button>
-                  );
-                })}
+                {visibleCandidates.map((candidate) => (
+                  <CandidateChip
+                    key={candidate.userId}
+                    candidate={candidate}
+                    sectionLabel={label}
+                    quarterHours={quarterHours?.get(candidate.userId)}
+                    onAssign={() => assign({ userId: candidate.userId, name: candidate.name })}
+                  />
+                ))}
                 {candidates.length > CHIP_LIMIT ? (
                   <Button
                     type="button"
@@ -747,6 +754,7 @@ function ShiftRow<S extends ShiftDraftForAssign>({
   userSelectOptions,
   responderById,
   conflicts,
+  quarterHours,
   askAvailability,
   readOnly,
   openSlotNote,
@@ -760,6 +768,7 @@ function ShiftRow<S extends ShiftDraftForAssign>({
   userSelectOptions: UserSelectOption[];
   responderById: Map<string, AssignableResponder>;
   conflicts: CrewConflict[];
+  quarterHours?: QuarterHoursById;
   askAvailability: boolean;
   readOnly: boolean;
   openSlotNote?: string;
@@ -785,8 +794,9 @@ function ShiftRow<S extends ShiftDraftForAssign>({
         responderById,
         conflicts,
         askAvailability,
+        quarterHours,
       }),
-    [userSelectOptions, personWindow, responderById, conflicts, askAvailability],
+    [userSelectOptions, personWindow, responderById, conflicts, askAvailability, quarterHours],
   );
 
   const warnings: Array<{ tone: "rose" | "amber" | "muted"; text: string }> = [];
@@ -932,5 +942,79 @@ function ShiftRow<S extends ShiftDraftForAssign>({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Quick-add chip for one person who can work a section. Hover for their
+ * availability here, contact info, and hours this week and quarter.
+ */
+function CandidateChip({
+  candidate,
+  sectionLabel,
+  quarterHours,
+  onAssign,
+}: {
+  candidate: SectionCandidate;
+  sectionLabel: string;
+  quarterHours?: number;
+  onAssign: () => void;
+}) {
+  const booked = candidate.conflicts.length > 0;
+  const notes = [
+    candidate.detail,
+    booked ? `Booked on ${candidate.conflicts.map((conflict) => conflict.eventTitle).join(", ")}` : null,
+    candidate.responder?.scheduleChanged ? "Answered before the schedule changed" : null,
+  ].filter(Boolean);
+  return (
+    <UserHoverCard
+      userId={candidate.userId}
+      showHours
+      extra={
+        <div className="space-y-1">
+          <span
+            className={cn(
+              "inline-block rounded-md border px-1.5 py-0.5 text-3xs font-medium uppercase tracking-wide",
+              booked ? CONFLICT_CLASS : LEVEL_CLASSES[candidate.level],
+            )}
+          >
+            {booked ? "Booked" : LEVEL_LABELS[candidate.level]} for {sectionLabel}
+          </span>
+          {notes.map((note) => (
+            <p key={note} className="text-muted-foreground">
+              {note}
+            </p>
+          ))}
+        </div>
+      }
+    >
+      <button
+        type="button"
+        className={cn(
+          "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs hover:brightness-95",
+          booked ? CONFLICT_CLASS : LEVEL_CLASSES[candidate.level],
+        )}
+        aria-label={`Add ${candidate.name} to ${sectionLabel}`}
+        data-testid="crew-candidate"
+        onClick={onAssign}
+      >
+        {booked ? (
+          <CalendarXIcon className="size-3.5" weight="bold" aria-hidden />
+        ) : (
+          <PlusIcon className="size-3" weight="bold" aria-hidden />
+        )}
+        {candidate.name}
+        {booked ? (
+          <span className="opacity-75">
+            · booked {candidate.conflicts.map((conflict) => formatTimeWindow(conflict)).join(", ")}
+          </span>
+        ) : candidate.level !== "available" ? (
+          <span className="opacity-75">· {LEVEL_LABELS[candidate.level].toLowerCase()}</span>
+        ) : null}
+        {quarterHours !== undefined ? (
+          <span className="tabular-nums opacity-60">· {formatHours(quarterHours)}</span>
+        ) : null}
+      </button>
+    </UserHoverCard>
   );
 }

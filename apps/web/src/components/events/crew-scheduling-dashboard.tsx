@@ -15,6 +15,10 @@ import { EmptyState } from "@/components/list-page";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AcademicPeriodPicks } from "@/components/academic-period-picks";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserHoverCard } from "@/components/users/user-hover-card";
+import { useCrewHoursWindows } from "@/hooks/use-crew-hours-windows";
+import { formatHours } from "@/lib/crew-hours-windows";
+import { compareHours } from "@/lib/crew-shift-assign";
 import {
   ADMIN_CREW_SCHEDULING_DEFAULT_WEEKS,
   adminSchedulingRangeFromDateInputs,
@@ -94,7 +98,11 @@ function PendingCrewSidebar({ rows }: { rows: PendingCrewRow[] | undefined }) {
                 <AvatarImage src={entry.image} alt={entry.name} />
                 <AvatarFallback>{initials(entry.name)}</AvatarFallback>
               </Avatar>
-              <span className="min-w-0 flex-1 truncate text-sm">{entry.name}</span>
+              <UserHoverCard userId={entry.userId} showHours side="left">
+                <button type="button" className="min-w-0 flex-1 truncate text-left text-sm hover:underline">
+                  {entry.name}
+                </button>
+              </UserHoverCard>
               <span className="rounded-full border border-status-amber-500/30 bg-status-amber-500/15 px-2 py-0.5 text-xs tabular-nums text-status-amber-700">
                 {entry.count}
               </span>
@@ -172,11 +180,36 @@ function responderDetail(responder: Responder, sectionLabelById: Map<string, str
   return parts.join(" · ");
 }
 
+/**
+ * Everyone who answered, grouped by answer and, within each, fewest hours this
+ * quarter first so work spreads out. Hover a name for contact and hours.
+ */
 function ResponsesList({ row }: { row: BoardRow }) {
   const sectionLabelById = new Map(row.sections.map((section) => [section._id as string, section.label]));
   const assigned = new Set(row.assignedCrew.map((member) => member.userId));
+  const { quarter } = useCrewHoursWindows();
+  const userIds = useMemo(
+    () => [...new Set(row.responders.map((responder) => responder.userId))].sort(),
+    [row.responders],
+  );
+  const hoursRows = useQuery(
+    api.userCards.listShiftHours,
+    quarter && userIds.length > 0
+      ? { userIds, window: { startMs: quarter.startMs, endMs: quarter.endMs } }
+      : "skip",
+  );
+  const hoursById = useMemo(
+    () => new Map((hoursRows ?? []).map((entry) => [entry.userId, entry.hours])),
+    [hoursRows],
+  );
   const responders = [...row.responders].sort(
-    (a, b) => RESPONSE_ORDER[a.responseStatus] - RESPONSE_ORDER[b.responseStatus] || a.name.localeCompare(b.name),
+    (a, b) =>
+      RESPONSE_ORDER[a.responseStatus] - RESPONSE_ORDER[b.responseStatus] ||
+      compareHours(
+        hoursById.get(a.userId) ?? Number.POSITIVE_INFINITY,
+        hoursById.get(b.userId) ?? Number.POSITIVE_INFINITY,
+      ) ||
+      a.name.localeCompare(b.name),
   );
   return (
     <div className="space-y-2 border p-3">
@@ -193,7 +226,20 @@ function ResponsesList({ row }: { row: BoardRow }) {
                   <AvatarImage src={responder.image} alt={responder.name} />
                   <AvatarFallback>{initials(responder.name)}</AvatarFallback>
                 </Avatar>
-                <span className="font-medium">{responder.name}</span>
+                <UserHoverCard userId={responder.userId} showHours>
+                  <button
+                    type="button"
+                    className="font-medium hover:underline"
+                    data-testid="crew-board-responder"
+                  >
+                    {responder.name}
+                  </button>
+                </UserHoverCard>
+                {hoursById.has(responder.userId) ? (
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {formatHours(hoursById.get(responder.userId) ?? 0)} this quarter
+                  </span>
+                ) : null}
                 <span
                   className={`rounded-md border px-2 py-0.5 text-xs ${crewResponseBadgeClass(responder.responseStatus)}`}
                 >
@@ -450,16 +496,18 @@ export function CrewSchedulingDashboard() {
                 {showPendingCrew && row.pendingCrew.length > 0 ? (
                   <div className="flex flex-wrap gap-1.5">
                     {sortByName(row.pendingCrew).map((person) => (
-                      <span
-                        key={person.userId}
-                        className="flex items-center gap-1.5 border px-1.5 py-0.5 text-xs"
-                      >
-                        <Avatar size="sm">
-                          <AvatarImage src={person.image} alt={person.name} />
-                          <AvatarFallback>{initials(person.name)}</AvatarFallback>
-                        </Avatar>
-                        {person.name}
-                      </span>
+                      <UserHoverCard key={person.userId} userId={person.userId} showHours>
+                        <button
+                          type="button"
+                          className="flex items-center gap-1.5 border px-1.5 py-0.5 text-xs hover:bg-muted"
+                        >
+                          <Avatar size="sm">
+                            <AvatarImage src={person.image} alt={person.name} />
+                            <AvatarFallback>{initials(person.name)}</AvatarFallback>
+                          </Avatar>
+                          {person.name}
+                        </button>
+                      </UserHoverCard>
                     ))}
                   </div>
                 ) : null}

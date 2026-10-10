@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { TrashIcon } from "@phosphor-icons/react";
 import { UserAvatar } from "@/components/account/user-avatar";
+import { UserHoverCard } from "@/components/users/user-hover-card";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -149,13 +150,15 @@ const MENTION_POPUP_LIMIT = 20;
 
 function renderBodyWithMentions(
   body: string,
-  mentioned: { name: string; username?: string }[],
+  mentioned: { userId: string; name: string; username?: string }[],
 ): ReactNode {
-  const handles = [
-    ...new Set(
-      mentioned.flatMap((user) => [user.username, user.name].filter(Boolean) as string[]),
-    ),
-  ].sort((a, b) => b.length - a.length);
+  const userIdByHandle = new Map<string, string>();
+  for (const user of mentioned) {
+    for (const handle of [user.username, user.name]) {
+      if (handle && !userIdByHandle.has(handle)) userIdByHandle.set(handle, user.userId);
+    }
+  }
+  const handles = [...userIdByHandle.keys()].sort((a, b) => b.length - a.length);
   if (!handles.length) return body;
   const pattern = new RegExp(
     `(?<![\\p{L}\\p{N}_])@(?:${handles.map(escapeRegExp).join("|")})(?![\\p{L}\\p{N}_])`,
@@ -166,10 +169,20 @@ function renderBodyWithMentions(
   for (const match of body.matchAll(pattern)) {
     const start = match.index ?? 0;
     if (start > lastIndex) nodes.push(body.slice(lastIndex, start));
-    nodes.push(
+    const userId = userIdByHandle.get(match[0].slice(1));
+    const mention = (
       <span key={`${start}-${match[0]}`} className="font-medium text-status-sky-700 dark:text-status-sky-300">
         {match[0]}
-      </span>,
+      </span>
+    );
+    nodes.push(
+      userId ? (
+        <UserHoverCard key={`${start}-${match[0]}`} userId={userId}>
+          {mention}
+        </UserHoverCard>
+      ) : (
+        mention
+      ),
     );
     lastIndex = start + match[0].length;
   }
@@ -363,18 +376,33 @@ function CommentsPanel({
                 >
                   <MessageAvatar>
                     {lastInGroup ? (
-                      <UserAvatar
-                        name={comment.authorName}
-                        email={comment.authorEmail}
-                        userId={comment.authorUserId}
-                        imageUrl={comment.authorAvatarUrl}
-                        size="sm"
-                      />
+                      <UserHoverCard userId={comment.authorUserId}>
+                        <button
+                          type="button"
+                          className="rounded-full"
+                          aria-label={`About ${comment.authorName}`}
+                          data-testid="comment-author-avatar"
+                        >
+                          <UserAvatar
+                            name={comment.authorName}
+                            email={comment.authorEmail}
+                            userId={comment.authorUserId}
+                            imageUrl={comment.authorAvatarUrl}
+                            size="sm"
+                          />
+                        </button>
+                      </UserHoverCard>
                     ) : null}
                   </MessageAvatar>
                   <MessageContent>
                     {!isOwn && index === 0 ? (
-                      <MessageHeader>{comment.authorName}</MessageHeader>
+                      <MessageHeader>
+                        <UserHoverCard userId={comment.authorUserId}>
+                          <button type="button" className="hover:underline" data-testid="comment-author">
+                            {comment.authorName}
+                          </button>
+                        </UserHoverCard>
+                      </MessageHeader>
                     ) : null}
                     <Bubble variant={isOwn ? "default" : "muted"}>
                       <BubbleContent
