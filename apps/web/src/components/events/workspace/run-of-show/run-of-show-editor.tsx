@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useMemo, useState } from "react";
+import { startTransition, useMemo, useRef, useState } from "react";
 import {
   CaretDownIcon,
   LightningIcon,
@@ -61,6 +61,11 @@ function refOf(block: TimelineBlockDraft) {
   return block.clientId ?? block.id ?? "";
 }
 
+/** Same block across drafts: a pending label edit replaces the object. */
+function sameBlock(a: TimelineBlockDraft, b: TimelineBlockDraft) {
+  return a === b || (refOf(a) !== "" && refOf(a) === refOf(b));
+}
+
 export type RunOfShowCrewCount = { total: number; filled: number };
 
 export function RunOfShowEditor({
@@ -99,8 +104,21 @@ export function RunOfShowEditor({
     [blocks, acts, actName, swaps],
   );
 
+  // Label edits reach the parent as transitions, so `blocks` can lag behind
+  // what was last sent. Every edit builds on the latest sent draft until the
+  // parent catches up; otherwise a time change made while a label edit is
+  // pending would overwrite the label.
+  const sent = useRef<{ base: TimelineBlockDraft[]; next: TimelineBlockDraft[] } | null>(null);
+  function latest() {
+    return sent.current?.base === blocks ? sent.current.next : blocks;
+  }
+  function commit(next: TimelineBlockDraft[]) {
+    sent.current = { base: blocks, next };
+    onChange(next);
+  }
+
   function update(target: TimelineBlockDraft, patch: Partial<TimelineBlockDraft>) {
-    onChange(blocks.map((block) => (block === target ? { ...block, ...patch } : block)));
+    commit(latest().map((block) => (sameBlock(block, target) ? { ...block, ...patch } : block)));
   }
 
   function setTimes(target: TimelineBlockDraft, start: string, end: string) {
@@ -116,7 +134,7 @@ export function RunOfShowEditor({
   }
 
   function remove(target: TimelineBlockDraft) {
-    onChange(blocks.filter((block) => block !== target));
+    commit(latest().filter((block) => !sameBlock(block, target)));
   }
 
   /** New blocks start where the run of show currently ends (or at event start). */
@@ -149,11 +167,11 @@ export function RunOfShowEditor({
       if (act.participationId) block.participationId = act.participationId;
       else if (act.needId) block.needId = act.needId;
     }
-    onChange([...blocks, block]);
+    commit([...latest(), block]);
   }
 
   function build(input: BuildRunOfShowInput) {
-    onChange(buildRunOfShow(blocks, input, newClientId));
+    commit(buildRunOfShow(latest(), input, newClientId));
   }
 
   const actsWith = (type: "soundcheck" | "set") =>
