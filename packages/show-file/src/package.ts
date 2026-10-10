@@ -152,8 +152,17 @@ export function buildShowPackage(args: {
   // The same night for Mixing Station, which X Air/X32 crews mix from on a
   // phone or tablet: one `.msz` per scene, opened straight into the app. The
   // `.scn` builds above still run, for the warnings they raise.
-  if (desk !== "wing" && mixingStation) {
+  if (desk !== "wing" && mixingStation && args.archive !== false) {
     const msDesk: MsDesk = desk === "x32" ? "x32" : "xr18";
+    // "Default" is the night baseline; a band that happens to share a stem
+    // gets a numbered file rather than replacing it.
+    const taken = new Set<string>();
+    const entryName = (stem: string) => {
+      let name = stem;
+      for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${stem} (${n})`;
+      taken.add(name.toLowerCase());
+      return `${name}.msz`;
+    };
     const scenes: Array<{ stem: string; name: string; fileStem: string | null }> = [
       { stem: "Default", name: "Default", fileStem: null },
       ...bandsWithInputs.map((band) => ({
@@ -163,7 +172,7 @@ export function buildShowPackage(args: {
       })),
     ];
     for (const scene of scenes) {
-      files[`${scene.stem}.msz`] = buildMixingStationScene({
+      files[entryName(scene.stem)] = buildMixingStationScene({
         desk: msDesk,
         channels: msChannels(desk, template, allocation, scene.fileStem),
         sceneName: scene.name,

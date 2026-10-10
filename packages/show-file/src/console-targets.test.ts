@@ -256,6 +256,22 @@ describe("buildShowPackage targets", () => {
     expect(headliners_.ch(3).headamp).toBeUndefined();
   });
 
+  it("keeps the Default baseline when a band is also called Default", () => {
+    const named = { ...openers, bandName: "Default", fileStem: "Default" };
+    const result = buildShowPackage({ eventName: "E", bands: [named, headliners], target: "xair-ms" });
+    const files = unzipSync(result.zipBytes);
+    expect(Object.keys(files)).toEqual(["Default.msz", "Default (2).msz", "Headliners.msz"]);
+    // The baseline (all muted, carries 48V) is still the first file.
+    expect(readMsz(files["Default.msz"]!).ch(1).main.generic["mix.rawOn"]).toBe(false);
+    expect(readMsz(files["Default (2).msz"]!).ch(1).main.generic["mix.rawOn"]).toBe(true);
+  });
+
+  it("builds no .msz bytes for a preview", () => {
+    const result = buildShowPackage({ eventName: "E", bands: [openers, headliners], target: "x32-ms", archive: false });
+    expect(result.zipBytes.byteLength).toBe(0);
+    expect(result.preview.length).toBeGreaterThan(0);
+  });
+
   it("routes the X32 .msz inputs from AES50 A, both snakes", () => {
     const result = buildShowPackage({
       eventName: "E",
