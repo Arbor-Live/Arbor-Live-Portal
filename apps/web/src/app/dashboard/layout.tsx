@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
+import { CommandPalette } from "@/components/command-palette";
 import { DashboardBreadcrumb } from "@/components/dashboard-breadcrumb";
 import { FormSaveBarStackProvider } from "@/components/forms";
 import { OnboardingBanner } from "@/components/onboarding/onboarding-banner";
@@ -41,7 +42,8 @@ export default async function DashboardLayout({
               <SidebarTrigger />
               <Separator orientation="vertical" className="h-4" />
               <DashboardBreadcrumb />
-              <div className="ml-auto">
+              <div className="ml-auto flex items-center gap-2">
+                <CommandPalette />
                 <NotificationBell />
               </div>
             </header>

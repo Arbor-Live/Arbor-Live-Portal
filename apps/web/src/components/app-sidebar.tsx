@@ -9,12 +9,11 @@ import { releasePushSubscription } from "@/lib/pwa"
 import { useMutation, useQuery } from "convex/react"
 import { useNow } from "@/lib/use-now"
 import { api } from "@/lib/convex-api"
-import { isArtistOrganizationType } from "@/lib/artist-types"
-import { navItems, sectionSubItems, type NavItem, type NavSubItem } from "@/lib/nav"
 import { getConvexErrorMessage } from "@/lib/convex-error"
 import { notify } from "@/lib/notify"
 import { useSessionShell } from "@/components/session-shell-provider"
 import { useViewMode } from "@/components/view-mode-provider"
+import { useDashboardNav } from "@/hooks/use-dashboard-nav"
 import { getDefaultAdminSchedulingRange } from "@/lib/crew-availability"
 import {
   Select,
@@ -46,48 +45,6 @@ import {
 } from "@/components/ui/sidebar"
 import { CaretRightIcon, LifebuoyIcon } from "@phosphor-icons/react"
 
-function visibleSubItems(
-  subItems: NavSubItem[] | undefined,
-  access: { isAdmin: boolean; hasOperationsAccess: boolean },
-) {
-  if (!subItems) return undefined
-  return subItems.filter(
-    (subItem) =>
-      access.isAdmin ||
-      (!subItem.adminOnly && (!subItem.opsOnly || access.hasOperationsAccess)),
-  )
-}
-
-function canAccessNavItem(
-  item: NavItem,
-  access: {
-    isAdmin: boolean
-    hasOperationsAccess: boolean
-    hasMarketingAccess: boolean
-    isBandContext: boolean
-    isCrewContext: boolean
-    isAdminHomeContext: boolean
-  },
-) {
-  if (access.isBandContext) {
-    // Band orgs keep Home and their own act (profile / riders / payments) even
-    // though the Artists section is admin-facing for Arbor Live, plus the band
-    // tools. Everything else is staff-facing — including adminOnly items like
-    // Camera, which the old fallback here accidentally let through.
-    return item.bandOnly || item.url === "/dashboard" || item.url === "/dashboard/artists"
-  }
-  if (item.bandOnly) return false
-  if (item.url === "/dashboard" && !access.isCrewContext && !access.isAdminHomeContext) return false
-  // Every Arbor staff member gets the directory here; the act workspace inside
-  // it stays admin-only (see the sub-item filter).
-  if (item.url === "/dashboard/artists") return true
-  if (access.isAdmin) return true
-  if (item.adminOnly) return false
-  if (item.opsOnly && !access.hasOperationsAccess) return false
-  if (item.marketingOnly && !access.hasMarketingAccess) return false
-  return true
-}
-
 const secondaryItems = [
   { title: "Support", url: "mailto:arborlive@stanford.edu", icon: <LifebuoyIcon /> },
 ]
@@ -111,28 +68,18 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const shell = useSessionShell()
   const setActiveOrganization = useMutation(api.users.setActiveOrganization)
   const unsubscribePush = useMutation(api.pushSubscriptions.unsubscribe)
-  const { viewMode, setViewMode } = useViewMode()
-  const viewer = shell?.viewer
+  const { setViewMode } = useViewMode()
+  const {
+    sections,
+    isAdmin,
+    inCrewMode,
+    isBandContext,
+    effectiveIsAdmin,
+    effectiveHasOperationsAccess,
+  } = useDashboardNav()
   const account = shell?.account
   const activeOrganization = shell?.activeOrganization
   const myOrganizations = shell?.organizations
-  const isAdmin = viewer?.isAdmin ?? false
-  const viewerVerticals = viewer?.verticals ?? []
-  const hasOperationsAccess = isAdmin || viewerVerticals.includes("Operations")
-  const hasMarketingAccess = isAdmin || viewerVerticals.includes("Marketing")
-  const hasCrewAccess =
-    isAdmin ||
-    viewerVerticals.includes("Crew") ||
-    viewerVerticals.includes("Trivia") ||
-    viewerVerticals.length === 0
-  // Crew mode hides ops/admin surfaces so an admin sees the portal the way crew does.
-  const inCrewMode =
-    viewMode === "crew" &&
-    isAdmin &&
-    activeOrganization?.organizationType === "arbor_internal"
-  const effectiveIsAdmin = isAdmin && !inCrewMode
-  const effectiveHasOperationsAccess = inCrewMode ? false : hasOperationsAccess
-  const effectiveHasMarketingAccess = inCrewMode ? false : hasMarketingAccess
   // Unconfirmed-crew badge fans out events × shifts — only subscribe on routes
   // where that count is actionable (scheduling board / home), not every page.
   const includeUnconfirmedCrew =
@@ -153,7 +100,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
           includeArborInternal: activeOrganization?.organizationType === "arbor_internal",
           includeAdmin: effectiveIsAdmin,
           includeOperations: effectiveHasOperationsAccess,
-          includeBand: isArtistOrganizationType(activeOrganization?.organizationType),
+          includeBand: isBandContext,
           includeUnconfirmedCrew,
           includeMyEventActions,
         }
@@ -174,30 +121,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const userName = account?.name ?? "Unknown user"
   const userEmail = account?.email ?? "No email"
   const orgName = activeOrganization?.name ?? "No active org"
-  const isBandContext = isArtistOrganizationType(activeOrganization?.organizationType)
-  const isCrewContext =
-    activeOrganization?.organizationType === "arbor_internal" &&
-    hasCrewAccess &&
-    !effectiveHasOperationsAccess &&
-    !effectiveIsAdmin
-  const isAdminHomeContext =
-    activeOrganization?.organizationType === "arbor_internal" &&
-    (effectiveIsAdmin || effectiveHasOperationsAccess)
-  const navAccess = {
-    isAdmin: effectiveIsAdmin,
-    hasOperationsAccess: effectiveHasOperationsAccess,
-    hasMarketingAccess: effectiveHasMarketingAccess,
-    isBandContext,
-    isCrewContext,
-    isAdminHomeContext,
-  }
   const unconfirmedEventCount = unconfirmedCrewCount ?? 0
-  const scopedNavItems = navItems
-    .filter((item) => canAccessNavItem(item, navAccess))
-    // An artist sees its own act there, not the admin's list of artists.
-    .map((item) =>
-      isBandContext && item.url === "/dashboard/artists" ? { ...item, title: "Your act" } : item,
-    )
 
   function pendingChipCountForUrl(url: string): number {
     switch (url) {
@@ -284,44 +208,15 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <SidebarMenu>
-          {scopedNavItems.map((item) => {
+          {sections.map(({ item, subItems }) => {
             const Icon = item.icon
-            const subItems = visibleSubItems(sectionSubItems[item.url], {
-              isAdmin: effectiveIsAdmin,
-              hasOperationsAccess: effectiveHasOperationsAccess,
-            })?.filter(
-              (subItem) =>
-                !(
-                  (effectiveIsAdmin || effectiveHasOperationsAccess) &&
-                  item.url === "/dashboard/events" &&
-                  subItem.url === "/dashboard/timecards/mine"
-                ) &&
-                !(
-                  !isBandContext &&
-                  item.url === "/dashboard/artists" &&
-                  (subItem.url === "/dashboard/artists/payments" ||
-                    subItem.url === "/dashboard/artists/team")
-                ) &&
-                !(isBandContext && subItem.staffOnly) &&
-                // The act workspace is for portal admins, not every staff member
-                // who sees the section for the directory.
-                !(
-                  !isBandContext &&
-                  !effectiveIsAdmin &&
-                  item.url === "/dashboard/artists" &&
-                  subItem.actWorkspace
-                ),
-            )
-              .map((subItem) =>
-                !isBandContext && subItem.staffTitle ? { ...subItem, title: subItem.staffTitle } : subItem,
-              )
-            const activeSubItemUrl = (subItems ?? [])
+            const activeSubItemUrl = subItems
               .filter(
                 (subItem) =>
                   pathname === subItem.url || pathname.startsWith(`${subItem.url}/`),
               )
               .sort((a, b) => b.url.length - a.url.length)[0]?.url
-            const hasCollapsibleSubItems = Boolean(subItems && subItems.length > 1)
+            const hasCollapsibleSubItems = subItems.length > 1
             const isParentActive =
               pathname === item.url ||
               pathname.startsWith(`${item.url}/`) ||
@@ -330,7 +225,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             const sectionOpen = hasCollapsibleSubItems
               ? isParentActive || (openSections[item.url] ?? false)
               : true
-            const parentPendingCount = (subItems ?? []).reduce(
+            const parentPendingCount = subItems.reduce(
               (sum, subItem) => sum + pendingChipCountForUrl(subItem.url),
               0,
             )
@@ -368,7 +263,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <SidebarMenuSub>
-                          {subItems?.map((subItem) => (
+                          {subItems.map((subItem) => (
                             <SidebarMenuSubItem key={subItem.url}>
                               <SidebarMenuSubButton
                                 asChild
@@ -387,7 +282,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                   ) : (
                     <SidebarMenuButton asChild isActive={isParentActive} className="text-sm">
                       {/* A section with one page (Artists for crew: the directory) links straight to it. */}
-                      <Link href={subItems?.length === 1 ? subItems[0].url : item.url}>
+                      <Link href={subItems.length === 1 ? subItems[0].url : item.url}>
                         <Icon />
                         <span>{item.title}</span>
                       </Link>
