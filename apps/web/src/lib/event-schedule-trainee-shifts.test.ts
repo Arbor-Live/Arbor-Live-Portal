@@ -53,6 +53,14 @@ describe("mergeServerTraineeShifts", () => {
     expect(merged?.baseline.shifts).toEqual([moved]);
   });
 
+  it("keeps a local notes edit when the server moves the same trainee", () => {
+    const baseline = { blocks: [], shifts: [trainee] };
+    const edited = { ...trainee, notes: "Pair with the A1" };
+    const moved = { ...trainee, startsAt: "2026-10-12T19:00" };
+    const merged = mergeServerTraineeShifts({ blocks: [], shifts: [edited] }, baseline, [moved]);
+    expect(merged?.state.shifts).toEqual([edited]);
+  });
+
   it("drops a trainee removed on the server", () => {
     const state = { blocks: [], shifts: [staff, trainee] };
     const merged = mergeServerTraineeShifts(state, state, []);

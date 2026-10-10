@@ -417,14 +417,19 @@ export function mergeServerActBlocks<T extends ShiftBlockLink & EventShiftDraft>
   };
 }
 
+/** Every persisted field, so a local edit to any of them counts as an edit. */
 function traineeShiftKey(shift: ShiftBlockLink & EventShiftDraft) {
   return [
     shift.id,
     shift.scheduleBlockId,
+    shift.scheduleBlockRef,
     shift.crewApplicationId,
+    shift.role,
     shift.personName,
     shift.startsAt,
     shift.endsAt,
+    shift.notes,
+    shift.timesOverridden === true,
   ].join("|");
 }
 
