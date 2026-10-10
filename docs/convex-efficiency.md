@@ -45,6 +45,15 @@ Conventions:
 - Hydrate selected IDs with `getOptionsByIds` so labels survive without a full catalog.
 - Do **not** convert small fixed lists (managers, categories, capabilities, storage locations) to type-to-search.
 
+## Global search (⌘K)
+
+`globalSearch.search` backs the dashboard palette (`components/command-palette.tsx`):
+one subscription per settled query (2+ chars, 200ms debounce), only while the
+palette is open. Events and invoices use full-text search indexes
+(`events.search_title`, `invoices.search_invoiceNumber` / `search_clientGroupName`);
+people and artists filter the Better Auth rows in memory, like their directories.
+Page jumps come from `useDashboardNav`, the same filter the sidebar uses.
+
 ## List / fan-out queries
 
 - `events.listForDashboard` deliberately uses tight per-event takes and skips series occurrence scans when `occurrenceCount` is set. Do not widen takes without measuring.

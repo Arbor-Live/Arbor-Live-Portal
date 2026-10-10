@@ -106,6 +106,7 @@ import {
 import { assertUsernameAvailable, normalizeUsername } from "./lib/username";
 import { clearUserBan, setAuthUserBanState } from "./lib/userAccess";
 import { loadAllAdminProfiles } from "./lib/userProfiles";
+import { fetchAllBetterAuthRows } from "./lib/betterAuthRows";
 import type { StanfordPosition } from "./lib/stanfordPosition";
 import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
 import { returnActTimesToPosition } from "./lib/actPositions";
@@ -254,36 +255,6 @@ function toSlug(input: string): string {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-}
-
-/**
- * Drain every page of a Better Auth model rather than reading a single fixed
- * page. The previous single-page reads silently truncated once an org grew past
- * the page size (e.g. users beyond 1000 vanished from admin lists); looping the
- * cursor keeps these admin-only reads complete. `maxPages` is a runaway
- * guard: past it we throw instead of returning a partial list as if it
- * were complete.
- */
-async function fetchAllBetterAuthRows<T>(
-  ctx: QueryCtx | MutationCtx,
-  model: "user" | "organization" | "invitation",
-  pageSize: number,
-  maxPages = 50,
-): Promise<T[]> {
-  const rows: T[] = [];
-  let cursor: string | null = null;
-  for (let page = 0; page < maxPages; page += 1) {
-    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-      model,
-      paginationOpts: { cursor, numItems: pageSize },
-    });
-    rows.push(...((result?.page ?? []) as T[]));
-    if (result?.isDone || !result?.continueCursor) return rows;
-    cursor = result.continueCursor as string;
-  }
-  throw new Error(
-    `Better Auth ${model} list exceeded ${maxPages} pages of ${pageSize} (got ${rows.length} rows). Refusing a partial result.`,
-  );
 }
 
 async function getAllAuthUsers(ctx: QueryCtx | MutationCtx) {

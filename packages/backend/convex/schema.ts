@@ -782,7 +782,10 @@ export default defineSchema({
     .index("by_createdAt", ["createdAt"])
     .index("by_groupId", ["groupId"])
     .index("by_paymentReceivedAt", ["paymentReceivedAt"])
-    .index("by_approvedAt", ["approvedAt"]),
+    .index("by_approvedAt", ["approvedAt"])
+    /** Global search (⌘K): by number ("PwWq" finds ALINV-PwWqpa9) or billing host. */
+    .searchIndex("search_invoiceNumber", { searchField: "invoiceNumber" })
+    .searchIndex("search_clientGroupName", { searchField: "clientGroupName" }),
 
   /**
    * What a quote looked like at each point that matters: when the client
@@ -1083,7 +1086,9 @@ export default defineSchema({
     .index("by_venueId", ["venueId"])
     .index("by_hostGroupId", ["hostGroupId"])
     .index("by_dayOfLeadUserId", ["dayOfLeadUserId"])
-    .index("by_eventManagerUserId", ["eventManagerUserId"]),
+    .index("by_eventManagerUserId", ["eventManagerUserId"])
+    /** Global search (⌘K). */
+    .searchIndex("search_title", { searchField: "title" }),
 
   /**
    * Invoices linked to an event besides `events.invoiceId`. The primary still
