@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@arbor/invoice-document": "workspace:*",
-    "@react-pdf/renderer": "^4.5.1",
+    "@react-pdf/renderer": "^4.9.0",
     "qrcode": "^1.5.4",
     "react": "^19.3.0"
   },
