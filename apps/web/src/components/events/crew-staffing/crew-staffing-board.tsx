@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { memo, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useQuery } from "convex/react";
 import {
   CalendarXIcon,
@@ -75,8 +75,12 @@ function shiftWindow(shift: { startsAt: string; endsAt: string }): SectionForAva
  * Staffing for an event: one group per crew section with its headcount, the
  * people on it, and who's available to add. Shared by the event Schedule tab
  * and the invoice crew section. Edits stay in the caller's draft until saved.
+ * Memoized: it's heavy, and sits under the run of show, whose every keystroke
+ * re-renders the parent.
  */
-export function CrewStaffingBoard<S extends ShiftDraftForAssign>({
+export const CrewStaffingBoard = memo(CrewStaffingBoardImpl) as typeof CrewStaffingBoardImpl;
+
+function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
   eventId,
   sectionBlocks,
   shifts,
