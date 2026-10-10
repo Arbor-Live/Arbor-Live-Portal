@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@arbor/format": "workspace:*",
-    "@react-pdf/renderer": "^4.5.1",
+    "@react-pdf/renderer": "^4.9.0",
     "react": "^19.3.0"
   },
   "devDependencies": {
