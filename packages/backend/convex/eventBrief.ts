@@ -10,13 +10,14 @@ import {
   sortBandsForShow,
   type ShowBandInput,
 } from "@arbor/show-file";
-import type { EventBriefAssignment, EventBriefDocumentData } from "@arbor/rider-document";
+import type { EventBriefDocumentData } from "@arbor/rider-document";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalQuery, query, type QueryCtx } from "./_generated/server";
 import { findAuthUsersByIds, requireArborInternalContext, requireAuth } from "./lib/auth";
 import {
   buildBandContacts,
+  buildEventTeamContacts,
   listManualEventContacts,
   manualContactToBriefContact,
   resolveInvoiceContact,
@@ -69,35 +70,6 @@ async function effectiveAddress(
     current = current.parentId ? await ctx.db.get(current.parentId) : null;
   }
   return undefined;
-}
-
-/**
- * Event manager and day-of lead are stored as user ids on the event. The brief
- * prints their name and contact, so resolve them the same way email does.
- */
-async function leadAssignments(
-  ctx: QueryCtx,
-  event: Doc<"events">,
-): Promise<EventBriefAssignment[]> {
-  const roles: Array<{ userId?: string; roleLabel: string }> = [
-    { userId: event.eventManagerUserId, roleLabel: "Event manager" },
-    { userId: event.dayOfLeadUserId, roleLabel: "Day-of lead" },
-  ];
-  const userByKey = await findAuthUsersByIds(
-    ctx,
-    roles.map((role) => role.userId).filter((id): id is string => Boolean(id?.trim())),
-  );
-  return roles.flatMap(({ userId, roleLabel }) => {
-    if (!userId?.trim()) return [];
-    const user = userByKey.get(userId);
-    return [
-      {
-        roleLabel,
-        person: user?.name?.trim() || user?.email?.trim() || "Assigned",
-        contact: user?.email?.trim() || undefined,
-      },
-    ];
-  });
 }
 
 /** Gate for the public brief download (any Arbor staff, incl. crew). */
@@ -270,7 +242,8 @@ export const getBriefSource = internalQuery({
       notes: event.notes ?? undefined,
       briefUrl: eventDashboardUrl(String(event._id)),
       ...runOfShowData,
-      assignments: await leadAssignments(ctx, event),
+      // Leads, then everyone on a shift with their phone, so crew can reach each other.
+      assignments: await buildEventTeamContacts(ctx, event, namedShifts),
       contacts,
       pullList: pullListItems.map((item) => ({
         label: item.label,

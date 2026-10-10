@@ -1,5 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
+import { findAuthUsersByIds } from "./auth";
 import { contactDisplayName } from "./contactName";
 
 /** A ready-to-print contact row (venue, host billing, band, or manual). */
@@ -140,4 +141,93 @@ export function manualContactToBriefContact(contact: ManualEventContact): EventC
     person: contact.name,
     contact: joinContact(contact.email, contact.phone),
   };
+}
+
+type TeamShift = Pick<
+  Doc<"eventCrewShifts">,
+  "role" | "personName" | "userId" | "crewApplicationId" | "startsAt"
+>;
+
+/**
+ * The event's own people with a way to reach them: event manager and day-of
+ * lead (email · phone), then everyone on a shift in call order, with their
+ * phone (email when they have none). Trainees come from their application.
+ */
+export async function buildEventTeamContacts(
+  ctx: QueryCtx,
+  event: Pick<Doc<"events">, "eventManagerUserId" | "dayOfLeadUserId">,
+  shifts: readonly TeamShift[],
+): Promise<EventContact[]> {
+  const leads = [
+    { userId: event.eventManagerUserId?.trim(), roleLabel: "Event manager" },
+    { userId: event.dayOfLeadUserId?.trim(), roleLabel: "Day-of lead" },
+  ].filter((lead): lead is { userId: string; roleLabel: string } => Boolean(lead.userId));
+
+  type Person = { userId?: string; applicationId?: Id<"crewApplications">; name?: string; roles: string[] };
+  const crew = new Map<string, Person>();
+  for (const shift of [...shifts].sort((a, b) => a.startsAt - b.startsAt)) {
+    const userId = shift.userId?.trim();
+    const key = userId ?? (shift.crewApplicationId ? `application:${shift.crewApplicationId}` : null);
+    if (!key) continue;
+    const person = crew.get(key) ?? {
+      userId,
+      applicationId: userId ? undefined : shift.crewApplicationId,
+      name: shift.personName?.trim() || undefined,
+      roles: [],
+    };
+    const role = shift.role.trim();
+    if (role && !person.roles.includes(role)) person.roles.push(role);
+    crew.set(key, person);
+  }
+
+  const userIds = [...new Set([...leads.map((lead) => lead.userId), ...[...crew.values()].flatMap((person) => (person.userId ? [person.userId] : []))])];
+  const [userByKey, phoneByUserId] = await Promise.all([
+    findAuthUsersByIds(ctx, userIds),
+    loadProfilePhones(ctx, userIds),
+  ]);
+
+  const rows: EventContact[] = leads.map(({ userId, roleLabel }) => {
+    const user = userByKey.get(userId);
+    return {
+      roleLabel,
+      person: user?.name?.trim() || user?.email?.trim() || "Assigned",
+      contact: joinContact(user?.email, phoneByUserId.get(userId)),
+    };
+  });
+  const leadIds = new Set(leads.map((lead) => lead.userId));
+
+  for (const person of crew.values()) {
+    if (person.userId) {
+      if (leadIds.has(person.userId)) continue;
+      const user = userByKey.get(person.userId);
+      rows.push({
+        roleLabel: person.roles.join(", ") || "Crew",
+        person: person.name || user?.name?.trim() || user?.email?.trim() || "Crew",
+        contact: phoneByUserId.get(person.userId) || user?.email?.trim() || undefined,
+      });
+      continue;
+    }
+    const application = person.applicationId ? await ctx.db.get(person.applicationId) : null;
+    rows.push({
+      roleLabel: "Trainee",
+      person: person.name || application?.name?.trim() || "Trainee",
+      contact: application?.phone?.trim() || application?.email?.trim() || undefined,
+    });
+  }
+  return rows;
+}
+
+async function loadProfilePhones(ctx: QueryCtx, userIds: readonly string[]) {
+  const phones = new Map<string, string>();
+  await Promise.all(
+    userIds.map(async (userId) => {
+      const [profile] = await ctx.db
+        .query("userAdminProfiles")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .take(1);
+      const phone = profile?.phone?.trim();
+      if (phone) phones.set(userId, phone);
+    }),
+  );
+  return phones;
 }

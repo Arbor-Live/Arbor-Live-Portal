@@ -4,6 +4,7 @@ import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { requireEventEditAccess } from "./lib/eventAccess";
 import {
   MAX_EVENT_CONTACTS,
+  buildEventTeamContacts,
   listManualEventContacts,
   resolveInvoiceContact,
   resolveVenueContact,
@@ -27,8 +28,9 @@ const manualContactValidator = v.object({
 });
 
 /**
- * Contacts board for the event editor: inherited venue/invoice contacts
- * (read-only) plus the manually added event contacts (editable). Band contacts
+ * Contacts board for the event editor: inherited venue/invoice contacts and
+ * the event's team (leads and crew with their phones), all read-only, plus
+ * the manually added event contacts (editable). Band contacts
  * are read from the event's riders by the caller so the overview does not load
  * rider documents twice.
  */
@@ -37,11 +39,13 @@ export const getBoard = query({
   returns: v.object({
     venue: v.union(v.null(), contactValidator),
     invoice: v.union(v.null(), contactValidator),
+    team: v.array(contactValidator),
     manual: v.array(manualContactValidator),
   }),
   handler: async (ctx, args): Promise<{
     venue: EventContact | null;
     invoice: EventContact | null;
+    team: EventContact[];
     manual: ManualEventContact[];
   }> => {
     await requireAuth(ctx);
@@ -49,9 +53,14 @@ export const getBoard = query({
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
     const venue = event.venueId ? await ctx.db.get(event.venueId) : null;
+    const shifts = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
+      .take(500);
     return {
       venue: (await resolveVenueContact(ctx, venue)) ?? null,
       invoice: (await resolveInvoiceContact(ctx, event.hostGroupId)) ?? null,
+      team: await buildEventTeamContacts(ctx, event, shifts),
       manual: await listManualEventContacts(ctx, args.eventId),
     };
   },

@@ -75,6 +75,22 @@ describe("fillOpenSlotsFromAvailability", () => {
     expect(bySection("show")).toEqual(["alex", undefined]);
   });
 
+  it("fills with the fewest-hours person first", () => {
+    const gus: AssignableResponder = { userId: "gus", name: "Gus", responseStatus: "yes", respondedAt: 5 };
+    const result = fillOpenSlotsFromAvailability({
+      shifts: [slot(show)],
+      blocks: [show],
+      responders: [alex, gus],
+      conflicts: [],
+      getBlockRef,
+      quarterHours: new Map([
+        ["alex", 12],
+        ["gus", 2],
+      ]),
+    });
+    expect(result.shifts[0]?.userId).toBe("gus");
+  });
+
   it("never overwrites trainee shifts or creates new slots", () => {
     const trainee = slot(setup, { crewApplicationId: "app1" as never, personName: "Trainee T" });
     const result = fillOpenSlotsFromAvailability({
@@ -139,6 +155,25 @@ describe("rankCandidatesForSection", () => {
       ["fay", "pending"],
       ["dee", "unavailable"],
     ]);
+  });
+
+  it("puts whoever has the fewest hours this quarter first within the same availability", () => {
+    const gus: AssignableResponder = { userId: "gus", name: "Gus", responseStatus: "yes", respondedAt: 5 };
+    const ranked = rankCandidatesForSection({
+      block: setup,
+      people: [alex, gus, cam],
+      responders: [alex, gus, cam],
+      shifts: [],
+      conflicts: [],
+      getBlockRef,
+      quarterHours: new Map([
+        ["alex", 30],
+        ["gus", 4],
+        ["cam", 0],
+      ]),
+    });
+    // Availability still wins: Cam (backup, 0h) stays after both yeses.
+    expect(ranked.map((candidate) => candidate.userId)).toEqual(["gus", "alex", "cam"]);
   });
 
   it("leaves out people already on the section", () => {

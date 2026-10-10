@@ -93,8 +93,13 @@ export function conflictsDuring(
   return conflicts.filter((conflict) => conflict.userId === userId && windowsOverlap(conflict, window));
 }
 
+/** Saved shift hours per person this quarter (from `userCards.listShiftHours`). */
+export type QuarterHoursById = ReadonlyMap<string, number>;
+
 /**
- * Everyone who could go on this section, best fit first. People already on
+ * Everyone who could go on this section, best fit first: availability, then
+ * not booked elsewhere, then whoever has the fewest hours this quarter (so
+ * work spreads out), then the fewest hours on this event. People already on
  * the section are left out.
  */
 export function rankCandidatesForSection(args: {
@@ -104,6 +109,7 @@ export function rankCandidatesForSection(args: {
   shifts: ShiftDraftForAssign[];
   conflicts: CrewConflict[];
   getBlockRef: GetBlockRef;
+  quarterHours?: QuarterHoursById;
 }): SectionCandidate[] {
   const window = sectionWindow(args.block);
   const responderById = new Map(args.responders.map((responder) => [responder.userId, responder]));
@@ -140,6 +146,7 @@ export function rankCandidatesForSection(args: {
       (a, b) =>
         SECTION_AVAILABILITY_RANK[a.level] - SECTION_AVAILABILITY_RANK[b.level] ||
         a.conflicts.length - b.conflicts.length ||
+        (args.quarterHours?.get(a.userId) ?? 0) - (args.quarterHours?.get(b.userId) ?? 0) ||
         hoursFor(a.userId) - hoursFor(b.userId) ||
         (a.responder?.respondedAt ?? Infinity) - (b.responder?.respondedAt ?? Infinity) ||
         a.name.localeCompare(b.name),
@@ -185,6 +192,7 @@ export function fillOpenSlotsFromAvailability<T extends ShiftDraftForAssign>(arg
   responders: AssignableResponder[];
   conflicts: CrewConflict[];
   getBlockRef: GetBlockRef;
+  quarterHours?: QuarterHoursById;
 }): { shifts: T[]; filled: number } {
   let next = args.shifts;
   let filled = 0;
@@ -210,6 +218,7 @@ export function fillOpenSlotsFromAvailability<T extends ShiftDraftForAssign>(arg
         shifts: next,
         conflicts: args.conflicts,
         getBlockRef: args.getBlockRef,
+        quarterHours: args.quarterHours,
       }).find(
         (entry) =>
           (entry.level === "available" || entry.level === "part") && entry.conflicts.length === 0,

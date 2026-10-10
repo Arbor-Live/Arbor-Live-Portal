@@ -272,6 +272,19 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   only* (`lib/crewShiftKinds.ts`). A slot held by a backup counts as filled
   ("3/3 · 1 on backup") but keeps the event on the needs-crew lists and the nav
   badge, so a better-placed person can still replace them.
+  Within each availability level, people with the **fewest shift hours this
+  Stanford quarter** come first (chips, person picker, *Fill open slots*, and
+  the crew scheduling board's answers), so work spreads out. Hours are every
+  shift starting in the quarter, worked or scheduled (`userCards.listShiftHours`).
+- **Person hover cards** (`UserHoverCard`, `userCards.getCard`): hovering a
+  comment author or @mention, a staffing chip, or a name on the crew scheduling
+  board shows the person's phone, email, title and pronouns; staffing surfaces
+  add hours this week (Mon–Sun) and this quarter.
+- **Crew phones**: the event brief's People table and the event Contacts card
+  ("Event team") list the event manager and day-of lead (email · phone), then
+  everyone on a shift with their profile phone (email if none) and trainees
+  with their application phone (`buildEventTeamContacts` in
+  `lib/eventContacts.ts`). Public contact views don't include them.
 - **Trainees** (shifts with `crewApplicationId` and no `userId`) shadow: they
   never fill a slot, never count toward staffing, crew cost, or invoice crew
   lines, and are never removed by "Delete unlinked shifts". Editors that don't
