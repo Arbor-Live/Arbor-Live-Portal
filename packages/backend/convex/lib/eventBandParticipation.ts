@@ -4,6 +4,7 @@ import { scheduleBandAssignedEmails } from "../email/bandAssignmentEmails";
 import { syncInvoiceLineForSlot } from "./artistLineSync";
 import { inheritSlotTimes, syncNeedBlocks, syncParticipationBlocks } from "./runOfShow";
 import { ensureActPosition } from "./actPositions";
+import { appError } from "./errors";
 
 /**
  * Drop an act's claim on a slot. Uses `replace` because Convex `patch` ignores
@@ -34,10 +35,10 @@ export async function claimSlot(
 ) {
   const slot = await ctx.db.get(args.needId);
   if (!slot || slot.eventId !== args.eventId) {
-    throw new Error("Slot not found on this event.");
+    appError("NEED_SLOT_NOT_ON_EVENT", "Slot not found on this event.");
   }
   if (slot.externalArtistName?.trim()) {
-    throw new Error("This position is filled by an outside artist.");
+    appError("NEED_POSITION_OUTSIDE_ACT", "This position is filled by an outside artist.");
   }
   const rivals = await ctx.db
     .query("eventBandParticipations")

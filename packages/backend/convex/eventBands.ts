@@ -35,6 +35,7 @@ import {
   syncNeedBlocks,
   syncParticipationBlocks,
 } from "./lib/runOfShow";
+import { appError, withReportableErrors } from "./lib/errors";
 
 const participationRoleValue = v.union(
   v.literal("headliner"),
@@ -587,6 +588,7 @@ export const setShowRiderForActiveBand = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const bandContext = await requireBandContext(ctx);
+    return await withReportableErrors("eventBands.setShowRiderForActiveBand", async () => {
     const participation = await ctx.db
       .query("eventBandParticipations")
       .withIndex("by_eventId_and_organizationId", (q) =>
@@ -594,13 +596,19 @@ export const setShowRiderForActiveBand = mutation({
       )
       .first();
     if (!participation) {
-      throw new Error("You're not on this show's lineup yet, so there's no rider to pick.");
+      appError(
+        "SHOW_RIDER_NOT_ON_LINEUP",
+        "You're not on this show's lineup yet, so there's no rider to pick.",
+      );
     }
     const now = Date.now();
     // Past and cancelled shows keep the rider staff worked from.
     const event = await ctx.db.get(args.eventId);
     if (!event || event.status === "cancelled" || event.endAt < now) {
-      throw new Error("This show has ended or was cancelled, so its rider can't change.");
+      appError(
+        "SHOW_RIDER_LOCKED",
+        "This show has ended or was cancelled, so its rider can't change.",
+      );
     }
     if (args.riderId === null) {
       // `patch` can't drop a field, so rewrite the row without it.
@@ -610,10 +618,11 @@ export const setShowRiderForActiveBand = mutation({
     }
     const rider = await ctx.db.get(args.riderId);
     if (!rider || rider.organizationId !== bandContext.organizationId) {
-      throw new Error("That rider doesn't belong to your act.");
+      appError("SHOW_RIDER_WRONG_ACT", "That rider doesn't belong to your act.");
     }
     await ctx.db.patch(participation._id, { riderId: rider._id, updatedAt: now });
     return null;
+    });
   },
 });
 
@@ -697,10 +706,12 @@ export const syncParticipationsFromPayments = mutation({
   returns: v.object({ synced: v.number() }),
   handler: async (ctx) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventBands.syncParticipationsFromPayments", async () => {
     // Cancelled payments are skipped by only walking the non-cancelled statuses
     // on `by_status`, so the full backlog drains instead of truncating at 500.
     const synced = await runSyncParticipationsPage(ctx, "draft", null);
     return { synced };
+    });
   },
 });
 
@@ -714,13 +725,15 @@ export const addParticipation = mutation({
   returns: v.id("eventBandParticipations"),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventBands.addParticipation", async () => {
     const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
+    if (!event) appError("EVENT_NOT_FOUND", "Event not found.");
     return await upsertEventBandParticipation(ctx, {
       eventId: args.eventId,
       organizationId: args.organizationId,
       role: args.role,
       needId: args.needId,
+    });
     });
   },
 });
@@ -743,18 +756,19 @@ export const updateParticipationLineup = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventBands.updateParticipationLineup", async () => {
     const existing = await ctx.db.get(args.participationId);
-    if (!existing) throw new Error("Artist is not linked to this event.");
+    if (!existing) appError("ARTIST_NOT_ON_EVENT", "Artist is not linked to this event.");
     const previousNeedId = existing.needId;
     if (args.setStartsAt != null && args.setEndsAt != null && args.setEndsAt <= args.setStartsAt) {
-      throw new Error("Set end time must be after the start time.");
+      appError("ACT_SET_TIME_ORDER", "Set end time must be after the start time.");
     }
     if (
       args.soundcheckStartsAt != null &&
       args.soundcheckEndsAt != null &&
       args.soundcheckEndsAt <= args.soundcheckStartsAt
     ) {
-      throw new Error("Soundcheck end time must be after the start time.");
+      appError("ACT_SOUNDCHECK_TIME_ORDER", "Soundcheck end time must be after the start time.");
     }
     if (args.needId) {
       await claimSlot(ctx, {
@@ -791,6 +805,7 @@ export const updateParticipationLineup = mutation({
       await syncInvoiceLineForSlot(ctx, previousNeedId, now2);
     }
     return null;
+    });
   },
 });
 
@@ -818,8 +833,10 @@ export const inviteBandFromEvent = mutation({
     if (!inviterId) throw new Error("Unable to resolve your account.");
 
     const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
+    if (!event) appError("EVENT_NOT_FOUND", "Event not found.");
 
+    // `provisionBandOrganization` is a shared helper (lib/bandOrgInvite) that
+    // throws expected input errors, so it runs before the reportable wrapper.
     const { organizationId, displayName, contactEmail } = await provisionBandOrganization(ctx, {
       displayName: args.artistName,
       contactEmail: args.email,
@@ -833,7 +850,7 @@ export const inviteBandFromEvent = mutation({
       )
       .unique();
     if (existingParticipation) {
-      throw new Error(`${displayName} is already assigned to this event.`);
+      appError("ARTIST_ALREADY_ON_EVENT", `${displayName} is already assigned to this event.`);
     }
 
     const invite = await inviteEmailToBandOrg(ctx, {
@@ -843,8 +860,9 @@ export const inviteBandFromEvent = mutation({
       inviterId,
       preserveDefaultOrganization: true,
     });
-    if (!invite) throw new Error("Enter a valid email address.");
+    if (!invite) appError("INVITE_EMAIL_INVALID", "Enter a valid email address.");
 
+    return await withReportableErrors("eventBands.inviteBandFromEvent", async () => {
     const participationId = await upsertEventBandParticipation(ctx, {
       eventId: args.eventId,
       organizationId,
@@ -872,6 +890,7 @@ export const inviteBandFromEvent = mutation({
     });
 
     return { organizationId, participationId };
+    });
   },
 });
 
@@ -884,15 +903,17 @@ export const updateParticipationRole = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventBands.updateParticipationRole", async () => {
     const existing = await ctx.db
       .query("eventBandParticipations")
       .withIndex("by_eventId_and_organizationId", (q) =>
         q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
       )
       .unique();
-    if (!existing) throw new Error("Artist is not linked to this event.");
+    if (!existing) appError("ARTIST_NOT_ON_EVENT", "Artist is not linked to this event.");
     await ctx.db.patch(existing._id, { role: args.role, updatedAt: Date.now() });
     return null;
+    });
   },
 });
 
@@ -928,7 +949,7 @@ export async function removeParticipationFromEvent(
     .unique();
   if (payment && payment.status !== "cancelled") {
     if (payment.status === "paid") {
-      throw new Error("Cannot remove an artist with a paid payout.");
+      appError("PARTICIPATION_PAID_PAYOUT", "Cannot remove an artist with a paid payout.");
     }
     await ctx.db.patch(payment._id, {
       status: "cancelled",
@@ -959,8 +980,10 @@ export const removeParticipation = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
-    await removeParticipationFromEvent(ctx, args.eventId, args.organizationId);
-    return null;
+    return await withReportableErrors("eventBands.removeParticipation", async () => {
+      await removeParticipationFromEvent(ctx, args.eventId, args.organizationId);
+      return null;
+    });
   },
 });
 
@@ -977,8 +1000,9 @@ export const upsertParticipations = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventBands.upsertParticipations", async () => {
     const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
+    if (!event) appError("EVENT_NOT_FOUND", "Event not found.");
 
     const existing = await ctx.db
       .query("eventBandParticipations")
@@ -1024,5 +1048,6 @@ export const upsertParticipations = mutation({
     }
     await ctx.db.patch(args.eventId, { bandsCostUsd: total });
     return null;
+    });
   },
 });

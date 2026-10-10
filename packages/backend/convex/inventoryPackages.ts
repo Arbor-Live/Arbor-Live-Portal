@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, internalMutation, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { appError, withReportableErrors } from "./lib/errors";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
   collectKeysFromInventoryPackage,
@@ -95,7 +96,10 @@ function normalizePublicSlug(raw: string | undefined) {
   const slug = raw?.trim().toLowerCase();
   if (!slug) return undefined;
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
-    throw new Error("Public slug must be lowercase letters/numbers with single dashes.");
+    appError(
+      "INVENTORY_PACKAGE_SLUG_INVALID",
+      "Public slug must be lowercase letters/numbers with single dashes.",
+    );
   }
   return slug;
 }
@@ -111,7 +115,10 @@ async function assertUniquePackagePublicSlug(
     .withIndex("by_publicSlug", (q) => q.eq("publicSlug", slug))
     .unique();
   if (match && (!excludeId || match._id !== excludeId)) {
-    throw new Error("Public slug is already in use by another package.");
+    appError(
+      "INVENTORY_PACKAGE_SLUG_TAKEN",
+      "Public slug is already in use by another package.",
+    );
   }
 }
 
@@ -320,21 +327,31 @@ async function validateContents(
   }>,
 ) {
   if (!contents.length) {
-    throw new Error("Package must include at least one content unit.");
+    appError("INVENTORY_PACKAGE_CONTENTS_REQUIRED", "Package must include at least one content unit.");
   }
   if (contents.length > MAX_CONTENT_UNITS) {
-    throw new Error(`Package can have at most ${MAX_CONTENT_UNITS} content units.`);
+    appError(
+      "INVENTORY_PACKAGE_CONTENT_UNITS_LIMIT",
+      `Package can have at most ${MAX_CONTENT_UNITS} content units.`,
+    );
   }
 
   for (const [unitIndex, unit] of contents.entries()) {
     if (unit.quantity <= 0) {
-      throw new Error(`Content unit ${unitIndex + 1} quantity must be greater than zero.`);
+      appError(
+        "INVENTORY_PACKAGE_UNIT_QUANTITY_INVALID",
+        `Content unit ${unitIndex + 1} quantity must be greater than zero.`,
+      );
     }
     if (!unit.options.length) {
-      throw new Error(`Content unit ${unitIndex + 1} needs at least one option.`);
+      appError(
+        "INVENTORY_PACKAGE_UNIT_OPTIONS_REQUIRED",
+        `Content unit ${unitIndex + 1} needs at least one option.`,
+      );
     }
     if (unit.options.length > MAX_OPTIONS_PER_UNIT) {
-      throw new Error(
+      appError(
+        "INVENTORY_PACKAGE_UNIT_OPTIONS_LIMIT",
         `Content unit ${unitIndex + 1} can have at most ${MAX_OPTIONS_PER_UNIT} options.`,
       );
     }
@@ -342,28 +359,37 @@ async function validateContents(
     for (const [optionIndex, option] of unit.options.entries()) {
       const label = option.name?.trim() || `option ${optionIndex + 1}`;
       if (!option.items.length) {
-        throw new Error(`Content unit ${unitIndex + 1} ${label} must include at least one item.`);
+        appError(
+          "INVENTORY_PACKAGE_OPTION_ITEMS_REQUIRED",
+          `Content unit ${unitIndex + 1} ${label} must include at least one item.`,
+        );
       }
       if (option.items.length > MAX_ITEMS_PER_OPTION) {
-        throw new Error(
+        appError(
+          "INVENTORY_PACKAGE_OPTION_ITEMS_LIMIT",
           `Content unit ${unitIndex + 1} ${label} can have at most ${MAX_ITEMS_PER_OPTION} items.`,
         );
       }
       const primaryCount = option.items.filter((item) => item.role === "primary").length;
       if (primaryCount !== 1) {
-        throw new Error(
+        appError(
+          "INVENTORY_PACKAGE_OPTION_PRIMARY_COUNT",
           `Content unit ${unitIndex + 1} ${label} must have exactly one primary item (got ${primaryCount}).`,
         );
       }
       for (const item of option.items) {
         if (item.quantity <= 0) {
-          throw new Error(
+          appError(
+            "INVENTORY_PACKAGE_OPTION_ITEM_QUANTITY_INVALID",
             `Content unit ${unitIndex + 1} ${label} item quantity must be greater than zero.`,
           );
         }
         const type = await ctx.db.get(item.typeId);
         if (!type) {
-          throw new Error(`Content unit ${unitIndex + 1} ${label} references a missing inventory type.`);
+          appError(
+            "INVENTORY_PACKAGE_OPTION_TYPE_MISSING",
+            `Content unit ${unitIndex + 1} ${label} references a missing inventory type.`,
+          );
         }
       }
     }
@@ -534,6 +560,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("inventoryPackages.create", async () => {
     const contents = normalizeWriteContents(args);
     await validateContents(ctx, contents);
     const now = Date.now();
@@ -548,12 +575,18 @@ export const create = mutation({
         .withIndex("by_publicSlug", (q) => q.eq("publicSlug", publicSlug))
         .unique();
       if (typeSlug) {
-        throw new Error("Public slug is already in use by an inventory type.");
+        appError(
+          "INVENTORY_PACKAGE_SLUG_TYPE_TAKEN",
+          "Public slug is already in use by an inventory type.",
+        );
       }
     }
     if (publicListing) {
       if (!args.publicBucket) {
-        throw new Error("Choose a public browse section for this package.");
+        appError(
+          "INVENTORY_PACKAGE_BUCKET_REQUIRED",
+          "Choose a public browse section for this package.",
+        );
       }
     }
 
@@ -579,6 +612,7 @@ export const create = mutation({
     }
 
     return packageId;
+    });
   },
 });
 
@@ -590,8 +624,9 @@ export const update = mutation({
   },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("inventoryPackages.update", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Package not found.");
+    if (!existing) appError("INVENTORY_PACKAGE_NOT_FOUND", "Package not found.");
     const contents = normalizeWriteContents(args);
     await validateContents(ctx, contents);
 
@@ -608,13 +643,19 @@ export const update = mutation({
         .withIndex("by_publicSlug", (q) => q.eq("publicSlug", publicSlug))
         .unique();
       if (typeSlug) {
-        throw new Error("Public slug is already in use by an inventory type.");
+        appError(
+          "INVENTORY_PACKAGE_SLUG_TYPE_TAKEN",
+          "Public slug is already in use by an inventory type.",
+        );
       }
     }
     if (publicListing) {
       const nextBucket = args.publicBucket ?? existing.publicBucket;
       if (!nextBucket) {
-        throw new Error("Choose a public browse section for this package.");
+        appError(
+          "INVENTORY_PACKAGE_BUCKET_REQUIRED",
+          "Choose a public browse section for this package.",
+        );
       }
     }
 
@@ -639,6 +680,7 @@ export const update = mutation({
     if (publicListing || existing.publicListing) {
       await scheduleInventoryPackageSiteRevalidation(ctx, args.id);
     }
+    });
   },
 });
 
@@ -646,8 +688,9 @@ export const remove = mutation({
   args: { id: v.id("inventoryPackages") },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("inventoryPackages.remove", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Package not found.");
+    if (!existing) appError("INVENTORY_PACKAGE_NOT_FOUND", "Package not found.");
 
     const currentRows = await ctx.db
       .query("inventoryPackageItems")
@@ -666,6 +709,7 @@ export const remove = mutation({
     if (existing.publicListing) {
       await scheduleInventoryPackageSiteRevalidation(ctx, args.id);
     }
+    });
   },
 });
 

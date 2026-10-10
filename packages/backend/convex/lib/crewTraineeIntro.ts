@@ -2,6 +2,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { resolveInheritedVenueFields } from "./venues";
 import { resolveUserContact } from "./userContact";
+import { appError } from "./errors";
 
 export const CREW_STORAGE_CLOSET_MAPS_URL = "https://maps.app.goo.gl/8d2dQF96sLV2QrBk7";
 export const CREW_STORAGE_CLOSET_LABEL = "Old Union storage closet";
@@ -264,7 +265,7 @@ export async function assertTraineeIntroReady(
   const missing: string[] = [];
   const event = await ctx.db.get(args.eventId);
   if (!event) {
-    throw new Error("Event not found.");
+    appError("EVENT_NOT_FOUND", "Event not found.");
   }
 
   const eventTitle = event.title?.trim();
@@ -312,7 +313,8 @@ export async function assertTraineeIntroReady(
   missing.push(...readiness.missing);
 
   if (missing.length > 0) {
-    throw new Error(
+    appError(
+      "TRAINEE_INTRO_NOT_READY",
       `Cannot assign trainee — missing required details:\n• ${missing.join("\n• ")}`,
     );
   }

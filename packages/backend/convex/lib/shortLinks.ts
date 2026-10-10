@@ -1,6 +1,7 @@
 import { pacificDateKey } from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { appError } from "./errors";
 
 export const SHORT_LINK_EVENT_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -9,19 +10,19 @@ export type ShortLinkExpiryMode = Doc<"shortLinks">["expiryMode"];
 export function validateShortLinkDestinationUrl(raw: string) {
   const url = raw.trim();
   if (!url) {
-    throw new Error("Destination URL is required.");
+    appError("SHORT_LINK_DESTINATION_REQUIRED", "Destination URL is required.");
   }
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
-    throw new Error("Destination URL must be a valid URL.");
+    appError("SHORT_LINK_DESTINATION_INVALID", "Destination URL must be a valid URL.");
   }
   if (parsed.protocol === "javascript:" || parsed.protocol === "data:") {
-    throw new Error("Destination URL is not allowed.");
+    appError("SHORT_LINK_DESTINATION_BLOCKED", "Destination URL is not allowed.");
   }
   if (parsed.protocol !== "https:" && !parsed.hostname.match(/^(localhost|127\.0\.0\.1)$/)) {
-    throw new Error("Destination URL must use https://.");
+    appError("SHORT_LINK_DESTINATION_HTTPS_REQUIRED", "Destination URL must use https://.");
   }
   return url;
 }
@@ -30,7 +31,7 @@ export function validateShortLinkDestinationUrl(raw: string) {
 export function endOfPacificDayMs(dateKey: string) {
   const [year, month, day] = dateKey.split("-").map(Number);
   if (!year || !month || !day) {
-    throw new Error("Expiry date must use YYYY-MM-DD format.");
+    appError("SHORT_LINK_EXPIRY_DATE_FORMAT", "Expiry date must use YYYY-MM-DD format.");
   }
   const startUtc = Date.UTC(year, month - 1, day - 1, 12, 0, 0);
   const endUtc = Date.UTC(year, month - 1, day + 2, 12, 0, 0);
@@ -39,7 +40,7 @@ export function endOfPacificDayMs(dateKey: string) {
       return ms;
     }
   }
-  throw new Error("Could not resolve expiry date.");
+  appError("SHORT_LINK_EXPIRY_DATE_UNRESOLVED", "Could not resolve expiry date.");
 }
 
 export async function resolveShortLinkExpiresAt(
@@ -55,16 +56,16 @@ export async function resolveShortLinkExpiresAt(
   }
   if (args.expiryMode === "manual") {
     if (!args.manualExpiresAtDate?.trim()) {
-      throw new Error("Expiry date is required for custom expiry.");
+      appError("SHORT_LINK_EXPIRY_DATE_REQUIRED", "Expiry date is required for custom expiry.");
     }
     return endOfPacificDayMs(args.manualExpiresAtDate.trim());
   }
   if (!args.eventId) {
-    throw new Error("Linked event is required for event-based expiry.");
+    appError("SHORT_LINK_EVENT_REQUIRED", "Linked event is required for event-based expiry.");
   }
   const event = await ctx.db.get(args.eventId);
   if (!event) {
-    throw new Error("Linked event was not found.");
+    appError("SHORT_LINK_EVENT_NOT_FOUND", "Linked event was not found.");
   }
   return event.endAt + SHORT_LINK_EVENT_GRACE_MS;
 }

@@ -8,6 +8,7 @@ import {
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getUserId, requireVerticalOrAdmin } from "./lib/auth";
+import { appError, withReportableErrors } from "./lib/errors";
 import { buildPublicEventUrl, isPubliclyListableEvent } from "./lib/publicEvents";
 import { SITE_URL } from "./email/constants";
 import { assertUniqueShortLinkSlug, normalizeShortLinkSlug } from "./lib/shortLinkSlug";
@@ -192,6 +193,7 @@ export const create = mutation({
   returns: v.id("shortLinks"),
   handler: async (ctx, args) => {
     const user = await requireVerticalOrAdmin(ctx, "Marketing");
+    return await withReportableErrors("shortLinks.create", async () => {
     const slug = normalizeShortLinkSlug(args.slug);
     await assertUniqueShortLinkSlug(ctx, slug);
     const destinationUrl = validateShortLinkDestinationUrl(args.destinationUrl);
@@ -214,6 +216,7 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    });
   },
 });
 
@@ -231,9 +234,10 @@ export const update = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireVerticalOrAdmin(ctx, "Marketing");
+    return await withReportableErrors("shortLinks.update", async () => {
     const existing = await ctx.db.get(args.id);
     if (!existing) {
-      throw new Error("Short link not found.");
+      appError("SHORT_LINK_NOT_FOUND", "Short link not found.");
     }
     const slug = normalizeShortLinkSlug(args.slug);
     await assertUniqueShortLinkSlug(ctx, slug, args.id);
@@ -254,6 +258,7 @@ export const update = mutation({
       updatedAt: Date.now(),
     });
     return null;
+    });
   },
 });
 
@@ -262,12 +267,14 @@ export const remove = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireVerticalOrAdmin(ctx, "Marketing");
+    return await withReportableErrors("shortLinks.remove", async () => {
     const existing = await ctx.db.get(args.id);
     if (!existing) {
-      throw new Error("Short link not found.");
+      appError("SHORT_LINK_NOT_FOUND", "Short link not found.");
     }
     await ctx.db.delete(args.id);
     return null;
+    });
   },
 });
 

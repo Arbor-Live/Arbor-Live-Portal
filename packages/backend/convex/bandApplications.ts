@@ -18,6 +18,7 @@ import { inviteEmailToBandOrg, isValidEmail } from "./lib/bandOrgInvite";
 import { marketingDesignLinkValue, normalizeMarketingLinks } from "./lib/marketingLinks";
 import { artistOrganizationTypeValue, isArtistOrganizationType } from "./lib/organizationType";
 import { resolveOrCreateOrganization } from "./users";
+import { appError, withReportableErrors } from "./lib/errors";
 
 const memberValue = v.object({
   name: v.string(),
@@ -94,17 +95,19 @@ export const submitPublic = mutation({
   handler: async (ctx, args) => {
     if (args.website?.trim()) {
       // Honeypot — pretend success without writing.
-      throw new Error("Unable to submit application.");
+      appError("APPLICATION_SUBMIT_BLOCKED", "Unable to submit application.");
     }
 
     const contactName = args.contactName.trim();
     const contactEmail = normalizeEmail(args.contactEmail);
     const bandDisplayName = args.bandDisplayName.trim();
-    if (!contactName) throw new Error("Enter your name.");
+    if (!contactName) appError("APPLICATION_NAME_REQUIRED", "Enter your name.");
     if (!isStanfordEmail(contactEmail)) {
-      throw new Error("Use a @stanford.edu email address.");
+      appError("APPLICATION_STANFORD_EMAIL", "Use a @stanford.edu email address.");
     }
-    if (!bandDisplayName) throw new Error("Enter your artist name.");
+    if (!bandDisplayName) {
+      appError("APPLICATION_ARTIST_NAME_REQUIRED", "Enter your artist name.");
+    }
 
     const members = args.isSolo
       ? []
@@ -116,20 +119,28 @@ export const submitPublic = mutation({
           .filter((member) => member.name.length > 0);
 
     if (!args.isSolo && members.length === 0) {
-      throw new Error("Add at least one member, or mark that you perform solo.");
+      appError(
+        "APPLICATION_MEMBERS_REQUIRED",
+        "Add at least one member, or mark that you perform solo.",
+      );
     }
     for (const member of members) {
       if (!member.email) {
-        throw new Error(`Enter an email for ${member.name}.`);
+        appError("APPLICATION_MEMBER_EMAIL_REQUIRED", `Enter an email for ${member.name}.`);
       }
       if (!isValidEmail(member.email)) {
-        throw new Error(`Enter a valid email for ${member.name}.`);
+        appError("APPLICATION_MEMBER_EMAIL_INVALID", `Enter a valid email for ${member.name}.`);
       }
     }
+
+    // `normalizeMarketingLinks` is a shared helper that throws expected URL
+    // errors, so it runs before the reportable wrapper.
+    const artistLinks = args.artistLinks ? normalizeMarketingLinks(args.artistLinks) : undefined;
 
     await enforceRateLimit(ctx, `bandApply:${contactEmail}`, { limit: 3, windowMs: HOUR_MS });
     await enforceRateLimit(ctx, "bandApply:global", { limit: 40, windowMs: HOUR_MS });
 
+    return await withReportableErrors("bandApplications.submitPublic", async () => {
     const now = Date.now();
     const applicationId = await ctx.db.insert("bandApplications", {
       status: "submitted",
@@ -147,7 +158,7 @@ export const submitPublic = mutation({
       genres: args.genres?.map((g) => g.trim()).filter(Boolean),
       isSolo: args.isSolo,
       members,
-      artistLinks: args.artistLinks ? normalizeMarketingLinks(args.artistLinks) : undefined,
+      artistLinks,
       organizationType: args.organizationType,
       submittedAt: now,
       createdAt: now,
@@ -173,6 +184,7 @@ export const submitPublic = mutation({
     });
 
     return { applicationId };
+    });
   },
 });
 
@@ -283,13 +295,14 @@ export const approve = mutation({
   returns: v.object({ organizationId: v.string() }),
   handler: async (ctx, args) => {
     const admin = await requireAdminOrOperations(ctx);
+    return await withReportableErrors("bandApplications.approve", async () => {
     const adminId = getUserId(admin);
     if (!adminId) throw new Error("Unable to resolve admin user.");
 
     const application = await ctx.db.get(args.applicationId);
-    if (!application) throw new Error("Application not found.");
+    if (!application) appError("APPLICATION_NOT_FOUND", "Application not found.");
     if (application.status !== "submitted") {
-      throw new Error("Only submitted applications can be approved.");
+      appError("APPLICATION_APPROVE_REQUIRES_SUBMITTED", "Only submitted applications can be approved.");
     }
 
     const now = Date.now();
@@ -422,6 +435,7 @@ export const approve = mutation({
     });
 
     return { organizationId: resolved.id };
+    });
   },
 });
 
@@ -433,11 +447,15 @@ export const decline = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const admin = await requireAdminOrOperations(ctx);
+    return await withReportableErrors("bandApplications.decline", async () => {
     const adminId = getUserId(admin);
     const application = await ctx.db.get(args.applicationId);
-    if (!application) throw new Error("Application not found.");
+    if (!application) appError("APPLICATION_NOT_FOUND", "Application not found.");
     if (application.status !== "submitted") {
-      throw new Error("Only submitted applications can be declined.");
+      appError(
+        "APPLICATION_DECLINE_REQUIRES_SUBMITTED",
+        "Only submitted applications can be declined.",
+      );
     }
 
     const now = Date.now();
@@ -463,5 +481,6 @@ export const decline = mutation({
     });
 
     return null;
+    });
   },
 });

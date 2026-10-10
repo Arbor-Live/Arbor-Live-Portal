@@ -1,3 +1,5 @@
+import { appError } from "./errors";
+
 export const inventoryUploadEntityKind = {
   package: "package",
   type: "type",
@@ -175,17 +177,19 @@ export function validateMarketingHeroUploadRequest(args: {
 }): void {
   const contentType = args.contentType.trim().toLowerCase() || "application/octet-stream";
   const fileName = args.fileName.trim();
-  if (!fileName) throw new Error("File name is required.");
-  if (args.contentLength <= 0) throw new Error("File size must be greater than zero.");
+  if (!fileName) appError("UPLOAD_FILE_NAME_REQUIRED", "File name is required.");
+  if (args.contentLength <= 0) {
+    appError("UPLOAD_FILE_EMPTY", "File size must be greater than zero.");
+  }
   validateImageUpload(contentType, args.contentLength);
 }
 
 function validateImageUpload(contentType: string, contentLength: number): void {
   if (contentLength > IMAGE_MAX_BYTES) {
-    throw new Error("Images must be 5 MB or smaller.");
+    appError("UPLOAD_IMAGE_TOO_LARGE", "Images must be 5 MB or smaller.");
   }
   if (!IMAGE_CONTENT_TYPES.has(contentType)) {
-    throw new Error("Upload a JPEG, PNG, WebP, GIF, or SVG image.");
+    appError("UPLOAD_IMAGE_TYPE_UNSUPPORTED", "Upload a JPEG, PNG, WebP, GIF, or SVG image.");
   }
 }
 
@@ -196,7 +200,7 @@ function validateDocumentUpload(
   label: string,
 ): void {
   if (contentLength > DOCUMENT_MAX_BYTES) {
-    throw new Error(`${label} must be 25 MB or smaller.`);
+    appError("UPLOAD_DOCUMENT_TOO_LARGE", `${label} must be 25 MB or smaller.`);
   }
   const lowerName = fileName.toLowerCase();
   const allowedByType =
@@ -210,7 +214,10 @@ function validateDocumentUpload(
     lowerName.endsWith(".xls") ||
     lowerName.endsWith(".xlsx");
   if (!allowedByType) {
-    throw new Error(`Upload a supported ${label.toLowerCase()} (PDF, ZIP, text, or Office doc).`);
+    appError(
+      "UPLOAD_DOCUMENT_TYPE_UNSUPPORTED",
+      `Upload a supported ${label.toLowerCase()} (PDF, ZIP, text, or Office doc).`,
+    );
   }
 }
 
@@ -221,8 +228,10 @@ export function validateEventArtifactUploadRequest(args: {
 }): void {
   const contentType = args.contentType.trim().toLowerCase() || "application/octet-stream";
   const fileName = args.fileName.trim();
-  if (!fileName) throw new Error("File name is required.");
-  if (args.contentLength <= 0) throw new Error("File size must be greater than zero.");
+  if (!fileName) appError("UPLOAD_FILE_NAME_REQUIRED", "File name is required.");
+  if (args.contentLength <= 0) {
+    appError("UPLOAD_FILE_EMPTY", "File size must be greater than zero.");
+  }
 
   const lowerName = fileName.toLowerCase();
   const isImage =
@@ -242,10 +251,12 @@ export function validateVenueDocumentUploadRequest(args: {
 }): void {
   const contentType = args.contentType.trim().toLowerCase() || "application/octet-stream";
   const fileName = args.fileName.trim();
-  if (!fileName) throw new Error("File name is required.");
-  if (args.contentLength <= 0) throw new Error("File size must be greater than zero.");
+  if (!fileName) appError("UPLOAD_FILE_NAME_REQUIRED", "File name is required.");
+  if (args.contentLength <= 0) {
+    appError("UPLOAD_FILE_EMPTY", "File size must be greater than zero.");
+  }
   if (args.contentLength > DOCUMENT_MAX_BYTES) {
-    throw new Error("Venue files must be 25 MB or smaller.");
+    appError("UPLOAD_VENUE_FILE_TOO_LARGE", "Venue files must be 25 MB or smaller.");
   }
 
   const lowerName = fileName.toLowerCase();
@@ -265,7 +276,10 @@ export function validateVenueDocumentUploadRequest(args: {
     lowerName.endsWith(".xls") ||
     lowerName.endsWith(".xlsx");
   if (!allowed) {
-    throw new Error("Upload a supported venue file (PDF, ZIP, VWX, CAD, text, or Office doc).");
+    appError(
+      "UPLOAD_VENUE_FILE_TYPE_UNSUPPORTED",
+      "Upload a supported venue file (PDF, ZIP, VWX, CAD, text, or Office doc).",
+    );
   }
 }
 
@@ -278,27 +292,32 @@ export function validateInventoryUploadRequest(args: {
 }): void {
   const contentType = args.contentType.trim().toLowerCase() || "application/octet-stream";
   const fileName = args.fileName.trim();
-  if (!fileName) throw new Error("File name is required.");
-  if (args.contentLength <= 0) throw new Error("File size must be greater than zero.");
+  if (!fileName) appError("UPLOAD_FILE_NAME_REQUIRED", "File name is required.");
+  if (args.contentLength <= 0) {
+    appError("UPLOAD_FILE_EMPTY", "File size must be greater than zero.");
+  }
 
   if (args.entityKind === "package" && args.purpose !== "hero") {
-    throw new Error("Packages only support hero image uploads.");
+    appError("UPLOAD_PACKAGE_PURPOSE_UNSUPPORTED", "Packages only support hero image uploads.");
   }
 
   if (args.entityKind === "type" && args.purpose === "hero") {
-    throw new Error("Hero uploads are only supported for packages.");
+    appError("UPLOAD_HERO_ONLY_FOR_PACKAGES", "Hero uploads are only supported for packages.");
   }
 
   if (args.entityKind === "item") {
     if (args.purpose !== "damage") {
-      throw new Error("Inventory items only support damage photo uploads.");
+      appError(
+        "UPLOAD_ITEM_PURPOSE_UNSUPPORTED",
+        "Inventory items only support damage photo uploads.",
+      );
     }
     validateImageUpload(contentType, args.contentLength);
     return;
   }
 
   if (args.purpose === "damage") {
-    throw new Error("Damage photos are only supported for inventory items.");
+    appError("UPLOAD_DAMAGE_ONLY_FOR_ITEMS", "Damage photos are only supported for inventory items.");
   }
 
   if (args.purpose === "hero" || args.purpose === "icon" || args.purpose === "promo") {
@@ -312,7 +331,7 @@ export function validateInventoryUploadRequest(args: {
   }
 
   if (args.contentLength > DOCUMENT_MAX_BYTES) {
-    throw new Error("GDTF files must be 25 MB or smaller.");
+    appError("UPLOAD_GDTF_TOO_LARGE", "GDTF files must be 25 MB or smaller.");
   }
   const lowerName = fileName.toLowerCase();
   const allowedGdtf =
@@ -320,7 +339,7 @@ export function validateInventoryUploadRequest(args: {
     lowerName.endsWith(".gdtf") ||
     lowerName.endsWith(".zip");
   if (!allowedGdtf) {
-    throw new Error("Upload a .gdtf or .zip GDTF file.");
+    appError("UPLOAD_GDTF_TYPE_UNSUPPORTED", "Upload a .gdtf or .zip GDTF file.");
   }
 }
 
@@ -365,7 +384,10 @@ export const parseStoredInventoryAsset = parseStoredR2Asset;
 function assertValidStoredAssetReference(raw: string, label: string): string {
   const parsed = parseStoredR2Asset(raw);
   if (!parsed) {
-    throw new Error(`${label} must be an https URL or an uploaded R2 asset reference.`);
+    appError(
+      "ASSET_REFERENCE_INVALID",
+      `${label} must be an https URL or an uploaded R2 asset reference.`,
+    );
   }
   if (parsed.kind === "external") return parsed.url;
   return formatStoredR2Asset(parsed.key);

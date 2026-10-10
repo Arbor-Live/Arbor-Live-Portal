@@ -41,6 +41,7 @@ import { normalizeEventStatus } from "./lib/eventStatus";
 import { removePositionRow as removeSlotRow } from "./lib/positionRows";
 import { syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
 import { requireOutreachAccess } from "./lib/outreachAccess";
+import { appError, withReportableErrors } from "./lib/errors";
 
 const MAX_NEED_CANDIDATES = 60;
 
@@ -226,8 +227,9 @@ export const upsertSlot = mutation({
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
     const author = await requireAuth(ctx);
+    return await withReportableErrors("eventArtistNeeds.upsertSlot", async () => {
     const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
+    if (!event) appError("EVENT_NOT_FOUND", "Event not found.");
     const now = Date.now();
     const label = trimOptional(args.label);
     const genres = trimOptional(args.genres);
@@ -236,7 +238,7 @@ export const upsertSlot = mutation({
     if (args.needId) {
       const existing = await ctx.db.get(args.needId);
       if (!existing || existing.eventId !== args.eventId) {
-        throw new Error("Slot not found on this event.");
+        appError("NEED_SLOT_NOT_ON_EVENT", "Slot not found on this event.");
       }
       await ctx.db.patch(existing._id, {
         label,
@@ -268,6 +270,7 @@ export const upsertSlot = mutation({
       updatedAt: now,
     });
     return { needId };
+    });
   },
 });
 
@@ -279,6 +282,7 @@ export const reorderSlots = mutation({
   },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventArtistNeeds.reorderSlots", async () => {
     const now = Date.now();
     for (const [index, needId] of args.needIds.entries()) {
       const slot = await ctx.db.get(needId);
@@ -287,6 +291,7 @@ export const reorderSlots = mutation({
       await ctx.db.patch(needId, { sortOrder: index, updatedAt: now });
     }
     return null;
+    });
   },
 });
 
@@ -323,10 +328,11 @@ export const swapPositions = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventArtistNeeds.swapPositions", async () => {
     if (args.needIdA === args.needIdB) return null;
     const [slotA, slotB] = await Promise.all([ctx.db.get(args.needIdA), ctx.db.get(args.needIdB)]);
     if (!slotA || !slotB || slotA.eventId !== args.eventId || slotB.eventId !== args.eventId) {
-      throw new Error("Position not found on this event.");
+      appError("NEED_POSITION_NOT_ON_EVENT", "Position not found on this event.");
     }
     const [actA, actB] = await Promise.all([
       findActForSlot(ctx, slotA._id),
@@ -335,7 +341,7 @@ export const swapPositions = mutation({
     const externalA = slotA.externalArtistName?.trim() || undefined;
     const externalB = slotB.externalArtistName?.trim() || undefined;
     if (!actA && !actB && !externalA && !externalB) {
-      throw new Error("Both positions are open — there is no act to swap.");
+      appError("NEED_SWAP_BOTH_OPEN", "Both positions are open — there is no act to swap.");
     }
     // A position's times are its act's when a platform act fills it (see
     // `updateSlotLineup`), otherwise the position's own.
@@ -388,6 +394,7 @@ export const swapPositions = mutation({
       await syncInvoiceLineForSlot(ctx, needId, now);
     }
     return null;
+    });
   },
 });
 
@@ -407,22 +414,23 @@ export const updateSlotLineup = mutation({
   },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventArtistNeeds.updateSlotLineup", async () => {
     const slot = await ctx.db.get(args.needId);
-    if (!slot) throw new Error("Position not found.");
+    if (!slot) appError("NEED_POSITION_NOT_FOUND", "Position not found.");
     if (args.setStartsAt != null && args.setEndsAt != null && args.setEndsAt <= args.setStartsAt) {
-      throw new Error("Set end time must be after the start time.");
+      appError("ACT_SET_TIME_ORDER", "Set end time must be after the start time.");
     }
     if (
       args.soundcheckStartsAt != null &&
       args.soundcheckEndsAt != null &&
       args.soundcheckEndsAt <= args.soundcheckStartsAt
     ) {
-      throw new Error("Soundcheck end time must be after the start time.");
+      appError("ACT_SOUNDCHECK_TIME_ORDER", "Soundcheck end time must be after the start time.");
     }
     const name = args.externalArtistName?.trim() || undefined;
     const act = await findActForSlot(ctx, slot._id);
     if (name && act) {
-      throw new Error("This position is filled by an artist already on the bill.");
+      appError("NEED_POSITION_FILLED_BY_ACT", "This position is filled by an artist already on the bill.");
     }
     const timeFields = ["setStartsAt", "setEndsAt", "soundcheckStartsAt", "soundcheckEndsAt"] as const;
     const next: Doc<"eventArtistNeeds"> = { ...slot, updatedAt: Date.now() };
@@ -446,6 +454,7 @@ export const updateSlotLineup = mutation({
     await syncNeedBlocks(ctx, slot._id);
     await syncInvoiceLineForSlot(ctx, slot._id, next.updatedAt);
     return null;
+    });
   },
 });
 
@@ -454,7 +463,9 @@ export const removeSlot = mutation({
   args: { needId: v.id("eventArtistNeeds") },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
-    await removeSlotRow(ctx, args.needId);
+    return await withReportableErrors("eventArtistNeeds.removeSlot", async () => {
+      await removeSlotRow(ctx, args.needId);
+    });
   },
 });
 
@@ -471,15 +482,19 @@ export const removeFromBill = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventArtistNeeds.removeFromBill", async () => {
     if (args.needId) {
       const slot = await ctx.db.get(args.needId);
-      if (slot && slot.eventId !== args.eventId) throw new Error("That position is on another event.");
+      if (slot && slot.eventId !== args.eventId) {
+        appError("NEED_POSITION_WRONG_EVENT", "That position is on another event.");
+      }
     }
     if (args.organizationId) {
       await removeParticipationFromEvent(ctx, args.eventId, args.organizationId);
     }
     if (args.needId) await removeSlotRow(ctx, args.needId);
     return null;
+    });
   },
 });
 
@@ -487,19 +502,20 @@ export const submitInquiry = mutation({
   args: { needId: v.id("eventArtistNeeds"), message: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const context = await requireBandContext(ctx);
+    return await withReportableErrors("eventArtistNeeds.submitInquiry", async () => {
     const need = await ctx.db.get(args.needId);
-    if (!need) throw new Error("This slot is no longer available.");
+    if (!need) appError("NEED_SLOT_UNAVAILABLE", "This slot is no longer available.");
     const event = await ctx.db.get(need.eventId);
     // Same gate as `listOpenNeedsForArtist`: only public, upcoming, uncancelled
     // events that match this artist's type are inquirable.
     if (!isArtistListableEvent(event, Date.now())) {
-      throw new Error("This slot is no longer available.");
+      appError("NEED_SLOT_UNAVAILABLE", "This slot is no longer available.");
     }
     if (!artistTypesMatchNeed(artistTypesOf(need), context.organizationType)) {
-      throw new Error("This slot is not looking for your kind of act.");
+      appError("NEED_SLOT_ACT_TYPE_MISMATCH", "This slot is not looking for your kind of act.");
     }
     if (slotIsBooked(need, new Set()) || (await findActForSlot(ctx, need._id))) {
-      throw new Error("This slot is already filled.");
+      appError("NEED_SLOT_FILLED", "This slot is already filled.");
     }
 
     const existing = await ctx.db
@@ -546,6 +562,7 @@ export const submitInquiry = mutation({
     });
 
     return { inquiryId };
+    });
   },
 });
 
@@ -553,9 +570,11 @@ export const dismissInquiry = mutation({
   args: { inquiryId: v.id("eventArtistInquiries") },
   handler: async (ctx, args) => {
     await requireOutreachAccess(ctx);
+    return await withReportableErrors("eventArtistNeeds.dismissInquiry", async () => {
     const inquiry = await ctx.db.get(args.inquiryId);
-    if (!inquiry) throw new Error("Inquiry not found.");
+    if (!inquiry) appError("INQUIRY_NOT_FOUND", "Inquiry not found.");
     await ctx.db.patch(inquiry._id, { status: "dismissed", updatedAt: Date.now() });
+    });
   },
 });
 
@@ -570,17 +589,18 @@ export const acceptInquiry = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireOutreachAccess(ctx);
+    return await withReportableErrors("eventArtistNeeds.acceptInquiry", async () => {
     const inquiry = await ctx.db.get(args.inquiryId);
-    if (!inquiry) throw new Error("Inquiry not found.");
+    if (!inquiry) appError("INQUIRY_NOT_FOUND", "Inquiry not found.");
     if (inquiry.status === "accepted") return null;
     const need = await ctx.db.get(inquiry.needId);
-    if (!need) throw new Error("Position not found.");
+    if (!need) appError("NEED_POSITION_NOT_FOUND", "Position not found.");
     const currentAct = await findActForSlot(ctx, need._id);
     if (
       need.externalArtistName?.trim() ||
       (currentAct && currentAct.organizationId !== inquiry.organizationId)
     ) {
-      throw new Error("This position is already filled.");
+      appError("NEED_POSITION_ALREADY_FILLED", "This position is already filled.");
     }
     const existing = await ctx.db
       .query("eventBandParticipations")
@@ -605,6 +625,7 @@ export const acceptInquiry = mutation({
       await ctx.db.patch(row._id, { status: "dismissed", updatedAt: now });
     }
     return null;
+    });
   },
 });
 

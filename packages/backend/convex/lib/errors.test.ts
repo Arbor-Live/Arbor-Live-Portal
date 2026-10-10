@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ConvexError } from "convex/values";
-import { appError, withReportableErrors } from "./errors";
+import { appError, reportedAppError, withReportableErrors } from "./errors";
 
 function captureThrown(fn: () => unknown): unknown {
   try {
@@ -108,3 +108,22 @@ describe("withReportableErrors", () => {
     });
   });
 });
+
+describe("reportedAppError", () => {
+  it("keeps the safe message, reports, and passes through the wrapper unchanged", async () => {
+    const cause = new TypeError("adapter exploded with secret details");
+    const thrown = await withReportableErrors("users.example", async () => {
+      reportedAppError("ORG_AUTH_DELETE_FAILED", "Please retry.", "users.example", cause);
+    }).catch((error: unknown) => error);
+    expect(thrown).toBeInstanceOf(ConvexError);
+    expect(errorData(thrown)).toEqual({
+      code: "ORG_AUTH_DELETE_FAILED",
+      message: "Please retry.",
+      report: true,
+      function: "users.example",
+      causeName: "TypeError",
+    });
+    expect(JSON.stringify(errorData(thrown))).not.toContain("secret");
+  });
+});
+

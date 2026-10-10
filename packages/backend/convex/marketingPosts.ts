@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalQuery, mutation, query } from "./_generated/server";
 import { getUserId, requireAdmin } from "./lib/auth";
+import { appError, withReportableErrors } from "./lib/errors";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
   collectKeysFromMarketingPost,
@@ -32,7 +33,7 @@ function normalizeContentJson(raw: string | undefined) {
     JSON.parse(value);
     return value;
   } catch {
-    throw new Error("Post body must be valid Lexical JSON.");
+    appError("MARKETING_POST_CONTENT_INVALID", "Post body must be valid Lexical JSON.");
   }
 }
 
@@ -115,15 +116,16 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx);
+    return await withReportableErrors("marketingPosts.create", async () => {
     const now = Date.now();
     const title = args.title.trim();
-    if (!title) throw new Error("Title is required.");
+    if (!title) appError("MARKETING_POST_TITLE_REQUIRED", "Title is required.");
 
     const published = args.published ?? false;
     const featured = args.featured ?? false;
     const slug = args.slug === undefined ? undefined : normalizePublicSlug(args.slug);
     if (published && !slug) {
-      throw new Error("Published posts require a public slug.");
+      appError("MARKETING_POST_SLUG_REQUIRED", "Published posts require a public slug.");
     }
     if (slug) {
       await assertUniqueMarketingPostSlug(ctx, slug);
@@ -152,6 +154,7 @@ export const create = mutation({
     }
 
     return postId;
+    });
   },
 });
 
@@ -171,8 +174,9 @@ export const update = mutation({
   },
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx);
+    return await withReportableErrors("marketingPosts.update", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Post not found.");
+    if (!existing) appError("MARKETING_POST_NOT_FOUND", "Post not found.");
 
     const now = Date.now();
     const published = args.published ?? existing.published;
@@ -185,7 +189,7 @@ export const update = mutation({
           : undefined;
 
     if (published && !slug) {
-      throw new Error("Published posts require a public slug.");
+      appError("MARKETING_POST_SLUG_REQUIRED", "Published posts require a public slug.");
     }
     if (slug) {
       await assertUniqueMarketingPostSlug(ctx, slug, args.id);
@@ -242,6 +246,7 @@ export const update = mutation({
     }
 
     return args.id;
+    });
   },
 });
 
@@ -249,8 +254,9 @@ export const remove = mutation({
   args: { id: v.id("marketingPosts") },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
+    return await withReportableErrors("marketingPosts.remove", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Post not found.");
+    if (!existing) appError("MARKETING_POST_NOT_FOUND", "Post not found.");
     const keysToRelease = collectKeysFromMarketingPost(existing);
     await ctx.db.delete(args.id);
     await releaseR2KeysIfUnreferenced(ctx, keysToRelease);
@@ -258,5 +264,6 @@ export const remove = mutation({
       await scheduleMarketingSiteRevalidation(ctx, existing.slug);
     }
     return null;
+    });
   },
 });
