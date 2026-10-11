@@ -324,6 +324,8 @@ function buildGraph(
       uniforms: {
         luminosityThreshold: OCEAN_TUNING.bloom.threshold,
         smoothWidth: OCEAN_TUNING.bloom.smoothWidth,
+        // vgpu 0.5 requires every reflected struct member, padding included.
+        _pad0: [0, 0],
       },
       tDiffuse: scene,
       linearSampler,
@@ -470,6 +472,7 @@ function setBloomConstants(
       bloomStrength:
         colorScheme === "light" ? 0 : OCEAN_TUNING.bloom.strength,
       bloomRadius: OCEAN_TUNING.bloom.radius,
+      _pad0: [0, 0],
       bloomFactors0: [1, 0.8, 0.6, 0.4],
       bloomFactors1: [0.2, 0, 0, 0],
     },
@@ -486,6 +489,9 @@ function setPresentConstants(
       // for additive particle blending into a black-cleared HDR target; keeping
       // it on the canvas punches dark holes into that fill. Force additive.
       alphaScale: colorScheme === "light" ? 0 : 1,
+      _pad0: 0,
+      _pad1: 0,
+      _pad2: 0,
     },
   });
 }
