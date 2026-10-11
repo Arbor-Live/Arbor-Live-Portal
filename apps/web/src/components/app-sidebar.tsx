@@ -313,7 +313,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             // Stop this device getting the account's pushes before the session ends.
             await releasePushSubscription((endpoint) => unsubscribePush({ endpoint }))
             await authClient.signOut()
-            window.location.href = "/sign-in"
+            // Full reload drops all client session state; replace so Back can't return to a signed-in page.
+            window.location.replace("/sign-in")
           }}
           crewMode={
             isAdmin && activeOrganization?.organizationType === "arbor_internal"
