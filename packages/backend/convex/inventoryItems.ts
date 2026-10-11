@@ -13,6 +13,13 @@ import {
 import { assetIdLookupCandidates, canonicalizeAssetIdTag } from "./lib/assetScan";
 import { resolveInventoryItemByScan } from "./lib/rentalFulfillment";
 import { appError, withReportableErrors } from "./lib/errors";
+import {
+  inventoryLifecycleValue,
+  lifecycleOf,
+  listPreviousAssetIds,
+  refreshItemSearchText,
+  retirementReasonValue,
+} from "./lib/inventoryLifecycle";
 
 const MAX_LIST_LIMIT = 2000;
 const MAX_ASSET_ID_LIMIT = 5000;
@@ -22,6 +29,32 @@ const MAX_CONTAINMENT_DESCENDANTS = 5000;
 /** Items without a tag sort/display by serial. */
 function itemSortKey(item: { assetId?: string; serialNumber?: string }): string {
   return item.assetId ?? item.serialNumber ?? "";
+}
+
+/** A tag is taken by a live item or kept as another item's old tag. */
+async function assertAssetIdAvailable(
+  ctx: MutationCtx,
+  assetId: string,
+  selfId?: Id<"inventoryItems">,
+) {
+  const existing = await ctx.db
+    .query("inventoryItems")
+    .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
+    .unique();
+  if (existing && existing._id !== selfId) {
+    appError("INVENTORY_ASSET_ID_EXISTS", `Asset ID already exists: ${assetId}`);
+  }
+  const alias = await ctx.db
+    .query("inventoryAssetIdAliases")
+    .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
+    .first();
+  const owner = alias && alias.inventoryItemId !== selfId ? await ctx.db.get(alias.inventoryItemId) : null;
+  if (owner) {
+    appError(
+      "INVENTORY_ASSET_ID_RETIRED",
+      `${assetId} is an old tag of ${owner.assetId ?? owner.serialNumber ?? "another item"}, so it can't be reused.`,
+    );
+  }
 }
 
 async function cascadeLocationToDescendants(
@@ -108,9 +141,14 @@ type InventoryItemFilters = {
   location?: ListFilter;
   container?: ListFilter;
   tag?: ListFilter;
+  lifecycle?: ListFilter;
+  damage?: ListFilter;
 };
 
-/** `location` uses `"none"` for unassigned; `container` and `tag` are yes/no chips. */
+/**
+ * `location` uses `"none"` for unassigned; `container`, `tag` and `damage`
+ * (`open` / `none`) are yes/no chips; `lifecycle` absent on a row is `active`.
+ */
 function matchesInventoryFilters(
   item: Doc<"inventoryItems"> & {
     type: { category: string; model: string; name: string } | null;
@@ -123,9 +161,12 @@ function matchesInventoryFilters(
   if (!matchesListFilter(args.location, [item.storageLocationId ?? "none"])) return false;
   if (!matchesListFilter(args.container, [item.containedInAssetId ? "inside" : "top"])) return false;
   if (!matchesListFilter(args.tag, [item.assetId ? "tagged" : "serial_only"])) return false;
+  if (!matchesListFilter(args.lifecycle, [lifecycleOf(item)])) return false;
+  if (!matchesListFilter(args.damage, [(item.openDamageCount ?? 0) > 0 ? "open" : "none"])) return false;
   const loweredSearch = args.search?.trim().toLowerCase();
   if (!loweredSearch) return true;
   return (
+    (item.searchText ?? "").includes(loweredSearch) ||
     (item.assetId ?? "").toLowerCase().includes(loweredSearch) ||
     (item.serialNumber ?? "").toLowerCase().includes(loweredSearch) ||
     item.type.model.toLowerCase().includes(loweredSearch) ||
@@ -155,13 +196,17 @@ export const list = query({
     location: listFilter,
     container: listFilter,
     tag: listFilter,
+    lifecycle: listFilter,
+    damage: listFilter,
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
 
     const hasInMemoryFilter =
       Boolean(args.search?.trim()) ||
-      [args.category, args.type, args.location, args.container, args.tag].some(isActiveFilter);
+      [args.category, args.type, args.location, args.container, args.tag, args.lifecycle, args.damage].some(
+        isActiveFilter,
+      );
 
     if (hasInMemoryFilter) {
       const scanned = await ctx.db
@@ -212,6 +257,7 @@ export const listSummaries = query({
         serialNumber: item.serialNumber,
         typeId: item.typeId,
         containedInAssetId: item.containedInAssetId,
+        lifecycle: lifecycleOf(item),
         type: typeById.get(item.typeId) ?? null,
       }))
       .sort((a, b) => itemSortKey(a).localeCompare(itemSortKey(b)));
@@ -241,7 +287,7 @@ export const create = mutation({
     typeId: v.id("inventoryTypes"),
     storageLocationId: v.optional(v.id("storageLocations")),
     containedInAssetId: v.optional(v.id("inventoryItems")),
-    status: v.optional(v.string()),
+    condition: v.optional(v.string()),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -251,13 +297,7 @@ export const create = mutation({
     if (!assetId && !args.serialNumber?.trim()) {
       appError("INVENTORY_IDENTITY_REQUIRED", "Add an Asset ID or Serial Number.");
     }
-    if (assetId) {
-      const existingAsset = await ctx.db
-        .query("inventoryItems")
-        .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
-        .unique();
-      if (existingAsset) appError("INVENTORY_ASSET_ID_EXISTS", "Asset ID already exists.");
-    }
+    if (assetId) await assertAssetIdAvailable(ctx, assetId);
 
     const type = await ctx.db.get(args.typeId);
     if (!type) appError("INVENTORY_TYPE_NOT_FOUND", "Inventory type not found.");
@@ -275,17 +315,19 @@ export const create = mutation({
     const effectiveStorageLocationId = inheritedContainerLocationId ?? args.storageLocationId;
 
     const now = Date.now();
-    return await ctx.db.insert("inventoryItems", {
+    const id = await ctx.db.insert("inventoryItems", {
       assetId: assetId || undefined,
       serialNumber: args.serialNumber?.trim(),
       typeId: args.typeId,
       storageLocationId: effectiveStorageLocationId,
       containedInAssetId: args.containedInAssetId,
-      status: args.status?.trim(),
+      condition: args.condition?.trim() || undefined,
       notes: args.notes?.trim(),
       createdAt: now,
       updatedAt: now,
     });
+    await refreshItemSearchText(ctx, id);
+    return id;
     });
   },
 });
@@ -312,7 +354,7 @@ export const createMany = mutation({
         serialNumber: v.optional(v.string()),
         storageLocationId: v.optional(v.id("storageLocations")),
         containedInAssetId: v.optional(v.string()),
-        status: v.optional(v.string()),
+        condition: v.optional(v.string()),
         notes: v.optional(v.string()),
         contains: v.optional(v.array(v.string())),
       }),
@@ -333,7 +375,7 @@ export const createMany = mutation({
       ...item,
       assetId: item.assetId ? canonicalizeAssetIdTag(item.assetId) : undefined,
       serialNumber: item.serialNumber?.trim(),
-      status: item.status?.trim(),
+      condition: item.condition?.trim() || undefined,
       notes: item.notes?.trim(),
       containedInAssetId: item.containedInAssetId
         ? canonicalizeAssetIdTag(item.containedInAssetId)
@@ -355,13 +397,7 @@ export const createMany = mutation({
         appError("INVENTORY_BATCH_DUPLICATE_ASSET_ID", `Duplicate asset ID in batch: ${item.assetId}`);
       }
       seen.add(key);
-      const existing = await ctx.db
-        .query("inventoryItems")
-        .withIndex("by_assetId", (q) => q.eq("assetId", item.assetId))
-        .unique();
-      if (existing) {
-        appError("INVENTORY_BATCH_ASSET_ID_EXISTS", `Asset ID already exists: ${item.assetId}`);
-      }
+      await assertAssetIdAvailable(ctx, item.assetId);
     }
 
     // 2. Insert all items without containment, remembering in-batch ids.
@@ -377,7 +413,7 @@ export const createMany = mutation({
         typeId: args.typeId,
         storageLocationId: item.storageLocationId,
         containedInAssetId: undefined,
-        status: item.status,
+        condition: item.condition,
         notes: item.notes,
         createdAt: now,
         updatedAt: now,
@@ -527,6 +563,7 @@ export const createMany = mutation({
     for (const id of cascadeTargets) {
       await cascadeLocationToDescendants(ctx, id, await finalLocation(id));
     }
+    for (const id of insertedIds) await refreshItemSearchText(ctx, id);
 
     return { created: normalizedItems.length };
     });
@@ -541,7 +578,7 @@ export const update = mutation({
     typeId: v.id("inventoryTypes"),
     storageLocationId: v.optional(v.id("storageLocations")),
     containedInAssetId: v.optional(v.id("inventoryItems")),
-    status: v.optional(v.string()),
+    condition: v.optional(v.string()),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -554,15 +591,7 @@ export const update = mutation({
     if (!assetId && !args.serialNumber?.trim()) {
       appError("INVENTORY_IDENTITY_REQUIRED", "Add an Asset ID or Serial Number.");
     }
-    if (assetId) {
-      const duplicateAsset = await ctx.db
-        .query("inventoryItems")
-        .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
-        .unique();
-      if (duplicateAsset && duplicateAsset._id !== args.id) {
-        appError("INVENTORY_ASSET_ID_EXISTS", "Asset ID already exists.");
-      }
-    }
+    if (assetId) await assertAssetIdAvailable(ctx, assetId, args.id);
 
     const type = await ctx.db.get(args.typeId);
     if (!type) appError("INVENTORY_TYPE_NOT_FOUND", "Inventory type not found.");
@@ -596,12 +625,13 @@ export const update = mutation({
       typeId: args.typeId,
       storageLocationId: effectiveStorageLocationId,
       containedInAssetId: args.containedInAssetId,
-      status: args.status?.trim(),
+      condition: args.condition?.trim() || undefined,
       notes: args.notes?.trim(),
       updatedAt: Date.now(),
     });
 
     await cascadeLocationToDescendants(ctx, args.id, effectiveStorageLocationId);
+    await refreshItemSearchText(ctx, args.id);
     });
   },
 });
@@ -620,6 +650,18 @@ export const remove = mutation({
     if (children) {
       appError("INVENTORY_ITEM_HAS_CHILDREN", "Cannot delete an asset that contains other assets.");
     }
+    // Deleting frees its old tags; its lifecycle history goes with it.
+    const [aliases, history] = await Promise.all([
+      ctx.db
+        .query("inventoryAssetIdAliases")
+        .withIndex("by_inventoryItemId", (q) => q.eq("inventoryItemId", args.id))
+        .take(50),
+      ctx.db
+        .query("inventoryItemHistory")
+        .withIndex("by_inventoryItemId_and_at", (q) => q.eq("inventoryItemId", args.id))
+        .take(500),
+    ]);
+    for (const row of [...aliases, ...history]) await ctx.db.delete(row._id);
     await ctx.db.delete(args.id);
     });
   },
@@ -750,7 +792,115 @@ export const get = query({
     const item = await ctx.db.get(id);
     if (!item) return null;
     const [row] = await hydrateInventoryItems(ctx, [item]);
-    return row ?? null;
+    if (!row) return null;
+    const [previousAssetIds, replacement] = await Promise.all([
+      listPreviousAssetIds(ctx, item._id),
+      item.retirement?.replacementItemId ? ctx.db.get(item.retirement.replacementItemId) : null,
+    ]);
+    return {
+      ...row,
+      lifecycle: lifecycleOf(item),
+      previousAssetIds,
+      replacementItem: replacement
+        ? { _id: replacement._id, assetId: replacement.assetId, serialNumber: replacement.serialNumber }
+        : null,
+    };
+  },
+});
+
+const MIN_ITEM_SEARCH_CHARS = 2;
+const MAX_ITEM_SEARCH_RESULTS = 20;
+
+const itemSearchResultValue = v.object({
+  _id: v.id("inventoryItems"),
+  assetId: v.optional(v.string()),
+  serialNumber: v.optional(v.string()),
+  typeName: v.string(),
+  typeModel: v.optional(v.string()),
+  manufacturer: v.optional(v.string()),
+  lifecycle: inventoryLifecycleValue,
+  retirementReason: v.optional(retirementReasonValue),
+  openDamageCount: v.number(),
+  locationPath: v.optional(v.string()),
+});
+
+function toSearchResult(row: Awaited<ReturnType<typeof hydrateInventoryItems>>[number]) {
+  return {
+    _id: row._id,
+    assetId: row.assetId,
+    serialNumber: row.serialNumber,
+    typeName: row.type?.name ?? "Unknown type",
+    typeModel: row.type?.model,
+    manufacturer: row.type?.manufacturer,
+    lifecycle: lifecycleOf(row),
+    retirementReason: row.retirement?.reason,
+    openDamageCount: row.openDamageCount ?? 0,
+    locationPath: row.location?.path,
+  };
+}
+
+/**
+ * Units matching typed text: an exact tag, link or old tag first, then
+ * full-text matches on tags, serial and type. Retired units come last and
+ * only when asked for. Shared by the item pickers and the ⌘K palette.
+ */
+export async function searchInventoryItems(
+  ctx: QueryCtx,
+  text: string,
+  options: { limit: number; includeRetired: boolean },
+) {
+  const trimmed = text.trim().slice(0, 100);
+  if (trimmed.length < MIN_ITEM_SEARCH_CHARS) return [];
+  const [exact, matches] = await Promise.all([
+    resolveInventoryItemByScan(ctx, trimmed),
+    ctx.db
+      .query("inventoryItems")
+      .withSearchIndex("search_searchText", (q) => q.search("searchText", trimmed))
+      .take(options.limit * 2),
+  ]);
+  const seen = new Set<string>();
+  const rows: Doc<"inventoryItems">[] = [];
+  for (const row of [...(exact ? [exact] : []), ...matches]) {
+    if (seen.has(row._id)) continue;
+    seen.add(row._id);
+    if (!options.includeRetired && lifecycleOf(row) === "retired") continue;
+    rows.push(row);
+  }
+  // Stable: keeps relevance order within each group.
+  rows.sort((a, b) => Number(lifecycleOf(a) === "retired") - Number(lifecycleOf(b) === "retired"));
+  const shown = rows.slice(0, options.limit);
+  const hydrated = await hydrateInventoryItems(ctx, shown);
+  return hydrated.map(toSearchResult);
+}
+
+/** Search-on-demand item picker (damage wizard, retire's "replaced by"). */
+export const search = query({
+  args: {
+    search: v.string(),
+    includeRetired: v.optional(v.boolean()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(itemSearchResultValue),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    return await searchInventoryItems(ctx, args.search, {
+      limit: Math.min(Math.max(args.limit ?? 12, 1), MAX_ITEM_SEARCH_RESULTS),
+      includeRetired: args.includeRetired ?? false,
+    });
+  },
+});
+
+/** One picked item in the picker's result shape, so a preselected value shows its label. */
+export const getSearchResult = query({
+  args: { id: v.id("inventoryItems") },
+  returns: v.union(v.null(), itemSearchResultValue),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const item = await ctx.db.get(args.id);
+    if (!item) return null;
+    const [row] = await hydrateInventoryItems(ctx, [item]);
+    if (!row) return null;
+    return toSearchResult(row);
   },
 });
 

@@ -14,6 +14,8 @@ import { fetchAllBetterAuthRows } from "./lib/betterAuthRows";
 import { eventStatusValue, normalizeEventStatus } from "./lib/eventStatus";
 import { matchArtists, type SearchOrganizationRow } from "./lib/globalSearch";
 import type { ArtistOrganizationType } from "./lib/organizationType";
+import { inventoryLifecycleValue, retirementReasonValue } from "./lib/inventoryLifecycle";
+import { searchInventoryItems } from "./inventoryItems";
 
 /**
  * The dashboard's ⌘K palette. One query for every section, so a keystroke is
@@ -26,6 +28,7 @@ const EVENT_LIMIT = 8;
 const INVOICE_LIMIT = 6;
 const PEOPLE_LIMIT = 6;
 const ARTIST_LIMIT = 6;
+const ITEM_LIMIT = 6;
 const MAX_QUERY_LENGTH = 100;
 /** Convex full-text search rejects more terms than this. */
 const MAX_SEARCH_TERMS = 16;
@@ -60,7 +63,31 @@ const artistResultValue = v.object({
   name: v.string(),
 });
 
-const EMPTY = { events: [], invoices: [], people: [], artists: [] };
+const itemResultValue = v.object({
+  _id: v.id("inventoryItems"),
+  assetId: v.optional(v.string()),
+  serialNumber: v.optional(v.string()),
+  typeName: v.string(),
+  lifecycle: inventoryLifecycleValue,
+  retirementReason: v.optional(retirementReasonValue),
+  openDamageCount: v.number(),
+});
+
+const EMPTY = { events: [], invoices: [], people: [], artists: [], items: [] };
+
+/** Gear by tag (current or old), serial or type; retired units after the rest. */
+async function searchItems(ctx: QueryCtx, search: string) {
+  const rows = await searchInventoryItems(ctx, search, { limit: ITEM_LIMIT, includeRetired: true });
+  return rows.map((row) => ({
+    _id: row._id,
+    assetId: row.assetId,
+    serialNumber: row.serialNumber,
+    typeName: row.typeName,
+    lifecycle: row.lifecycle,
+    retirementReason: row.retirementReason,
+    openDamageCount: row.openDamageCount,
+  }));
+}
 
 async function searchEvents(ctx: QueryCtx, search: string) {
   const rows = await ctx.db
@@ -169,6 +196,7 @@ export const search = query({
     invoices: v.array(invoiceResultValue),
     people: v.array(personResultValue),
     artists: v.array(artistResultValue),
+    items: v.array(itemResultValue),
   }),
   handler: async (ctx, args) => {
     const search = args.query
@@ -189,12 +217,13 @@ export const search = query({
       args.includeOperations ? hasOperationsAccess(ctx, user) : false,
     ]);
     const lowered = search.toLowerCase();
-    const [events, invoices, people, artists] = await Promise.all([
+    const [events, invoices, people, artists, items] = await Promise.all([
       searchEvents(ctx, search),
       isOperations ? searchInvoices(ctx, search) : [],
       isAdmin ? searchPeople(ctx, lowered) : [],
       searchArtists(ctx, lowered),
+      searchItems(ctx, search),
     ]);
-    return { events, invoices, people, artists };
+    return { events, invoices, people, artists, items };
   },
 });

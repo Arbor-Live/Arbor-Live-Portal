@@ -125,6 +125,19 @@ export const equipmentByAssetId = query({
         .unique();
       if (item) break;
     }
+    // A relabeled unit's old QR still lands on its page.
+    if (!item) {
+      for (const candidate of assetIdLookupCandidates(assetId)) {
+        const alias = await ctx.db
+          .query("inventoryAssetIdAliases")
+          .withIndex("by_assetId", (q) => q.eq("assetId", candidate))
+          .first();
+        if (alias) {
+          item = await ctx.db.get(alias.inventoryItemId);
+          break;
+        }
+      }
+    }
     if (!item?.assetId) return null;
 
     const type = await ctx.db.get(item.typeId);

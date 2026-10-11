@@ -75,17 +75,17 @@ export function DamageReportSheet({
     );
   }
 
-  async function decommissionAsset() {
+  async function retireBeyondRepair() {
     if (!report) return;
     const ok = await confirm({
-      title: `Decommission ${report.assetId ?? report.typeName ?? "this asset"}?`,
+      title: `Retire ${report.assetId ?? report.typeName ?? "this asset"}?`,
       description:
-        "The asset is marked out of service and this report is resolved. Its history and comments stay.",
-      confirmLabel: "Decommission",
+        "It's retired as damaged beyond repair, and this report and any other open ones on it are resolved. Its history and comments stay, and it can be reinstated from the item.",
+      confirmLabel: "Retire (beyond repair)",
       destructive: true,
     });
     if (!ok) return;
-    await attempt(() => decommission({ reportId: report._id }), `Decommissioned ${report.assetId ?? "the asset"}`);
+    await attempt(() => decommission({ reportId: report._id }), `Retired ${report.assetId ?? "the asset"}`);
   }
 
   return (
@@ -119,6 +119,11 @@ export function DamageReportSheet({
         <>
           <SheetSection title="Details">
             <SheetFields>
+              <SheetField label="Item">
+                <Link className="underline" href={`/dashboard/inventory/items?item=${report.inventoryItemId}`}>
+                  {[report.assetId, report.typeName].filter(Boolean).join(" · ") || "Open item"}
+                </Link>
+              </SheetField>
               <SheetField label="Severity">{report.severity} of 5</SheetField>
               <SheetField label="Operability">{OPERABILITY_LABELS[report.operability]}</SheetField>
               <SheetField label="Event">
@@ -173,8 +178,8 @@ export function DamageReportSheet({
           {canTriage && report.status !== "resolved" ? (
             <DetailSheetFooter
               start={
-                <Button type="button" variant="destructive" size="sm" onClick={() => void decommissionAsset()}>
-                  Decommission
+                <Button type="button" variant="destructive" size="sm" onClick={() => void retireBeyondRepair()}>
+                  Retire (beyond repair)
                 </Button>
               }
             >

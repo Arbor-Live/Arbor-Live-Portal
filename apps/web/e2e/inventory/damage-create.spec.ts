@@ -31,7 +31,7 @@ test.describe("damage report create", () => {
     const scanInput = page.locator("#asset-scan-input");
     await scanInput.fill(seeded.assetId);
     await scanInput.press("Enter");
-    await expect(page.getByText(/Asset selected/i)).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByTestId("damage-wizard-item")).toContainText(seeded.assetId, { timeout: 25_000 });
 
     await page.getByLabel("Damage severity (1–5)").fill("4");
     await page.getByLabel("Notes").fill(notes);

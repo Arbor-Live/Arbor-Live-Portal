@@ -38,6 +38,16 @@ async function findItemByAssetIdCandidates(
     // Index match ⇒ doc.assetId === candidate exactly.
     return { ...item, assetId: candidate };
   }
+  // A relabeled item still answers to its old tag.
+  for (const candidate of assetIdLookupCandidates(assetId)) {
+    const alias = await ctx.db
+      .query("inventoryAssetIdAliases")
+      .withIndex("by_assetId", (q) => q.eq("assetId", candidate))
+      .first();
+    if (!alias) continue;
+    const item = await ctx.db.get(alias.inventoryItemId);
+    if (item?.assetId) return { ...item, assetId: item.assetId };
+  }
   return null;
 }
 

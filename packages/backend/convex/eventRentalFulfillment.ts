@@ -493,8 +493,15 @@ export const scanOutboundAsset = mutation({
       );
     }
 
-    // Always expand packouts/containers: root + every nested contained asset.
-    const bundle = await listItemWithDescendants(ctx, root._id);
+    if (root.lifecycle === "retired") {
+      appError("ASSET_RETIRED", `${root.assetId} is retired and can't go out. Reinstate it in Inventory first.`);
+    }
+
+    // Always expand packouts/containers: root + every nested contained asset
+    // still in service (a reinstated case can hold units retired with it).
+    const bundle = (await listItemWithDescendants(ctx, root._id)).filter(
+      (item) => item.lifecycle !== "retired",
+    );
     let units = await listUnitsForFulfillment(ctx, fulfillment._id);
     const now = Date.now();
     const scannedLabel = await formatScannedAssetLabel(ctx, root);

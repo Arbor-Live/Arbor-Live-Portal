@@ -14,6 +14,7 @@ import { v } from "convex/values";
 import { mutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { assertE2eHelpersEnabled } from "./lib/e2eGuard";
+import { buildItemSearchText } from "./lib/inventoryLifecycle";
 import { EMPTY_LEXICAL_STATE } from "./lib/marketingContent";
 
 /** Scan bound for purges — comfortably above any batch a spec seeds. */
@@ -242,10 +243,9 @@ export const seedDamageReports = mutation({
     let typeId = args.typeId;
     let inventoryItemId = args.inventoryItemId;
     if (!typeId || !inventoryItemId) {
+      const type = { name: bulkLabel(args.stamp, 0), category: "misc", model: "E2E-BULK-1" };
       typeId = await ctx.db.insert("inventoryTypes", {
-        name: bulkLabel(args.stamp, 0),
-        category: "misc",
-        model: "E2E-BULK-1",
+        ...type,
         manualUrls: [],
         capabilities: [],
         createdAt: now,
@@ -254,7 +254,8 @@ export const seedDamageReports = mutation({
       inventoryItemId = await ctx.db.insert("inventoryItems", {
         assetId,
         typeId,
-        status: "needs_repair",
+        lifecycle: "in_repair",
+        searchText: buildItemSearchText({ assetId }, type, []),
         createdAt: now,
         updatedAt: now,
       });
@@ -275,6 +276,13 @@ export const seedDamageReports = mutation({
         reportedByUserId: "e2e-bulk-reporter",
         reportedAt: row.at,
         updatedAt: row.at,
+      });
+    }
+    // Every seeded report is open, so the unit's count grows with each chunk.
+    const item = await ctx.db.get(inventoryItemId);
+    if (item) {
+      await ctx.db.patch(inventoryItemId, {
+        openDamageCount: (item.openDamageCount ?? 0) + rows.length,
       });
     }
     return {

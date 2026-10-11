@@ -87,7 +87,7 @@ export function InventoryItemEditor({
       containedInAssetId: values.containedInAssetId
         ? (values.containedInAssetId as Id<"inventoryItems">)
         : undefined,
-      status: values.status || undefined,
+      condition: values.condition || undefined,
       notes: values.notes || undefined,
     };
     if (editingId) {
@@ -183,7 +183,7 @@ export function InventoryItemEditor({
               typeId: values.typeId,
               storageLocationId: values.storageLocationId ?? "",
               containedInAssetId: values.containedInAssetId ?? "",
-              status: values.status ?? "",
+              condition: values.condition ?? "",
               notes: values.notes ?? "",
             }}
             onChange={onDetailsChange}

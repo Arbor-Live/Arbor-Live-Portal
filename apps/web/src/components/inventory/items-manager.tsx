@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { CameraIcon, PackageIcon, PlusIcon } from "@phosphor-icons/react";
 import { activeFilters, FilterBar, type FilterDefinition, type FilterState } from "@/components/filter-bar";
-import { EmptyState, ListSummary, RowCell, RowMenu, RowText } from "@/components/list-page";
+import { EmptyState, ListSummary, RowCell, RowFlag, RowMenu, RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 import { MetaItem, PageHeader } from "@/components/page-header";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -14,12 +15,15 @@ import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdow
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSheetParam } from "@/hooks/use-sheet-param";
 import { api, type Id } from "@/lib/convex-api";
+import { useSessionViewer } from "@/components/session-shell-provider";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { LIFECYCLE_OPTIONS, lifecycleSummary } from "@/lib/inventory-lifecycle";
 import { notify } from "@/lib/notify";
 import { AssetScanner } from "./asset-scanner";
 import { inventoryItemLabel, toCategoryOptions } from "./constants";
 import { CreateAssetWizard } from "./create-asset-wizard";
 import { DamageReportWizard } from "./damage-report-wizard";
+import { RetagItemDialog, RetireItemDialog, type LifecycleTarget } from "./item-lifecycle-dialogs";
 import { ItemSheet } from "./item-sheet";
 import { formatTypeDisplay } from "./package-section-utils";
 
@@ -33,6 +37,23 @@ const TAG_OPTIONS = [
   { value: "serial_only", label: "Serial only" },
 ];
 
+const DAMAGE_OPTIONS = [
+  { value: "open", label: "Has open damage" },
+  { value: "none", label: "No open damage" },
+];
+
+/** Retired units stay on record but out of the way: the list opens without them. */
+const HIDE_RETIRED: FilterState = { lifecycle: { operator: "is_not", values: ["retired"] } };
+
+function initialFilters(typeId: string | null): FilterState {
+  return typeId ? { ...HIDE_RETIRED, type: { operator: "is", values: [typeId] } } : HIDE_RETIRED;
+}
+
+function hidesRetired(filters: FilterState) {
+  const lifecycle = filters.lifecycle;
+  return lifecycle?.operator === "is_not" && lifecycle.values.length === 1 && lifecycle.values[0] === "retired";
+}
+
 function plural(count: number, noun: string) {
   return `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
 }
@@ -43,9 +64,11 @@ function plural(count: number, noun: string) {
  */
 export function ItemsManager() {
   const { confirm } = useAppDialog();
+  const searchParams = useSearchParams();
   const siteBase = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<FilterState>({});
+  // `?type=` comes from a type's panel ("See its units").
+  const [filters, setFilters] = useState<FilterState>(() => initialFilters(searchParams.get("type")));
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [selectedId, setSelectedId] = useSheetParam("item");
   const [damageItemId, setDamageItemId] = useState<Id<"inventoryItems"> | null>(null);
@@ -54,6 +77,10 @@ export function ItemsManager() {
   const [scanRaw, setScanRaw] = useState("");
   const [scanError, setScanError] = useState<string | null>(null);
   const [bulkPending, setBulkPending] = useState(false);
+  const [retireTarget, setRetireTarget] = useState<LifecycleTarget | null>(null);
+  const [retagTarget, setRetagTarget] = useState<{ _id: Id<"inventoryItems">; assetId: string } | null>(null);
+  const viewer = useSessionViewer();
+  const canManage = Boolean(viewer?.isAdmin || viewer?.verticals?.includes("Operations"));
 
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: true });
   const { results: items, status, loadMore } = usePaginatedQuery(
@@ -65,6 +92,7 @@ export function ItemsManager() {
   const types = useQuery(api.inventoryTypes.listOptions, {});
   const locations = useQuery(api.storageLocations.list, {});
   const removeItem = useMutation(api.inventoryItems.remove);
+  const reinstateItem = useMutation(api.inventoryLifecycle.reinstate);
   const scanResolved = useQuery(api.inventoryItems.resolveByScan, scanRaw.trim() ? { raw: scanRaw } : "skip");
 
   /** How many items each container holds, from summaries so the list query skips per-row child scans. */
@@ -75,6 +103,8 @@ export function ItemsManager() {
     }
     return map;
   }, [itemSummaries]);
+  const inService = itemSummaries?.filter((item) => item.lifecycle !== "retired");
+  const retiredCount = (itemSummaries?.length ?? 0) - (inService?.length ?? 0);
 
   const filterDefinitions = useMemo<FilterDefinition[]>(
     () => [
@@ -96,6 +126,8 @@ export function ItemsManager() {
           ...(locations ?? []).map((location) => ({ value: location._id, label: location.path })),
         ],
       },
+      { id: "lifecycle", label: "Status", options: LIFECYCLE_OPTIONS },
+      { id: "damage", label: "Damage", options: DAMAGE_OPTIONS, single: true },
       { id: "container", label: "Container", options: CONTAINER_OPTIONS, single: true },
       { id: "tag", label: "Asset tag", options: TAG_OPTIONS, single: true },
     ],
@@ -124,7 +156,8 @@ export function ItemsManager() {
   const selectedIds = items.filter((item) => selected.has(item._id)).map((item) => item._id);
   const inContainers = items.filter((item) => item.containedInAssetId).length;
   const unassigned = items.filter((item) => !item.storageLocationId).length;
-  const narrowed = Boolean(search.trim()) || Object.keys(activeFilters(filters)).length > 0;
+  const narrowed =
+    Boolean(search.trim()) || Object.keys(activeFilters(hidesRetired(filters) ? {} : filters)).length > 0;
   const allSelected = items.length > 0 && items.every((item) => selected.has(item._id));
 
   function withClearedSelection<T>(setter: (value: T) => void) {
@@ -134,11 +167,33 @@ export function ItemsManager() {
     };
   }
 
+  async function reinstate(target: LifecycleTarget) {
+    const ok = await confirm({
+      title: `Reinstate ${target.label}?`,
+      description:
+        "It goes back in service. Anything retired along with it that's still packed inside comes back too.",
+      confirmLabel: "Reinstate",
+    });
+    if (!ok) return false;
+    try {
+      const result = await reinstateItem({ id: target._id, includeContents: true });
+      notify.success(
+        result.reinstatedCount > 1
+          ? `Reinstated ${target.label} and ${result.reinstatedCount - 1} inside it.`
+          : `Reinstated ${target.label}.`,
+      );
+      return true;
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Could not reinstate the item."));
+      return false;
+    }
+  }
+
   async function deleteItem(item: { _id: Id<"inventoryItems">; label: string }) {
     const ok = await confirm({
       title: `Delete ${item.label}?`,
       description:
-        "The unit leaves inventory and its public page stops working. A container that still holds anything can't be deleted; move its contents out first.",
+        "Only for records entered by mistake: the unit and its history leave inventory and its public page stops working. For gear that was lost, sold or broken, retire it instead. A container that still holds anything can't be deleted; move its contents out first.",
       destructive: true,
       confirmLabel: "Delete item",
     });
@@ -192,8 +247,11 @@ export function ItemsManager() {
           </>
         }
         meta={
-          itemSummaries ? (
-            <MetaItem icon={PackageIcon}>{plural(itemSummaries.length, "unit")} in inventory</MetaItem>
+          inService ? (
+            <MetaItem icon={PackageIcon}>
+              {plural(inService.length, "unit")} in service
+              {retiredCount ? ` · ${retiredCount.toLocaleString()} retired` : ""}
+            </MetaItem>
           ) : null
         }
       />
@@ -225,6 +283,22 @@ export function ItemsManager() {
           <ListSummary testId="items-summary" order="By asset tag, then serial.">
             {plural(items.length, "item")}
             {status === "CanLoadMore" ? "+" : ""} · {inContainers} inside containers · {unassigned} without a location
+            {hidesRetired(filters) && retiredCount ? (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  className="underline underline-offset-2 hover:text-foreground"
+                  onClick={() => {
+                    const { lifecycle: _hidden, ...rest } = filters;
+                    setFilters(rest);
+                    setSelected(new Set());
+                  }}
+                >
+                  Show {retiredCount.toLocaleString()} retired
+                </button>
+              </>
+            ) : null}
           </ListSummary>
 
           {selectedIds.length ? (
@@ -252,7 +326,7 @@ export function ItemsManager() {
                     size="sm"
                     onClick={() => {
                       setSearch("");
-                      setFilters({});
+                      setFilters(HIDE_RETIRED);
                     }}
                   >
                     Clear search and filters
@@ -289,12 +363,20 @@ export function ItemsManager() {
                 {items.map((item) => {
                   const label = inventoryItemLabel(item);
                   const holds = childCount.get(item._id) ?? 0;
+                  const lifecycle = item.lifecycle ?? "active";
+                  const openDamage = item.openDamageCount ?? 0;
                   return (
                     <ListRow
                       key={item._id}
                       data-testid={`item-row-${item._id}`}
                       onOpen={() => setSelectedId(item._id)}
-                      className={selectedId === item._id ? "bg-muted/40" : undefined}
+                      className={
+                        selectedId === item._id
+                          ? "bg-muted/40"
+                          : lifecycle === "retired"
+                            ? "text-muted-foreground"
+                            : undefined
+                      }
                       leading={
                         <Checkbox
                           aria-label={`Select ${label}`}
@@ -312,7 +394,16 @@ export function ItemsManager() {
                       actions={
                         <RowMenu label={`More for ${label}`}>
                           <DropdownMenuItem onSelect={() => setSelectedId(item._id)}>Open details</DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => setDamageItemId(item._id)}>Report damage</DropdownMenuItem>
+                          {lifecycle !== "retired" ? (
+                            <DropdownMenuItem onSelect={() => setDamageItemId(item._id)}>Report damage</DropdownMenuItem>
+                          ) : null}
+                          {canManage && item.assetId ? (
+                            <DropdownMenuItem
+                              onSelect={() => setRetagTarget({ _id: item._id, assetId: item.assetId! })}
+                            >
+                              Replace tag…
+                            </DropdownMenuItem>
+                          ) : null}
                           {item.assetId ? (
                             <DropdownMenuItem asChild>
                               <a href={`${siteBase}/e/${encodeURIComponent(item.assetId)}`} target="_blank" rel="noreferrer">
@@ -321,6 +412,20 @@ export function ItemsManager() {
                             </DropdownMenuItem>
                           ) : null}
                           <DropdownMenuSeparator />
+                          {canManage ? (
+                            lifecycle === "retired" ? (
+                              <DropdownMenuItem onSelect={() => void reinstate({ _id: item._id, label, holds })}>
+                                Reinstate
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => setRetireTarget({ _id: item._id, label, holds })}
+                              >
+                                Retire…
+                              </DropdownMenuItem>
+                            )
+                          ) : null}
                           <DropdownMenuItem variant="destructive" onSelect={() => void deleteItem({ _id: item._id, label })}>
                             Delete item
                           </DropdownMenuItem>
@@ -333,13 +438,21 @@ export function ItemsManager() {
                         detail={[
                           formatTypeDisplay(item.type ?? { name: "Unknown type", model: "Unknown type" }),
                           item.assetId && item.serialNumber ? `SN ${item.serialNumber}` : null,
-                          item.status,
+                          item.condition,
                         ]
                           .filter(Boolean)
                           .join(" · ")}
                       />
+                      {lifecycle !== "active" ? (
+                        <RowFlag tone={lifecycle === "in_repair" ? "amber" : "neutral"}>
+                          {lifecycleSummary(lifecycle, item.retirement?.reason)}
+                        </RowFlag>
+                      ) : null}
+                      {openDamage > 0 && lifecycle !== "retired" ? (
+                        <RowFlag tone="rose">{openDamage === 1 ? "Open damage" : `${openDamage} open damage`}</RowFlag>
+                      ) : null}
                       <RowCell className="w-48 truncate" align="left" hideBelow="md" muted>
-                        {item.location?.path ?? "No location"}
+                        {lifecycle === "retired" ? "—" : (item.location?.path ?? "No location")}
                       </RowCell>
                       <RowCell className="w-36 truncate" align="left" hideBelow="lg" muted>
                         {item.containedInAsset
@@ -371,7 +484,8 @@ export function ItemsManager() {
         options={{
           types: types ?? [],
           locations: locations ?? [],
-          items: (itemSummaries ?? []).map((item) => ({
+          // Retired units can't hold or be put in anything.
+          items: (inService ?? []).map((item) => ({
             _id: item._id,
             assetId: item.assetId,
             serialNumber: item.serialNumber,
@@ -379,9 +493,17 @@ export function ItemsManager() {
           })),
         }}
         siteBase={siteBase}
-        onReportDamage={(id) => setDamageItemId(id)}
-        onDelete={deleteItem}
+        holds={selectedId ? (childCount.get(selectedId) ?? 0) : 0}
+        actions={{
+          onReportDamage: (id) => setDamageItemId(id),
+          onRetire: setRetireTarget,
+          onReinstate: reinstate,
+          onRetag: setRetagTarget,
+          onDelete: deleteItem,
+        }}
       />
+      <RetireItemDialog target={retireTarget} onOpenChange={(open) => !open && setRetireTarget(null)} />
+      <RetagItemDialog target={retagTarget} onOpenChange={(open) => !open && setRetagTarget(null)} />
       <DamageReportWizard
         open={Boolean(damageItemId)}
         onOpenChange={(open) => {

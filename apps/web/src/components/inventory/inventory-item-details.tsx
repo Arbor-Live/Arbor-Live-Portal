@@ -23,7 +23,7 @@ export type ItemDetailsValues = {
   typeId: string;
   storageLocationId: string;
   containedInAssetId: string;
-  status: string;
+  condition: string;
   notes: string;
 };
 
@@ -243,13 +243,13 @@ export function InventoryItemDetails({
       <BarcodeCameraView camera={containerCamera} idleHint="Scan the container this sits in." />
 
       <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-status`}>Status</Label>
+        <Label htmlFor={`${idPrefix}-condition`}>Condition</Label>
         <Input
-          id={`${idPrefix}-status`}
+          id={`${idPrefix}-condition`}
           type="text"
-          value={values.status}
-          onChange={(event) => onChange({ status: event.target.value })}
-          placeholder="e.g. functional, needs repair"
+          value={values.condition}
+          onChange={(event) => onChange({ condition: event.target.value })}
+          placeholder="e.g. good, scuffed corner"
           disabled={disabled}
         />
       </div>

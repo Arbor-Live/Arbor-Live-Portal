@@ -16,12 +16,15 @@ import {
   CalendarDotsIcon,
   GuitarIcon,
   MagnifyingGlassIcon,
+  PackageIcon,
   ReceiptIcon,
+  WarningIcon,
   type Icon,
 } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { formatDate } from "@/lib/format";
 import { formatEventStatusLabel } from "@/lib/event-status";
+import { lifecycleSummary } from "@/lib/inventory-lifecycle";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { useDashboardNav, type DashboardNavSection } from "@/hooks/use-dashboard-nav";
 import { UserAvatar } from "@/components/account/user-avatar";
@@ -76,6 +79,26 @@ function matchesPage(page: PageEntry, words: string[]) {
   return words.every((word) => haystack.includes(word));
 }
 
+type ActionEntry = { title: string; detail: string; keywords: string; url: string; icon: Icon };
+
+const DAMAGE_QUEUE_URL = "/dashboard/inventory/damage";
+
+/** Shortcuts that start a task, each behind the page it opens on. */
+const ACTIONS: ActionEntry[] = [
+  {
+    title: "Report damage",
+    detail: "Log broken or faulty gear",
+    keywords: "report damage broken faulty gear",
+    url: `${DAMAGE_QUEUE_URL}?new=1`,
+    icon: WarningIcon,
+  },
+];
+
+function matchesAction(action: ActionEntry, words: string[]) {
+  const haystack = `${action.title} ${action.keywords}`.toLowerCase();
+  return words.every((word) => haystack.includes(word));
+}
+
 const noSubscribe = () => () => {};
 
 /** The shortcut hint: ⌘K on Apple devices, Ctrl K elsewhere (⌘ while server-rendering). */
@@ -89,7 +112,7 @@ function useIsMac() {
 
 /**
  * ⌘K / Ctrl+K: jump to any dashboard page the viewer can open, or find an
- * event, invoice, person or artist by name.
+ * event, invoice, person, artist or inventory item by name.
  */
 export function CommandPalette() {
   const router = useRouter();
@@ -130,6 +153,14 @@ export function CommandPalette() {
 
   const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const matchingPages = words.length ? pages.filter((page) => matchesPage(page, words)) : pages;
+  // An action shows only to viewers whose sidebar links its page.
+  const matchingActions =
+    isArborContext && !pending
+      ? ACTIONS.filter(
+          (action) =>
+            pages.some((page) => page.url === DAMAGE_QUEUE_URL) && (!words.length || matchesAction(action, words)),
+        )
+      : [];
   // Skeleton rows stand in while a query settles, so Enter never opens a
   // result from the previous query.
   const shown = searching && !pending ? results : undefined;
@@ -194,7 +225,7 @@ export function CommandPalette() {
           if (!next) setSearch("");
         }}
         title="Search"
-        description="Jump to a page, or find an event, invoice, person or artist."
+        description="Jump to a page, or find an event, invoice, person, artist or piece of gear."
         className="sm:max-w-2xl"
       >
         {/* Results already match on the server; cmdk only orders keyboard focus. */}
@@ -203,7 +234,7 @@ export function CommandPalette() {
             value={search}
             onValueChange={setSearch}
             placeholder={
-              isArborContext ? "Search events, invoices, people, pages…" : "Search pages…"
+              isArborContext ? "Search events, invoices, people, gear, pages…" : "Search pages…"
             }
           >
             <Kbd className="hidden sm:inline-flex">esc</Kbd>
@@ -219,7 +250,7 @@ export function CommandPalette() {
                 <MagnifyingGlassIcon className="size-6 text-muted-foreground" />
                 <span className="text-sm">No results for “{search.trim()}”</span>
                 <span className="text-xs text-muted-foreground">
-                  Try an event name, an invoice number, or a person.
+                  Try an event name, an invoice number, a person, or an asset ID.
                 </span>
               </CommandEmpty>
             )}
@@ -293,6 +324,40 @@ export function CommandPalette() {
                     leading={<IconTile icon={GuitarIcon} />}
                     title={artist.name}
                     detail="Artist directory"
+                  />
+                ))}
+              </CommandGroup>
+            ) : null}
+            {shown?.items.length ? (
+              <CommandGroup heading="Inventory">
+                {shown.items.map((item) => (
+                  <PaletteItem
+                    key={item._id}
+                    value={`item-${item._id}`}
+                    onSelect={() => go(`/dashboard/inventory/items?item=${item._id}`)}
+                    leading={<IconTile icon={PackageIcon} />}
+                    title={item.assetId ?? item.serialNumber ?? "No ID"}
+                    detail={[
+                      item.typeName,
+                      lifecycleSummary(item.lifecycle, item.retirementReason),
+                      item.openDamageCount > 0 ? `${item.openDamageCount} open damage` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  />
+                ))}
+              </CommandGroup>
+            ) : null}
+            {matchingActions.length ? (
+              <CommandGroup heading="Actions">
+                {matchingActions.map((action) => (
+                  <PaletteItem
+                    key={action.url}
+                    value={`action-${action.url}`}
+                    onSelect={() => go(action.url)}
+                    leading={<IconTile icon={action.icon} compact={!words.length} />}
+                    title={action.title}
+                    detail={action.detail}
                   />
                 ))}
               </CommandGroup>

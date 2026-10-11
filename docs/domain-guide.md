@@ -713,11 +713,37 @@ Update `YEARS` there when the Registrar publishes new dates.
   (`rental_outbound_packed`, `rental_return_processed`); series-linked invoices
   count. Completing without a client email still succeeds but surfaces a warning
   and a resend action once an invoice email exists.
+- **Item lifecycle** (`inventoryLifecycle.ts`, `lib/inventoryLifecycle.ts`):
+  `inventoryItems.lifecycle` is `active` (absent on the row means active),
+  `in_repair` (owned but can't go out) or `retired` (left service, details on
+  `retirement`). The old free-text `status` is deprecated; the free-text field
+  is now `condition` ("Condition" in the editor). Retirement reasons: `lost`,
+  `stolen`, `rma` (may come back), `decommissioned`, `beyond_repair`, `sold`,
+  `donated`, `parted_out`, `disposed`, `duplicate` (needs the real item),
+  `other` (needs a note). Retiring a case can take its contents with it (they
+  stay nested so reinstating the case brings them back) or leave them in
+  service. Any retirement can be reinstated. Retiring resolves the unit's open
+  damage reports, and outbound rental scans refuse retired units. Every change
+  lands in `inventoryItemHistory`.
+- **Retagging** (`inventoryLifecycle.retag`) gives a unit a new `assetId` and
+  keeps the old one in `inventoryAssetIdAliases`: scans and `/e/{oldTag}` still
+  resolve to the unit, and nobody else can take the old tag.
+- **Lists and search**: the items list hides retired units by default (a Status
+  chip of "is not Retired"; the header counts units in service) and has a
+  Damage chip driven by `openDamageCount`. `searchText` (tags current and old,
+  zero-padded `0041` of short numeric tags, serial, type words; see
+  `buildItemSearchText`) backs
+  the item search index, so ⌘K finds items by any tag, serial or type, with
+  retired units listed last.
 - Damage reports (`damageReports.ts`): any arbor_internal crew can create
   reports (scope for containers, operability, severity, photo, optional event).
-  Operations/admin triage at `/dashboard/inventory/damage`: rows default to a
-  Status chip of Open + In progress (`damageReports.list` `statuses`, newest 500
-  per status merged), and `?report=<id>` opens the report's side panel.
+  Each open or in-progress report counts in the item's `openDamageCount`, and a
+  `needs_repair` report puts the unit `in_repair`. Operations/admin triage at
+  `/dashboard/inventory/damage`: rows default to a Status chip of Open + In
+  progress (`damageReports.list` `statuses`, newest 500 per status merged), and
+  `?report=<id>` opens the report's side panel, which links back to the item.
+  **Retire (beyond repair)** (`damageReports.decommission`) retires the unit as
+  `beyond_repair` linked to the report and resolves its open reports.
 - **Borrow requests** (`equipmentBorrowRequests.ts`): crew submit an
   `ALBRW-`-numbered request for equipment by type or package + quantity, with a
   purpose and pickup/return window (`/dashboard/inventory/borrow-requests`).
