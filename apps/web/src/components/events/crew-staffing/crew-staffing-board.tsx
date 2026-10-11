@@ -24,6 +24,7 @@ import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { UserHoverCard } from "@/components/users/user-hover-card";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
+import { AssignTraineeDialog } from "@/components/events/crew-staffing/assign-trainee-dialog";
 import { useCrewHoursWindows } from "@/hooks/use-crew-hours-windows";
 import {
   annotateOptionsForWindow,
@@ -96,6 +97,7 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
   readOnly = false,
   onDeleteUnlinked,
   openSlotNote,
+  canAssignTrainees = false,
 }: {
   eventId: Id<"events">;
   sectionBlocks: TimelineBlockDraft[];
@@ -109,7 +111,10 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
   onDeleteUnlinked?: () => void;
   /** Extra line under open slots (the invoice shows the billed rate). */
   openSlotNote?: string;
+  /** Staff admins assign trainees right here; otherwise it links to Crew applications. */
+  canAssignTrainees?: boolean;
 }) {
+  const [assignTraineeOpen, setAssignTraineeOpen] = useState(false);
   const summary = useQuery(
     api.eventCrewAvailability.getSummaryForEvent,
     askAvailability ? { eventId } : "skip",
@@ -191,6 +196,10 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
       ),
     };
   }, [shifts, blockKeys]);
+  const traineeApplicationIds = useMemo(
+    () => new Set(trainees.flatMap(({ shift }) => (shift.crewApplicationId ? [shift.crewApplicationId] : []))),
+    [trainees],
+  );
   const backupUserIds = useMemo(
     () =>
       new Set(
@@ -353,7 +362,7 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
         ))
       )}
 
-      {trainees.length > 0 ? (
+      {trainees.length > 0 || (canAssignTrainees && !readOnly) ? (
         <section className="border" data-testid="crew-trainees">
           <header className="flex flex-wrap items-center gap-2 border-b bg-muted/20 px-3 py-2">
             <GraduationCapIcon className="size-4 text-muted-foreground" aria-hidden />
@@ -361,10 +370,26 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
             <p className="text-xs text-muted-foreground">
               Shadowing only. They don&apos;t fill slots and aren&apos;t paid or billed.
             </p>
-            <Button asChild variant="ghost" size="sm" className="ml-auto">
-              <Link href="/dashboard/users/crew-applications">Assign trainees</Link>
-            </Button>
+            {!canAssignTrainees ? (
+              <Button asChild variant="ghost" size="sm" className="ml-auto">
+                <Link href="/dashboard/users/crew-applications">Assign trainees</Link>
+              </Button>
+            ) : !readOnly ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="ml-auto"
+                onClick={() => setAssignTraineeOpen(true)}
+              >
+                <PlusIcon />
+                Assign trainee
+              </Button>
+            ) : null}
           </header>
+          {trainees.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-muted-foreground">No trainees on this event.</p>
+          ) : null}
           <ul className="divide-y">
             {trainees.map(({ shift, index }) => {
               const block = sectionBlocks.find((candidate) => shiftBelongsToBlock(shift, candidate));
@@ -396,6 +421,16 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
             })}
           </ul>
         </section>
+      ) : null}
+
+      {canAssignTrainees && !readOnly ? (
+        <AssignTraineeDialog
+          open={assignTraineeOpen}
+          onOpenChange={setAssignTraineeOpen}
+          eventId={eventId}
+          staffOptions={userSelectOptions}
+          assignedApplicationIds={traineeApplicationIds}
+        />
       ) : null}
 
       {unlinked.length > 0 ? (

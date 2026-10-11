@@ -183,14 +183,22 @@ function OutreachStepper({
 /** Turns the form into mutation args; throws a readable error when something is missing. */
 type SubmitHandler<T> = (getArgs: () => T) => void;
 
-function TraineeAssignForm({
+/**
+ * Where and when a trainee shadows. With `fixedEventId` (assigning from the
+ * event page) the event picker is hidden.
+ */
+export function TraineeAssignForm({
   staffOptions,
   onSubmit,
+  fixedEventId,
+  formId = DECIDE_FORM_ID,
 }: {
   staffOptions: UserSelectOption[];
   onSubmit: SubmitHandler<TraineeAssignArgs>;
+  fixedEventId?: Id<"events">;
+  formId?: string;
 }) {
-  const [eventId, setEventId] = useState("");
+  const [eventId, setEventId] = useState<string>(fixedEventId ?? "");
   const [presenceMode, setPresenceMode] = useState<PresenceMode>("entire_event");
   const [scheduleBlockId, setScheduleBlockId] = useState("");
   const [startsAtInput, setStartsAtInput] = useState("");
@@ -266,7 +274,7 @@ function TraineeAssignForm({
 
   return (
     <form
-      id={DECIDE_FORM_ID}
+      id={formId}
       className="space-y-3"
       data-testid="crew-application-trainee-form"
       onSubmit={(event) => {
@@ -280,25 +288,27 @@ function TraineeAssignForm({
         submitOrFix();
       }}
     >
-      <div className="space-y-2">
-        <Label>Training event</Label>
-        <EventSelect
-          value={eventId}
-          onChange={(value) => {
-            setEventId(value);
-            // A click queued for the previous event must not submit this one.
-            setSubmitQueued(false);
-            setPresenceMode("entire_event");
-            setScheduleBlockId("");
-            setStartsAtInput("");
-            setEndsAtInput("");
-            setCallTimeOverride(null);
-          }}
-        />
-        <p className="text-xs text-muted-foreground">
-          They get an intro email and a calendar invite. Trainees don&apos;t get a portal login.
-        </p>
-      </div>
+      {fixedEventId ? null : (
+        <div className="space-y-2">
+          <Label>Training event</Label>
+          <EventSelect
+            value={eventId}
+            onChange={(value) => {
+              setEventId(value);
+              // A click queued for the previous event must not submit this one.
+              setSubmitQueued(false);
+              setPresenceMode("entire_event");
+              setScheduleBlockId("");
+              setStartsAtInput("");
+              setEndsAtInput("");
+              setCallTimeOverride(null);
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            They get an intro email and a calendar invite. Trainees don&apos;t get a portal login.
+          </p>
+        </div>
+      )}
 
       {eventId && readiness ? (
         <>

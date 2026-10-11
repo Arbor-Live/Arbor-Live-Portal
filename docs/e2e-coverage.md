@@ -163,7 +163,7 @@ the URL looks like cloud.
 | Surface | Status | Spec / notes |
 |---------|--------|--------------|
 | Public `/crew/apply` → admin list | Covered | `crew/crew-application.spec.ts` |
-| Admin outreach / trainee / convert / turn away | Covered | `crew/crew-application-triage.spec.ts` (Batch 4) |
+| Admin outreach / trainee / convert / turn away | Covered | `crew/crew-application-triage.spec.ts` (Batch 4; trainee assign from the event crew board too) |
 
 ### Bands and payouts
 

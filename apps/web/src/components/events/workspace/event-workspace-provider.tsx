@@ -12,6 +12,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { api, type Id } from "@/lib/convex-api";
 import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -24,6 +25,7 @@ import {
   attachShiftsToPersistedBlocks,
   blockDraftFromRow,
   mergeServerActBlocks,
+  mergeServerTraineeShifts,
   resolveShiftScheduleBlockId,
   shiftBelongsToBlock,
   sortScheduleBlocksByTime,
@@ -61,6 +63,26 @@ import { isTraineeShift } from "@/lib/crew-shift-kinds";
 import { isSectionBlockType } from "@/lib/schedule-block-types";
 
 type SavedSchedule = { blocks: TimelineBlockDraft[]; shifts: ShiftDraft[] };
+
+type ShiftRow = NonNullable<FunctionReturnType<typeof api.events.get>>["shifts"][number];
+
+function shiftDraftFromRow(row: ShiftRow): ShiftDraft {
+  return {
+    id: row._id,
+    scheduleBlockId: row.scheduleBlockId,
+    scheduleBlockRef: row.scheduleBlockId,
+    expenseReportId: row.expenseReportId,
+    role: row.role,
+    userId: row.userId ?? undefined,
+    crewApplicationId: row.crewApplicationId ?? undefined,
+    personName: row.personName ?? "",
+    startsAt: toLocalDateTimeInput(row.startsAt),
+    endsAt: toLocalDateTimeInput(row.endsAt),
+    postedToExpense: row.postedToExpense,
+    notes: row.notes ?? "",
+    timesOverridden: row.timesOverridden === true,
+  };
+}
 
 /** Module-level so it's one stable reference for the memoized crew board. */
 function getBlockRef(block: TimelineBlockDraft) {
@@ -143,24 +165,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     setDraft(nextDraft);
     setBaseline(nextDraft);
     const nextBlocks = sortScheduleBlocksByTime(eventData.blocks.map((row) => blockDraftFromRow(row)));
-    const nextShifts = applyShiftTimesOverrideFlags(
-      eventData.shifts.map((row) => ({
-        id: row._id,
-        scheduleBlockId: row.scheduleBlockId,
-        scheduleBlockRef: row.scheduleBlockId,
-        expenseReportId: row.expenseReportId,
-        role: row.role,
-        userId: row.userId ?? undefined,
-        crewApplicationId: row.crewApplicationId ?? undefined,
-        personName: row.personName ?? "",
-        startsAt: toLocalDateTimeInput(row.startsAt),
-        endsAt: toLocalDateTimeInput(row.endsAt),
-        postedToExpense: row.postedToExpense,
-        notes: row.notes ?? "",
-        timesOverridden: row.timesOverridden === true,
-      })),
-      nextBlocks,
-    );
+    const nextShifts = applyShiftTimesOverrideFlags(eventData.shifts.map(shiftDraftFromRow), nextBlocks);
     setBlocks(nextBlocks);
     setShifts(nextShifts);
     setScheduleBaseline(JSON.stringify({ blocks: nextBlocks, shifts: nextShifts }));
@@ -212,6 +217,26 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     if (!merged) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from the Convex subscription; converges once the baseline matches
     setBlocks(merged.state.blocks);
+    setShifts(merged.state.shifts);
+    setScheduleBaseline(JSON.stringify(merged.baseline));
+  }, [eventData, scheduleEventId, hydrationToken, scheduleBaseline, saveStatus, blocks, shifts]);
+
+  useEffect(() => {
+    if (!eventData?.event || scheduleEventId !== `${eventData.event._id}:${hydrationToken}`) return;
+    // Trainees are assigned from this page (or Crew applications) by their own
+    // mutation, which writes straight to the server. Pull them into the draft,
+    // or the next schedule save would delete them.
+    if (!scheduleBaseline || saveStatus === "saving") return;
+    const merged = mergeServerTraineeShifts(
+      { blocks, shifts },
+      JSON.parse(scheduleBaseline) as SavedSchedule,
+      applyShiftTimesOverrideFlags(
+        eventData.shifts.filter((row) => isTraineeShift(row)).map(shiftDraftFromRow),
+        blocks,
+      ),
+    );
+    if (!merged) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from the Convex subscription; converges once the baseline matches
     setShifts(merged.state.shifts);
     setScheduleBaseline(JSON.stringify(merged.baseline));
   }, [eventData, scheduleEventId, hydrationToken, scheduleBaseline, saveStatus, blocks, shifts]);
