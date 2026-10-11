@@ -32,7 +32,12 @@ test.describe("staff payment proof verify", () => {
   });
 
   test("the old Payments URL lands on the Payments tab", async ({ page }) => {
-    await page.goto("/dashboard/ops-center/payments");
+    // This URL is a redirect hop (it server-redirects onto the Payments tab,
+    // and pre-rename financial-hub URLs 308 into the same chain), so `goto`'s
+    // own wait settles whichever document answered first. Start the
+    // navigation and let toHaveURL wait for the FINAL url instead — the tab
+    // content can only render there.
+    await page.goto("/dashboard/ops-center/payments", { waitUntil: "commit" });
     await expect(page).toHaveURL(/\/dashboard\/ops-center\/invoices\/payments/, { timeout: 30_000 });
     await expect(page.getByTestId("payments-board")).toBeVisible({ timeout: 30_000 });
   });
