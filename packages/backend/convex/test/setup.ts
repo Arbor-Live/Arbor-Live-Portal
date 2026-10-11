@@ -1,4 +1,3 @@
-/// <reference types="vite/client" />
 import {
   convexTest,
   type TestConvexForDataModel,
@@ -8,6 +7,12 @@ import { components } from "../_generated/api";
 import type { DataModel, Id } from "../_generated/dataModel";
 import betterAuthSchema from "../betterAuth/schema";
 import schema from "../schema";
+
+declare global {
+  interface ImportMeta {
+    glob(pattern: string): Record<string, () => Promise<unknown>>;
+  }
+}
 
 const modules = import.meta.glob("../**/*.ts");
 const betterAuthModules = import.meta.glob("../betterAuth/**/*.ts");
