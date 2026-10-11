@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { motion, useReducedMotion, type Variants } from "framer-motion";
+import { motion, useReducedMotion, type Variants } from "motion/react";
 
 export const landingSpring = { type: "spring" as const, stiffness: 380, damping: 36 };
 export const landingSpringBouncy = { type: "spring" as const, stiffness: 420, damping: 22 };
