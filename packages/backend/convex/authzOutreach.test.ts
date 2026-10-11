@@ -2,6 +2,7 @@
 import { expect, test } from "vitest";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import type { UserVertical } from "./lib/userVerticals";
 import {
   addMembership,
   asUser,
@@ -9,24 +10,17 @@ import {
   createUser,
   makeTest,
   setActiveOrg,
+  setVerticals,
   type Test,
 } from "./test/setup";
 
-async function arborUserWithVerticals(verticals: Array<"Operations" | "Crew">) {
+async function arborUserWithVerticals(verticals: UserVertical[]) {
   const t = makeTest();
   const arbor = await createOrg(t, { type: "arbor_internal" });
   const user = await createUser(t);
   await addMembership(t, user._id, arbor.organizationId, "member", true);
   await setActiveOrg(t, user._id, arbor.organizationId);
-  const now = Date.now();
-  await t.run(async (ctx) => {
-    await ctx.db.insert("userAdminProfiles", {
-      userId: user._id,
-      verticals,
-      createdAt: now,
-      updatedAt: now,
-    });
-  });
+  await setVerticals(t, user._id, verticals);
   return { t, user };
 }
 
