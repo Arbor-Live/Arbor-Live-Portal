@@ -6,6 +6,7 @@ import {
 import { components } from "../_generated/api";
 import type { DataModel, Id } from "../_generated/dataModel";
 import betterAuthSchema from "../betterAuth/schema";
+import type { UserVertical } from "../lib/userVerticals";
 import schema from "../schema";
 
 declare global {
@@ -148,4 +149,28 @@ export async function setActiveOrg(
 
 export function asUser(t: Test, user: TestUser): Test {
   return t.withIdentity({ subject: user._id, email: user.email });
+}
+
+export async function setVerticals(
+  t: Test,
+  userId: string,
+  verticals: UserVertical[],
+): Promise<void> {
+  const now = Date.now();
+  await t.run(async (ctx) => {
+    const existing = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, { verticals, updatedAt: now });
+    } else {
+      await ctx.db.insert("userAdminProfiles", {
+        userId,
+        verticals,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  });
 }
