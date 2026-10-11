@@ -222,24 +222,17 @@ function ItemSheetBody({
                   Reinstate
                 </Button>
               ) : null
-            ) : (
-              <>
-                <Button type="button" variant="ghost" size="sm" onClick={() => actions.onReportDamage(item._id)}>
-                  Report damage
-                </Button>
-                {canManage ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive"
-                    onClick={() => actions.onRetire(target)}
-                  >
-                    Retire…
-                  </Button>
-                ) : null}
-              </>
-            )}
+            ) : canManage ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-destructive"
+                onClick={() => actions.onRetire(target)}
+              >
+                Retire…
+              </Button>
+            ) : null}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${label}`}>
