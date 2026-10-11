@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import type { QuestionnaireItemDefinition } from "@shadcn/react/questionnaire";
@@ -43,7 +43,11 @@ export function useCrewOnboardingForm() {
     void ensureOnboarding({});
   }, [ensureOnboarding]);
 
-  useEffect(() => {
+  // Hydrate before paint (same as the artist wizard): the loading gate lifts
+  // in the commit that schedules this, so a passive effect leaves the profile
+  // fields typeable before they are populated — a fill in that window gets
+  // overwritten by this snapshot and the step then refuses to advance.
+  useLayoutEffect(() => {
     if (!onboarding || hydratedRef.current) return;
     hydratedRef.current = true;
     setForm({
