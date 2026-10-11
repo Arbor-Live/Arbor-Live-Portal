@@ -13,7 +13,7 @@ import {
   Row,
   Section,
   Text,
-} from "@react-email/components";
+} from "react-email";
 import type { CSSProperties, ReactNode } from "react";
 import {
   ARBOR_CONTACT_EMAIL,
@@ -52,7 +52,7 @@ export function EmailLayout({
         <Container className={DARK.surface} style={containerStyle}>
           <BrandMasthead accentColor={accentColor} />
 
-          <Section className={GUTTER_CLASS} style={contentSectionStyle}>
+          <Section tdClassName={GUTTER_CLASS} style={contentSectionStyle}>
             <Heading className={DARK.text} style={headingStyle}>{heading}</Heading>
             {children}
           </Section>
@@ -194,7 +194,7 @@ export function BrandFooter({
   suffix?: string;
 }) {
   return (
-    <Section className={GUTTER_CLASS} style={footerSectionStyle}>
+    <Section tdClassName={GUTTER_CLASS} style={footerSectionStyle}>
       <Text className={DARK.muted} style={footerTaglineStyle}>{tagline}</Text>
       <Text className={DARK.muted} style={footerLineStyle}>
         {links.map((link, index) => (

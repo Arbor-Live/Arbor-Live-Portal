@@ -10,7 +10,7 @@ import {
   Row,
   Section,
   Text,
-} from "@react-email/components";
+} from "react-email";
 import type { CSSProperties } from "react";
 import { BrandFooter, BrandHead, BrandMasthead, DARK, GUTTER_CLASS } from "./_components/email-layout";
 import { brand, eyebrowText } from "./_components/brand-theme";
@@ -43,7 +43,7 @@ export function ThisWeekAtArborEmail({
         <Container className={DARK.surface} style={containerStyle}>
           <BrandMasthead />
 
-          <Section className={GUTTER_CLASS} style={heroStyle}>
+          <Section tdClassName={GUTTER_CLASS} style={heroStyle}>
             <Text className={DARK.accent} style={kickerStyle}>This week at Arbor</Text>
             <Heading className={DARK.text} style={weekLabelStyle}>{weekLabel}</Heading>
             <Text className={DARK.muted} style={introStyle}>
@@ -51,13 +51,13 @@ export function ThisWeekAtArborEmail({
             </Text>
           </Section>
 
-          <Section className={GUTTER_CLASS} style={listStyle}>
+          <Section tdClassName={GUTTER_CLASS} style={listStyle}>
             {events.map((event, index) => (
               <EventCard key={`${event.eventUrl}-${index}`} event={event} />
             ))}
           </Section>
 
-          <Section className={GUTTER_CLASS} style={ctaSectionStyle}>
+          <Section tdClassName={GUTTER_CLASS} style={ctaSectionStyle}>
             <Row>
               <Column align="left">
                 <Link href={allEventsUrl} style={ctaLinkStyle}>
