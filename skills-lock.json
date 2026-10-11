@@ -227,7 +227,7 @@
       "source": "vercel-labs/vgpu",
       "sourceType": "github",
       "skillPath": "skills/vgpu/SKILL.md",
-      "computedHash": "9c9731c17bcbc0696a2f0c4a4e88bd7fe53f2981ea0153630c321e6b2e60dad2"
+      "computedHash": "1fec632b1dc4257c9dca23fd51a82d97bc52a5521215caf03a31e3a97f2ec2d8"
     },
     "web-design-guidelines": {
       "source": "vercel-labs/agent-skills",
