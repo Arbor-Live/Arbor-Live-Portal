@@ -72,9 +72,12 @@ test.describe.serial("item lifecycle", () => {
     await expect(dialog).toHaveCount(0);
     await expect(sheet.getByText(`Old tags, still scannable: ${relabelTag}`)).toBeVisible({ timeout: 15_000 });
 
-    // Scan the old sticker: the panel opens on the relabeled unit.
+    // Scan the old sticker: the panel opens on the relabeled unit. Close the
+    // panel first; its own scan buttons ("Scan with camera", …) also match
+    // "Scan", and the page's Scan button sits behind it.
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Scan" }).click();
+    await expect(sheet).toBeHidden({ timeout: 15_000 });
+    await page.getByRole("button", { name: "Scan", exact: true }).click();
     const scan = page.locator("#asset-scan-input");
     await scan.fill(relabelTag);
     await scan.press("Enter");
