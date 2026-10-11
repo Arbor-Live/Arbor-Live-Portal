@@ -22,7 +22,7 @@ export const inventoryItemSchema = z
     typeId: z.string().min(1, "Type is required"),
     storageLocationId: z.string().optional(),
     containedInAssetId: z.string().optional(),
-    status: z.string().optional(),
+    condition: z.string().optional(),
     notes: z.string().optional(),
   })
   .refine((data) => Boolean(data.assetId?.trim() || data.serialNumber?.trim()), {

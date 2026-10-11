@@ -4,7 +4,7 @@ import { StatusPill } from "@/components/page-header";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { ListRow } from "@/components/list-row";
-import { RowCell, RowMenu, RowText } from "@/components/list-page";
+import { RowCell, RowFlag, RowMenu, RowText } from "@/components/list-page";
 import { formatUsdOptional } from "@/lib/format";
 import { formatTypeDisplay } from "./package-section-utils";
 import {
@@ -13,11 +13,13 @@ import {
   TYPE_VISIBILITY_TONES,
   typeVisibility,
   type InventoryTypeRow,
+  type TypeUnitRollup,
 } from "./type-form";
 
 /**
  * The types list: one row per model, opening the side panel. Checkboxes feed
- * the bulk bar; everything else about a row lives in its `⋯` menu.
+ * the bulk bar; everything else about a row lives in its `⋯` menu. Units are
+ * the ones in inventory, flagged when some have open damage or are in repair.
  */
 export function TypesTable({
   rows,
@@ -35,7 +37,7 @@ export function TypesTable({
   categoryLabels: Map<string, string>;
   capabilityLabels: Map<string, string>;
   /** Undefined while the counts load. */
-  unitCounts: Map<string, number> | undefined;
+  unitCounts: Map<string, TypeUnitRollup> | undefined;
   /** The count scan hit its limit: counts are floors, and a missing type isn't known to be empty. */
   unitsTruncated: boolean;
   selected: Set<string>;
@@ -71,7 +73,9 @@ export function TypesTable({
       <ul className="divide-y [&>li]:border-0">
         {rows.map((row) => {
           const visibility = typeVisibility(row);
-          const units = unitCounts?.get(row._id) ?? 0;
+          const rollup = unitCounts?.get(row._id);
+          const units = rollup?.units ?? 0;
+          const floor = unitsTruncated ? "+" : "";
           const capabilities = row.capabilities.map((key) => capabilityLabels.get(key) ?? key);
           return (
             <ListRow
@@ -111,6 +115,18 @@ export function TypesTable({
                 title={formatTypeDisplay(row)}
                 detail={capabilities.length ? capabilities.join(" · ") : "No capabilities"}
               />
+              {rollup?.damaged ? (
+                <RowFlag tone="rose" className="hidden sm:inline">
+                  {rollup.damaged}
+                  {floor} damaged
+                </RowFlag>
+              ) : null}
+              {rollup?.inRepair ? (
+                <RowFlag className="hidden sm:inline">
+                  {rollup.inRepair}
+                  {floor} in repair
+                </RowFlag>
+              ) : null}
               <RowCell className="w-20" hideBelow="md">
                 {formatUsdOptional(row.nonSubsidizedRentalPriceUsd ?? row.rentalPriceUsd)}
               </RowCell>

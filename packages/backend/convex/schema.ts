@@ -8,6 +8,12 @@ import { eventSeriesPositionTemplateValue } from "./lib/eventSeriesPositions";
 import { artistNeedActTypeValue, artistNeedTypeValue } from "./lib/artistNeedTypes";
 import { eventGroupKindValue } from "./lib/eventGroupKind";
 import { emailTemplateValue, notificationTemplateValue } from "./lib/emailTemplateValue";
+import {
+  inventoryLifecycleValue,
+  itemHistoryKindValue,
+  retirementReasonValue,
+  retirementValue,
+} from "./lib/inventoryLifecycle";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -518,7 +524,18 @@ export default defineSchema({
     typeId: v.id("inventoryTypes"),
     storageLocationId: v.optional(v.id("storageLocations")),
     containedInAssetId: v.optional(v.id("inventoryItems")),
+    /** Legacy free-text status; `migrateInventoryItemStatus` moves it to `lifecycle` / `condition`. */
     status: v.optional(v.string()),
+    /** Free-text condition note ("scuffed corner, works"). */
+    condition: v.optional(v.string()),
+    /** Absent means `active`. */
+    lifecycle: v.optional(inventoryLifecycleValue),
+    /** Set while `lifecycle` is `retired`. */
+    retirement: v.optional(retirementValue),
+    /** Open + in-progress damage reports on this unit, kept by `damageReports`. */
+    openDamageCount: v.optional(v.number()),
+    /** Tags (current and previous), serial and type words, for the search index. */
+    searchText: v.optional(v.string()),
     notes: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -526,7 +543,33 @@ export default defineSchema({
     .index("by_assetId", ["assetId"])
     .index("by_typeId", ["typeId"])
     .index("by_storageLocationId", ["storageLocationId"])
-    .index("by_containedInAssetId", ["containedInAssetId"]),
+    .index("by_containedInAssetId", ["containedInAssetId"])
+    .searchIndex("search_searchText", { searchField: "searchText" }),
+
+  /**
+   * A tag an item used to carry before it was relabeled. Scans and the public
+   * page still resolve it to the item, and no other item may take it.
+   */
+  inventoryAssetIdAliases: defineTable({
+    assetId: v.string(),
+    inventoryItemId: v.id("inventoryItems"),
+    createdAt: v.number(),
+  })
+    .index("by_assetId", ["assetId"])
+    .index("by_inventoryItemId", ["inventoryItemId"]),
+
+  /** Lifecycle changes on an item: retired, reinstated, retagged, into and out of repair. */
+  inventoryItemHistory: defineTable({
+    inventoryItemId: v.id("inventoryItems"),
+    kind: itemHistoryKindValue,
+    reason: v.optional(retirementReasonValue),
+    fromAssetId: v.optional(v.string()),
+    toAssetId: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    damageReportId: v.optional(v.id("damageReports")),
+    actorUserId: v.string(),
+    at: v.number(),
+  }).index("by_inventoryItemId_and_at", ["inventoryItemId", "at"]),
 
   inventoryPackages: defineTable({
     name: v.string(),

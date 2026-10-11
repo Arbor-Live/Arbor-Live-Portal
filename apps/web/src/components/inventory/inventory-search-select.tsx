@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { api, type Id } from "@/lib/convex-api";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
+import { lifecycleSummary } from "@/lib/inventory-lifecycle";
 import {
   SearchableSelect,
   type SearchableSelectOption,
@@ -178,6 +180,83 @@ export function InventoryPackageSearchSelect({
       onQueryChange={setQuery}
       minQueryLength={MIN_QUERY_CHARS}
       searchHint={`Type at least ${MIN_QUERY_CHARS} characters to search`}
+      searching={canSearch && searchRows === undefined}
+    />
+  );
+}
+
+export type InventoryItemSearchResult = FunctionReturnType<typeof api.inventoryItems.search>[number];
+
+function itemOption(row: InventoryItemSearchResult): SearchableSelectOption {
+  const state = lifecycleSummary(row.lifecycle, row.retirementReason);
+  return {
+    value: row._id,
+    label: row.assetId ?? row.serialNumber ?? "No ID",
+    description: [
+      row.manufacturer ? `${row.manufacturer} ${row.typeName}` : row.typeName,
+      row.assetId && row.serialNumber ? `SN ${row.serialNumber}` : null,
+      state,
+      row.openDamageCount ? `${row.openDamageCount} open damage` : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+  };
+}
+
+/**
+ * Find one unit by tag (current or old), serial, link or type words. Server
+ * search, so it reaches every item, not just a loaded page.
+ */
+export function InventoryItemSearchSelect({
+  id,
+  value,
+  onChange,
+  includeRetired = false,
+  excludeId,
+  emptyLabel = "Select an item",
+  placeholder = "Search tag, serial or type…",
+}: {
+  id?: string;
+  value: string;
+  onChange: (value: string, option: InventoryItemSearchResult | null) => void;
+  includeRetired?: boolean;
+  excludeId?: string;
+  emptyLabel?: string;
+  placeholder?: string;
+}) {
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(query, DEBOUNCE_MS);
+  const canSearch = debouncedQuery.trim().length >= MIN_QUERY_CHARS;
+
+  const selected = useQuery(
+    api.inventoryItems.getSearchResult,
+    value ? { id: value as Id<"inventoryItems"> } : "skip",
+  );
+  const searchRows = useQuery(
+    api.inventoryItems.search,
+    canSearch ? { search: debouncedQuery.trim(), includeRetired } : "skip",
+  );
+
+  const rowById = useMemo(() => {
+    const map = new Map<string, InventoryItemSearchResult>();
+    if (selected) map.set(selected._id, selected);
+    for (const row of searchRows ?? []) {
+      if (row._id !== excludeId) map.set(row._id, row);
+    }
+    return map;
+  }, [excludeId, searchRows, selected]);
+
+  return (
+    <SearchableSelect
+      id={id}
+      value={value}
+      onChange={(next) => onChange(next, rowById.get(next) ?? null)}
+      options={[...rowById.values()].map(itemOption)}
+      placeholder={placeholder}
+      emptyLabel={emptyLabel}
+      onQueryChange={setQuery}
+      minQueryLength={MIN_QUERY_CHARS}
+      searchHint={`Type at least ${MIN_QUERY_CHARS} characters of a tag, serial or type`}
       searching={canSearch && searchRows === undefined}
     />
   );

@@ -27,6 +27,7 @@ import { syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
 import { ensureActPosition } from "./lib/actPositions";
 import { artistTypesOf } from "./lib/artistNeedTypes";
 import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
+import { buildItemSearchText, listPreviousAssetIds } from "./lib/inventoryLifecycle";
 
 /**
  * Official @convex-dev/migrations runner.
@@ -828,6 +829,48 @@ export const keepPaymentOpenForApprovedQuotes = migrations.define({
 });
 
 /**
+ * Inventory lifecycle: the free-text `status` becomes `lifecycle` (the values
+ * damage reports wrote) or a `condition` note (anything typed or imported),
+ * and every item gets its open-damage count and search text.
+ */
+export const migrateInventoryItemLifecycle = migrations.define({
+  table: "inventoryItems",
+  migrateOne: async (ctx, item) => {
+    const patch: Partial<Doc<"inventoryItems">> = {};
+    const status = item.status?.trim();
+    if (item.status !== undefined) {
+      patch.status = undefined;
+      const key = status?.toLowerCase().replace(/[\s-]+/g, "_");
+      if (key === "needs_repair" && !item.lifecycle) {
+        patch.lifecycle = "in_repair";
+      } else if (key === "decommissioned" && !item.lifecycle) {
+        patch.lifecycle = "retired";
+        patch.retirement = {
+          reason: "decommissioned",
+          retiredAt: item.updatedAt,
+          retiredByUserId: "migration",
+        };
+      } else if (status && key !== "functional" && !item.condition) {
+        patch.condition = status;
+      }
+    }
+
+    const reports = await ctx.db
+      .query("damageReports")
+      .withIndex("by_inventoryItemId", (q) => q.eq("inventoryItemId", item._id))
+      .take(200);
+    const openDamageCount = reports.filter((report) => report.status !== "resolved").length;
+    if (openDamageCount !== (item.openDamageCount ?? 0)) patch.openDamageCount = openDamageCount;
+
+    const type = await ctx.db.get(item.typeId);
+    const searchText = buildItemSearchText(item, type, await listPreviousAssetIds(ctx, item._id));
+    if (searchText !== item.searchText) patch.searchText = searchText;
+
+    return Object.keys(patch).length ? patch : undefined;
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -869,6 +912,7 @@ const MIGRATION_SERIES = [
   internal.migrations.groupMultiDayBookings,
   internal.migrations.migratePositionArtistTypeToArtistTypes,
   internal.migrations.migrateSeriesPositionTemplateArtistTypes,
+  internal.migrations.migrateInventoryItemLifecycle,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

@@ -22,6 +22,7 @@ import {
 import { appError, withReportableErrors } from "./lib/errors";
 import { scheduleInventoryTypeSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 import { ensureDefaultCategories } from "./inventoryCategories";
+import { lifecycleOf, refreshItemSearchText } from "./lib/inventoryLifecycle";
 
 type InventoryCategoryMetadata = Doc<"inventoryTypes">["categoryMetadata"];
 
@@ -379,23 +380,35 @@ export const listManufacturers = query({
 });
 
 const MAX_UNIT_SCAN = 5000;
+const MAX_REINDEX_UNITS = 1000;
 
 /**
- * Units per type for the types list. `inventoryItems` has no per-type counter,
- * so this scans a bounded window of the table and groups it; `truncated` says
- * the counts are a floor rather than exact.
+ * Units per type for the types list, split by state. `units` counts what
+ * Arbor still has (active and in repair), not retired units. `inventoryItems`
+ * has no per-type counter, so this scans a bounded window of the table and
+ * groups it; `truncated` says the counts are a floor rather than exact.
  */
 export const unitCounts = query({
   args: {},
   handler: async (ctx) => {
     await requireAuth(ctx);
     const items = await ctx.db.query("inventoryItems").take(MAX_UNIT_SCAN + 1);
-    const counts = new Map<Id<"inventoryTypes">, number>();
+    type Rollup = { units: number; inRepair: number; damaged: number; retired: number };
+    const counts = new Map<Id<"inventoryTypes">, Rollup>();
     for (const item of items.slice(0, MAX_UNIT_SCAN)) {
-      counts.set(item.typeId, (counts.get(item.typeId) ?? 0) + 1);
+      const rollup = counts.get(item.typeId) ?? { units: 0, inRepair: 0, damaged: 0, retired: 0 };
+      const lifecycle = lifecycleOf(item);
+      if (lifecycle === "retired") {
+        rollup.retired += 1;
+      } else {
+        rollup.units += 1;
+        if (lifecycle === "in_repair") rollup.inRepair += 1;
+        if ((item.openDamageCount ?? 0) > 0) rollup.damaged += 1;
+      }
+      counts.set(item.typeId, rollup);
     }
     return {
-      counts: [...counts].map(([typeId, units]) => ({ typeId, units })),
+      counts: [...counts].map(([typeId, rollup]) => ({ typeId, ...rollup })),
       truncated: items.length > MAX_UNIT_SCAN,
     };
   },
@@ -611,6 +624,20 @@ export const update = mutation({
 
     if (publicListing || existing.publicListing) {
       await scheduleInventoryTypeSiteRevalidation(ctx);
+    }
+
+    // Units are found by their type's words, so a rename re-indexes them.
+    const searchWordsChanged =
+      existing.name !== args.name.trim() ||
+      existing.model !== args.model.trim() ||
+      (existing.manufacturer ?? "") !== (args.manufacturer?.trim() ?? "") ||
+      existing.category !== args.category.trim().toLowerCase();
+    if (searchWordsChanged) {
+      const units = await ctx.db
+        .query("inventoryItems")
+        .withIndex("by_typeId", (q) => q.eq("typeId", args.id))
+        .take(MAX_REINDEX_UNITS);
+      for (const unit of units) await refreshItemSearchText(ctx, unit._id);
     }
     });
   },

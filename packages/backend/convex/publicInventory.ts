@@ -4,6 +4,7 @@ import type { Doc } from "./_generated/dataModel";
 import { resolveStoredInventoryAssetUrl } from "./inventoryR2";
 import { assetIdLookupCandidates } from "./lib/assetScan";
 import { listFulfillmentPackageBom } from "./lib/packageBom";
+import { findItemByOldAssetId } from "./lib/rentalFulfillment";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -124,6 +125,13 @@ export const equipmentByAssetId = query({
         .withIndex("by_assetId", (q) => q.eq("assetId", candidate))
         .unique();
       if (item) break;
+    }
+    // A relabeled unit's old QR still lands on its page.
+    if (!item) {
+      for (const candidate of assetIdLookupCandidates(assetId)) {
+        item = await findItemByOldAssetId(ctx, candidate);
+        if (item) break;
+      }
     }
     if (!item?.assetId) return null;
 

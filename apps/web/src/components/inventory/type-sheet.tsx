@@ -1,6 +1,7 @@
 "use client";
 
-import { SheetSection } from "@/components/list-page";
+import { SheetField, SheetFields, SheetSection } from "@/components/list-page";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { CaretDownIcon, PlusIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
@@ -27,6 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { api } from "@/lib/convex-api";
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 import { inventoryTypeSchema, type InventoryTypeFormValues } from "@/lib/validations/inventory";
 import { formatTypeDisplay } from "./package-section-utils";
 import { SearchableSelect } from "./searchable-select";
@@ -41,6 +43,7 @@ import {
   typeVisibility,
   type InventoryTypeRow,
   type ResourceRow,
+  type TypeUnitRollup,
 } from "./type-form";
 
 type CapabilityOption = { _id: string; key: string; label: string };
@@ -52,7 +55,7 @@ type CapabilityOption = { _id: string; key: string; label: string };
 export function TypeSheet({
   open,
   row,
-  unitCount,
+  unitRollup,
   unitsTruncated = false,
   categoryOptions,
   capabilityOptions,
@@ -61,7 +64,8 @@ export function TypeSheet({
 }: {
   open: boolean;
   row: InventoryTypeRow | null;
-  unitCount?: number;
+  /** The open type's units by state; undefined while the counts load. */
+  unitRollup?: TypeUnitRollup;
   unitsTruncated?: boolean;
   categoryOptions: ReadonlyArray<{ value: string; label: string }>;
   capabilityOptions: CapabilityOption[];
@@ -100,7 +104,7 @@ export function TypeSheet({
           <TypeSheetBody
             key={row?._id ?? "new"}
             row={row}
-            unitCount={unitCount}
+            unitRollup={unitRollup}
             unitsTruncated={unitsTruncated}
             categoryOptions={categoryOptions}
             capabilityOptions={capabilityOptions}
@@ -122,7 +126,7 @@ export function TypeSheet({
 
 function TypeSheetBody({
   row,
-  unitCount,
+  unitRollup,
   unitsTruncated = false,
   categoryOptions,
   capabilityOptions,
@@ -132,7 +136,7 @@ function TypeSheetBody({
   onDelete,
 }: {
   row: InventoryTypeRow | null;
-  unitCount?: number;
+  unitRollup?: TypeUnitRollup;
   unitsTruncated?: boolean;
   categoryOptions: ReadonlyArray<{ value: string; label: string }>;
   capabilityOptions: CapabilityOption[];
@@ -196,10 +200,12 @@ function TypeSheetBody({
           </SheetTitle>
           <SheetDescription>
             {row
-              ? `${unitCount === undefined ? "Counting units…" : `${formatUnitCount(unitCount, unitsTruncated)} in inventory`}. Changes apply to every unit, package line and pull list that uses this type.`
+              ? `${unitRollup === undefined ? "Counting units…" : `${formatUnitCount(unitRollup.units, unitsTruncated)} in inventory`}. Changes apply to every unit, package line and pull list that uses this type.`
               : "A model of gear. Add units of it from Items once it exists."}
           </SheetDescription>
         </SheetHeader>
+
+        {row ? <TypeUnitsSection typeId={row._id} rollup={unitRollup} truncated={unitsTruncated} /> : null}
 
         <SheetSection title="Details">
           <TextFormField name="name" label="Name" />
@@ -454,6 +460,66 @@ function CapabilityPicker({
         <p className="text-xs text-muted-foreground">None yet. Capabilities power the capability filter and pull lists.</p>
       )}
     </div>
+  );
+}
+
+const UNIT_STATE_TEXT = {
+  amber: "text-status-amber-700 dark:text-status-amber-200",
+  rose: "text-status-rose-700 dark:text-status-rose-200",
+} as const;
+
+/**
+ * Where the type's units stand: in service, in repair, flagged with open
+ * damage, retired. In service plus in repair is what's in inventory.
+ */
+function TypeUnitsSection({
+  typeId,
+  rollup,
+  truncated,
+}: {
+  typeId: string;
+  rollup: TypeUnitRollup | undefined;
+  truncated: boolean;
+}) {
+  return (
+    <SheetSection
+      title="Units"
+      action={
+        <Button type="button" variant="link" size="sm" className="h-auto p-0" asChild>
+          <Link href={`/dashboard/inventory/items?type=${typeId}`}>See units</Link>
+        </Button>
+      }
+    >
+      {rollup === undefined ? (
+        <p className="text-sm text-muted-foreground">Counting units…</p>
+      ) : (
+        <SheetFields>
+          <SheetField label="In service">
+            <span className="tabular-nums">{formatUnitCount(rollup.units - rollup.inRepair, truncated)}</span>
+          </SheetField>
+          <SheetField label="In repair">
+            <span className={cn("tabular-nums", rollup.inRepair ? UNIT_STATE_TEXT.amber : "text-muted-foreground")}>
+              {formatUnitCount(rollup.inRepair, truncated)}
+            </span>
+          </SheetField>
+          <SheetField label="Open damage">
+            <span className="flex flex-wrap items-baseline gap-x-2">
+              <span className={cn("tabular-nums", rollup.damaged ? UNIT_STATE_TEXT.rose : "text-muted-foreground")}>
+                {formatUnitCount(rollup.damaged, truncated)}
+              </span>
+              {rollup.damaged ? (
+                <Link href="/dashboard/inventory/damage" className="text-sm underline-offset-4 hover:underline">
+                  Open damage queue
+                </Link>
+              ) : null}
+            </span>
+          </SheetField>
+          <SheetField label="Retired">
+            <span className="text-muted-foreground tabular-nums">{formatUnitCount(rollup.retired, truncated)}</span>
+          </SheetField>
+        </SheetFields>
+      )}
+    </SheetSection>
   );
 }
 

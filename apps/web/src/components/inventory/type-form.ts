@@ -106,6 +106,15 @@ export function formatUnitCount(count: number, truncated: boolean) {
   return `${count}${truncated ? "+" : ""} unit${count === 1 && !truncated ? "" : "s"}`;
 }
 
+/**
+ * A type's units by state, from `unitCounts`. `units` is what Arbor still has
+ * (in service plus in repair); `damaged` is units still in service with an
+ * open damage report; retired units sit outside `units`.
+ */
+export type TypeUnitRollup = { units: number; inRepair: number; damaged: number; retired: number };
+
+export const EMPTY_UNIT_ROLLUP: TypeUnitRollup = { units: 0, inRepair: 0, damaged: 0, retired: 0 };
+
 /** How far a type is published: hidden, on the public browse pages, or with its full profile. */
 export type TypeVisibility = "hidden" | "listing" | "profile";
 

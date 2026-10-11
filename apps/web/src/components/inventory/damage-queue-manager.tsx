@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "convex/react";
 import { ChatCircleIcon, PlusIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
@@ -47,8 +47,21 @@ function statusesFor(filter: FilterState[string] | undefined): DamageStatus[] | 
 
 export function DamageQueueManager() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [wizardOpen, setWizardOpen] = useState(false);
+  // `?new=1` (the command palette's "Report damage") opens the wizard once,
+  // then leaves the URL so a reload or a back press doesn't reopen it.
+  const startNewReport = searchParams.get("new") === "1";
+  useEffect(() => {
+    if (!startNewReport) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot open from a deep link
+    setWizardOpen(true);
+    const params = new URLSearchParams(window.location.search);
+    params.delete("new");
+    const query = params.toString();
+    window.history.replaceState(null, "", query ? `${pathname}?${query}` : pathname);
+  }, [startNewReport, pathname]);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const applied = activeFilters(filters);

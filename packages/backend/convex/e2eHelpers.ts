@@ -14,6 +14,7 @@ import {
 import { resolveProfileMembership, userVerticalValue } from "./lib/userVerticals";
 import { resolveUserStatus } from "./lib/userStatus";
 import { assertE2eHelpersEnabled } from "./lib/e2eGuard";
+import { buildItemSearchText, inventoryLifecycleValue, lifecycleOf } from "./lib/inventoryLifecycle";
 import { emailTemplateValue } from "./lib/emailTemplateValue";
 import { recordInAppNotification } from "./lib/inAppNotifications";
 import { recordInvoiceRevision, snapshotInvoice } from "./lib/invoiceRevisions";
@@ -2950,10 +2951,9 @@ export const seedDryHireWithPullList = mutation({
     const assetId = args.assetId?.trim() || `E2E-ALE-${String(now).slice(-6)}`;
 
     const typeName = `E2E Mic ${now}`;
+    const type = { name: typeName, category: "misc", model: "E2E-MIC-1" };
     const typeId = await ctx.db.insert("inventoryTypes", {
-      name: typeName,
-      category: "misc",
-      model: "E2E-MIC-1",
+      ...type,
       manualUrls: [],
       capabilities: [],
       createdAt: now,
@@ -2962,7 +2962,7 @@ export const seedDryHireWithPullList = mutation({
     const inventoryItemId = await ctx.db.insert("inventoryItems", {
       assetId,
       typeId,
-      status: "functional",
+      searchText: buildItemSearchText({ assetId }, type, []),
       createdAt: now,
       updatedAt: now,
     });
@@ -3069,19 +3069,21 @@ export const seedOpenDamageReport = mutation({
     assertE2eHelpersEnabled();
     const now = Date.now();
     const assetId = args.assetId?.trim() || `E2E-DMG-${String(now).slice(-6)}`;
+    const type = { name: `E2E Damaged ${now}`, category: "misc", model: "E2E-DMG-1" };
     const typeId = await ctx.db.insert("inventoryTypes", {
-      name: `E2E Damaged ${now}`,
-      category: "misc",
-      model: "E2E-DMG-1",
+      ...type,
       manualUrls: [],
       capabilities: [],
       createdAt: now,
       updatedAt: now,
     });
+    // Matches what `damageReports.create` leaves: in repair, one open report.
     const inventoryItemId = await ctx.db.insert("inventoryItems", {
       assetId,
       typeId,
-      status: "needs_repair",
+      lifecycle: "in_repair",
+      openDamageCount: 1,
+      searchText: buildItemSearchText({ assetId }, type, []),
       createdAt: now,
       updatedAt: now,
     });
@@ -5152,10 +5154,9 @@ export const seedLostFoundAsset = mutation({
     const assetId = args.assetId?.trim() || `E2E-LF-${String(now).slice(-6)}`;
     const typeName = `E2E Lost Found Type ${now}`;
 
+    const type = { name: typeName, category: "misc", model: "E2E-LF-1" };
     const typeId = await ctx.db.insert("inventoryTypes", {
-      name: typeName,
-      category: "misc",
-      model: "E2E-LF-1",
+      ...type,
       manualUrls: [],
       capabilities: [],
       createdAt: now,
@@ -5164,7 +5165,7 @@ export const seedLostFoundAsset = mutation({
     const inventoryItemId = await ctx.db.insert("inventoryItems", {
       assetId,
       typeId,
-      status: "functional",
+      searchText: buildItemSearchText({ assetId }, type, []),
       createdAt: now,
       updatedAt: now,
     });
@@ -6666,12 +6667,13 @@ export const seedInventoryItem = mutation({
       if (!location) throw new Error(`No storage location at path "${locationPath}".`);
       storageLocationId = location._id;
     }
+    const serialNumber = args.serialNumber?.trim();
     const itemId = await ctx.db.insert("inventoryItems", {
       assetId,
-      serialNumber: args.serialNumber?.trim(),
+      serialNumber,
       typeId: type._id,
       storageLocationId,
-      status: "functional",
+      searchText: buildItemSearchText({ assetId, serialNumber }, type, []),
       createdAt: now,
       updatedAt: now,
     });
@@ -6833,7 +6835,9 @@ export const getInventoryItemByAssetId = query({
       assetId: v.string(),
       serialNumber: v.union(v.string(), v.null()),
       typeName: v.union(v.string(), v.null()),
-      status: v.union(v.string(), v.null()),
+      condition: v.union(v.string(), v.null()),
+      lifecycle: inventoryLifecycleValue,
+      openDamageCount: v.number(),
       notes: v.union(v.string(), v.null()),
       storageLocationPath: v.union(v.string(), v.null()),
       containedInAssetId: v.union(v.string(), v.null()),
@@ -6877,7 +6881,9 @@ export const getInventoryItemByAssetId = query({
       assetId: item.assetId,
       serialNumber: item.serialNumber ?? null,
       typeName: type?.name ?? null,
-      status: item.status ?? null,
+      condition: item.condition ?? null,
+      lifecycle: lifecycleOf(item),
+      openDamageCount: item.openDamageCount ?? 0,
       notes: item.notes ?? null,
       storageLocationPath: location?.path ?? null,
       containedInAssetId: container?.assetId ?? null,

@@ -25,6 +25,22 @@ export async function requireEvent(ctx: QueryCtx | MutationCtx, eventId: Id<"eve
  */
 type ScanResolvedItem = Doc<"inventoryItems"> & { assetId: string };
 
+/** The live item an old tag points at, skipping aliases left by a deleted item. */
+export async function findItemByOldAssetId(
+  ctx: QueryCtx | MutationCtx,
+  assetId: string,
+): Promise<Doc<"inventoryItems"> | null> {
+  const aliases = await ctx.db
+    .query("inventoryAssetIdAliases")
+    .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
+    .take(10);
+  for (const alias of aliases) {
+    const item = await ctx.db.get(alias.inventoryItemId);
+    if (item) return item;
+  }
+  return null;
+}
+
 async function findItemByAssetIdCandidates(
   ctx: QueryCtx | MutationCtx,
   assetId: string,
@@ -37,6 +53,11 @@ async function findItemByAssetIdCandidates(
     if (!item) continue;
     // Index match ⇒ doc.assetId === candidate exactly.
     return { ...item, assetId: candidate };
+  }
+  // A relabeled item still answers to its old tag.
+  for (const candidate of assetIdLookupCandidates(assetId)) {
+    const item = await findItemByOldAssetId(ctx, candidate);
+    if (item?.assetId) return { ...item, assetId: item.assetId };
   }
   return null;
 }

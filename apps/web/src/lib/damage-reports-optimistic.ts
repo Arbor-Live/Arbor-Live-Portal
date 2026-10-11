@@ -135,12 +135,28 @@ export function optimisticUpdateDamageStatus(
   adjustPendingCount(localStore, result.previous.status, args.status);
 }
 
+/**
+ * Retiring the unit as beyond repair resolves this report and every other
+ * pending one on the same unit, so resolve those too wherever they're loaded.
+ */
 export function optimisticDecommissionDamageReport(
   localStore: OptimisticLocalStore,
   args: { reportId: Id<"damageReports"> },
 ) {
-  patchLoadedDetail(localStore, args.reportId, "resolved");
-  const result = patchLoadedLists(localStore, args.reportId, "resolved");
-  if (!result) return;
-  adjustPendingCount(localStore, result.previous.status, "resolved");
+  const inventoryItemId =
+    findReportInLoadedLists(localStore, args.reportId)?.inventoryItemId ??
+    localStore.getQuery(api.damageReports.getById, { reportId: args.reportId })?.report.inventoryItemId;
+  const reportIds = new Set<Id<"damageReports">>([args.reportId]);
+  if (inventoryItemId) {
+    for (const entry of localStore.getAllQueries(api.damageReports.list)) {
+      for (const row of entry.value ?? []) {
+        if (row.inventoryItemId === inventoryItemId && isPendingStatus(row.status)) reportIds.add(row._id);
+      }
+    }
+  }
+  for (const reportId of reportIds) {
+    patchLoadedDetail(localStore, reportId, "resolved");
+    const result = patchLoadedLists(localStore, reportId, "resolved");
+    if (result) adjustPendingCount(localStore, result.previous.status, "resolved");
+  }
 }
