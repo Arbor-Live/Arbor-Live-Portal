@@ -186,7 +186,11 @@ function ItemSheetBody({
         </SheetSection>
       ) : null}
       {/* Above the form: what's happened to the unit is the first thing to see. */}
-      <ItemDamageSection itemId={item._id} openCount={item.openDamageCount ?? 0} />
+      <ItemDamageSection
+        itemId={item._id}
+        openCount={item.openDamageCount ?? 0}
+        onReport={retired ? undefined : () => actions.onReportDamage(item._id)}
+      />
       <ItemHistorySection itemId={item._id} previousAssetIds={item.previousAssetIds} />
       <InventoryItemEditor
         editingId={item._id}
@@ -295,10 +299,28 @@ export function LifecyclePill({
 }
 
 /** Every report filed on this unit, so its damage is visible from the item itself. */
-function ItemDamageSection({ itemId, openCount }: { itemId: Id<"inventoryItems">; openCount: number }) {
+function ItemDamageSection({
+  itemId,
+  openCount,
+  onReport,
+}: {
+  itemId: Id<"inventoryItems">;
+  openCount: number;
+  /** Absent for retired units, which can't take new reports. */
+  onReport?: () => void;
+}) {
   const reports = useQuery(api.damageReports.listForItem, { inventoryItemId: itemId });
   return (
-    <SheetSection title={openCount ? `Damage (${openCount} open)` : "Damage"}>
+    <SheetSection
+      title={openCount ? `Damage (${openCount} open)` : "Damage"}
+      action={
+        onReport ? (
+          <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={onReport}>
+            Report damage
+          </Button>
+        ) : undefined
+      }
+    >
       {reports === undefined ? (
         <Skeleton className="h-12 w-full" />
       ) : reports.length === 0 ? (
