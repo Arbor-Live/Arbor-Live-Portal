@@ -8,7 +8,7 @@ import {
   createUser,
   makeTest,
   setActiveOrg,
-} from "./test/setup";
+} from "./test/setup.helpers";
 
 const STORED_PAYEE = "payee@band.test";
 

@@ -7,7 +7,7 @@ import {
   createOrg,
   createUser,
   makeTest,
-} from "./test/setup";
+} from "./test/setup.helpers";
 
 test("refuses a band org admin whose cached role is admin", async () => {
   const t = makeTest();

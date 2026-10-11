@@ -2,7 +2,7 @@
 import { expect, test } from "vitest";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { makeTest, type Test } from "./test/setup";
+import { makeTest, type Test } from "./test/setup.helpers";
 
 async function seedPublicItem(
   t: Test,

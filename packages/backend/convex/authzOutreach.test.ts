@@ -12,7 +12,7 @@ import {
   setActiveOrg,
   setVerticals,
   type Test,
-} from "./test/setup";
+} from "./test/setup.helpers";
 
 async function arborUserWithVerticals(verticals: UserVertical[]) {
   const t = makeTest();

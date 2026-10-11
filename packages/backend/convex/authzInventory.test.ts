@@ -11,7 +11,7 @@ import {
   setActiveOrg,
   type Test,
   type TestUser,
-} from "./test/setup";
+} from "./test/setup.helpers";
 
 async function seedInventoryType(t: Test, name: string): Promise<Id<"inventoryTypes">> {
   const now = Date.now();

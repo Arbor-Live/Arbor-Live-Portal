@@ -1,3 +1,5 @@
+// Test-only: the second dot in this file name keeps Convex from bundling it
+// (the CLI skips files with multiple dots), since it uses import.meta.glob.
 import {
   convexTest,
   type TestConvexForDataModel,
