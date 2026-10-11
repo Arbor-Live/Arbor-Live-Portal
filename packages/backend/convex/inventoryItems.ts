@@ -650,18 +650,18 @@ export const remove = mutation({
     if (children) {
       appError("INVENTORY_ITEM_HAS_CHILDREN", "Cannot delete an asset that contains other assets.");
     }
-    // Deleting frees its old tags; its lifecycle history goes with it.
-    const [aliases, history] = await Promise.all([
-      ctx.db
-        .query("inventoryAssetIdAliases")
-        .withIndex("by_inventoryItemId", (q) => q.eq("inventoryItemId", args.id))
-        .take(50),
-      ctx.db
-        .query("inventoryItemHistory")
-        .withIndex("by_inventoryItemId_and_at", (q) => q.eq("inventoryItemId", args.id))
-        .take(500),
-    ]);
-    for (const row of [...aliases, ...history]) await ctx.db.delete(row._id);
+    // Deleting frees its old tags; its lifecycle history goes with it. Both
+    // are per-item and small, so every row goes in this transaction.
+    for await (const alias of ctx.db
+      .query("inventoryAssetIdAliases")
+      .withIndex("by_inventoryItemId", (q) => q.eq("inventoryItemId", args.id))) {
+      await ctx.db.delete(alias._id);
+    }
+    for await (const entry of ctx.db
+      .query("inventoryItemHistory")
+      .withIndex("by_inventoryItemId_and_at", (q) => q.eq("inventoryItemId", args.id))) {
+      await ctx.db.delete(entry._id);
+    }
     await ctx.db.delete(args.id);
     });
   },

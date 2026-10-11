@@ -723,7 +723,8 @@ Update `YEARS` there when the Registrar publishes new dates.
   `other` (needs a note). Retiring a case can take its contents with it (they
   stay nested so reinstating the case brings them back) or leave them in
   service. Any retirement can be reinstated. Retiring resolves the unit's open
-  damage reports, and outbound rental scans refuse retired units. Every change
+  damage reports. Outbound rental scans refuse retired and in-repair units
+  (and leave them out of a scanned case). Every change
   lands in `inventoryItemHistory`.
 - **Retagging** (`inventoryLifecycle.retag`) gives a unit a new `assetId` and
   keeps the old one in `inventoryAssetIdAliases`: scans and `/e/{oldTag}` still

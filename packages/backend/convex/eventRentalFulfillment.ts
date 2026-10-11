@@ -496,11 +496,14 @@ export const scanOutboundAsset = mutation({
     if (root.lifecycle === "retired") {
       appError("ASSET_RETIRED", `${root.assetId} is retired and can't go out. Reinstate it in Inventory first.`);
     }
+    if (root.lifecycle === "in_repair") {
+      appError("ASSET_IN_REPAIR", `${root.assetId} is in repair and can't go out. Mark it back in service first.`);
+    }
 
     // Always expand packouts/containers: root + every nested contained asset
-    // still in service (a reinstated case can hold units retired with it).
+    // that can go out (a case can hold units in repair, or retired with it).
     const bundle = (await listItemWithDescendants(ctx, root._id)).filter(
-      (item) => item.lifecycle !== "retired",
+      (item) => item.lifecycle !== "retired" && item.lifecycle !== "in_repair",
     );
     let units = await listUnitsForFulfillment(ctx, fulfillment._id);
     const now = Date.now();
