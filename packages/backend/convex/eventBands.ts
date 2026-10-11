@@ -835,8 +835,7 @@ export const inviteBandFromEvent = mutation({
     const event = await ctx.db.get(args.eventId);
     if (!event) appError("EVENT_NOT_FOUND", "Event not found.");
 
-    // `provisionBandOrganization` is a shared helper (lib/bandOrgInvite) that
-    // throws expected input errors, so it runs before the reportable wrapper.
+    return await withReportableErrors("eventBands.inviteBandFromEvent", async () => {
     const { organizationId, displayName, contactEmail } = await provisionBandOrganization(ctx, {
       displayName: args.artistName,
       contactEmail: args.email,
@@ -862,7 +861,6 @@ export const inviteBandFromEvent = mutation({
     });
     if (!invite) appError("INVITE_EMAIL_INVALID", "Enter a valid email address.");
 
-    return await withReportableErrors("eventBands.inviteBandFromEvent", async () => {
     const participationId = await upsertEventBandParticipation(ctx, {
       eventId: args.eventId,
       organizationId,
