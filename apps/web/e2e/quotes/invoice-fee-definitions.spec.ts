@@ -64,9 +64,20 @@ test.describe("invoice fee definitions", () => {
     await expect(page.getByText("Fee definitions").first()).toBeVisible({ timeout: 25_000 });
 
     // Add via the card's form.
-    await page.getByPlaceholder("Key (e.g. labor_fee)").fill(crudKey);
-    await page.getByPlaceholder("Label").fill(crudLabel);
-    await page.getByPlaceholder("Default amount").fill("60");
+    const keyInput = page.getByPlaceholder("Key (e.g. labor_fee)");
+    const labelInput = page.getByPlaceholder("Label");
+    const amountInput = page.getByPlaceholder("Default amount");
+    await keyInput.fill(crudKey);
+    await labelInput.fill(crudLabel);
+    await amountInput.fill("60");
+    // Controlled react-hook-form inputs only read back once the form holds the
+    // values, and the save bar is its dirty flag. Clicking Add Fee before that
+    // makes `handleSubmit` validate a stale form and decline silently — the
+    // create never lands and the poll below times out on null.
+    await expect(keyInput).toHaveValue(crudKey);
+    await expect(labelInput).toHaveValue(crudLabel);
+    await expect(amountInput).toHaveValue("60");
+    await expect(page.getByText("Unsaved changes")).toBeVisible({ timeout: 15_000 });
     await page.getByRole("button", { name: "Add Fee" }).click();
 
     const created = await pollConvex<FeeDefinitionState>(
@@ -130,9 +141,18 @@ test.describe("invoice fee definitions", () => {
     // Create the definition through the settings card, then drive the editor.
     await page.goto("/dashboard/ops-center/settings");
     await expect(page.getByText("Fee definitions").first()).toBeVisible({ timeout: 25_000 });
-    await page.getByPlaceholder("Key (e.g. labor_fee)").fill(integrationKey);
-    await page.getByPlaceholder("Label").fill(integrationLabel);
-    await page.getByPlaceholder("Default amount").fill(String(rate));
+    const keyInput = page.getByPlaceholder("Key (e.g. labor_fee)");
+    const labelInput = page.getByPlaceholder("Label");
+    const amountInput = page.getByPlaceholder("Default amount");
+    await keyInput.fill(integrationKey);
+    await labelInput.fill(integrationLabel);
+    await amountInput.fill(String(rate));
+    await expect(keyInput).toHaveValue(integrationKey);
+    await expect(labelInput).toHaveValue(integrationLabel);
+    await expect(amountInput).toHaveValue(String(rate));
+    // Same race as the CRUD test above: wait until the form has the edits
+    // (the save bar is the dirty flag) before submitting.
+    await expect(page.getByText("Unsaved changes")).toBeVisible({ timeout: 15_000 });
     await page.getByRole("button", { name: "Add Fee" }).click();
 
     const seeded = await pollConvex<FeeDefinitionState>(

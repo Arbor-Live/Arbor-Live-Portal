@@ -78,9 +78,13 @@ test.describe("Operations team access", () => {
     await expect(page.getByText("Admin access required").first()).toBeVisible({ timeout: 30_000 });
 
     const sidebar = page.locator('[data-slot="sidebar"]').first();
-    await expect(sidebar.getByRole("button", { name: "Ops Center", exact: true })).toBeVisible();
-    await expect(sidebar.getByRole("link", { name: "Users", exact: true })).toHaveCount(0);
-    await expect(sidebar.getByRole("button", { name: "Users", exact: true })).toHaveCount(0);
+    // Nav buttons grow a pending-count chip once `navBadges` resolves ("Ops
+    // Center 2"), so an exact name match races that unrelated query — it only
+    // passes while the badges are still in flight. Match the label itself,
+    // and let the absence checks count chip-decorated names too.
+    await expect(sidebar.getByText("Ops Center", { exact: true })).toBeVisible();
+    await expect(sidebar.getByRole("link", { name: /^Users/ })).toHaveCount(0);
+    await expect(sidebar.getByRole("button", { name: /^Users/ })).toHaveCount(0);
   });
 
   test("convex grants ops their work and still refuses admin-only calls", async ({ page }) => {

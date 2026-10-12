@@ -704,14 +704,12 @@ export const saveCrewProfileStep = mutation({
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     const userId = getUserId(user);
-    // Username checks run before the wrapper: `lib/username` is shared with
-    // account.ts and stays plain-Error.
+    return await withReportableErrors("onboarding.saveCrewProfileStep", async () => {
     const usernameProvided = Object.prototype.hasOwnProperty.call(args, "username");
     const username = usernameProvided ? normalizeUsername(args.username) : undefined;
     if (username) {
       await assertUsernameAvailable(ctx, username, userId);
     }
-    return await withReportableErrors("onboarding.saveCrewProfileStep", async () => {
     await ensureCrewOnboarding(ctx, userId);
     const now = Date.now();
     const name = args.name.trim();

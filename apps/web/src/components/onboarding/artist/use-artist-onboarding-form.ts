@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import type { QuestionnaireItemDefinition } from "@shadcn/react/questionnaire";
@@ -45,7 +45,11 @@ export function useArtistOnboardingForm() {
   const [sessionSentEmails, setSessionSentEmails] = useState<string[]>([]);
   const hydratedRef = useRef(false);
 
-  useEffect(() => {
+  // Hydrate before paint, not after: the wizard's loading gate lifts in the
+  // same commit that schedules this, so a passive effect leaves a window where
+  // the identity fields are already typeable but not yet populated — typing in
+  // it gets overwritten by this snapshot (the edit is lost on save).
+  useLayoutEffect(() => {
     if (!profile || hydratedRef.current) return;
     hydratedRef.current = true;
     setForm((prev) => ({

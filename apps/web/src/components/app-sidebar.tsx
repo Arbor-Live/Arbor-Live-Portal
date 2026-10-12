@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useState, type ComponentProps } from "react"
 import { authClient } from "@/lib/auth-client"
 import { releasePushSubscription } from "@/lib/pwa"
-import { useMutation, useQuery } from "convex/react"
+import { useConvexAuth, useMutation, useQuery } from "convex/react"
 import { useNow } from "@/lib/use-now"
 import { api } from "@/lib/convex-api"
 import { getConvexErrorMessage } from "@/lib/convex-error"
@@ -90,9 +90,12 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const includeMyEventActions =
     activeOrganization?.organizationType === "arbor_internal" &&
     (pathname === "/dashboard" || pathname.startsWith("/dashboard/events"))
+  // The shell is preloaded on the server, so it can exist before the client
+  // has its Convex auth token; wait for auth before subscribing.
+  const { isAuthenticated } = useConvexAuth()
   const navBadges = useQuery(
     api.navBadges.getNavBadges,
-    shell
+    shell && isAuthenticated
       ? {
           now,
           rangeStart: adminSchedulingRange.rangeStart,
@@ -310,7 +313,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             // Stop this device getting the account's pushes before the session ends.
             await releasePushSubscription((endpoint) => unsubscribePush({ endpoint }))
             await authClient.signOut()
-            window.location.href = "/sign-in"
+            // Full reload drops all client session state; replace so Back can't return to a signed-in page.
+            window.location.replace("/sign-in")
           }}
           crewMode={
             isAdmin && activeOrganization?.organizationType === "arbor_internal"

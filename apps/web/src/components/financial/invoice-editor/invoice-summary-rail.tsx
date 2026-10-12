@@ -108,8 +108,11 @@ function InvoiceTotalCard({ draft }: { draft: InvoiceDraft }) {
             inputMode="decimal"
             value={fields.discountValue}
             onChange={(event) => setField("discountValue", event.target.value)}
-            onBlur={() =>
-              setField("discountValue", normalizeInvoiceDiscountInput(fields.discountValue, fields.discountType))
+            onBlur={(event) =>
+              // Normalize what is actually in the box, not the render-closure
+              // value: a blur that lands before the last change commits would
+              // otherwise rewrite the typed number with the stale one.
+              setField("discountValue", normalizeInvoiceDiscountInput(event.target.value, fields.discountType))
             }
           />
         </div>

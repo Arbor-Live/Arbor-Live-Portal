@@ -50,14 +50,33 @@ test.describe("create user and grant admin", () => {
     await expect(orgFilter(page)).toHaveText("Arbor Live", { timeout: 30_000 });
 
     const modal = await openAddPersonDialog(page);
-    await toggleFilter(page, "Add person mode", "Create account").click();
-    await formField(modal, "Name").fill(targetName);
-    await formField(modal, "Title (optional)").fill("E2E Fixture");
-    await formField(modal, "Email").fill(targetEmail);
-    await formField(modal, "Temporary password").fill(targetPassword);
+    const createMode = toggleFilter(page, "Add person mode", "Create account");
+    await createMode.click();
+    // The mode is form state (`form.setValue("mode", …)`): the create-only
+    // fields mount and the submit's `superRefine` branch off it. Wait for the
+    // toggle to register before filling anything, or the fills can target
+    // fields that are about to mount and the submit can take the invite path.
+    await expect(createMode).toHaveAttribute("aria-checked", "true");
+
+    const nameField = formField(modal, "Name");
+    await nameField.fill(targetName);
+    await expect(nameField).toHaveValue(targetName);
+    const titleField = formField(modal, "Title (optional)");
+    await titleField.fill("E2E Fixture");
+    await expect(titleField).toHaveValue("E2E Fixture");
+    const emailField = formField(modal, "Email");
+    await emailField.fill(targetEmail);
+    await expect(emailField).toHaveValue(targetEmail);
+    const passwordField = formField(modal, "Temporary password");
+    await passwordField.fill(targetPassword);
     // Leave Role on Member — being refused first is the point.
     await pickSelectOption(page, selectByLabel(modal, "Payment method"), "Stanford payroll");
-    await modal.getByRole("button", { name: "Create user" }).click();
+    // Controlled react-hook-form inputs echo state back to the DOM, so the
+    // values above are registered only once they read back. Without this the
+    // submit can validate a stale form and decline silently — no toast.
+    const createUserButton = modal.getByRole("button", { name: "Create user" });
+    await expect(createUserButton).toBeEnabled();
+    await createUserButton.click();
 
     await expect(page.getByText("User created.")).toBeVisible({ timeout: 30_000 });
 
@@ -91,7 +110,11 @@ test.describe("create user and grant admin", () => {
       // Promote from their People panel.
       const { sheet } = await openUserSheet(page, created.userId);
       await pickSelectOption(page, selectByLabel(sheet, "Role"), "Admin");
-      await personSheetSave(sheet).click();
+      // Save renders disabled until the role pick registers as dirty; clicking
+      // before that waits on the disabled button and misses the edit window.
+      const promoteSave = personSheetSave(sheet);
+      await expect(promoteSave).toBeEnabled();
+      await promoteSave.click();
 
       const promoted = await waitForUserAdminState(
         targetEmail,
@@ -115,7 +138,9 @@ test.describe("create user and grant admin", () => {
       // Demote, which also leaves the fixture in the state the next run expects.
       const { sheet: demoteSheet } = await openUserSheet(page, created.userId);
       await pickSelectOption(page, selectByLabel(demoteSheet, "Role"), "Member");
-      await personSheetSave(demoteSheet).click();
+      const demoteSave = personSheetSave(demoteSheet);
+      await expect(demoteSave).toBeEnabled();
+      await demoteSave.click();
       await waitForUserAdminState(targetEmail, (state) => state?.authRole === "member");
 
       await targetPage.reload();

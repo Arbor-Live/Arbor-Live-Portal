@@ -114,8 +114,11 @@ test.describe("band onboarding wizard", () => {
     expect(state.designatedPayeeName).toBe(onboardingBandName);
     expect(state.designatedPayeePayoutMethod).toBe("pickup");
 
-    // Completed onboarding sends the wizard back to the dashboard.
-    await page.waitForURL(/\/dashboard/, { timeout: 30_000 });
+    // Completed onboarding sends the wizard back to the dashboard. The wizard
+    // gets there via `router.replace` — client-side, no load event — so
+    // `waitForURL` can sit on its load wait for the whole timeout (the invoice
+    // helper documents the same trap). `toHaveURL` polls the URL instead.
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
     await expect(page.getByText(/Finish setting up your artist profile/i)).toHaveCount(0);
   });
 });
