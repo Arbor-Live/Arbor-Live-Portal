@@ -39,6 +39,10 @@ so the new test lands in the right file.
   use `getByRole` over `getByLabel`.
 - First page hit may catch Turbopack compiling: wait for stable UI text, not
   `networkidle` alone. See `e2e/helpers/auth.ts` `signInWithCredentials`.
+- Right after `page.goto`, scope page-content locators to `page.getByRole("main")`.
+  React may keep a hidden streamed copy of the page (`<div hidden id="S:…">`
+  at the end of `<body>`) for up to ~2.3s. Until it is removed, an unscoped
+  `getByTestId` matches twice and fails strict mode at once, before any timeout.
 - Never use `window.confirm`/`alert` in app code under test — the app uses
   `useAppDialog()`; Playwright helpers for that dialog live in
   `e2e/helpers/auth.ts`.
