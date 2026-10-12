@@ -11,14 +11,21 @@ import {
 } from "./constants";
 import { enqueueEmail } from "./enqueue";
 
-/** Tell the client an approved quote changed and needs their approval again. */
+/**
+ * Tell the client their quote changed and needs their decision: an approved
+ * quote staff changed, or our reply to the changes they asked for.
+ */
 export async function scheduleQuoteUpdatedEmail(
   ctx: MutationCtx,
   args: {
     invoice: Doc<"invoices">;
+    /** What the previous total was: the one they approved, or the one they asked about. */
+    reason?: "approved" | "changes_requested";
     previousTotalUsd: number;
     newTotalUsd: number;
     changeNote?: string;
+    /** Their change request, when this answers one. */
+    requestNote?: string;
     revisionNumber: number;
   },
 ) {
@@ -51,6 +58,8 @@ export async function scheduleQuoteUpdatedEmail(
       previousTotalUsd: args.previousTotalUsd,
       newTotalUsd: args.newTotalUsd,
       changeNote: args.changeNote,
+      reason: args.reason ?? "approved",
+      requestNote: args.requestNote,
       portalUrl:
         portal.portal === "request" ? requestTrackingUrl(portal.token) : publicQuoteUrl(portal.token),
       managerName: args.invoice.managerName,

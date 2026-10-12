@@ -28,6 +28,7 @@ import { ensureActPosition } from "./lib/actPositions";
 import { artistTypesOf } from "./lib/artistNeedTypes";
 import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
 import { buildItemSearchText, listPreviousAssetIds } from "./lib/inventoryLifecycle";
+import { ensureChangeRequestRevision } from "./lib/invoiceRevisions";
 
 /**
  * Official @convex-dev/migrations runner.
@@ -871,6 +872,18 @@ export const migrateInventoryItemLifecycle = migrations.define({
 });
 
 /**
+ * Open change requests made before requests were versions only live on the
+ * invoice, where replying cleared them. Record each as a revision so it stays
+ * in the history after it's answered.
+ */
+export const backfillOpenChangeRequestRevisions = migrations.define({
+  table: "invoices",
+  migrateOne: async (ctx, invoice) => {
+    await ensureChangeRequestRevision(ctx, invoice);
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -913,6 +926,7 @@ const MIGRATION_SERIES = [
   internal.migrations.migratePositionArtistTypeToArtistTypes,
   internal.migrations.migrateSeriesPositionTemplateArtistTypes,
   internal.migrations.migrateInventoryItemLifecycle,
+  internal.migrations.backfillOpenChangeRequestRevisions,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);
