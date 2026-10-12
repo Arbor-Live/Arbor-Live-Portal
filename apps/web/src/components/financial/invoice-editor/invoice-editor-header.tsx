@@ -11,6 +11,7 @@ import {
   CalendarBlankIcon,
   CalendarCheckIcon,
   CalendarDotsIcon,
+  ChatTextIcon,
   CopyIcon,
   EnvelopeSimpleIcon,
   FilePdfIcon,
@@ -41,6 +42,7 @@ import {
   type InvoiceStatus,
 } from "./invoice-status";
 import { InvoiceBillingState } from "./invoice-billing-state";
+import { RevisedQuoteSheet } from "./revised-quote-sheet";
 import type { InvoiceDraft } from "./use-invoice-draft";
 
 type SourceRequest = {
@@ -413,6 +415,7 @@ export function InvoiceEditorHeader({
               sourceRequest?.publicToken ? `${origin}/request/track/${sourceRequest.publicToken}` : ""
             }
             quoteUrl={quoteUrl}
+            clientEmail={(isRequestLinked ? sourceRequest?.email : invoice.clientEmail) ?? ""}
             onWithdraw={() => void handleWithdraw()}
           />
         ) : null}
@@ -457,6 +460,7 @@ function InvoiceWorkflowStrip({
   onRequestPortal,
   requestPortalUrl,
   quoteUrl,
+  clientEmail,
   onWithdraw,
 }: {
   draft: InvoiceDraft;
@@ -464,14 +468,32 @@ function InvoiceWorkflowStrip({
   onRequestPortal: boolean;
   requestPortalUrl: string;
   quoteUrl: string;
+  clientEmail: string;
   onWithdraw: () => void;
 }) {
   const { confirm } = useAppDialog();
   const regeneratePublicApprovalToken = useMutation(api.invoices.regeneratePublicApprovalToken);
   const resetApprovalToPending = useMutation(api.invoices.resetApprovalToPending);
+  const sendRevisedQuote = useMutation(api.invoices.sendRevisedQuote);
+  const [replySheet, setReplySheet] = useState({ open: false, key: 0 });
+  const [sendingReply, setSendingReply] = useState(false);
   const invoice = draft.invoice!;
   const invoiceId = draft.activeInvoiceId!;
   const approval = invoice.clientApprovalStatus ?? "pending";
+
+  async function sendReply(message: string) {
+    setSendingReply(true);
+    try {
+      if (draft.isDraftDirty) {
+        const saved = await draft.persistDraft();
+        if (!saved) throw new Error("Save the quote before sending.");
+      }
+      const { number } = await sendRevisedQuote({ id: invoiceId, message });
+      notify.success(`Sent v${number} to the client for approval.`);
+    } finally {
+      setSendingReply(false);
+    }
+  }
 
   async function regenerateToken() {
     const confirmed = await confirm({
@@ -494,7 +516,7 @@ function InvoiceWorkflowStrip({
     const confirmed = await confirm({
       title: `Reset ${invoice.invoiceNumber} to pending approval?`,
       description:
-        "Clears the client's signature, change request and payment submitter. The client will need to approve the quote again.",
+        "Clears the client's signature and payment submitter. The client will need to approve the quote again. What they approved stays in the version history.",
       confirmLabel: "Reset approval",
       destructive: true,
     });
@@ -591,10 +613,37 @@ function InvoiceWorkflowStrip({
               </>
             )}
           </span>
-          <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => void resetApproval()}>
-            Reset to pending
-          </Button>
+          {approval === "approved" ? (
+            <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => void resetApproval()}>
+              Reset to pending
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              data-testid="invoice-reply-to-changes"
+              disabled={invoice.status === "void"}
+              onClick={() => setReplySheet((current) => ({ open: true, key: current.key + 1 }))}
+            >
+              <ChatTextIcon />
+              Reply with revised quote
+            </Button>
+          )}
         </div>
+      ) : null}
+      {approval === "changes_requested" ? (
+        <RevisedQuoteSheet
+          key={replySheet.key}
+          open={replySheet.open}
+          onOpenChange={(open) => setReplySheet((current) => ({ ...current, open }))}
+          invoiceId={invoiceId}
+          toEmail={clientEmail}
+          managerEmail={draft.fields.managerEmail || undefined}
+          isRequestLinked={isRequestLinked}
+          hasUnsavedEdits={draft.isDraftDirty}
+          sending={sendingReply}
+          onSend={sendReply}
+        />
       ) : null}
       {approval === "approved" && invoice.status !== "void" ? <InvoiceBillingState draft={draft} /> : null}
     </div>

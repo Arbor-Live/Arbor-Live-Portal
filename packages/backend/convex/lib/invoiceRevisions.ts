@@ -127,7 +127,36 @@ export async function ensureApprovedRevision(ctx: MutationCtx, invoice: Doc<"inv
   return revisionId;
 }
 
-/** Newest first. An invoice changes a handful of times, so 50 is plenty. */
+/** The newest revision, or null before the quote's first send, request or approval. */
+export async function latestInvoiceRevision(ctx: QueryCtx | MutationCtx, invoiceId: Id<"invoices">) {
+  return await ctx.db
+    .query("invoiceRevisions")
+    .withIndex("by_invoiceId_and_number", (q) => q.eq("invoiceId", invoiceId))
+    .order("desc")
+    .first();
+}
+
+/**
+ * The client's open change request, as a revision. Requests made before
+ * revisions recorded them only live on the invoice; snapshot one the first
+ * time it's needed, marked as recorded late, so replying to it never loses it.
+ */
+export async function ensureChangeRequestRevision(ctx: MutationCtx, invoice: Doc<"invoices">) {
+  if (invoice.clientApprovalStatus !== "changes_requested") return null;
+  const latest = await latestInvoiceRevision(ctx, invoice._id);
+  if (latest?.kind === "changes_requested") return latest;
+  const snapshot = await snapshotInvoice(ctx, invoice);
+  const { revisionId } = await recordInvoiceRevision(ctx, invoice._id, snapshot, {
+    kind: "changes_requested",
+    at: invoice.changesRequestedAt ?? Date.now(),
+    note: invoice.clientApprovalNote,
+    actorName: invoice.clientContactName,
+    recordedLate: true,
+  });
+  return await ctx.db.get(revisionId);
+}
+
+/** Newest first. A quote goes back and forth a handful of times, so 50 is plenty. */
 export async function listInvoiceRevisions(ctx: QueryCtx | MutationCtx, invoiceId: Id<"invoices">) {
   return await ctx.db
     .query("invoiceRevisions")

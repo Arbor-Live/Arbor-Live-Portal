@@ -49,6 +49,8 @@ import { syncLinkedEventsPrimaryHostFromInvoice } from "./lib/hostOrgs";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import {
   ensureApprovedRevision,
+  ensureChangeRequestRevision,
+  latestInvoiceRevision,
   listInvoiceRevisions,
   recordInvoiceRevision,
   snapshotFromRows,
@@ -1866,6 +1868,12 @@ export const resetApprovalToPending = mutation({
     return await withReportableErrors("invoices.resetApprovalToPending", async () => {
       const invoice = await ctx.db.get(args.id);
       if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+      if (invoice.clientApprovalStatus === "changes_requested") {
+        appError(
+          "QUOTE_CHANGES_NEED_REPLY",
+          "The client asked for changes. Send them the revised quote (or the same one, with why) instead.",
+        );
+      }
       await resetInvoiceApproval(ctx, invoice, Date.now());
       return { ok: true };
     });
@@ -2425,6 +2433,94 @@ export const createDraftForSeries = mutation({
   },
 });
 
+type QuoteSender = { name?: string; userId?: string };
+
+/**
+ * Put a booking-request quote on the request portal and email it: the first
+ * send, a re-send after a withdraw, or a reply to a change request. Each send
+ * is a version, with the message, so the client's history shows what they got.
+ */
+async function sendQuoteOnRequestPortal(
+  ctx: MutationCtx,
+  invoice: Doc<"invoices">,
+  clientMessage: string,
+  sender: QuoteSender,
+) {
+  if (!invoice.sourceEventRequestId) {
+    appError(
+      "QUOTE_NOT_BOOKING_REQUEST",
+      "Only booking-request quotes can be sent on the request portal.",
+    );
+  }
+  if (invoice.status === "void") {
+    appError("INVOICE_VOID", "Cannot publish a void quote.");
+  }
+  const clientReadyMessage = clientMessage.trim();
+  if (!clientReadyMessage) {
+    appError(
+      "QUOTE_MESSAGE_REQUIRED",
+      "A message to the client is required before sending the quote.",
+    );
+  }
+  if (resolveInvoiceTermsIds(invoice).length === 0) {
+    appError(
+      "QUOTE_TERMS_REQUIRED",
+      "Select at least one terms template before sending the quote.",
+    );
+  }
+  const now = Date.now();
+  const fromApprovalStatus = invoice.clientApprovalStatus ?? "pending";
+  const resetAfterChangesRequested = fromApprovalStatus === "changes_requested";
+  if (resetAfterChangesRequested) await ensureChangeRequestRevision(ctx, invoice);
+  await ctx.db.patch(invoice._id, {
+    status: "finalized",
+    clientReviewReadyAt: now,
+    clientReadyMessage,
+    ...(resetAfterChangesRequested
+      ? {
+          clientApprovalStatus: "pending" as const,
+          changesRequestedAt: undefined,
+          clientApprovalNote: undefined,
+        }
+      : {}),
+    updatedAt: now,
+  });
+  if (resetAfterChangesRequested) {
+    await recordInvoiceStatusTransition(ctx, invoice._id, fromApprovalStatus, "pending", { at: now });
+    await syncLinkedEventStatusFromInvoice(ctx, invoice._id, "pending");
+  }
+
+  const updatedInvoice = await ctx.db.get(invoice._id);
+  if (!updatedInvoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+  await recordInvoiceRevision(ctx, invoice._id, await snapshotInvoice(ctx, updatedInvoice), {
+    kind: "sent",
+    at: now,
+    note: clientReadyMessage,
+    actorName: sender.name,
+    actorUserId: sender.userId,
+  });
+  if (updatedInvoice.sourceEventRequestId) {
+    await syncBookingRequestStatusFromInvoice(ctx, updatedInvoice, { at: now });
+    const request = await ctx.db.get(updatedInvoice.sourceEventRequestId);
+    if (request) {
+      await scheduleBookingQuoteReadyEmail(ctx, {
+        request,
+        invoice: {
+          _id: updatedInvoice._id,
+          invoiceNumber: updatedInvoice.invoiceNumber,
+          totalUsd: updatedInvoice.totalUsd,
+          billingFinalizedAt: updatedInvoice.billingFinalizedAt,
+          paymentOpenedEarlyAt: updatedInvoice.paymentOpenedEarlyAt,
+          managerName: updatedInvoice.managerName,
+          managerEmail: updatedInvoice.managerEmail,
+          clientReviewReadyAt: now,
+          clientReadyMessage,
+        },
+      });
+    }
+  }
+}
+
 export const markReadyForClientReview = mutation({
   args: {
     id: v.id("invoices"),
@@ -2432,78 +2528,100 @@ export const markReadyForClientReview = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    const viewer = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     return await withReportableErrors("invoices.markReadyForClientReview", async () => {
-    const invoice = await ctx.db.get(args.id);
-    if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
-    if (!invoice.sourceEventRequestId) {
-      appError(
-        "QUOTE_NOT_BOOKING_REQUEST",
-        "Only booking-request quotes can be sent on the request portal.",
-      );
-    }
-    if (invoice.status === "void") {
-      appError("INVOICE_VOID", "Cannot publish a void quote.");
-    }
-    const clientReadyMessage = args.clientMessage.trim();
-    if (!clientReadyMessage) {
-      appError(
-        "QUOTE_MESSAGE_REQUIRED",
-        "A message to the client is required before sending the quote.",
-      );
-    }
-    if (resolveInvoiceTermsIds(invoice).length === 0) {
-      appError(
-        "QUOTE_TERMS_REQUIRED",
-        "Select at least one terms template before sending the quote.",
-      );
-    }
-    const now = Date.now();
-    const fromApprovalStatus = invoice.clientApprovalStatus ?? "pending";
-    const resetAfterChangesRequested = fromApprovalStatus === "changes_requested";
-    await ctx.db.patch(args.id, {
-      status: "finalized",
-      clientReviewReadyAt: now,
-      clientReadyMessage,
-      ...(resetAfterChangesRequested
-        ? {
-            clientApprovalStatus: "pending" as const,
-            changesRequestedAt: undefined,
-            clientApprovalNote: undefined,
-          }
-        : {}),
-      updatedAt: now,
+      const invoice = await ctx.db.get(args.id);
+      if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+      await sendQuoteOnRequestPortal(ctx, invoice, args.clientMessage, {
+        name: viewer.name,
+        userId: viewer._id ?? viewer.id,
+      });
+      return null;
     });
-    if (resetAfterChangesRequested) {
-      await recordInvoiceStatusTransition(ctx, args.id, fromApprovalStatus, "pending", { at: now });
-      await syncLinkedEventStatusFromInvoice(ctx, args.id, "pending");
-    }
+  },
+});
 
-    const updatedInvoice = await ctx.db.get(args.id);
-    if (updatedInvoice?.sourceEventRequestId) {
-      await syncBookingRequestStatusFromInvoice(ctx, updatedInvoice, { at: now });
-      const request = await ctx.db.get(updatedInvoice.sourceEventRequestId);
-      if (request) {
-        await scheduleBookingQuoteReadyEmail(ctx, {
-          request,
-          invoice: {
-            _id: updatedInvoice._id,
-            invoiceNumber: updatedInvoice.invoiceNumber,
-            totalUsd: updatedInvoice.totalUsd,
-            billingFinalizedAt: updatedInvoice.billingFinalizedAt,
-            paymentOpenedEarlyAt: updatedInvoice.paymentOpenedEarlyAt,
-            managerName: updatedInvoice.managerName,
-            managerEmail: updatedInvoice.managerEmail,
-            clientReviewReadyAt: now,
-            clientReadyMessage,
-          },
-        });
+/**
+ * Answer the client's change request: send the quote as it now stands (revised,
+ * or unchanged with an explanation) with a reply, and open it for their
+ * decision again. Request-portal quotes go back on the portal; others are
+ * emailed with their quote link. The request stays in the version history,
+ * followed by this reply.
+ */
+export const sendRevisedQuote = mutation({
+  args: {
+    id: v.id("invoices"),
+    message: v.string(),
+  },
+  returns: v.object({ number: v.number() }),
+  handler: async (ctx, args) => {
+    const viewer = await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    return await withReportableErrors("invoices.sendRevisedQuote", async () => {
+      const invoice = await ctx.db.get(args.id);
+      if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+      if (invoice.status === "void") appError("INVOICE_VOID", "This quote is void.");
+      if (invoice.clientApprovalStatus !== "changes_requested") {
+        appError("QUOTE_NO_CHANGE_REQUEST", "The client hasn't asked for changes to this quote.");
       }
-    }
+      const message = args.message.trim();
+      if (!message) {
+        appError("QUOTE_REPLY_REQUIRED", "Tell the client what changed, or why it didn't.");
+      }
+      const sender = { name: viewer.name, userId: viewer._id ?? viewer.id };
 
-    return null;
+      if (invoice.sourceEventRequestId) {
+        await sendQuoteOnRequestPortal(ctx, invoice, message, sender);
+        const sent = await latestInvoiceRevision(ctx, invoice._id);
+        return { number: sent?.number ?? 0 };
+      }
+
+      const request = await ensureChangeRequestRevision(ctx, invoice);
+      const now = Date.now();
+      await resetInvoiceApproval(ctx, invoice, now);
+      const snapshot = await snapshotInvoice(ctx, invoice);
+      const { number } = await recordInvoiceRevision(ctx, invoice._id, snapshot, {
+        kind: "sent",
+        at: now,
+        note: message,
+        actorName: sender.name,
+        actorUserId: sender.userId,
+      });
+      await scheduleQuoteUpdatedEmail(ctx, {
+        invoice,
+        reason: "changes_requested",
+        previousTotalUsd: request?.totalUsd ?? invoice.totalUsd,
+        newTotalUsd: snapshot.totalUsd,
+        changeNote: message,
+        requestNote: request?.note,
+        revisionNumber: number,
+      });
+      return { number };
     });
+  },
+});
+
+/**
+ * The client's open change request next to the quote as saved now, so the
+ * reply sheet can show what changed since they asked. Null when there's no
+ * open request.
+ */
+export const revisedQuotePreview = query({
+  args: { id: v.id("invoices") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice || invoice.clientApprovalStatus !== "changes_requested") return null;
+    const latest = await latestInvoiceRevision(ctx, invoice._id);
+    const current = await snapshotInvoice(ctx, invoice);
+    const request =
+      latest?.kind === "changes_requested"
+        ? { number: latest.number, note: latest.note, totalUsd: latest.totalUsd, lines: latest.lines }
+        : // Asked before requests were versions: the note is all there is.
+          { number: null, note: invoice.clientApprovalNote, totalUsd: null, lines: null };
+    return { request, current: { totalUsd: current.totalUsd, lines: current.lines } };
   },
 });
 

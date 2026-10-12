@@ -114,6 +114,9 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
   (status, pull list, host, payment reminders). Further links are
   `eventInvoiceLinks` (max 12). Event margin and pipeline booked revenue sum
   them. Extra invoices are per occurrence; a series still shares one primary.
+- Quote back-and-forth lives in `invoiceRevisions` (`sent`, `changes_requested`,
+  `approved`, …). Never clear a client change request without recording it:
+  answer it via `sendRevisedQuote` (see `docs/domain-guide.md`).
 
 ## Event groups (series + multi-day bookings)
 - `eventSeries` rows are **event groups**: `kind: "recurring"` (series) or `"multi_day"` (days sharing one primary invoice). Days

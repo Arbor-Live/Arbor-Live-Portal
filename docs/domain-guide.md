@@ -589,6 +589,25 @@ Update `YEARS` there when the Registrar publishes new dates.
   - Versions show in the editor (Versions card) and in the client portal (Quote
     history, plus a "we updated your quote" banner while re-approval is
     pending).
+- **Change requests are versions too.** The version history covers the whole
+  back-and-forth with the client, not just what happens after an approval:
+  - Each send to the client (`markReadyForClientReview`, `sendRevisedQuote`)
+    saves a `sent` version with the staff message.
+  - A client change request (`requestInvoiceQuoteChanges`) saves a
+    `changes_requested` version with their note. `invoices.changesRequestedAt`
+    / `clientApprovalNote` hold only the *open* request and are cleared once
+    it's answered; the version keeps it.
+  - Staff answer with **Reply with revised quote** (`sendRevisedQuote`, a
+    required message, `revisedQuotePreview` shows the diff since the request).
+    It saves a `sent` version and reopens approval. Request-portal quotes go back
+    on the portal (`booking_quote_ready`); others get `quote_updated` with
+    `reason: "changes_requested"`. Resending unchanged is allowed, with a reply.
+  - `resetApprovalToPending` refuses an open change request, so a request is
+    never cleared silently. Requests made before this were backfilled
+    (`backfillOpenChangeRequestRevisions`, `recordedLate`) only while still
+    open; earlier answered ones only survive in `emailNotifications`.
+  - The client portal shows a "we answered your change request" banner (their
+    request, the reply, the diff) while the reply awaits their decision.
 - Every invoice carries a `publicApprovalToken` for the client-facing quote
   page (`/public/quote/[token]`): view, approve, request changes, set payment
   contacts, download PDF — all token-gated, no login.

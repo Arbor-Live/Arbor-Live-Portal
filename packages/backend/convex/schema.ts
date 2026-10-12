@@ -62,6 +62,10 @@ const clientApprovalStatusValue = v.union(
 );
 
 const invoiceRevisionKindValue = v.union(
+  /** Staff sent this version to the client: the first send, or a reply to a change request. */
+  v.literal("sent"),
+  /** The client asked for changes to this version; the note is their request. */
+  v.literal("changes_requested"),
   /** The client approved this version. */
   v.literal("approved"),
   /** Staff changed an approved quote and sent it back for approval. */
@@ -831,11 +835,11 @@ export default defineSchema({
     .searchIndex("search_clientGroupName", { searchField: "clientGroupName" }),
 
   /**
-   * What a quote looked like at each point that matters: when the client
-   * approved it, and each time staff changed it afterwards (sent back for
-   * re-approval, or kept the approval with a reason). Immutable snapshots, in
-   * the amounts the client saw, so "what did they agree to?" always has an
-   * answer.
+   * What a quote looked like at each point that matters: each time staff sent
+   * it, each time the client asked for changes or approved it, and each change
+   * after an approval (sent back for re-approval, or kept with a reason).
+   * Immutable snapshots, in the amounts the client saw, so "what did they ask
+   * for, and what did they agree to?" always has an answer.
    */
   invoiceRevisions: defineTable({
     invoiceId: v.id("invoices"),
@@ -855,14 +859,20 @@ export default defineSchema({
         amountUsd: v.number(),
       }),
     ),
-    /** Why it changed (required when staff keep an approval). */
+    /**
+     * Why it changed (required when staff keep an approval), the client's
+     * change request, or staff's message when sending it.
+     */
     note: v.optional(v.string()),
-    /** Who made it: the client's signed name for approvals, else the staff member. */
+    /**
+     * Who made it: the client's signed name for approvals, the client contact
+     * for change requests, else the staff member.
+     */
     actorName: v.optional(v.string()),
     actorUserId: v.optional(v.string()),
     /**
-     * Approved before revisions existed: snapshotted the first time the quote
-     * changed afterwards, so it shows the quote as it stood then.
+     * Approved (or changes requested) before revisions existed: snapshotted
+     * later, so it shows the quote as it stood then rather than as it was seen.
      */
     recordedLate: v.optional(v.boolean()),
     createdAt: v.number(),

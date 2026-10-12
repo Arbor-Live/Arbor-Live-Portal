@@ -198,6 +198,13 @@ export type QuoteUpdatedEmailProps = {
   previousTotalUsd: number;
   newTotalUsd: number;
   changeNote?: string;
+  /**
+   * Why it's back with the client: staff changed the quote they approved, or
+   * staff answered the changes they asked for. Older queued emails omit it.
+   */
+  reason?: "approved" | "changes_requested";
+  /** The client's change request this answers. */
+  requestNote?: string;
   portalUrl: string;
   managerName: string;
   managerEmail?: string;

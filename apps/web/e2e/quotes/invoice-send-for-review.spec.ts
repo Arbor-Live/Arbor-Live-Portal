@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { pollConvex, runConvex } from "../helpers/convex";
 import { waitForSentEmail } from "../helpers/email";
 import { e2eEnv } from "../helpers/env";
-import { invoiceEditorHeading } from "../helpers/invoice";
+import { invoiceEditorHeading, type InvoiceRevisionsState } from "../helpers/invoice";
 
 type ReviewState = {
   status: string;
@@ -154,7 +154,7 @@ test.describe("invoice send for client review", () => {
     }
   });
 
-  test("re-sending after client requested changes resets approval to pending", async ({
+  test("replying to a change request keeps it in the history and reopens approval", async ({
     page,
     browser,
   }) => {
@@ -206,16 +206,13 @@ test.describe("invoice send for client review", () => {
     );
     expect(changesRequested.clientApprovalStatus).toBe("changes_requested");
 
-    await page.getByTestId("invoice-withdraw-review").click();
-    await pollConvex<ReviewState>(
-      "e2eHelpers:getInvoiceReviewState",
-      { invoiceId: seeded.invoiceId },
-      (row) => row?.clientReviewReadyAt === null,
-    );
-
-    await page.getByTestId("invoice-send-quote-to-client").click();
-    await page.locator("#quote-ready-message").fill(resendMessage);
-    await page.getByRole("button", { name: "Send email" }).click();
+    // Reply straight from the request, unchanged: no withdraw, and the request stays in the history.
+    await page.getByTestId("invoice-reply-to-changes").click();
+    const sheet = page.getByTestId("revised-quote-sheet");
+    await expect(sheet).toContainText("Please adjust crew hours.");
+    await expect(sheet.getByTestId("revised-quote-unchanged")).toBeVisible({ timeout: 20_000 });
+    await sheet.getByTestId("revised-quote-message").fill(resendMessage);
+    await sheet.getByTestId("revised-quote-send").click();
 
     const resent = await pollConvex<ReviewState>(
       "e2eHelpers:getInvoiceReviewState",
@@ -223,6 +220,17 @@ test.describe("invoice send for client review", () => {
       (row) => row?.clientReadyMessage === resendMessage,
     );
     expect(resent.clientApprovalStatus).toBe("pending");
+    const history = await pollConvex<InvoiceRevisionsState>(
+      "e2eHelpers:getInvoiceRevisionsState",
+      { invoiceId: seeded.invoiceId },
+      (row) => row?.revisions.length === 3,
+    );
+    expect(history.revisions.map((revision) => [revision.kind, revision.note])).toEqual([
+      ["sent", `E2E first send ${stamp}`],
+      ["changes_requested", "Please adjust crew hours."],
+      ["sent", resendMessage],
+    ]);
+    await expect(page.getByTestId("quote-version-2")).toContainText("Please adjust crew hours.");
 
     const recheckContext = await browser.newContext({ baseURL: e2eEnv.baseURL });
     try {
@@ -231,6 +239,7 @@ test.describe("invoice send for client review", () => {
       await expect(recheckPage.getByRole("button", { name: "Approve quote" })).toBeVisible({
         timeout: 25_000,
       });
+      await expect(recheckPage.getByTestId("public-quote-revised")).toContainText("Please adjust crew hours.");
       await expect(recheckPage.getByText(/Terms & conditions/i).first()).toBeVisible({
         timeout: 25_000,
       });
