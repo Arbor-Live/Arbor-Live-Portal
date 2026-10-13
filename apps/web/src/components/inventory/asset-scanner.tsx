@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CameraIcon, KeyboardIcon } from "@phosphor-icons/react";
+import { CameraIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,7 +48,7 @@ export function AssetScanner({
       <div className="space-y-1.5">
         <Label htmlFor="asset-scan-input">Scan asset</Label>
         <form
-          className="flex gap-2"
+          className="flex gap-1.5"
           onSubmit={(event) => {
             event.preventDefault();
             void handleSubmit(value);
@@ -63,16 +63,24 @@ export function AssetScanner({
             autoFocus={autoFocus}
             autoComplete="off"
           />
+          {supported ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label={cameraOn ? "Hide camera" : "Scan with camera"}
+              aria-pressed={cameraOn}
+              disabled={disabled}
+              onClick={toggleCamera}
+              className="shrink-0"
+            >
+              <CameraIcon className="size-4" />
+            </Button>
+          ) : null}
           <Button type="submit" disabled={disabled || busy || !value.trim()}>
             Add
           </Button>
         </form>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={toggleCamera}>
-          {cameraOn ? <KeyboardIcon className="size-4" /> : <CameraIcon className="size-4" />}
-          {cameraOn ? "Hide camera" : supported ? "Use camera" : "Camera unavailable"}
-        </Button>
       </div>
       <BarcodeCameraView
         camera={camera}

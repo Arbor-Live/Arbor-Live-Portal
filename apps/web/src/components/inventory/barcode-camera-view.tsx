@@ -1,6 +1,6 @@
 "use client";
 
-import { FlashlightIcon, SpeakerHighIcon, SpeakerSlashIcon } from "@phosphor-icons/react";
+import { CameraIcon, FlashlightIcon, SpeakerHighIcon, SpeakerSlashIcon } from "@phosphor-icons/react";
 import { describeScan } from "@/lib/asset-scan";
 import { cn } from "@/lib/utils";
 import type { BarcodeCamera } from "./use-barcode-camera";
@@ -88,7 +88,24 @@ export function BarcodeCameraView({
                 {muted ? <SpeakerSlashIcon className="size-4" /> : <SpeakerHighIcon className="size-4" />}
               </button>
             </div>
-            {lenses.length > 1 ? (
+            {lenses.length > 1 && !lenses.every((lens) => lens.short) ? (
+              // Desktop camera names ("FaceTime HD Camera", a phone via Continuity) are too long for pills.
+              <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-full bg-black/60 pr-2 pl-2.5 text-white">
+                <CameraIcon className="size-3.5 shrink-0" aria-hidden />
+                <select
+                  aria-label="Camera"
+                  value={activeLensId ?? ""}
+                  onChange={(event) => selectLens(event.target.value)}
+                  className="min-w-0 cursor-pointer truncate bg-transparent py-1 text-xs font-medium outline-none"
+                >
+                  {lenses.map((lens) => (
+                    <option key={lens.deviceId} value={lens.deviceId} className="text-black">
+                      {lens.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : lenses.length > 1 ? (
               <div
                 className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1 rounded-full bg-black/60 p-1"
                 role="group"
