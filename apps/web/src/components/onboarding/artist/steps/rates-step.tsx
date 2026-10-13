@@ -7,6 +7,7 @@ import { OnboardingTextarea } from "@/components/onboarding/onboarding-ui";
 import {
   BAND_PAYEE_MAILING_ADDRESS_HINT,
   BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER,
+  bandPayoutAdminOnlyNotice,
 } from "@/lib/band-payout-copy";
 import { PENDING_PAYEE_PREFIX, normalizeEmail } from "../constants";
 import type { FormState } from "../types";
@@ -17,15 +18,28 @@ export function RatesStep({
   members,
   payeeOptions,
   payeeSelectValue,
+  readOnly = false,
+  artistAdminNames = [],
 }: {
   form: FormState;
   patch: (next: Partial<FormState>) => void;
   members: Array<{ userId: string; name: string; email: string }> | undefined;
   payeeOptions: UserSelectOption[];
   payeeSelectValue: string;
+  /** Members see what's on file; only an artist admin can change it. */
+  readOnly?: boolean;
+  artistAdminNames?: string[];
 }) {
   return (
-    <div className="space-y-4">
+    <fieldset disabled={readOnly} className="space-y-4">
+      {readOnly ? (
+        <p
+          className="border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
+          data-testid="band-onboarding-payee-admin-only"
+        >
+          {bandPayoutAdminOnlyNotice(artistAdminNames)} You can continue without it.
+        </p>
+      ) : null}
       <div className="space-y-2">
         <Label htmlFor="band-rate">Rate per person per hour (USD)</Label>
         <NumberInput
@@ -33,7 +47,7 @@ export function RatesStep({
           min={0}
           value={form.performerHourlyRateUsd}
           onValueChange={(performerHourlyRateUsd) => patch({ performerHourlyRateUsd })}
-          autoFocus
+          autoFocus={!readOnly}
         />
       </div>
 
@@ -110,6 +124,6 @@ export function RatesStep({
           </p>
         </div>
       </div>
-    </div>
+    </fieldset>
   );
 }

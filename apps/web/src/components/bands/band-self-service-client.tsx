@@ -219,7 +219,7 @@ export function BandSelfServiceClient() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <BandArborPrivateFields />
+                  <BandArborPrivateFields rateReadOnly={profile?.canEditPayout === false} />
                 </CardContent>
               </Card>
             </form>

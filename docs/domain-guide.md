@@ -643,7 +643,11 @@ Update `YEARS` there when the Registrar publishes new dates.
   (or create a payout which also upserts participation), then set pricing on the
   same overview row.
 - Each band org has a designated payee (name/email/mailing address + linked
-  user id on `organizationProfiles`).
+  user id on `organizationProfiles`). Only an artist admin (`org_admin`
+  membership) or Arbor staff can change the payee or rate. Members see them
+  read-only and skip that onboarding step. Staff change a membership's role
+  from the person panel in **Users**. Add person defaults to Org Admin when
+  the artist has no admin yet.
 - **Artist payouts** (`/dashboard/financial-hub/artist-payouts`) is a pipeline
   grouped by who acts next (`lib/band-payout-stages.ts`): **Upcoming** (`draft`)
   → **Waiting on artist** (`pending_onboarding`, `pending_payee`) → **Ready to

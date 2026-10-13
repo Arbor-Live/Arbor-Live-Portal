@@ -32,6 +32,8 @@ function membershipLine(panel: Locator, organizationName: string) {
  * reaches a band portal at all — and the band-only/Arbor-only separation that
  * `auth/org-context-guards.spec.ts` asserts is downstream of these rows.
  *
+ * Staff change a membership's role in place from the same section.
+ *
  * The band org seeded by `band.setup.ts` is reused as the second org rather than
  * creating one: `createOrganizationAdmin` would leave a new org behind on every
  * run, and orgs appear in the pickers of every other spec.
@@ -39,7 +41,7 @@ function membershipLine(panel: Locator, organizationName: string) {
 test.describe.serial("user organization memberships", () => {
   test.setTimeout(180_000);
 
-  test("admin adds a band-org membership, then removes it", async ({ page }) => {
+  test("admin adds a band-org membership, changes its role, then removes it", async ({ page }) => {
     runConvex("e2eHelpers:ensureCrewUser", {
       email: targetEmail,
       password: targetPassword,
@@ -85,9 +87,23 @@ test.describe.serial("user organization memberships", () => {
     // Additive: the Arbor membership is untouched, the user is not moved.
     expect(added.memberships.length).toBe(baseline.memberships.length + 1);
 
-    await expect(membershipLine(panel, e2eEnv.bandOrgName)).toContainText("Org Admin", {
+    const lineRole = membershipLine(panel, e2eEnv.bandOrgName).getByRole("combobox", {
+      name: `${e2eEnv.bandOrgName} role`,
+    });
+    await expect(lineRole).toHaveText("Org Admin", { timeout: 30_000 });
+
+    // The role is editable in place: staff can demote (or promote) without
+    // removing and re-adding the membership.
+    await pickSelectOption(page, lineRole, "Org Member");
+    await expect(page.getByText(`${targetName} is now Org Member of ${e2eEnv.bandOrgName}.`)).toBeVisible({
       timeout: 30_000,
     });
+    await waitForUserAdminState(targetEmail, (state) =>
+      (state?.memberships ?? []).some(
+        (membership) =>
+          membership.organizationName === e2eEnv.bandOrgName && membership.role === "org_member",
+      ),
+    );
 
     await removeMembership(panel, e2eEnv.bandOrgName);
     await expect(page.getByText(`Removed membership for ${targetName}.`)).toBeVisible({
