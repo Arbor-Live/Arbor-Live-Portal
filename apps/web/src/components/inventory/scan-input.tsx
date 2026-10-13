@@ -5,7 +5,7 @@ import { CameraIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BarcodeCameraView } from "./barcode-camera-view";
-import { useBarcodeCamera } from "./use-barcode-camera";
+import { useBarcodeCamera, type BarcodeCamera } from "./use-barcode-camera";
 
 type ScanInputProps = {
   value: string;
@@ -24,6 +24,11 @@ type ScanInputProps = {
   ariaLabel?: string;
   className?: string;
   showCameraButton?: boolean;
+  /**
+   * A camera owned by the parent, which renders its `BarcodeCameraView`. Lets a
+   * field in a narrow column show the preview at full width below the row.
+   */
+  camera?: BarcodeCamera;
 };
 
 /**
@@ -46,15 +51,17 @@ export function ScanInput({
   ariaLabel,
   className,
   showCameraButton = true,
+  camera: externalCamera,
 }: ScanInputProps) {
   // Stays open after a read: a later read replaces the value, "Hide camera" closes it.
-  const camera = useBarcodeCamera((raw) => {
+  const ownCamera = useBarcodeCamera((raw) => {
     if (onScan) {
       void onScan(raw);
       return;
     }
     onChange(raw.trim());
   });
+  const camera = externalCamera ?? ownCamera;
   const { cameraOn, toggleCamera, supported } = camera;
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -96,7 +103,9 @@ export function ScanInput({
           </Button>
         ) : null}
       </div>
-      <BarcodeCameraView camera={camera} idleHint="Point the camera at a QR code or barcode." />
+      {externalCamera ? null : (
+        <BarcodeCameraView camera={camera} idleHint="Point the camera at a QR code or barcode." />
+      )}
     </div>
   );
 }
