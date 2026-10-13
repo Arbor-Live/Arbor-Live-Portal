@@ -101,7 +101,7 @@ export function AddPersonDialog({
   useEffect(() => {
     if (rolePicked || arborOrg || orgHasAdmin === undefined) return;
     form.setValue("role", orgHasAdmin ? "org_member" : "org_admin");
-  }, [arborOrg, form, orgHasAdmin, rolePicked]);
+  }, [arborOrg, form, orgHasAdmin, organizationId, rolePicked]);
   const submitting = form.saveStatus === "saving" || form.formState.isSubmitting;
 
   const orgSelectOptions = useMemo(

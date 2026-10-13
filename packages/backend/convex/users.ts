@@ -3154,8 +3154,9 @@ export const updateActiveBandProfile = mutation({
     // Forms resend these fields on every save, so only a real change counts.
     const text = (value: string | undefined) => value?.trim() || undefined;
     const changesPayout =
+      // The profile query reports a missing rate as 0, so 0 resent is no change.
       (args.performerHourlyRateUsd !== undefined &&
-        args.performerHourlyRateUsd !== existing?.performerHourlyRateUsd) ||
+        args.performerHourlyRateUsd !== (existing?.performerHourlyRateUsd ?? 0)) ||
       (args.designatedPayeeUserId !== undefined &&
         text(args.designatedPayeeUserId) !== existing?.designatedPayeeUserId) ||
       (args.designatedPayeeName !== undefined &&

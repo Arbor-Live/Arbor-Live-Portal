@@ -148,3 +148,21 @@ test("reports whether an artist org has an active admin", async () => {
     }),
   ).toBe(true);
 });
+
+test("lets a member save the profile when no rate was ever set", async () => {
+  const { t, band, member } = await bandContextWithPayee();
+
+  // The profile query reports the missing rate as 0, and forms resend it.
+  await asUser(t, member).mutation(api.users.updateActiveBandProfile, {
+    displayName: "Renamed Band",
+    performerHourlyRateUsd: 0,
+  });
+
+  const profile = await t.run(async (ctx) =>
+    ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", band.organizationId))
+      .unique(),
+  );
+  expect(profile?.displayName).toBe("Renamed Band");
+});
