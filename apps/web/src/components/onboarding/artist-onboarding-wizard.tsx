@@ -255,6 +255,8 @@ export function BandOnboardingWizard() {
                   members={members}
                   payeeOptions={payeeOptions}
                   payeeSelectValue={payeeSelectValue}
+                  readOnly={profile?.canEditPayout === false}
+                  artistAdminNames={profile?.artistAdminNames ?? []}
                 />
                 <MarkStepAnswered />
                 <QuestionnaireFieldError className="text-sm">

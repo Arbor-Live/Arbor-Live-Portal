@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { useMutation } from "convex/react";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { EnvelopeSimpleIcon, UserIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { notify } from "@/lib/notify";
@@ -90,6 +90,18 @@ export function AddPersonDialog({
   const arborOrg = isArborOrg(orgOptions, organizationId);
   const showCompensation = arborOrg && inviteKind === "crew";
   const roleOptions = getRoleOptionsForOrg(orgOptions, organizationId);
+  // Someone has to manage an artist's payee and team, so the first person
+  // invited into an artist org with no admin defaults to Org Admin.
+  const orgHasAdmin = useQuery(
+    api.users.organizationHasActiveAdminAdmin,
+    organizationId && !arborOrg ? { organizationId } : "skip",
+  );
+  const firstArtistAdmin = !arborOrg && orgHasAdmin === false;
+  const [rolePicked, setRolePicked] = useState(false);
+  useEffect(() => {
+    if (rolePicked || arborOrg || orgHasAdmin === undefined) return;
+    form.setValue("role", orgHasAdmin ? "org_member" : "org_admin");
+  }, [arborOrg, form, orgHasAdmin, organizationId, rolePicked]);
   const submitting = form.saveStatus === "saving" || form.formState.isSubmitting;
 
   const orgSelectOptions = useMemo(
@@ -171,6 +183,7 @@ export function AddPersonDialog({
                 onChange={(value) => {
                   form.setValue("organizationId", value, { shouldDirty: true, shouldValidate: true });
                   form.setValue("role", getRoleOptionsForOrg(orgOptions, value)[0]?.value ?? "member");
+                  setRolePicked(false);
                 }}
                 options={orgSelectOptions}
                 placeholder="Search organizations…"
@@ -196,7 +209,10 @@ export function AddPersonDialog({
                 <Label htmlFor="add-person-role">Role</Label>
                 <Select
                   value={form.watch("role")}
-                  onValueChange={(value) => form.setValue("role", value, { shouldDirty: true })}
+                  onValueChange={(value) => {
+                    setRolePicked(true);
+                    form.setValue("role", value, { shouldDirty: true });
+                  }}
                 >
                   <SelectTrigger id="add-person-role">
                     <SelectValue />
@@ -209,6 +225,11 @@ export function AddPersonDialog({
                     ))}
                   </SelectContent>
                 </Select>
+                {firstArtistAdmin ? (
+                  <p className="text-xs text-muted-foreground" data-testid="add-person-first-admin-hint">
+                    No admin yet. Admins set the payee and manage the team.
+                  </p>
+                ) : null}
               </div>
               {arborOrg ? (
                 <div className="space-y-1">

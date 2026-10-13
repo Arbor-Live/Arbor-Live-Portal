@@ -35,3 +35,12 @@ export const BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER =
 
 export const BAND_PAYEE_1099_NOTICE =
   "If your designated payee receives more than $2,000 in total across the calendar year from any Stanford VSO (not just Arbor Live), Stanford will issue them a Form 1099. Consider rotating the designated payee among members if you expect to exceed that threshold.";
+
+/** Shown to artist members who can see payout details but cannot change them. */
+export function bandPayoutAdminOnlyNotice(adminNames: string[]) {
+  const ask =
+    adminNames.length === 0
+      ? "Ask Arbor Live to make someone on your team an artist admin."
+      : `Ask ${new Intl.ListFormat("en", { type: "disjunction" }).format(adminNames)}.`;
+  return `Only your artist admin can set the payee. ${ask}`;
+}

@@ -636,6 +636,22 @@ export const listOrganizationsAdmin = query({
   },
 });
 
+/** Whether an organization already has an active admin, so a first invite can default to admin. */
+export const organizationHasActiveAdminAdmin = query({
+  args: { organizationId: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const memberships = await ctx.db
+      .query("userOrganizationMemberships")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .take(500);
+    return memberships.some(
+      (membership) => membership.active && isArtistOrgAdminRole(membership.role),
+    );
+  },
+});
+
 /** Every artist org with payee details; Operations books and pays acts, so they read it too. */
 export const listBandOrganizationsAdmin = query({
   args: { includeArchived: v.optional(v.boolean()) },
@@ -2952,6 +2968,36 @@ export const addUserOrganizationMembershipAdmin = mutation({
   },
 });
 
+export const updateUserOrganizationMembershipRoleAdmin = mutation({
+  args: {
+    userId: v.string(),
+    organizationId: v.string(),
+    role: v.string(),
+  },
+  returns: v.object({ role: v.string() }),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    return await withReportableErrors("users.updateUserOrganizationMembershipRoleAdmin", async () => {
+      const role = await normalizeMembershipRole(ctx, args.organizationId, args.role);
+      const membership = await ctx.db
+        .query("userOrganizationMemberships")
+        .withIndex("by_userId_and_organizationId", (q) =>
+          q.eq("userId", args.userId).eq("organizationId", args.organizationId),
+        )
+        .unique();
+      if (!membership) {
+        appError("MEMBERSHIP_NOT_FOUND", "This person is not a member of that organization.");
+      }
+      if (membership.role !== role) {
+        await ctx.db.patch(membership._id, { role, updatedAt: Date.now() });
+        // Arbor admin/member changes portal access; artist roles never do.
+        await syncGlobalRoleFromMemberships(ctx, args.userId);
+      }
+      return { role };
+    });
+  },
+});
+
 export const removeUserOrganizationMembershipAdmin = mutation({
   args: {
     userId: v.string(),
@@ -2992,6 +3038,37 @@ export const sendPasswordResetAdmin = mutation({
   },
 });
 
+/** Active artist admins of the org, and Arbor staff, may change payout details. */
+async function canChangeBandPayout(ctx: QueryCtx | MutationCtx, organizationId: string) {
+  const actor = await requireAuth(ctx);
+  const actorId = getUserId(actor);
+  const actorMembership = await ctx.db
+    .query("userOrganizationMemberships")
+    .withIndex("by_userId_and_organizationId", (q) =>
+      q.eq("userId", actorId).eq("organizationId", organizationId),
+    )
+    .unique();
+  return (
+    (actorMembership?.active === true && isArtistOrgAdminRole(actorMembership.role)) ||
+    (await isStaffAdmin(ctx, actor))
+  );
+}
+
+/** Names of the active artist admins, so members know whom to ask about payouts. */
+async function listArtistAdminNames(ctx: QueryCtx, organizationId: string) {
+  const memberships = await ctx.db
+    .query("userOrganizationMemberships")
+    .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+    .take(500);
+  const names: string[] = [];
+  for (const membership of memberships) {
+    if (!membership.active || !isArtistOrgAdminRole(membership.role)) continue;
+    const user = await findAuthUserById(ctx, membership.userId);
+    names.push(user?.name?.trim() || user?.email || "your artist admin");
+  }
+  return names.sort((a, b) => a.localeCompare(b));
+}
+
 export const getActiveBandProfile = query({
   args: {},
   handler: async (ctx) => {
@@ -3000,8 +3077,13 @@ export const getActiveBandProfile = query({
       .query("organizationProfiles")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", context.organizationId))
       .unique();
+    const canEditPayout = await canChangeBandPayout(ctx, context.organizationId);
     return {
       organizationId: context.organizationId,
+      canEditPayout,
+      artistAdminNames: canEditPayout
+        ? []
+        : await listArtistAdminNames(ctx, context.organizationId),
       name: context.organizationName,
       displayName: profile?.displayName ?? context.organizationName,
       bio: profile?.bio ?? "",
@@ -3072,8 +3154,9 @@ export const updateActiveBandProfile = mutation({
     // Forms resend these fields on every save, so only a real change counts.
     const text = (value: string | undefined) => value?.trim() || undefined;
     const changesPayout =
+      // The profile query reports a missing rate as 0, so 0 resent is no change.
       (args.performerHourlyRateUsd !== undefined &&
-        args.performerHourlyRateUsd !== existing?.performerHourlyRateUsd) ||
+        args.performerHourlyRateUsd !== (existing?.performerHourlyRateUsd ?? 0)) ||
       (args.designatedPayeeUserId !== undefined &&
         text(args.designatedPayeeUserId) !== existing?.designatedPayeeUserId) ||
       (args.designatedPayeeName !== undefined &&
@@ -3084,24 +3167,8 @@ export const updateActiveBandProfile = mutation({
         text(args.designatedPayeeMailingAddress) !== existing?.designatedPayeeMailingAddress) ||
       (args.designatedPayeePayoutMethod !== undefined &&
         args.designatedPayeePayoutMethod !== existing?.designatedPayeePayoutMethod);
-    if (changesPayout) {
-      const actor = await requireAuth(ctx);
-      const actorId = getUserId(actor);
-      const actorMembership = await ctx.db
-        .query("userOrganizationMemberships")
-        .withIndex("by_userId_and_organizationId", (q) =>
-          q.eq("userId", actorId).eq("organizationId", context.organizationId),
-        )
-        .unique();
-      const isOrgAdmin =
-        (actorMembership?.active === true && isArtistOrgAdminRole(actorMembership.role)) ||
-        (await isStaffAdmin(ctx, actor));
-      if (!isOrgAdmin) {
-        appError(
-          "BAND_PAYOUT_ADMIN_REQUIRED",
-          "Only an artist admin can change who gets paid.",
-        );
-      }
+    if (changesPayout && !(await canChangeBandPayout(ctx, context.organizationId))) {
+      appError("BAND_PAYOUT_ADMIN_REQUIRED", "Only an artist admin can change who gets paid.");
     }
 
     return await withReportableErrors("users.updateActiveBandProfile", async () => {

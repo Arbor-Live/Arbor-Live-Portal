@@ -20,6 +20,7 @@ import {
   BAND_PAYEE_MAILING_ADDRESS_HINT,
   BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER,
   DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
+  bandPayoutAdminOnlyNotice,
   type BandPayeePayoutMethod,
 } from "@/lib/band-payout-copy";
 import { trimOptional } from "@/lib/band-profile-lists";
@@ -105,6 +106,7 @@ export function BandPayeeSettingsSection() {
   if (profile === undefined) {
     return <p className="text-sm text-muted-foreground">Loading payee settings…</p>;
   }
+  const readOnly = !profile.canEditPayout;
 
   return (
     <div className="space-y-4">
@@ -129,85 +131,97 @@ export function BandPayeeSettingsSection() {
               )}
             </CardHeader>
             <CardContent className="space-y-3">
+              {readOnly ? (
+                <p
+                  className="border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
+                  data-testid="band-payee-admin-only"
+                >
+                  {bandPayoutAdminOnlyNotice(profile.artistAdminNames)}
+                </p>
+              ) : null}
               {!profile.payeeComplete ? (
                 <p className="border border-status-amber-500/40 bg-status-amber-500/10 px-3 py-2 text-sm text-status-amber-700 dark:text-status-amber-200">
                   Required before artist payments can be processed. Provide one designated payee who
                   receives and distributes payment, a mailing address, and pickup or delivery for
                   GrantEd.
                 </p>
-              ) : (
+              ) : readOnly ? null : (
                 <p className="text-sm text-muted-foreground">
                   Payee on file. Update here if your artist&apos;s payment contact or address changes.
                 </p>
               )}
-              <div className="space-y-1">
-                <Label>Designated payee</Label>
-                <UserSelect
-                  value={payeeUserId ?? ""}
-                  onChange={(userId) => {
-                    form.setValue("designatedPayeeUserId", userId, { shouldDirty: true });
-                    const user = (members ?? []).find((row) => row.userId === userId);
-                    if (user) {
-                      form.setValue("designatedPayeeName", user.name, { shouldDirty: true });
-                      form.setValue("designatedPayeeEmail", user.email ?? "", { shouldDirty: true });
-                    }
+              <fieldset disabled={readOnly} className="space-y-3">
+                <div className="space-y-1">
+                  <Label>Designated payee</Label>
+                  <UserSelect
+                    value={payeeUserId ?? ""}
+                    onChange={(userId) => {
+                      form.setValue("designatedPayeeUserId", userId, { shouldDirty: true });
+                      const user = (members ?? []).find((row) => row.userId === userId);
+                      if (user) {
+                        form.setValue("designatedPayeeName", user.name, { shouldDirty: true });
+                        form.setValue("designatedPayeeEmail", user.email ?? "", { shouldDirty: true });
+                      }
+                    }}
+                    options={(members ?? []).map((user) =>
+                      toUserSelectOption({
+                        id: user.userId,
+                        name: user.name,
+                        email: user.email,
+                        avatarUrl: user.avatarUrl,
+                        image: user.image,
+                      }),
+                    )}
+                    placeholder="Select member payee..."
+                    emptyLabel="Select payee"
+                  />
+                </div>
+                <TextFormField name="designatedPayeeName" label="Payee name" />
+                <TextFormField name="designatedPayeeEmail" label="Payee email" type="email" />
+                <BandPayeePayoutMethodField
+                  value={payoutMethod}
+                  onChange={(method: BandPayeePayoutMethod) => {
+                    form.setValue("designatedPayeePayoutMethod", method, { shouldDirty: true });
                   }}
-                  options={(members ?? []).map((user) =>
-                    toUserSelectOption({
-                      id: user.userId,
-                      name: user.name,
-                      email: user.email,
-                      avatarUrl: user.avatarUrl,
-                      image: user.image,
-                    }),
-                  )}
-                  placeholder="Select member payee..."
-                  emptyLabel="Select payee"
+                  idPrefix="band-payee-settings"
                 />
-              </div>
-              <TextFormField name="designatedPayeeName" label="Payee name" />
-              <TextFormField name="designatedPayeeEmail" label="Payee email" type="email" />
-              <BandPayeePayoutMethodField
-                value={payoutMethod}
-                onChange={(method: BandPayeePayoutMethod) => {
-                  form.setValue("designatedPayeePayoutMethod", method, { shouldDirty: true });
-                }}
-                idPrefix="band-payee-settings"
-              />
-              <TextareaFormField
-                name="designatedPayeeMailingAddress"
-                label="Mailing address"
-                placeholder={BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER}
-                description={BAND_PAYEE_MAILING_ADDRESS_HINT}
-              />
+                <TextareaFormField
+                  name="designatedPayeeMailingAddress"
+                  label="Mailing address"
+                  placeholder={BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER}
+                  description={BAND_PAYEE_MAILING_ADDRESS_HINT}
+                />
+              </fieldset>
               <p className="text-sm text-muted-foreground">{BAND_PAYEE_1099_NOTICE}</p>
             </CardContent>
           </Card>
         </form>
       </Form>
 
-      <FormSaveBar
-        tier="C"
-        saveStatus={form.saveStatus}
-        saveError={form.saveError}
-        isDirty={form.formState.isDirty}
-        onSave={() => void form.handleSubmit(onSave)()}
-        onDiscard={() => {
-          if (!profile) return;
-          form.reset({
-            designatedPayeeUserId: profile.designatedPayeeUserId ?? "",
-            designatedPayeeName: profile.designatedPayeeName ?? "",
-            designatedPayeeEmail: profile.designatedPayeeEmail ?? "",
-            designatedPayeeMailingAddress: profile.designatedPayeeMailingAddress ?? "",
-            designatedPayeePayoutMethod:
-              profile.designatedPayeePayoutMethod === "pickup" ||
-              profile.designatedPayeePayoutMethod === "delivery"
-                ? profile.designatedPayeePayoutMethod
-                : DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
-          });
-        }}
-        onRetry={() => void form.handleSubmit(onSave)()}
-      />
+      {readOnly ? null : (
+        <FormSaveBar
+          tier="C"
+          saveStatus={form.saveStatus}
+          saveError={form.saveError}
+          isDirty={form.formState.isDirty}
+          onSave={() => void form.handleSubmit(onSave)()}
+          onDiscard={() => {
+            if (!profile) return;
+            form.reset({
+              designatedPayeeUserId: profile.designatedPayeeUserId ?? "",
+              designatedPayeeName: profile.designatedPayeeName ?? "",
+              designatedPayeeEmail: profile.designatedPayeeEmail ?? "",
+              designatedPayeeMailingAddress: profile.designatedPayeeMailingAddress ?? "",
+              designatedPayeePayoutMethod:
+                profile.designatedPayeePayoutMethod === "pickup" ||
+                profile.designatedPayeePayoutMethod === "delivery"
+                  ? profile.designatedPayeePayoutMethod
+                  : DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
+            });
+          }}
+          onRetry={() => void form.handleSubmit(onSave)()}
+        />
+      )}
     </div>
   );
 }

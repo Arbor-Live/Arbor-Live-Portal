@@ -135,6 +135,7 @@ export function useArtistOnboardingForm() {
 
   // Walk the UI without writing when previewing without a band onboarding row.
   const previewOnly = Boolean(devPreview && onboarding === null);
+  const payoutReadOnly = profile?.canEditPayout === false;
 
   const tryAdvance = useCallback(async (): Promise<boolean> => {
     setFieldError(null);
@@ -251,6 +252,13 @@ export function useArtistOnboardingForm() {
       }
 
       if (currentStep === "rates") {
+        // Only an artist admin can set the payee; members acknowledge and move on.
+        if (payoutReadOnly) {
+          if (previewOnly) return true;
+          setIsSubmitting(true);
+          await saveBandOnboardingStep({ ratesPayeeCompleted: true });
+          return true;
+        }
         if (form.performerHourlyRateUsd < 0) {
           setFieldError("Hourly rate must be 0 or greater.");
           return false;
@@ -302,6 +310,7 @@ export function useArtistOnboardingForm() {
     form,
     inviteMember,
     pendingEmails,
+    payoutReadOnly,
     previewOnly,
     saveBandOnboardingStep,
     sentInviteEmails,

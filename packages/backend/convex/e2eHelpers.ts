@@ -3147,6 +3147,8 @@ export const ensureBandPayeeUser = mutation({
     bandName: v.optional(v.string()),
     /** Override to get a band org isolated from the shared e-sign fixture. */
     orgSlug: v.optional(v.string()),
+    /** Defaults to org_admin; org_member seeds a plain member who cannot set the payee. */
+    membershipRole: v.optional(v.union(v.literal("org_admin"), v.literal("org_member"))),
   },
   returns: v.object({
     ok: v.literal(true),
@@ -3160,6 +3162,7 @@ export const ensureBandPayeeUser = mutation({
     const email = args.email.trim().toLowerCase();
     const name = (args.name ?? "E2E Band Payee").trim() || "E2E Band Payee";
     const bandName = (args.bandName ?? "E2E Test Band").trim() || "E2E Test Band";
+    const membershipRole = args.membershipRole ?? "org_admin";
     if (!email) throw new Error("Email is required.");
     if (args.password.length < 8) throw new Error("Password must be at least 8 characters.");
 
@@ -3262,7 +3265,7 @@ export const ensureBandPayeeUser = mutation({
           data: {
             organizationId,
             userId,
-            role: "owner",
+            role: membershipRole === "org_admin" ? "owner" : "member",
             createdAt: now,
           },
         },
@@ -3277,7 +3280,7 @@ export const ensureBandPayeeUser = mutation({
       .unique();
     if (existingAppMembership) {
       await ctx.db.patch(existingAppMembership._id, {
-        role: "org_admin",
+        role: membershipRole,
         active: true,
         updatedAt: now,
       });
@@ -3285,7 +3288,7 @@ export const ensureBandPayeeUser = mutation({
       await ctx.db.insert("userOrganizationMemberships", {
         userId,
         organizationId,
-        role: "org_admin",
+        role: membershipRole,
         active: true,
         createdAt: now,
         updatedAt: now,
