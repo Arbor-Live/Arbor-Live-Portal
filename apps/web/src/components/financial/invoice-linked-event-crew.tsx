@@ -144,7 +144,7 @@ export function InvoiceLinkedEventCrewSection({
   // An OT day bills its crew at the OT multiple (see `markCrewRowOvertime`).
   const openSlotBilledRateUsd =
     eventData?.event.otPremium === true ? defaultCrewHourlyRateUsd * CREW_OT_MULTIPLIER : defaultCrewHourlyRateUsd;
-  const openSlotRateLabel = `${formatUsd(openSlotBilledRateUsd)}/hr${eventData?.event.otPremium === true ? " (OT)" : ""}`;
+  const openSlotRateLabel = `${formatUsd(openSlotBilledRateUsd)}/hr${eventData?.event.otPremium === true ? " OT" : ""}`;
 
   const viewerUserId = viewer?.userId;
   const userSelectOptions: UserSelectOption[] = useMemo(
