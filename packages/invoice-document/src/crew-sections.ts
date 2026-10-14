@@ -3,7 +3,7 @@
  * portal and the PDF quote.
  *
  * The invoice editor saves one crew line per shift, labeled
- * `[Day N — ][Section — ]Role (Person[ (Lead)])` (see
+ * `[Day N — ][Section — ]Role (Person[ (Lead)])[ · OT]` (see
  * `invoice-crew-from-event.ts`), plus hand-entered `people × hours` rows. Read
  * as a flat list that's dense; this module regroups the same lines so a client
  * can see who works when. It never changes what is billed: every group total
@@ -45,12 +45,15 @@ export type CrewLine = {
   rateUsd: number;
   amountUsd: number;
   notes?: string;
+  /** `OT` / `DT` when the line bills at an overtime multiple (from the label's ` · OT` tag). */
+  rateTag?: string;
 };
 
 const SEPARATOR = " — ";
 const OPEN_SLOT = "Open slot";
 const UNNAMED_ASSIGNEE = "Assigned crew";
 const DAY_PREFIX = /^Day \d+$/;
+const RATE_TAG = / · (OT|DT)$/;
 
 /** Splits `Role (Inner (Lead))` into `Role` and `Inner (Lead)` (balanced parens). */
 function splitTrailingParens(text: string): { head: string; inner?: string } {
@@ -88,13 +91,16 @@ function positive(value: number | undefined) {
 export function parseCrewLine(line: CrewLineInput): CrewLine {
   const people = positive(line.memberCount);
   const hoursEach = positive(line.performanceHours);
-  const base = {
+  const base: Pick<CrewLine, "id" | "rateUsd" | "amountUsd" | "notes" | "rateTag"> = {
     id: line.id,
     rateUsd: line.rateUsd,
     amountUsd: line.amountUsd,
     notes: line.notes?.trim() || undefined,
   };
-  const segments = line.label.split(SEPARATOR).map((segment) => segment.trim());
+  const rateTag = RATE_TAG.exec(line.label)?.[1];
+  if (rateTag) base.rateTag = rateTag;
+  const label = rateTag ? line.label.replace(RATE_TAG, "") : line.label;
+  const segments = label.split(SEPARATOR).map((segment) => segment.trim());
   const day = segments.length > 1 && DAY_PREFIX.test(segments[0]!) ? segments.shift() : undefined;
   if (line.crewSource === "manual" || (people && people > 1)) {
     return {
@@ -173,10 +179,11 @@ export function formatCrewRate(rateUsd: number) {
   return `${Number.isInteger(rateUsd) ? usd.replace(/\.00$/, "") : usd}/hr`;
 }
 
-/** `3 hrs × $35/hr`, or `2 × 1.5 hrs × $22/hr` on a people × hours row. */
-export function describeHoursTimesRate(line: Pick<CrewLine, "people" | "hoursEach" | "rateUsd">) {
+/** `3 hrs × $35/hr`, `2 × 1.5 hrs × $22/hr` on a people × hours row, `… × $30/hr OT` at an overtime multiple. */
+export function describeHoursTimesRate(line: Pick<CrewLine, "people" | "hoursEach" | "rateUsd" | "rateTag">) {
   const people = line.people > 1 ? `${line.people} × ` : "";
-  return `${people}${formatHours(line.hoursEach)} × ${formatCrewRate(line.rateUsd)}`;
+  const tag = line.rateTag ? ` ${line.rateTag}` : "";
+  return `${people}${formatHours(line.hoursEach)} × ${formatCrewRate(line.rateUsd)}${tag}`;
 }
 
 export function crewLinePerson(line: CrewLine) {

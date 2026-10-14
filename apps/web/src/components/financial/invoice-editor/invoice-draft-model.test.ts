@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ARTIST_TBD_VALUE } from "@/components/bands/artist-select";
+import { markCrewRowOvertime } from "@/lib/invoice-crew-from-event";
 import {
   adoptServerArtistChanges,
+  crewLineRateUsd,
   layoutArtistBill,
   type ArtistRow,
   type ServerArtistLines,
@@ -69,5 +71,24 @@ describe("layoutArtistBill", () => {
     expect(layoutArtistBill([], [position("headliner", ["inv"])], "inv")).toEqual([
       { kind: "open", position: expect.objectContaining({ needId: "headliner" }) },
     ]);
+  });
+});
+
+describe("crewLineRateUsd on OT days", () => {
+  const settings = { crewNormalRateUsd: 20, crewLeadRateUsd: 22 };
+
+  it("bills an OT row's stamped rate at 1.5×", () => {
+    const row = markCrewRowOvertime({ label: "Strike — Alex", quantity: "2", rateUsd: "22", source: "event" });
+    expect(row.label).toBe("Strike — Alex · OT");
+    expect(crewLineRateUsd(row, "normal", "", settings)).toBe(33);
+  });
+
+  it("bills an unrated OT row at 1.5× the mode default", () => {
+    const row = markCrewRowOvertime({ label: "Strike — Open slot", quantity: "2", source: "event" });
+    expect(crewLineRateUsd(row, "normal", "", settings)).toBe(30);
+  });
+
+  it("leaves rows from non-OT days at their rate", () => {
+    expect(crewLineRateUsd({ rateUsd: "22" }, "normal", "", settings)).toBe(22);
   });
 });

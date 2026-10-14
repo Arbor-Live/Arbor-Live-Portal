@@ -14,6 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/ui/input";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatUsd } from "@/lib/format";
+import { CREW_OT_MULTIPLIER } from "@/lib/invoice-crew-from-event";
 import { notify } from "@/lib/notify";
 import { crewLineRateUsd, crewPersonHours, isBillableCrewRow, type CrewRow } from "./invoice-draft-model";
 import {
@@ -186,7 +187,7 @@ export function CrewLines({ draft }: { draft: InvoiceDraft }) {
     <LineGroup
       icon={UsersThreeIcon}
       title="Crew"
-      detail={`${plural(sumHours(scheduleRows), "person-hr", "person-hrs")} from the ${draft.linkedSeries ? "series" : "run of show"}`}
+      detail={`${plural(sumHours(scheduleRows), "person-hr", "person-hrs")} from the ${draft.linkedSeries ? "series" : "run of show"}${scheduleRows.some((row) => row.overtime) ? ` · OT days at ${CREW_OT_MULTIPLIER}×` : ""}`}
       subtotalUsd={sumAmount(scheduleRows, rateOf)}
       subtotalTestId="invoice-total-crew"
       testId="invoice-group-crew"

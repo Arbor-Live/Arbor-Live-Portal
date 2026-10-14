@@ -555,6 +555,11 @@ Update `YEARS` there when the Registrar publishes new dates.
   and the invoice↔event import matches lines to the right day.
   Artist and external-rental amounts are pass-through (excluded from Insights
   earned revenue and from net-profit margin).
+- **OT days.** A day's OT flag is the event's own `otPremium`, one switch shown
+  in two places: the event Billing tab and the invoice Details sidebar (one
+  checkbox per day on multi-day bookings). On an OT day, crew cost and the quote's schedule crew lines
+  (tagged `· OT`) both bill at 1.5× (`CREW_OT_MULTIPLIER`). Hand-added extra
+  crew hours and recurring-series template lines keep their typed rate.
 - **Changing an approved quote** (#405). The client's approval pins a version
   (`invoiceRevisions`, kind `approved`; `invoices.approvedRevisionId` /
   `approvedTotalUsd`). Snapshots use the portal's pricing (`snapshotInvoice`),

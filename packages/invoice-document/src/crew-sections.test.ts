@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   describeHeadcount,
+  describeHoursTimesRate,
   groupCrewBySection,
   parseCrewLine,
   sumCrewAmountUsd,
@@ -46,6 +47,12 @@ describe("parseCrewLine", () => {
       lead: true,
     });
     expect(parseCrewLine(line("Show — Open slot", 4, 25))).toMatchObject({ openSlot: true });
+  });
+
+  it("reads an OT tag off the end of the label", () => {
+    const parsed = parseCrewLine(line("Day 2 — Strike — Crew (Open slot) · OT", 2, 30));
+    expect(parsed).toMatchObject({ day: "Day 2", section: "Strike", role: "Crew", openSlot: true, rateTag: "OT" });
+    expect(describeHoursTimesRate(parsed)).toBe("2 hrs × $30/hr OT");
   });
 
   it("keeps parentheses inside a role", () => {

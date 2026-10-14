@@ -372,7 +372,8 @@ export function BillingTab() {
               </Field>
               <p className="text-xs text-muted-foreground md:col-span-2">
                 OT premium inflates Stanford input hours (1.5× for hours 1–8) and bills all crew hours at 1.5×
-                rate.
+                rate, on crew cost and on the linked invoice&apos;s crew lines. The invoice&apos;s Details sidebar
+                has the same switch.
               </p>
             </div>
           ) : null}

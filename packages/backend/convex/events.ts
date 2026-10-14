@@ -531,6 +531,7 @@ export const getByInvoiceId = query({
         status: row.status,
         startAt: row.startAt,
         endAt: row.endAt,
+        otPremium: row.otPremium === true,
       })),
       series: await resolveSeriesMetadataForInvoice(ctx, args.invoiceId),
       // Summed across all linked occurrences — used for the net-profit surface
