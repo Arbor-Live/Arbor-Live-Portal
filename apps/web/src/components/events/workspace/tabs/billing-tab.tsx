@@ -132,6 +132,10 @@ export function BillingTab() {
     "";
 
   const crewCostTotal = computedCrewCost?.totalCostUsd ?? eventData?.event.crewCostUsd ?? 0;
+  // A person's first 8 hrs and the rest: regular / OT, or OT / DT on an OT event.
+  const tierNames = computedCrewCost?.otPremium
+    ? { regular: "OT", regularTitle: "OT", overtime: "DT", columns: "OT / DT" }
+    : { regular: "regular", regularTitle: "Regular", overtime: "OT", columns: "Reg / OT" };
   const bandsCostTotal = Number(draft.bandsCostUsd || "0");
   const externalRentalsCostTotal = Number(draft.externalRentalsCostUsd || "0");
   const otherCostTotal = Number(draft.otherCostUsd || "0");
@@ -326,7 +330,7 @@ export function BillingTab() {
               icon={UsersThreeIcon}
               hint={
                 computedCrewCost
-                  ? `${formatHours(computedCrewCost.totalRegularHours)} regular · ${formatHours(computedCrewCost.totalOvertimeHours)} OT`
+                  ? `${formatHours(computedCrewCost.totalRegularHours)} ${tierNames.regular} · ${formatHours(computedCrewCost.totalOvertimeHours)} ${tierNames.overtime}`
                   : "Calculating from assigned shifts…"
               }
             >
@@ -343,9 +347,9 @@ export function BillingTab() {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Crew cost is calculated from assigned users in schedule shifts: each uses their hourly rate, and
-            hours beyond 8/day are billed at 1.5×
-            {computedCrewCost?.otPremium ? " (this event uses whole-event OT premium)." : "."}
+            Crew cost is calculated from schedule shifts: open slots assume the same people stay on all day, and
+            each person&apos;s first 8 hrs bill at their rate, the rest at 1.5×
+            {computedCrewCost?.otPremium ? " (this event is OT: 1.5×, then double time after 8 hrs)." : "."}
             {computedCrewCost?.bufferPercent !== undefined && computedCrewCost.bufferPercent > 0
               ? ` Buffered crew cost (${computedCrewCost.bufferPercent}%): ${formatUsd(
                   computedCrewCost.bufferedTotalCostUsd ?? computedCrewCost.totalCostUsd,
@@ -361,7 +365,7 @@ export function BillingTab() {
                   checked={draft.otPremium}
                   onChange={(e) => updateDraft({ otPremium: e.target.checked })}
                 />
-                OT premium (whole event 1.5×)
+                OT premium (1.5×, double time after 8 hrs)
               </label>
               <Field label="Per-event crew buffer %">
                 <Input
@@ -371,8 +375,8 @@ export function BillingTab() {
                 />
               </Field>
               <p className="text-xs text-muted-foreground md:col-span-2">
-                OT premium inflates Stanford input hours (1.5× for hours 1–8) and bills all crew hours at 1.5×
-                rate, on crew cost and on the linked invoice&apos;s crew lines. The invoice&apos;s Details sidebar
+                OT premium inflates Stanford input hours (1.5× for hours 1–8) and bills crew at 1.5× (double time
+                after 8 hrs), on crew cost and on the linked invoice&apos;s crew lines. The invoice&apos;s Details sidebar
                 has the same switch.
               </p>
             </div>
@@ -413,7 +417,7 @@ export function BillingTab() {
               Crew cost breakdown
             </CardTitle>
             <span className="text-xs text-muted-foreground">
-              OT multiplier {computedCrewCost.overtimeMultiplier.toFixed(2)}×
+              {tierNames.regular} {computedCrewCost.regularMultiplier}× · {tierNames.overtime} {computedCrewCost.overtimeMultiplier}×
             </span>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -431,7 +435,8 @@ export function BillingTab() {
                           {block.blockType ? ` (${block.blockType})` : ""}
                         </span>
                         <span className="block text-xs text-muted-foreground">
-                          Regular {formatHours(block.regularHours)} · OT {formatHours(block.overtimeHours)}
+                          {tierNames.regularTitle} {formatHours(block.regularHours)} · {tierNames.overtime}{" "}
+                          {formatHours(block.overtimeHours)}
                         </span>
                       </span>
                     </span>
@@ -441,8 +446,8 @@ export function BillingTab() {
                     <div className="hidden items-center gap-3 bg-muted/20 px-3 py-2 text-xs font-medium text-muted-foreground md:flex">
                       <span className="min-w-0 flex-1">Crew</span>
                       <span className="w-40 shrink-0">Shift</span>
-                      <span className="w-24 shrink-0 text-right">Hours (Reg / OT)</span>
-                      <span className="w-32 shrink-0 text-right">Rate (Base / OT)</span>
+                      <span className="w-24 shrink-0 text-right">Hours ({tierNames.columns})</span>
+                      <span className="w-32 shrink-0 text-right">Rate ({tierNames.columns})</span>
                       <span className="w-20 shrink-0 text-right">Subtotal</span>
                     </div>
                     <ul className="divide-y">
@@ -465,7 +470,7 @@ export function BillingTab() {
                             {formatHours(row.regularHours)} / {formatHours(row.overtimeHours)}
                           </RowCell>
                           <RowCell className="w-32">
-                            {formatUsd(row.baseRateUsd)} / {formatUsd(row.overtimeRateUsd)}
+                            {formatUsd(row.regularRateUsd)} / {formatUsd(row.overtimeRateUsd)}
                           </RowCell>
                           <RowCell className="w-20">{formatUsd(row.subtotalUsd)}</RowCell>
                         </li>

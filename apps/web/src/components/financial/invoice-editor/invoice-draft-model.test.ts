@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ARTIST_TBD_VALUE } from "@/components/bands/artist-select";
-import { markCrewRowOvertime } from "@/lib/invoice-crew-from-event";
+import { applyCrewDayRates } from "@/lib/invoice-crew-from-event";
 import {
   adoptServerArtistChanges,
   crewLineRateUsd,
@@ -74,21 +74,22 @@ describe("layoutArtistBill", () => {
   });
 });
 
-describe("crewLineRateUsd on OT days", () => {
+describe("crewLineRateUsd with day rates", () => {
   const settings = { crewNormalRateUsd: 20, crewLeadRateUsd: 22 };
+  const row = (hoursTier: "regular" | "past_regular", rateUsd?: string) =>
+    ({ label: "Setup → Strike — Crew (Open slot)", quantity: "2", rateUsd, source: "event", hoursTier }) as const;
 
-  it("bills an OT row's stamped rate at 1.5×", () => {
-    const row = markCrewRowOvertime({ label: "Strike — Alex", quantity: "2", rateUsd: "22", source: "event" });
-    expect(row.label).toBe("Strike — Alex · OT");
-    expect(crewLineRateUsd(row, "normal", "", settings)).toBe(33);
+  it("bills hours past 8 at 1.5× on a normal day", () => {
+    const priced = applyCrewDayRates(row("past_regular", "20"), false);
+    expect(priced.label).toBe("Setup → Strike — Crew (Open slot) · OT after 8 hrs");
+    expect(crewLineRateUsd(priced, "normal", "", settings)).toBe(30);
+    expect(crewLineRateUsd(applyCrewDayRates(row("regular", "20"), false), "normal", "", settings)).toBe(20);
   });
 
-  it("bills an unrated OT row at 1.5× the mode default", () => {
-    const row = markCrewRowOvertime({ label: "Strike — Open slot", quantity: "2", source: "event" });
-    expect(crewLineRateUsd(row, "normal", "", settings)).toBe(30);
-  });
-
-  it("leaves rows from non-OT days at their rate", () => {
-    expect(crewLineRateUsd({ rateUsd: "22" }, "normal", "", settings)).toBe(22);
+  it("bills 1.5× then double time on an OT day, from the mode default when unrated", () => {
+    expect(crewLineRateUsd(applyCrewDayRates(row("regular"), true), "normal", "", settings)).toBe(30);
+    const dt = applyCrewDayRates(row("past_regular", "22"), true);
+    expect(dt.label).toContain("· DT after 8 hrs");
+    expect(crewLineRateUsd(dt, "normal", "", settings)).toBe(44);
   });
 });

@@ -141,7 +141,7 @@ export function InvoiceLinkedEventCrewSection({
   const startAt = eventData?.event.startAt ? toLocalDateTimeInput(eventData.event.startAt) : "";
   const endAt = eventData?.event.endAt ? toLocalDateTimeInput(eventData.event.endAt) : "";
   const showCrewTools = eventTypeHasCrewAssignment(eventType);
-  // An OT day bills its crew at the OT multiple (see `markCrewRowOvertime`).
+  // An OT day bills its crew's first 8 hrs at the OT multiple (see `applyCrewDayRates`).
   const openSlotBilledRateUsd =
     eventData?.event.otPremium === true ? defaultCrewHourlyRateUsd * CREW_OT_MULTIPLIER : defaultCrewHourlyRateUsd;
   const openSlotRateLabel = `${formatUsd(openSlotBilledRateUsd)}/hr${eventData?.event.otPremium === true ? " OT" : ""}`;

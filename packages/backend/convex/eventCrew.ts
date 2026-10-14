@@ -26,6 +26,7 @@ const computedCrewCostValue = v.object({
   bufferPercent: v.number(),
   totalRegularHours: v.number(),
   totalOvertimeHours: v.number(),
+  regularMultiplier: v.number(),
   overtimeMultiplier: v.number(),
   otPremium: v.boolean(),
   byUser: v.array(
@@ -59,6 +60,7 @@ const computedCrewCostValue = v.object({
           regularHours: v.number(),
           overtimeHours: v.number(),
           baseRateUsd: v.number(),
+          regularRateUsd: v.number(),
           overtimeMultiplier: v.number(),
           overtimeRateUsd: v.number(),
           subtotalUsd: v.number(),

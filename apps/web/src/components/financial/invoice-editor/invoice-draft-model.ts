@@ -1,7 +1,7 @@
 import { ARTIST_TBD_OPTION, ARTIST_TBD_VALUE } from "@/components/bands/artist-select";
 import type { Id } from "@/lib/convex-api";
 import { formatContactFullName } from "@/lib/contact-name";
-import { CREW_OT_MULTIPLIER, type InvoiceCrewRow } from "@/lib/invoice-crew-from-event";
+import type { InvoiceCrewRow } from "@/lib/invoice-crew-from-event";
 
 /**
  * The quote editor's draft: plain form values (strings while typing), and the
@@ -292,17 +292,17 @@ type CrewRateSettings =
 /**
  * The $/hr a crew line bills at. Assigned people carry their own compensation
  * rate on the row (Lead $22, Normal $20, Custom). Open slots and unrated rows
- * use the invoice's crew rate mode (or the custom rate). Rows from an OT day
- * bill at `CREW_OT_MULTIPLIER` × that.
+ * use the invoice's crew rate mode (or the custom rate). Overtime rows bill at
+ * their `rateMultiplier` × that (see `applyCrewDayRates`).
  */
 export function crewLineRateUsd(
-  row: Pick<CrewRow, "rateUsd" | "overtime">,
+  row: Pick<CrewRow, "rateUsd" | "rateMultiplier">,
   crewRateMode: CrewRateMode,
   customCrewRateUsd: string,
   settings: CrewRateSettings,
 ) {
   const base = crewLineBaseRateUsd(row, crewRateMode, customCrewRateUsd, settings);
-  return row.overtime ? Math.round(base * CREW_OT_MULTIPLIER * 100) / 100 : base;
+  return row.rateMultiplier ? Math.round(base * row.rateMultiplier * 100) / 100 : base;
 }
 
 function crewLineBaseRateUsd(
