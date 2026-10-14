@@ -1,3 +1,4 @@
+import { allocateCrewHours, crewPersonKeys, crewTierMultiplier } from "@arbor/invoice-document/crew-hours";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { findAuthUsersByIds } from "./auth";
@@ -78,6 +79,7 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
         regularHours: number;
         overtimeHours: number;
         baseRateUsd: number;
+        regularRateUsd: number;
         overtimeMultiplier: number;
         overtimeRateUsd: number;
         subtotalUsd: number;
@@ -85,8 +87,29 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
       }>;
     }
   >();
-  const userDayAllocatedHours = new Map<string, number>();
-  const overtimeMultiplier = 1.5;
+  // A day is the event: open slots assume the same people stay on all day, and
+  // everyone's first 8 hrs bill at the regular multiple (see `crew-hours.ts`).
+  const regularMultiplier = crewTierMultiplier("regular", otPremium);
+  const overtimeMultiplier = crewTierMultiplier("past_regular", otPremium);
+  const personByShift = crewPersonKeys(
+    shifts.map((shift) => ({
+      id: shift._id,
+      day: "event",
+      sectionRef: shift.scheduleBlockId ?? "unlinked",
+      sectionStartsAt: (shift.scheduleBlockId ? scheduleBlockById.get(shift.scheduleBlockId)?.startsAt : undefined) ?? shift.startsAt,
+      role: shift.role,
+      userId: shift.userId,
+      startsAt: shift.startsAt,
+    })),
+  );
+  const hoursByShift = allocateCrewHours(
+    shifts.map((shift) => ({
+      id: shift._id,
+      personKey: personByShift.get(shift._id) ?? shift._id,
+      startsAt: shift.startsAt,
+      hours: shift.hours,
+    })),
+  );
 
   for (const shift of shifts) {
     const dayKey = getShiftDayKey(shift.startsAt);
@@ -114,23 +137,13 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
     const userName = shift.userId
       ? (userById.get(shift.userId)?.name ?? userById.get(shift.userId)?.email ?? shift.userId)
       : shift.personName?.trim() || "Unassigned";
-    const allocationKey = shift.userId ? `${shift.userId}:${dayKey}` : undefined;
-    const alreadyAllocated = allocationKey ? (userDayAllocatedHours.get(allocationKey) ?? 0) : 0;
-    let regularHours = roundCurrency(Math.max(0, Math.min(shift.hours, 8 - alreadyAllocated)));
-    let overtimeHours = roundCurrency(Math.max(0, shift.hours - regularHours));
-    if (otPremium) {
-      regularHours = 0;
-      overtimeHours = roundCurrency(shift.hours);
-    }
-    if (allocationKey) {
-      userDayAllocatedHours.set(allocationKey, roundCurrency(alreadyAllocated + shift.hours));
-    }
+    const { regularHours, pastRegularHours: overtimeHours } = hoursByShift.get(shift._id) ?? {
+      regularHours: shift.hours,
+      pastRegularHours: 0,
+    };
+    const regularRateUsd = roundCurrency(rate * regularMultiplier);
     const overtimeRateUsd = roundCurrency(rate * overtimeMultiplier);
-    const subtotalUsd = shift.userId
-      ? otPremium
-        ? roundCurrency(shift.hours * overtimeRateUsd)
-        : roundCurrency(regularHours * rate + overtimeHours * overtimeRateUsd)
-      : roundCurrency(shift.hours * rate);
+    const subtotalUsd = roundCurrency(regularHours * regularRateUsd + overtimeHours * overtimeRateUsd);
 
     blockEntry.regularHours = roundCurrency(blockEntry.regularHours + regularHours);
     blockEntry.overtimeHours = roundCurrency(blockEntry.overtimeHours + overtimeHours);
@@ -146,6 +159,7 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
       regularHours,
       overtimeHours,
       baseRateUsd: rate,
+      regularRateUsd,
       overtimeMultiplier,
       overtimeRateUsd,
       subtotalUsd,
@@ -200,6 +214,7 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
     bufferPercent,
     totalRegularHours,
     totalOvertimeHours,
+    regularMultiplier,
     overtimeMultiplier,
     otPremium,
     byUser,

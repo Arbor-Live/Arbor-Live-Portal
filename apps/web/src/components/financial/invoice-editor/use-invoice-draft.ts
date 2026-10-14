@@ -10,7 +10,7 @@ import { assignableCrewSelectOptions } from "@/lib/user-select-description";
 import {
   buildCrewRowsFromLinkedEvent,
   buildInvoiceCrewRowsFromShiftTemplateDrafts,
-  markCrewRowOvertime,
+  applyCrewDayRates,
   mergeEventCrewWithManualRows,
   type CrewAssigneeRate,
   type InvoiceCrewRow,
@@ -220,7 +220,7 @@ export function useInvoiceDraft({
 
   // --- Crew lines from the linked event -----------------------------------
 
-  // Days marked OT (`events.otPremium`) bill their schedule rows at the OT multiple.
+  // Each day prices its schedule rows: past 8 hrs at 1.5×, and OT days (`events.otPremium`) 1.5× / double time.
   const flattenCrewBuckets = useCallback(
     (dayEvents: Array<{ _id: Id<"events">; title: string; otPremium?: boolean }>) => {
       const multiDay = dayEvents.length > 1;
@@ -234,7 +234,7 @@ export function useInvoiceDraft({
             ...row,
             label: row.label.startsWith(dayPrefix) ? row.label : `${dayPrefix}${row.label}`,
           };
-          rows.push(day.otPremium ? markCrewRowOvertime(prefixed) : prefixed);
+          rows.push(applyCrewDayRates(prefixed, day.otPremium === true));
         }
       }
       return rows;
@@ -304,13 +304,20 @@ export function useInvoiceDraft({
         role: shift.role,
         personName: shift.personName,
         userId: shift.userId,
+        crewApplicationId: shift.crewApplicationId,
         hours: shift.hours,
+        startsAt: shift.startsAt,
       }));
       crewRowsByEventRef.current.set(
         eventId,
         buildCrewRowsFromLinkedEvent(
           {
-            blocks: blocks.map((block) => ({ _id: block._id, label: block.label, blockType: block.blockType })),
+            blocks: blocks.map((block) => ({
+              _id: block._id,
+              label: block.label,
+              blockType: block.blockType,
+              startsAt: block.startsAt,
+            })),
             shifts,
           },
           { ratesByUserId: crewRatesByUserId, openSlotRateUsd: defaultCrewHourlyRateUsd },

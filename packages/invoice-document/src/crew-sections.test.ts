@@ -55,6 +55,18 @@ describe("parseCrewLine", () => {
     expect(describeHoursTimesRate(parsed)).toBe("2 hrs × $30/hr OT");
   });
 
+  it("reads hours past a full day as the same people, not more", () => {
+    const lines = [
+      line("Setup → Strike — Crew (Open slot)", 8, 20),
+      line("Setup → Strike — Crew (Open slot)", 8, 20),
+      line("Setup → Strike — Crew (Open slot) · OT after 8 hrs", 2, 30),
+      line("Setup → Strike — Crew (Open slot) · OT after 8 hrs", 2, 30),
+    ].map(parseCrewLine);
+    expect(lines[2]).toMatchObject({ section: "Setup → Strike", openSlot: true, rateTag: "OT", pastRegularDay: "after 8 hrs" });
+    expect(describeHoursTimesRate(lines[2]!)).toBe("2 hrs × $30/hr OT after 8 hrs");
+    expect(describeHeadcount(lines)).toBe("2 people × 8 hrs");
+  });
+
   it("keeps parentheses inside a role", () => {
     expect(parseCrewLine(line("Show — A1 (FOH) (Priya Natarajan)", 4, 25))).toMatchObject({
       role: "A1 (FOH)",

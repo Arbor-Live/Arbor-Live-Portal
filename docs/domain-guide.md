@@ -555,11 +555,19 @@ Update `YEARS` there when the Registrar publishes new dates.
   and the invoice↔event import matches lines to the right day.
   Artist and external-rental amounts are pass-through (excluded from Insights
   earned revenue and from net-profit margin).
-- **OT days.** A day's OT flag is the event's own `otPremium`, one switch shown
-  in two places: the event Billing tab and the invoice Details sidebar (one
-  checkbox per day on multi-day bookings). On an OT day, crew cost and the quote's schedule crew lines
-  (tagged `· OT`) both bill at 1.5× (`CREW_OT_MULTIPLIER`). Hand-added extra
-  crew hours and recurring-series template lines keep their typed rate.
+- **Crew hours and OT days.** Crew bill per person per day (one event = one
+  day), shared by the quote and event crew cost
+  (`@arbor/invoice-document/crew-hours`). Open slots assume the same people
+  stay on: per role, the first open slot of every section is one person, the
+  second another (2 setup / 2 show / 3 strike is two people all day plus one on
+  strike). Assigned crew are matched by who they are; only scheduled hours
+  count (no pay through gaps). Each person's first 8 hrs bill at 1×, the rest at
+  1.5× (`· OT after 8 hrs`). A day's OT flag is the event's own `otPremium`,
+  shown on the event Billing tab and the invoice Details sidebar (one checkbox
+  per day on multi-day bookings); an OT day bills 1.5× (`· OT`), then double
+  time after 8 hrs (`· DT after 8 hrs`). The client quote and PDF read those
+  tags back (`parseCrewLine`). Hand-added extra crew hours and recurring-series
+  template lines keep their typed rate.
 - **Changing an approved quote** (#405). The client's approval pins a version
   (`invoiceRevisions`, kind `approved`; `invoices.approvedRevisionId` /
   `approvedTotalUsd`). Snapshots use the portal's pricing (`snapshotInvoice`),
