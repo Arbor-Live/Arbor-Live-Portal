@@ -27,6 +27,7 @@ import { INVOICE_DUE_DAYS_AFTER_EVENT } from "@/lib/invoice-due-date";
 import { EQUIPMENT_PRICING_MODE_OPTIONS, INVOICE_GROUP_TYPE_LABELS } from "@/lib/invoice-group-labels";
 import { cn } from "@/lib/utils";
 import { NewClientDialog, NewHostDialog } from "./invoice-host-dialogs";
+import { InvoiceOvertimeControl } from "./invoice-overtime-control";
 import {
   normalizeInvoiceDiscountInput,
   type CrewRateMode,
@@ -449,6 +450,7 @@ function InvoiceDetailsCard({ draft }: { draft: InvoiceDraft }) {
             />
           </div>
         ) : null}
+        <InvoiceOvertimeControl draft={draft} />
       </CardContent>
     </Card>
   );
