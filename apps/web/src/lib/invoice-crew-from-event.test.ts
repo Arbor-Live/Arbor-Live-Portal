@@ -73,4 +73,21 @@ describe("invoice crew rows assume the same people stay on", () => {
     );
     expect(rows[0]?.label).toBe("Setup + Strike — Crew (Open slot)");
   });
+
+  it("bills each slot's hours at that slot's own stamped rate", () => {
+    const draftBlocks = [
+      { id: "setup" as Id<"eventScheduleBlocks">, label: "Setup", blockType: "setup" as const, startsAt: "2026-10-10T09:00" },
+      { id: "strike" as Id<"eventScheduleBlocks">, label: "Strike", blockType: "strike" as const, startsAt: "2026-10-10T13:00" },
+    ];
+    const base = { role: "Crew", personName: "", postedToExpense: false, notes: "" };
+    const rows = buildCrewRowsFromShifts(draftBlocks, [
+      { ...base, scheduleBlockId: draftBlocks[0]!.id, startsAt: "2026-10-10T09:00", endsAt: "2026-10-10T13:00", estimatedHourlyRateUsd: 20 },
+      { ...base, scheduleBlockId: draftBlocks[1]!.id, startsAt: "2026-10-10T13:00", endsAt: "2026-10-10T19:00", estimatedHourlyRateUsd: 25 },
+    ]);
+    expect(rows.map((row) => [row.quantity, row.rateUsd, row.hoursTier])).toEqual([
+      ["4", "20", "regular"],
+      ["4", "25", "regular"],
+      ["2", "25", "past_regular"],
+    ]);
+  });
 });

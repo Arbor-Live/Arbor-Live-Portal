@@ -1,6 +1,6 @@
 import { pacificDateTimeInputToMs } from "@arbor/format";
 import {
-  CREW_REGULAR_HOURS_PER_DAY,
+  allocateCrewHours,
   crewPersonKeys,
   crewTierMultiplier,
   crewTierTag,
@@ -186,40 +186,63 @@ function buildCrewRowsFromSlots(
     people.set(key, [...(people.get(key) ?? []), slot]);
   }
 
+  // Fill each person's day slot by slot (as event crew cost does), so a slot
+  // stamped at its own rate bills its own hours at that rate.
+  const hoursBySlot = allocateCrewHours(
+    slots.map((slot) => ({ ...slot, personKey: personBySlot.get(slot.id) ?? slot.id })),
+  );
   const rows: InvoiceCrewRow[] = [];
   for (const personSlots of people.values()) {
     const first = personSlots[0]!;
-    const hours = personSlots.reduce((sum, slot) => sum + Math.max(0, slot.hours), 0);
-    const billing = resolveShiftBilling({
+    const firstBilling = resolveShiftBilling({
       userId: first.userId,
-      estimatedHourlyRateUsd: first.estimatedHourlyRateUsd,
       ratesByUserId: options?.ratesByUserId,
-      openSlotRateUsd: options?.openSlotRateUsd,
     });
     const label = crewRowLabel({
       blockLabel: phaseLabel([...new Set(personSlots.map((slot) => slot.sectionRef))], labelByRef, sectionOrder),
       role: personSlots.find((slot) => slot.role.trim())?.role ?? "",
       personName: first.personName,
-      userId: billing.userId,
-      rateMode: billing.rateMode,
+      userId: firstBilling.userId,
+      rateMode: firstBilling.rateMode,
     });
     if (!label.trim()) continue;
-    const regularHours = Math.min(hours, CREW_REGULAR_HOURS_PER_DAY);
-    const tiers: Array<[CrewHoursTier, number]> = [
-      ["regular", regularHours],
-      ["past_regular", hours - regularHours],
-    ];
-    for (const [hoursTier, quantity] of tiers) {
-      if (!(quantity > 0)) continue;
-      rows.push({
-        label,
-        quantity: String(Number(quantity.toFixed(2))),
-        rateUsd: billing.rateUsd,
-        source: "event",
-        userId: billing.userId,
-        rateMode: billing.rateMode,
-        hoursTier,
+    // One row per tier and rate: usually two (first 8 hrs, the rest).
+    const personRows = new Map<string, InvoiceCrewRow & { hoursValue: number }>();
+    for (const slot of personSlots) {
+      const billing = resolveShiftBilling({
+        userId: slot.userId,
+        estimatedHourlyRateUsd: slot.estimatedHourlyRateUsd,
+        ratesByUserId: options?.ratesByUserId,
+        openSlotRateUsd: options?.openSlotRateUsd,
       });
+      const split = hoursBySlot.get(slot.id);
+      const tiers: Array<[CrewHoursTier, number]> = [
+        ["regular", split?.regularHours ?? Math.max(0, slot.hours)],
+        ["past_regular", split?.pastRegularHours ?? 0],
+      ];
+      for (const [hoursTier, hours] of tiers) {
+        if (!(hours > 0)) continue;
+        const key = `${hoursTier}|${billing.rateUsd ?? ""}`;
+        const row = personRows.get(key);
+        if (row) row.hoursValue += hours;
+        else
+          personRows.set(key, {
+            label,
+            quantity: "",
+            hoursValue: hours,
+            rateUsd: billing.rateUsd,
+            source: "event",
+            userId: billing.userId,
+            rateMode: billing.rateMode,
+            hoursTier,
+          });
+      }
+    }
+    const tierOrder: CrewHoursTier[] = ["regular", "past_regular"];
+    for (const { hoursValue, ...row } of [...personRows.values()].sort(
+      (a, b) => tierOrder.indexOf(a.hoursTier!) - tierOrder.indexOf(b.hoursTier!),
+    )) {
+      rows.push({ ...row, quantity: String(Number(hoursValue.toFixed(2))) });
     }
   }
   return rows;
