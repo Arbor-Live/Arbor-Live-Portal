@@ -35,7 +35,7 @@ import {
 } from "@/lib/event-schedule-draft";
 import { requireLocalDateTimeInputMs } from "@/lib/crew-availability";
 import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
-import { buildCrewRowsFromShifts, type InvoiceCrewRow } from "@/lib/invoice-crew-from-event";
+import { buildCrewRowsFromShifts, CREW_OT_MULTIPLIER, type InvoiceCrewRow } from "@/lib/invoice-crew-from-event";
 import { FormSaveBar } from "@/components/forms";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -141,6 +141,10 @@ export function InvoiceLinkedEventCrewSection({
   const startAt = eventData?.event.startAt ? toLocalDateTimeInput(eventData.event.startAt) : "";
   const endAt = eventData?.event.endAt ? toLocalDateTimeInput(eventData.event.endAt) : "";
   const showCrewTools = eventTypeHasCrewAssignment(eventType);
+  // An OT day bills its crew at the OT multiple (see `markCrewRowOvertime`).
+  const openSlotBilledRateUsd =
+    eventData?.event.otPremium === true ? defaultCrewHourlyRateUsd * CREW_OT_MULTIPLIER : defaultCrewHourlyRateUsd;
+  const openSlotRateLabel = `${formatUsd(openSlotBilledRateUsd)}/hr${eventData?.event.otPremium === true ? " (OT)" : ""}`;
 
   const viewerUserId = viewer?.userId;
   const userSelectOptions: UserSelectOption[] = useMemo(
@@ -389,7 +393,7 @@ export function InvoiceLinkedEventCrewSection({
           Edit schedule blocks and crew slots for{" "}
           <span className="font-medium">{eventData.event.title}</span>. Click Save to persist schedule and crew
           changes to the linked event. Open slots bill at the invoice&apos;s default crew rate (
-          {formatUsd(defaultCrewHourlyRateUsd)}/hr).
+          {openSlotRateLabel}).
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -442,7 +446,7 @@ export function InvoiceLinkedEventCrewSection({
             userSelectOptions={userSelectOptions}
             askAvailability={showCrewTools}
             onDeleteUnlinked={() => void removeLegacyUnassignedShifts()}
-            openSlotNote={`Open slot · bills at ${formatUsd(defaultCrewHourlyRateUsd)}/hr on this invoice`}
+            openSlotNote={`Open slot · bills at ${openSlotRateLabel} on this invoice`}
           />
         ) : null}
         <Button type="button" disabled={saving} onClick={() => void saveScheduleAndPersonnel()}>

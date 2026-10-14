@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { CaretDownIcon, ClockIcon, CopyIcon, UsersThreeIcon } from "@phosphor-icons/react";
-import { api } from "@/lib/convex-api";
+import { api, type Id } from "@/lib/convex-api";
 import { ApplyDaySetupDialog, type ApplyDaySetupArgs } from "@/components/events/apply-day-setup-dialog";
 import { EventSeriesShiftEditor } from "@/components/events/event-series-shift-editor";
 import { LinkedEventDaySwitcher } from "@/components/events/linked-event-day-switcher";
@@ -12,8 +12,11 @@ import { InvoiceLinkedEventCrewSection } from "@/components/financial/invoice-li
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatUsd } from "@/lib/format";
+import { CREW_OT_MULTIPLIER } from "@/lib/invoice-crew-from-event";
 import { notify } from "@/lib/notify";
 import { crewLineRateUsd, crewPersonHours, isBillableCrewRow, type CrewRow } from "./invoice-draft-model";
 import {
@@ -186,7 +189,7 @@ export function CrewLines({ draft }: { draft: InvoiceDraft }) {
     <LineGroup
       icon={UsersThreeIcon}
       title="Crew"
-      detail={`${plural(sumHours(scheduleRows), "person-hr", "person-hrs")} from the ${draft.linkedSeries ? "series" : "run of show"}`}
+      detail={`${plural(sumHours(scheduleRows), "person-hr", "person-hrs")} from the ${draft.linkedSeries ? "series" : "run of show"}${scheduleRows.some((row) => row.overtime) ? ` · OT days at ${CREW_OT_MULTIPLIER}×` : ""}`}
       subtotalUsd={sumAmount(scheduleRows, rateOf)}
       subtotalTestId="invoice-total-crew"
       testId="invoice-group-crew"
@@ -327,6 +330,13 @@ function CrewScheduleEditor({ draft }: { draft: InvoiceDraft }) {
           </div>
         ) : null}
         {selectedDayEventId ? (
+          <DayOvertimeToggle
+            eventId={selectedDayEventId}
+            overtime={linkedDayEvents.find((day) => day._id === selectedDayEventId)?.otPremium === true}
+            multiDay={linkedDayEvents.length > 1}
+          />
+        ) : null}
+        {selectedDayEventId ? (
           <InvoiceLinkedEventCrewSection
             key={selectedDayEventId}
             embedded
@@ -356,6 +366,51 @@ function CrewScheduleEditor({ draft }: { draft: InvoiceDraft }) {
         {body}
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+/**
+ * The selected day's OT flag. It's the event's own `otPremium` (the same one
+ * as the event Billing tab), so the quote, the event's crew cost and the
+ * crew timecards all agree.
+ */
+function DayOvertimeToggle({
+  eventId,
+  overtime,
+  multiDay,
+}: {
+  eventId: Id<"events">;
+  overtime: boolean;
+  multiDay: boolean;
+}) {
+  const updateEvent = useMutation(api.events.update);
+  const [saving, setSaving] = useState(false);
+
+  async function setOvertime(otPremium: boolean) {
+    setSaving(true);
+    try {
+      await updateEvent({ id: eventId, otPremium });
+      notify.success(otPremium ? `Marked ${multiDay ? "this day" : "the event"} OT.` : "OT removed.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2" data-testid="invoice-crew-overtime">
+      <Switch
+        id={`invoice-crew-overtime-${eventId}`}
+        checked={overtime}
+        disabled={saving}
+        onCheckedChange={(next) => void setOvertime(next)}
+      />
+      <Label htmlFor={`invoice-crew-overtime-${eventId}`} className="text-sm font-normal">
+        {multiDay ? "This day is OT" : "Event is OT"}
+        <span className="text-muted-foreground"> · crew bills at {CREW_OT_MULTIPLIER}×</span>
+      </Label>
+    </div>
   );
 }
 

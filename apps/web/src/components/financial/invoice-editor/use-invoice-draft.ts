@@ -10,6 +10,7 @@ import { assignableCrewSelectOptions } from "@/lib/user-select-description";
 import {
   buildCrewRowsFromLinkedEvent,
   buildInvoiceCrewRowsFromShiftTemplateDrafts,
+  markCrewRowOvertime,
   mergeEventCrewWithManualRows,
   type CrewAssigneeRate,
   type InvoiceCrewRow,
@@ -219,22 +220,27 @@ export function useInvoiceDraft({
 
   // --- Crew lines from the linked event -----------------------------------
 
-  const flattenCrewBuckets = useCallback((dayEvents: Array<{ _id: Id<"events">; title: string }>) => {
-    const multiDay = dayEvents.length > 1;
-    const rows: InvoiceCrewRow[] = [];
-    for (let index = 0; index < dayEvents.length; index += 1) {
-      const day = dayEvents[index]!;
-      const dayRows = crewRowsByEventRef.current.get(day._id) ?? [];
-      const dayPrefix = multiDay ? `Day ${index + 1} — ` : "";
-      for (const row of dayRows) {
-        rows.push({
-          ...row,
-          label: row.label.startsWith(dayPrefix) ? row.label : `${dayPrefix}${row.label}`,
-        });
+  // Days marked OT (`events.otPremium`) bill their schedule rows at the OT multiple.
+  const flattenCrewBuckets = useCallback(
+    (dayEvents: Array<{ _id: Id<"events">; title: string; otPremium?: boolean }>) => {
+      const multiDay = dayEvents.length > 1;
+      const rows: InvoiceCrewRow[] = [];
+      for (let index = 0; index < dayEvents.length; index += 1) {
+        const day = dayEvents[index]!;
+        const dayRows = crewRowsByEventRef.current.get(day._id) ?? [];
+        const dayPrefix = multiDay ? `Day ${index + 1} — ` : "";
+        for (const row of dayRows) {
+          const prefixed = {
+            ...row,
+            label: row.label.startsWith(dayPrefix) ? row.label : `${dayPrefix}${row.label}`,
+          };
+          rows.push(day.otPremium ? markCrewRowOvertime(prefixed) : prefixed);
+        }
       }
-    }
-    return rows;
-  }, []);
+      return rows;
+    },
+    [],
+  );
 
   const handleEventCrewRowsChange = useCallback(
     (eventRows: InvoiceCrewRow[]) => {
@@ -324,6 +330,14 @@ export function useInvoiceDraft({
     linkedSeries,
     setCrewRows,
   ]);
+
+  // Marking a day OT (here or on the event) re-prices its rows without re-reading the schedule.
+  const overtimeDaysKey = linkedDayEvents.map((day) => (day.otPremium ? "1" : "0")).join("");
+  useEffect(() => {
+    if (!crewBucketsHydratedInvoiceRef.current || linkedSeries || linkedDayEvents.length === 0) return;
+    setCrewRows((current) => mergeEventCrewWithManualRows(flattenCrewBuckets(linkedDayEvents), current));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when a day's OT flag flips
+  }, [overtimeDaysKey]);
 
   // --- Defaults and hydration ---------------------------------------------
 

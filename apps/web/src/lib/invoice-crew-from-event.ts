@@ -11,6 +11,9 @@ import {
 
 export type CrewCompensationRateMode = "normal" | "lead" | "custom";
 
+/** An OT day (`events.otPremium`) bills every scheduled crew hour at this multiple. */
+export const CREW_OT_MULTIPLIER = 1.5;
+
 export type CrewAssigneeRate = {
   hourlyRateUsd: number;
   rateMode: CrewCompensationRateMode;
@@ -31,7 +34,14 @@ export type InvoiceCrewRow = {
   userId?: string;
   /** Assignee compensation mode — used for Lead tagging / rate resolution. */
   rateMode?: CrewCompensationRateMode;
+  /** From a day marked OT: bills at `CREW_OT_MULTIPLIER` × the row's rate. */
+  overtime?: boolean;
 };
+
+/** A schedule row from a day marked OT: tagged on the line and billed at the OT multiple. */
+export function markCrewRowOvertime(row: InvoiceCrewRow): InvoiceCrewRow {
+  return { ...row, label: `${row.label} · OT`, overtime: true };
+}
 
 export type LinkedEventForInvoiceCrew = {
   blocks: Array<{
