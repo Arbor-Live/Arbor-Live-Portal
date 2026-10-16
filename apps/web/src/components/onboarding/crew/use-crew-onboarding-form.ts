@@ -9,6 +9,7 @@ import { normalizeAvatarFile } from "@/lib/image-processing";
 import { pacificDateAndTimeToMs, pacificDateKey } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useDevPreviewReady } from "@/hooks/use-dev-preview";
+import { usualEveningsComplete } from "@/lib/crew-nights";
 import { EMPTY_FORM, QUESTION_STEPS, stepOrderForPayroll } from "./constants";
 import type { FormState, StepId } from "./types";
 
@@ -22,6 +23,8 @@ export function useCrewOnboardingForm() {
   const ensureOnboarding = useMutation(api.onboarding.ensureMyCrewOnboarding);
   const generateAvatarUploadUrl = useMutation(api.account.generateAvatarUploadUrl);
   const setMyAvatar = useMutation(api.account.setMyAvatar);
+  const usualEvenings = useQuery(api.crewNights.getMyUsualEvenings, {});
+  const saveUsualEvenings = useMutation(api.crewNights.setMyUsualEvenings);
 
   const [item, setItem] = useState<StepId>("welcome");
   const [done, setDone] = useState(false);
@@ -35,7 +38,16 @@ export function useCrewOnboardingForm() {
   // arrive slightly after the onboarding row is created) is used otherwise.
   const [avatarPreviewOverride, setAvatarPreviewOverride] = useState<string | null>(null);
   const hydratedRef = useRef(false);
+  const eveningsHydratedRef = useRef(false);
   const ensuredRef = useRef(false);
+
+  // Usual evenings load separately; start from what's saved, else the application's Fri/Sat.
+  useEffect(() => {
+    if (!usualEvenings || eveningsHydratedRef.current) return;
+    eveningsHydratedRef.current = true;
+    const start = usualEvenings.setAt ? usualEvenings.usualEvenings : usualEvenings.suggested;
+    setForm((prev) => (Object.keys(prev.usualEvenings).length > 0 ? prev : { ...prev, usualEvenings: start }));
+  }, [usualEvenings]);
 
   useEffect(() => {
     if (ensuredRef.current) return;
@@ -50,7 +62,8 @@ export function useCrewOnboardingForm() {
   useLayoutEffect(() => {
     if (!onboarding || hydratedRef.current) return;
     hydratedRef.current = true;
-    setForm({
+    setForm((prev) => ({
+      usualEvenings: prev.usualEvenings,
       name: onboarding.profile.name ?? "",
       email: onboarding.profile.email ?? "",
       phone: onboarding.profile.phone ?? "",
@@ -85,7 +98,7 @@ export function useCrewOnboardingForm() {
       contractorPayAcknowledged: Boolean(onboarding.contractorPayAcknowledgedAt),
       signatureLegalName: onboarding.signatureLegalName ?? "",
       agreedToDoc: Boolean(onboarding.agreedToOnboardingDocAt),
-    });
+    }));
   }, [onboarding]);
 
   // Avatar/email seed for the avatar preview are decorative-only (not part of
@@ -194,6 +207,18 @@ export function useCrewOnboardingForm() {
         if (previewOnly) return true;
         setIsSubmitting(true);
         await saveOnboardingStep({ instagramAcknowledged: true });
+        return true;
+      }
+
+      if (currentStep === "evenings") {
+        if (!usualEveningsComplete(form.usualEvenings)) {
+          setFieldError("Pick an answer for Thursday, Friday and Saturday.");
+          return false;
+        }
+        // Only crew with a crew specialty are asked about availability.
+        if (previewOnly || !usualEvenings) return true;
+        setIsSubmitting(true);
+        await saveUsualEvenings({ usualEvenings: form.usualEvenings });
         return true;
       }
 
@@ -335,6 +360,8 @@ export function useCrewOnboardingForm() {
     previewOnly,
     saveOnboardingStep,
     saveProfileStep,
+    saveUsualEvenings,
+    usualEvenings,
   ]);
 
   const handleItemChange = useCallback(

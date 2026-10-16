@@ -30,6 +30,7 @@ import { formatDate } from "@/lib/format";
 import { AvatarUploadField } from "@/components/account/avatar-upload-field";
 import { NotificationPreferences } from "@/components/notifications/notification-preferences";
 import { PushNotificationSettings } from "@/components/notifications/push-settings";
+import { UsualEveningsCard } from "@/components/availability/usual-evenings-card";
 import { normalizeAvatarFile } from "@/lib/image-processing";
 import {
   FingerprintIcon,
@@ -440,6 +441,8 @@ export function AccountSettingsClient() {
           </Form>
         </CardContent>
       </Card>
+
+      <UsualEveningsCard variant="settings" />
 
       <PushNotificationSettings />
 

@@ -1,4 +1,4 @@
-import { CrewAvailabilityInbox } from "@/components/events/crew-availability-inbox";
+import { NightsInbox } from "@/components/availability/nights-inbox";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { PageHeader } from "@/components/page-header";
 import type { Metadata } from "next";
@@ -13,10 +13,10 @@ export default function MyAvailabilityPage() {
       <PageHeader
         back={{ href: "/dashboard/events", label: "Events" }}
         title="My Availability"
-        description="Tell the schedulers which events, and which parts of them, you can work."
+        description="One answer per night covers every event that night."
       />
       <ArborOnlyGuard>
-        <CrewAvailabilityInbox />
+        <NightsInbox />
       </ArborOnlyGuard>
     </div>
   );
