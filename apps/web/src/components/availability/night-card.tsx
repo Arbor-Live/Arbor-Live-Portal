@@ -65,7 +65,7 @@ function DateColumn({ nightKey }: { nightKey: string }) {
 }
 
 function Chip({ className, children }: { className: string; children: React.ReactNode }) {
-  return <span className={cn("shrink-0 rounded-md border px-2 py-0.5 text-xs", className)}>{children}</span>;
+  return <span className={cn("max-w-full rounded-md border px-2 py-0.5 text-xs", className)}>{children}</span>;
 }
 
 function NightSummary({ night }: { night: Night }) {
@@ -139,7 +139,15 @@ function NightAnswerForm({ night }: { night: Night }) {
   const firstSaved = savedWindows[0];
   const [from, setFrom] = useState(timeOf(firstSaved?.startsAt ?? night.startsAt));
   const [to, setTo] = useState(timeOf(savedWindows.at(-1)?.endsAt ?? night.endsAt));
-  const [busy, setBusy] = useState<BusyDraft[]>([]);
+  // Gaps between saved free windows come back as busy times.
+  const [busy, setBusy] = useState<BusyDraft[]>(() =>
+    savedWindows.slice(1).map((window, index) => ({
+      key: index,
+      start: timeOf(savedWindows[index]!.endsAt),
+      end: timeOf(window.startsAt),
+      notes: "",
+    })),
+  );
 
   const usualSuggestion: Choice | null =
     night.usual === "usually" ? "free" : night.usual === "rarely" ? "no" : null;
