@@ -204,6 +204,8 @@ const nightEventValue = v.object({
   sections: v.array(nightSectionValue),
   /** Shifts this person already has on the event. */
   myShiftCount: v.number(),
+  /** An OT event: crew are paid 1.5×, then double time after 8 hrs. */
+  otPremium: v.boolean(),
 });
 
 const nightValue = v.object({
@@ -306,6 +308,7 @@ export const listMine = query({
               earlySetup: isEarlySetupSection(block),
             })),
             myShiftCount: shiftCountByEvent.get(event._id) ?? 0,
+            otPremium: event.otPremium === true,
           })),
           answer: row
             ? {

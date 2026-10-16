@@ -264,7 +264,8 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     yet (staff ranking from it is a follow-up).
   - **Nights.** My Availability shows one card per night that has crewed
     events matching the person (teams/specialties, status, crewed types) in
-    the 3-week window (`DEFAULT_AVAILABILITY_WEEKS`); nights without events
+    the 3-week window (`DEFAULT_AVAILABILITY_WEEKS`), with an **OT** tag on
+    overtime events (`events.otPremium`); nights without events
     never appear. A night is the Pacific day of an event's start; anything
     starting before 6 AM belongs to the night before, so a show past midnight
     stays on the night it started. The night's span runs from the earliest
