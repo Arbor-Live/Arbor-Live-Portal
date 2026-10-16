@@ -30,7 +30,6 @@ import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
 import { buildItemSearchText, listPreviousAssetIds } from "./lib/inventoryLifecycle";
 import { ensureChangeRequestRevision } from "./lib/invoiceRevisions";
 import { convertLegacyResponseRow } from "./lib/crewNightConversion";
-import { nightKeyForStart } from "./lib/crewNights";
 
 /**
  * Official @convex-dev/migrations runner.
@@ -887,15 +886,17 @@ export const backfillOpenChangeRequestRevisions = migrations.define({
 
 /**
  * Availability moved from per-event answers to per-night time on the person
- * (`crewAvailabilityNights`). Fold each upcoming answer into its night: yes →
+ * (`crewAvailabilityNights`). Fold every answer (past nights too) into its night: yes →
  * free over the event's crew span, partial → its windows minus busy times,
  * only if necessary → backup, no → no; on one night the most available wins.
  * Old rows stay in place. See `lib/crewNightConversion.ts`.
  */
 export const convertAvailabilityToNights = migrations.define({
   table: "eventCrewAvailabilityResponses",
+  // Each row reads its event, up to 200 blocks and one night: keep batches small.
+  batchSize: 25,
   migrateOne: async (ctx, row) => {
-    await convertLegacyResponseRow(ctx, row, nightKeyForStart(Date.now()));
+    await convertLegacyResponseRow(ctx, row);
   },
 });
 

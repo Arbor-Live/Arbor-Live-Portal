@@ -293,7 +293,8 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     the free time as windows); none → `no`; `backup` → `only_if_necessary`; no
     night row → not answered. `scheduleChanged` is always false now.
   - **Old answers** (`eventCrewAvailabilityResponses`) were converted by
-    `migrations.convertAvailabilityToNights` for nights from today on (`yes` →
+    `migrations.convertAvailabilityToNights` for every non-cancelled event, past
+    nights included so Insights and backups keep their history (`yes` →
     free over the event's crew span, `partial` → its windows minus busy times,
     `only_if_necessary` → backup, `no` → no; on one night the most available
     wins and partial time is unioned). It's idempotent and never touches a

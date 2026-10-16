@@ -11,8 +11,9 @@ import { normalizeEventStatus } from "./eventStatus";
 
 /**
  * Fold one old per-event answer into that person's night row
- * (`migrations.convertAvailabilityToNights`). Only nights from `todayKey` on
- * are converted; past answers stay in the old table.
+ * (`migrations.convertAvailabilityToNights`). Past nights are converted too,
+ * so Insights and backup counting keep their history. Reads per row are
+ * bounded: the event, its blocks (≤ 200) and one night row.
  *
  * Idempotent: merging is a union of time and the most available status, so
  * running a row twice changes nothing. A night the person answered themselves
@@ -21,12 +22,10 @@ import { normalizeEventStatus } from "./eventStatus";
 export async function convertLegacyResponseRow(
   ctx: MutationCtx,
   row: Doc<"eventCrewAvailabilityResponses">,
-  todayKey: string,
 ) {
   const event = await ctx.db.get(row.eventId);
   if (!event || normalizeEventStatus(event.status) === "cancelled") return "skipped" as const;
   const nightKey = nightKeyForEvent(event);
-  if (nightKey < todayKey) return "skipped" as const;
 
   const blocks = await ctx.db
     .query("eventScheduleBlocks")

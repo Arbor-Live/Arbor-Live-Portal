@@ -293,7 +293,6 @@ test("converting old answers merges into the night, keeps own answers, and is id
   const staff = await crewMember(t, arbor);
   const a = await seedEvent(t, "A", { setup: "17:00", start: "19:00", end: "22:00" });
   const b = await seedEvent(t, "B", { setup: "20:00", start: "21:00", end: "23:30" });
-  const today = pacificDateKey(Date.now());
 
   const legacy = await t.run(async (ctx) => {
     const now = Date.now();
@@ -321,7 +320,7 @@ test("converting old answers merges into the night, keeps own answers, and is id
     t.run(async (ctx) => {
       for (const id of legacy) {
         const row = (await ctx.db.get(id))!;
-        await convertLegacyResponseRow(ctx, row, today);
+        await convertLegacyResponseRow(ctx, row);
       }
     });
   await convertAll();
@@ -349,4 +348,65 @@ test("converting old answers merges into the night, keeps own answers, and is id
   expect(kept[0]).toMatchObject({ status: "no", source: "answer" });
   // The old rows are still there.
   expect(await t.run((ctx) => ctx.db.query("eventCrewAvailabilityResponses").collect())).toHaveLength(2);
+});
+
+test("conversion keeps past nights (for Insights and backups) and skips cancelled events", async () => {
+  const { t, arbor } = await setup();
+  const crew = await crewMember(t, arbor);
+  const staff = await crewMember(t, arbor);
+  const pastNight = pacificDateKey(addPacificCalendarDays(Date.now(), -30));
+  const pastAt = (time: string) => pacificDateAndTimeToMs(pastNight, time)!;
+  const ids = await t.run(async (ctx) => {
+    const now = Date.now();
+    const base = {
+      visibility: "internal" as const,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: false,
+      eventType: "Crewed Event",
+      teamsInterested: ["Sound"],
+      createdAt: now,
+      updatedAt: now,
+    };
+    const past = await ctx.db.insert("events", {
+      ...base,
+      title: "Last month",
+      status: "completed",
+      startAt: pastAt("19:00"),
+      endAt: pastAt("22:00"),
+    });
+    const cancelled = await ctx.db.insert("events", {
+      ...base,
+      title: "Called off",
+      status: "cancelled",
+      startAt: at("19:00"),
+      endAt: at("22:00"),
+    });
+    const rows: Id<"eventCrewAvailabilityResponses">[] = [];
+    for (const [eventId, responseStatus] of [
+      [past, "only_if_necessary"],
+      [cancelled, "yes"],
+    ] as const) {
+      rows.push(
+        await ctx.db.insert("eventCrewAvailabilityResponses", {
+          eventId,
+          userId: crew._id,
+          responseStatus,
+          respondedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        }),
+      );
+    }
+    return { past, rows };
+  });
+
+  await t.run(async (ctx) => {
+    for (const id of ids.rows) await convertLegacyResponseRow(ctx, (await ctx.db.get(id))!);
+  });
+  const nights = await t.run((ctx) => ctx.db.query("crewAvailabilityNights").collect());
+  expect(nights.map((night) => [night.nightKey, night.status])).toEqual([[pastNight, "backup"]]);
+  expect((await summaryFor(t, staff, ids.past, crew._id))?.responseStatus).toBe("only_if_necessary");
 });
