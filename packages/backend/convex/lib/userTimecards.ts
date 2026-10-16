@@ -1,6 +1,7 @@
 import { pacificDateKey, pacificStartOfDayMs, payPeriodStatus, recentPayPeriods } from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
+import { countableShiftHours, loadUserShiftsWithLookback } from "./crewShiftOverlap";
 import { computeUserDayHours } from "./stanfordHours";
 
 export const timecardEventShape = {
@@ -49,18 +50,24 @@ function roundHours(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+/**
+ * The person's shifts starting in the range, each with the hours it counts: an
+ * overlap with an earlier-starting shift (any event) is removed from the later
+ * shift, so the day total counts it once. Shifts just before the range are read
+ * only so they can cover the first ones.
+ */
 async function loadShiftsForUserInRange(
   ctx: QueryCtx,
   userId: string,
   rangeStart: number,
   rangeEnd: number,
 ) {
-  return await ctx.db
-    .query("eventCrewShifts")
-    .withIndex("by_userId_and_startsAt", (q) =>
-      q.eq("userId", userId).gte("startsAt", rangeStart).lte("startsAt", rangeEnd),
-    )
-    .take(500);
+  const shifts = await loadUserShiftsWithLookback(ctx, userId, rangeStart, rangeEnd, 600);
+  const countable = await countableShiftHours(ctx, shifts);
+  return shifts
+    .filter((shift) => shift.startsAt >= rangeStart)
+    .slice(0, 500)
+    .map((shift) => ({ ...shift, hours: countable.get(shift._id) ?? shift.hours }));
 }
 
 export async function buildTimecardPeriodForUser(

@@ -7,6 +7,11 @@ import {
   resolveUserCompensationHourlyRateUsd,
 } from "./crewCompensation";
 import { staffingSlots } from "./crewShiftKinds";
+import { countableShiftHours, loadOverlappingOtherEventShifts } from "./crewShiftOverlap";
+import { normalizeEventStatus } from "./eventStatus";
+
+/** Other events re-priced when this one's crew changes (they share people's time). */
+const NEIGHBOR_RESYNC_CAP = 20;
 
 function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
@@ -22,6 +27,14 @@ function getShiftDayKey(startsAt: number) {
 }
 
 export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id<"events">) {
+  return (await computeCrewCost(ctx, eventId)).cost;
+}
+
+/**
+ * The event's crew cost, plus the other events whose shifts share a person's
+ * time with this one (their cost depends on this event's shifts too).
+ */
+async function computeCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id<"events">) {
   const event = await ctx.db.get(eventId);
   const otPremium = event?.otPremium === true;
   const settings = await ctx.db
@@ -50,6 +63,16 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
     ),
   );
 
+  // A person on two shifts at once counts the shared time once, on the shift
+  // that starts first, here or on another event (`crewCountableHours`).
+  const otherEventShifts = await loadOverlappingOtherEventShifts(ctx, new Set([eventId]), shifts);
+  const countableByShift = await countableShiftHours(
+    ctx,
+    [...shifts, ...otherEventShifts],
+    new Map([[eventId, !event || normalizeEventStatus(event.status) === "cancelled"]]),
+  );
+  const countableHours = (shift: (typeof shifts)[number]) => countableByShift.get(shift._id) ?? shift.hours;
+
   const scheduleBlocks = await ctx.db
     .query("eventScheduleBlocks")
     .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
@@ -76,6 +99,8 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
         startsAt: number;
         endsAt: number;
         totalHours: number;
+        /** Hours already counted on an earlier-starting shift of the same person. */
+        coveredHours: number;
         regularHours: number;
         overtimeHours: number;
         baseRateUsd: number;
@@ -100,6 +125,7 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
       role: shift.role,
       userId: shift.userId,
       startsAt: shift.startsAt,
+      hours: shift.hours,
     })),
   );
   const hoursByShift = allocateCrewHours(
@@ -107,7 +133,7 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
       id: shift._id,
       personKey: personByShift.get(shift._id) ?? shift._id,
       startsAt: shift.startsAt,
-      hours: shift.hours,
+      hours: countableHours(shift),
     })),
   );
 
@@ -138,7 +164,7 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
       ? (userById.get(shift.userId)?.name ?? userById.get(shift.userId)?.email ?? shift.userId)
       : shift.personName?.trim() || "Unassigned";
     const { regularHours, pastRegularHours: overtimeHours } = hoursByShift.get(shift._id) ?? {
-      regularHours: shift.hours,
+      regularHours: countableHours(shift),
       pastRegularHours: 0,
     };
     const regularRateUsd = roundCurrency(rate * regularMultiplier);
@@ -155,7 +181,8 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
       role: shift.role,
       startsAt: shift.startsAt,
       endsAt: shift.endsAt,
-      totalHours: shift.hours,
+      totalHours: countableHours(shift),
+      coveredHours: roundCurrency(Math.max(0, shift.hours - countableHours(shift))),
       regularHours,
       overtimeHours,
       baseRateUsd: rate,
@@ -208,7 +235,7 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
   );
   const totalRegularHours = roundCurrency(byScheduleBlock.reduce((sum, row) => sum + row.regularHours, 0));
   const totalOvertimeHours = roundCurrency(byScheduleBlock.reduce((sum, row) => sum + row.overtimeHours, 0));
-  return {
+  const cost = {
     totalCostUsd,
     bufferedTotalCostUsd,
     bufferPercent,
@@ -222,13 +249,48 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
     missingRateUsers,
     missingRateOpenSlotCount,
   };
+  const neighborEventIds = [...new Set(otherEventShifts.map((shift) => shift.eventId))];
+  return { cost, neighborEventIds };
 }
 
-export async function syncEventCrewCostUsd(ctx: MutationCtx, eventId: Id<"events">, now: number) {
-  const costs = await calculateCrewCost(ctx, eventId);
+/**
+ * Other events whose crew share a person's time with this event's crew. Read
+ * before changing an event's shifts so events that stop overlapping are
+ * re-priced too (`syncEventCrewCostUsd`'s `previousNeighborEventIds`).
+ */
+export async function crewCostNeighborEventIds(ctx: QueryCtx | MutationCtx, eventId: Id<"events">) {
+  const shifts = await ctx.db
+    .query("eventCrewShifts")
+    .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
+    .take(500);
+  const others = await loadOverlappingOtherEventShifts(ctx, new Set([eventId]), shifts);
+  return [...new Set(others.map((shift) => shift.eventId))];
+}
+
+/**
+ * Stores the event's crew cost, then re-prices the other events that share a
+ * person's time with it: which shift keeps the shared hours depends on both.
+ */
+export async function syncEventCrewCostUsd(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  now: number,
+  options?: { previousNeighborEventIds?: Array<Id<"events">> },
+) {
+  const { cost, neighborEventIds } = await computeCrewCost(ctx, eventId);
   await ctx.db.patch(eventId, {
-    crewCostUsd: costs.totalCostUsd,
+    crewCostUsd: cost.totalCostUsd,
     updatedAt: now,
   });
-  return costs;
+  const neighbors = [...new Set([...neighborEventIds, ...(options?.previousNeighborEventIds ?? [])])]
+    .filter((id) => id !== eventId)
+    .slice(0, NEIGHBOR_RESYNC_CAP);
+  for (const neighborId of neighbors) {
+    const neighbor = await ctx.db.get(neighborId);
+    if (!neighbor) continue;
+    const { cost: neighborCost } = await computeCrewCost(ctx, neighborId);
+    if (neighbor.crewCostUsd === neighborCost.totalCostUsd) continue;
+    await ctx.db.patch(neighborId, { crewCostUsd: neighborCost.totalCostUsd, updatedAt: now });
+  }
+  return cost;
 }

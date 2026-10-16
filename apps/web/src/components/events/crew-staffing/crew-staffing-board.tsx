@@ -23,7 +23,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { UserHoverCard } from "@/components/users/user-hover-card";
-import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
+import { CartEligibleTag, UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { AssignTraineeDialog } from "@/components/events/crew-staffing/assign-trainee-dialog";
 import { useCrewHoursWindows } from "@/hooks/use-crew-hours-windows";
 import {
@@ -224,6 +224,14 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
     }
     return [...byId.entries()].map(([userId, person]) => ({ userId, ...person }));
   }, [shifts]);
+  // Each crew needs someone who can take the golf cart with the gear.
+  const cartEligibleIds = useMemo(
+    () => new Set(userSelectOptions.filter((option) => option.cartEligible).map((option) => option.value)),
+    [userSelectOptions],
+  );
+  const cartEligibleNames = assignedUsers
+    .filter((person) => cartEligibleIds.has(person.userId))
+    .map((person) => person.name);
 
   function updateShift(index: number, next: S) {
     setShifts((prev) => prev.map((shift, i) => (i === index ? next : shift)));
@@ -317,6 +325,13 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
           ) : null}
         </div>
         {assignedUsers.length > 0 ? (
+          <p className="text-xs text-muted-foreground" data-testid="crew-cart-eligible">
+            {cartEligibleNames.length > 0
+              ? `Cart eligible: ${cartEligibleNames.join(", ")}`
+              : "No one on this crew is cart eligible."}
+          </p>
+        ) : null}
+        {assignedUsers.length > 0 ? (
           <div className="space-y-1">
             {assignedUsers.map((person) => (
               <OvertimeRisk
@@ -351,6 +366,7 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
             userSelectOptions={userSelectOptions}
             responders={responders}
             responderById={responderById}
+            cartEligibleIds={cartEligibleIds}
             conflicts={conflicts}
             quarterHours={quarterHours}
             askAvailability={askAvailability}
@@ -576,6 +592,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
   userSelectOptions,
   responders,
   responderById,
+  cartEligibleIds,
   conflicts,
   quarterHours,
   askAvailability,
@@ -594,6 +611,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
   userSelectOptions: UserSelectOption[];
   responders: AssignableResponder[];
   responderById: Map<string, AssignableResponder>;
+  cartEligibleIds: Set<string>;
   conflicts: CrewConflict[];
   quarterHours?: QuarterHoursById;
   askAvailability: boolean;
@@ -751,6 +769,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
                     candidate={candidate}
                     sectionLabel={label}
                     quarterHours={quarterHours?.get(candidate.userId)}
+                    cartEligible={cartEligibleIds.has(candidate.userId)}
                     onAssign={() => assign({ userId: candidate.userId, name: candidate.name })}
                   />
                 ))}
@@ -775,6 +794,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
                   assign({ userId, name: option?.label ?? userId });
                 }}
                 options={addOptions}
+                showCartTag
                 emptyLabel="Add someone…"
                 contentClassName="w-80 max-w-[calc(100vw-2rem)]"
               />
@@ -893,6 +913,7 @@ function ShiftRow<S extends ShiftDraftForAssign>({
             options={options}
             emptyLabel="Open slot — pick crew"
             clearable
+            showCartTag
           />
         </div>
         {block ? (
@@ -992,11 +1013,13 @@ function CandidateChip({
   candidate,
   sectionLabel,
   quarterHours,
+  cartEligible,
   onAssign,
 }: {
   candidate: SectionCandidate;
   sectionLabel: string;
   quarterHours?: number;
+  cartEligible: boolean;
   onAssign: () => void;
 }) {
   const booked = candidate.conflicts.length > 0;
@@ -1053,6 +1076,7 @@ function CandidateChip({
         {quarterHours !== undefined ? (
           <span className="tabular-nums opacity-60">· {formatHours(quarterHours)}</span>
         ) : null}
+        {cartEligible ? <CartEligibleTag className="border-0 p-0 text-current opacity-75" /> : null}
       </button>
     </UserHoverCard>
   );

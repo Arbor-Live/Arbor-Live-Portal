@@ -7,6 +7,7 @@ import { CrewStaffingBoard } from "@/components/events/crew-staffing/crew-staffi
 import { RunOfShowEditor } from "@/components/events/workspace/run-of-show/run-of-show-editor";
 import { useRunOfShowData } from "@/components/events/workspace/run-of-show/use-run-of-show-data";
 import { isSectionBlockType } from "@/lib/schedule-block-types";
+import { setSectionHeadcount } from "@/lib/crew-shift-assign";
 import { countStaffing } from "@/lib/crew-shift-kinds";
 import {
   buildQuickAddScheduleBlocks,
@@ -112,6 +113,9 @@ export function ScheduleCrewTab() {
               const staffing = countStaffing(shifts.filter((shift) => shiftBelongsToBlock(shift, block)));
               return { total: staffing.slots, filled: staffing.filled };
             }}
+            onEarlySetupAdded={(block, headcount) =>
+              setShifts((prev) => setSectionHeadcount(prev, block, headcount, getBlockRef))
+            }
             quickAdd={{
               label: quickAddLabel,
               disabled: quickAddDisabled,

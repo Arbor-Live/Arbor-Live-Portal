@@ -13,11 +13,13 @@ import {
   applyCrewDayRates,
   mergeEventCrewWithManualRows,
   type CrewAssigneeRate,
+  type CrewOtherShift,
   type InvoiceCrewRow,
 } from "@/lib/invoice-crew-from-event";
 import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
 import { getConvexAppErrorData, getConvexErrorMessage } from "@/lib/convex-error";
 import { formatUsd } from "@/lib/format";
+import { normalizeEventStatus } from "@/lib/event-status";
 import { notify } from "@/lib/notify";
 import { computeInvoiceDraftTotals } from "@/lib/compute-invoice-draft-totals";
 import {
@@ -295,6 +297,25 @@ export function useInvoiceDraft({
       shiftsByEvent.set(shift.eventId, list);
     }
 
+    // A person's time on another event, or another day of this booking, isn't
+    // billed twice: shared time stays with the shift that starts first.
+    const cancelledDayIds = new Set(
+      days.filter((day) => normalizeEventStatus(day.status) === "cancelled").map((day) => day._id as string),
+    );
+    const outsideShifts: Array<CrewOtherShift & { eventId: string }> = [
+      ...(linkedEvent.otherEventShifts ?? []),
+      ...linkedEvent.shifts,
+    ].map((shift) => ({
+      id: shift._id,
+      eventId: shift.eventId,
+      userId: shift.userId,
+      startsAt: shift.startsAt,
+      endsAt: shift.endsAt,
+      hours: shift.hours,
+      createdAt: shift._creationTime,
+      cancelled: cancelledDayIds.has(shift.eventId),
+    }));
+
     crewRowsByEventRef.current = new Map();
     for (const eventId of dayIds) {
       const blocks = blocksByEvent.get(eventId) ?? [];
@@ -307,6 +328,8 @@ export function useInvoiceDraft({
         crewApplicationId: shift.crewApplicationId,
         hours: shift.hours,
         startsAt: shift.startsAt,
+        endsAt: shift.endsAt,
+        _creationTime: shift._creationTime,
       }));
       crewRowsByEventRef.current.set(
         eventId,
@@ -320,7 +343,11 @@ export function useInvoiceDraft({
             })),
             shifts,
           },
-          { ratesByUserId: crewRatesByUserId, openSlotRateUsd: defaultCrewHourlyRateUsd },
+          {
+            ratesByUserId: crewRatesByUserId,
+            openSlotRateUsd: defaultCrewHourlyRateUsd,
+            otherShifts: outsideShifts.filter((shift) => shift.eventId !== eventId),
+          },
         ),
       );
     }

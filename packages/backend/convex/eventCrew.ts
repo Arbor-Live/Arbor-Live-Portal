@@ -4,7 +4,7 @@ import schema from "./schema";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { appError, withReportableErrors } from "./lib/errors";
 import { requireEventEditAccess } from "./lib/eventAccess";
-import { calculateCrewCost, syncEventCrewCostUsd } from "./lib/crewCost";
+import { calculateCrewCost, crewCostNeighborEventIds, syncEventCrewCostUsd } from "./lib/crewCost";
 import {
   loadInvoiceCrewRateSettings,
   resolveOpenSlotHourlyRateUsd,
@@ -56,7 +56,9 @@ const computedCrewCostValue = v.object({
           role: v.string(),
           startsAt: v.number(),
           endsAt: v.number(),
+          /** Billed hours: the shift's hours less time an earlier shift already counts. */
           totalHours: v.number(),
+          coveredHours: v.number(),
           regularHours: v.number(),
           overtimeHours: v.number(),
           baseRateUsd: v.number(),
@@ -161,6 +163,8 @@ export const upsertShifts = mutation({
       userId: row.userId,
       crewApplicationId: row.crewApplicationId,
     }));
+    // Events sharing someone's time before the edit get re-priced even if they stop overlapping.
+    const previousNeighborEventIds = await crewCostNeighborEventIds(ctx, args.eventId);
     const keepIds = new Set(args.shifts.map((s) => s.id).filter(Boolean));
     for (const row of existing) {
       if (!keepIds.has(row._id)) await ctx.db.delete(row._id);
@@ -253,7 +257,7 @@ export const upsertShifts = mutation({
       });
     }
 
-    await syncEventCrewCostUsd(ctx, args.eventId, now);
+    await syncEventCrewCostUsd(ctx, args.eventId, now, { previousNeighborEventIds });
     const inviteSequence = await bumpInviteSequence(ctx, args.eventId);
     await scheduleCrewScheduledEmails(
       ctx,
@@ -378,6 +382,10 @@ export const listCrewConflictsForEvent = query({
         eventTitle: v.string(),
         startsAt: v.number(),
         endsAt: v.number(),
+        /** The other shift itself, so crew lines can count shared time once (`crewCountableHours`). */
+        shiftId: v.id("eventCrewShifts"),
+        shiftCreationTime: v.number(),
+        hours: v.number(),
       }),
     ),
     /** People past the cap the overlap scan never reached. */
@@ -448,6 +456,9 @@ export const listCrewConflictsForEvent = query({
           eventTitle: other.title,
           startsAt: shift.startsAt,
           endsAt: shift.endsAt,
+          shiftId: shift._id,
+          shiftCreationTime: shift._creationTime,
+          hours: shift.hours,
         },
       ];
     });

@@ -1204,6 +1204,8 @@ export default defineSchema({
     requiresOnboarding: v.optional(v.boolean()),
     includeInTimecards: v.optional(v.boolean()),
     assignableAsCrew: v.optional(v.boolean()),
+    /** Staff-set: may drive the golf cart to move gear. Missing ⇒ false. */
+    cartEligible: v.optional(v.boolean()),
     /** Email templates this user opted out of (keys from `email/constants.ts`). */
     emailOptOuts: v.optional(v.array(v.string())),
     /** Templates this user muted in the notification center (no row, so no push either). */

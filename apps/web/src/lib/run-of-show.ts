@@ -332,3 +332,41 @@ export function buildRunOfShow(
       (localDateTimeInputToMs(a.startsAt) ?? 0) - (localDateTimeInputToMs(b.startsAt) ?? 0),
   );
 }
+
+/** Early setup crew start this long before setup by default. */
+export const EARLY_SETUP_LEAD_MINUTES = 60;
+
+/** Early setup crew either stay on with everyone or leave once soundchecks start. */
+export type EarlySetupUntil = "setup" | "soundcheck";
+
+function isEarlySetup(block: TimelineBlockDraft) {
+  return block.blockType === "setup" && /^early setup/i.test(block.label.trim());
+}
+
+/**
+ * An early setup section: a crew who come in before everyone else to stage
+ * gear, so setup starts with a cart run ready to go. It runs from `leadMinutes`
+ * before the first setup section until setup starts (they stay on and are
+ * staffed on setup too) or until the first soundcheck (they leave, so the
+ * section overlaps setup and they're other people than the setup crew).
+ */
+export function planEarlySetup(
+  blocks: TimelineBlockDraft[],
+  input: { leadMinutes: number; until: EarlySetupUntil },
+): { start: number; end: number; label: string } | { error: string } {
+  const all = timed(blocks);
+  const setup = all
+    .filter((row) => row.block.blockType === "setup" && !isEarlySetup(row.block))
+    .sort((a, b) => a.start - b.start)[0];
+  if (!setup) return { error: "Add a setup section first." };
+  if (all.some((row) => isEarlySetup(row.block))) {
+    return { error: "This run of show already has an early setup." };
+  }
+  const start = setup.start - Math.max(15, input.leadMinutes) * MINUTE;
+  if (input.until === "setup") return { start, end: setup.start, label: "Early setup" };
+  const soundcheck = all
+    .filter((row) => row.block.blockType === "soundcheck" && row.start > setup.start)
+    .sort((a, b) => a.start - b.start)[0];
+  if (!soundcheck) return { error: "Add soundchecks first, or keep the early crew on." };
+  return { start, end: soundcheck.start, label: "Early setup (until soundcheck)" };
+}

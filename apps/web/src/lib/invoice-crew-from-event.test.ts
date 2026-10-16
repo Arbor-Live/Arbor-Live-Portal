@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Id } from "@/lib/convex-api";
-import { buildCrewRowsFromLinkedEvent, buildCrewRowsFromShifts } from "@/lib/invoice-crew-from-event";
+import {
+  buildCrewRowsFromLinkedEvent,
+  buildCrewRowsFromShifts,
+  crewOtherShiftsFromConflicts,
+} from "@/lib/invoice-crew-from-event";
 
 const blockId = "block1" as Id<"eventScheduleBlocks">;
 const appId = "app1" as Id<"crewApplications">;
@@ -89,5 +93,59 @@ describe("invoice crew rows assume the same people stay on", () => {
       ["4", "25", "regular"],
       ["2", "25", "past_regular"],
     ]);
+  });
+});
+
+describe("invoice crew rows count a person's shared time once", () => {
+  const H = 3_600_000;
+  const seven = Date.UTC(2026, 9, 31, 2); // 7pm Pacific
+  const showId = "show" as Id<"eventScheduleBlocks">;
+  const strikeId = "strike" as Id<"eventScheduleBlocks">;
+
+  it("bills only the part another event's earlier shift doesn't cover", () => {
+    const rows = buildCrewRowsFromLinkedEvent(
+      {
+        blocks: [{ _id: showId, label: "Show", blockType: "show", startsAt: seven + 0.75 * H }],
+        shifts: [
+          { _id: "s1" as Id<"eventCrewShifts">, scheduleBlockId: showId, role: "Sound", userId: "u1", personName: "Alex", hours: 1.25, startsAt: seven + 0.75 * H, endsAt: seven + 2 * H, _creationTime: 1 },
+        ],
+      },
+      {
+        ratesByUserId: new Map([["u1", { hourlyRateUsd: 20, rateMode: "normal" }]]),
+        otherShifts: crewOtherShiftsFromConflicts([
+          { userId: "u1", startsAt: seven, endsAt: seven + H, shiftId: "other", shiftCreationTime: 5, hours: 1 },
+        ]),
+      },
+    );
+    expect(rows.map((row) => row.quantity)).toEqual(["1"]);
+  });
+
+  it("dedupes one person's overlapping sections within the event", () => {
+    const base = { role: "Sound", userId: "u1", personName: "Alex" };
+    const rows = buildCrewRowsFromLinkedEvent(
+      {
+        blocks: [
+          { _id: showId, label: "Show", blockType: "show", startsAt: seven },
+          { _id: strikeId, label: "Strike", blockType: "strike", startsAt: seven + H },
+        ],
+        shifts: [
+          { ...base, _id: "s1" as Id<"eventCrewShifts">, scheduleBlockId: showId, hours: 2, startsAt: seven, endsAt: seven + 2 * H },
+          { ...base, _id: "s2" as Id<"eventCrewShifts">, scheduleBlockId: strikeId, hours: 2, startsAt: seven + H, endsAt: seven + 3 * H },
+        ],
+      },
+      { ratesByUserId: new Map([["u1", { hourlyRateUsd: 20, rateMode: "normal" }]]) },
+    );
+    expect(rows.map((row) => row.quantity)).toEqual(["3"]);
+  });
+
+  it("from draft shifts, ignoring a cancelled event's shift", () => {
+    const shift = { role: "Sound", userId: "u1", personName: "Alex", postedToExpense: false, notes: "", scheduleBlockId: showId };
+    const draft = [{ ...shift, startsAt: "2026-10-30T19:45", endsAt: "2026-10-30T21:00" }];
+    const blocks = [{ id: showId, label: "Show", blockType: "show" as const, startsAt: "2026-10-30T19:45" }];
+    const other = { id: "o1", userId: "u1", startsAt: seven, endsAt: seven + H, hours: 1 };
+    expect(buildCrewRowsFromShifts(blocks, draft, { otherShifts: [other] }).map((row) => row.quantity)).toEqual(["1"]);
+    expect(
+      buildCrewRowsFromShifts(blocks, draft, { otherShifts: [{ ...other, cancelled: true }] }).map((row) => row.quantity),
+    ).toEqual(["1.25"]);
   });
 });

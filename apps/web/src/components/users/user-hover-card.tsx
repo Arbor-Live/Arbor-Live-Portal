@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useQuery } from "convex/react";
-import { EnvelopeSimpleIcon, PhoneIcon } from "@phosphor-icons/react";
+import { CarSimpleIcon, EnvelopeSimpleIcon, PhoneIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { UserAvatar } from "@/components/account/user-avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
@@ -127,6 +127,12 @@ function UserCardBody({
             <EnvelopeSimpleIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
             <span className="truncate">{card.email}</span>
           </a>
+        ) : null}
+        {card.cartEligible ? (
+          <p className="flex items-center gap-2 text-muted-foreground">
+            <CarSimpleIcon className="size-3.5 shrink-0" aria-hidden />
+            Cart eligible
+          </p>
         ) : null}
       </div>
 

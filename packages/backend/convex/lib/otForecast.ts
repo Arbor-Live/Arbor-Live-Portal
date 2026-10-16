@@ -1,6 +1,8 @@
 import { pacificDateKey } from "@arbor/format";
+import { crewCountableHours, overlappingCrewShiftIds } from "@arbor/invoice-document/crew-hours";
 import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
+import { normalizeEventStatus } from "./eventStatus";
 
 const DAY_MS = 24 * 3_600_000;
 
@@ -19,7 +21,17 @@ function roundHours(value: number) {
 }
 
 type ShiftWindow = { startsAt: number; endsAt: number };
-type ShiftHours = { startsAt: number; hours: number };
+/** A saved shift on another event. */
+type ShiftHours = {
+  id?: string;
+  startsAt: number;
+  /** Without an end the shift runs `hours` from its start. */
+  endsAt?: number;
+  hours: number;
+  createdAt?: number;
+  /** On a cancelled event: never covers this event's time. */
+  cancelled?: boolean;
+};
 
 /**
  * Overtime this event's shifts would land in for one person: their saved
@@ -45,8 +57,29 @@ export async function getUserOtForecast(
         .lte("startsAt", Math.max(...starts) + 7 * DAY_MS),
     )
     .take(500);
+  const otherShifts = others.filter((shift) => shift.eventId !== eventId);
+  // Only shifts that overlap another need their event's status (cancelled never covers time).
+  const overlapping = overlappingCrewShiftIds([
+    ...otherShifts.map((shift) => ({ id: shift._id, userId, startsAt: shift.startsAt, endsAt: shift.endsAt, hours: shift.hours })),
+    ...eventShifts.map((shift, index) => ({ id: `proposed-${index}`, userId, ...shift, hours: 0 })),
+  ]);
+  const eventIds = [...new Set(otherShifts.filter((shift) => overlapping.has(shift._id)).map((shift) => shift.eventId))];
+  const events = await Promise.all(eventIds.map((id) => ctx.db.get(id)));
+  const cancelled = new Set(
+    eventIds.filter((_, index) => {
+      const event = events[index];
+      return !event || normalizeEventStatus(event.status) === "cancelled";
+    }),
+  );
   return forecastOt(
-    others.filter((shift) => shift.eventId !== eventId),
+    otherShifts.map((shift) => ({
+      id: shift._id,
+      startsAt: shift.startsAt,
+      endsAt: shift.endsAt,
+      hours: shift.hours,
+      createdAt: shift._creationTime,
+      cancelled: cancelled.has(shift.eventId),
+    })),
     eventShifts,
   );
 }
@@ -54,23 +87,36 @@ export async function getUserOtForecast(
 export function forecastOt(otherShifts: ShiftHours[], eventShifts: ShiftWindow[]) {
   const proposed = eventShifts
     .filter((shift) => shift.endsAt > shift.startsAt)
-    .map((shift) => ({
+    .map((shift, index) => ({
+      id: `proposed-${index}`,
       startsAt: shift.startsAt,
+      endsAt: shift.endsAt,
       hours: (shift.endsAt - shift.startsAt) / 3_600_000,
     }));
+  // Time on two shifts at once counts once, on the shift that starts first.
+  // This event's draft shifts aren't saved yet, so they lose a tie on start.
+  const saved = otherShifts.map((shift, index) => ({
+    ...shift,
+    id: shift.id ?? `other-${index}`,
+    endsAt: shift.endsAt ?? shift.startsAt + shift.hours * 3_600_000,
+  }));
+  const countable = crewCountableHours(
+    [...saved, ...proposed].map((shift) => ({ ...shift, userId: "person" })),
+  );
   const dayKeys = new Set(proposed.map((shift) => pacificDateKey(shift.startsAt)));
   const weekKeys = new Set([...dayKeys].map(getIsoWeekKey));
 
   const hoursByDay = new Map<string, number>();
   const hoursByWeek = new Map<string, number>();
-  for (const shift of [...otherShifts, ...proposed]) {
+  for (const shift of [...saved, ...proposed]) {
     const dayKey = pacificDateKey(shift.startsAt);
     const weekKey = getIsoWeekKey(dayKey);
+    const hours = countable.get(shift.id) ?? shift.hours;
     if (dayKeys.has(dayKey)) {
-      hoursByDay.set(dayKey, roundHours((hoursByDay.get(dayKey) ?? 0) + shift.hours));
+      hoursByDay.set(dayKey, roundHours((hoursByDay.get(dayKey) ?? 0) + hours));
     }
     if (weekKeys.has(weekKey)) {
-      hoursByWeek.set(weekKey, roundHours((hoursByWeek.get(weekKey) ?? 0) + shift.hours));
+      hoursByWeek.set(weekKey, roundHours((hoursByWeek.get(weekKey) ?? 0) + hours));
     }
   }
 

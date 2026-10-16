@@ -46,6 +46,7 @@ export async function loadAdminProfilesByUserIds(
       pronouns?: string;
       gradYear?: number;
       assignableAsCrew?: boolean;
+      cartEligible?: boolean;
       status?: UserStatus;
       active?: boolean;
     }
@@ -58,6 +59,7 @@ export async function loadAdminProfilesByUserIds(
       pronouns?: string;
       gradYear?: number;
       assignableAsCrew?: boolean;
+      cartEligible?: boolean;
       status?: UserStatus;
       active?: boolean;
     }
@@ -77,6 +79,7 @@ export async function loadAdminProfilesByUserIds(
           pronouns: profile.pronouns,
           gradYear: profile.gradYear,
           assignableAsCrew: profile.assignableAsCrew,
+          cartEligible: profile.cartEligible,
           status: profile.status,
           active: profile.active,
         });
