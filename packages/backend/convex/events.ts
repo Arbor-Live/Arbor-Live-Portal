@@ -68,6 +68,7 @@ import {
 import { eventTeamValue } from "./lib/eventTeams";
 import { isActBlock } from "./lib/runOfShow";
 import { loadOverlappingOtherEventShifts } from "./lib/crewShiftOverlap";
+import { syncCrewCostAfterStatusChange } from "./lib/crewCost";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -1101,6 +1102,7 @@ export const update = mutation({
       if (occStatus === "cancelled" && normalizeEventStatus(occ.prevStatus) !== "cancelled") {
         await scheduleEventCancelledEmails(ctx, occ.id, now);
       }
+      await syncCrewCostAfterStatusChange(ctx, occ.id, occ.prevStatus, occStatus, now);
     }
     });
   },
@@ -1149,6 +1151,7 @@ export const setStatus = mutation({
     if (nextStatus === "cancelled" && !wasCancelled) {
       await scheduleEventCancelledEmails(ctx, args.id, now);
     }
+    await syncCrewCostAfterStatusChange(ctx, args.id, prevStatus, nextStatus, now);
     // Cancelled days don't count toward a multi-day booking.
     if (prevStatus !== nextStatus && existing.invoiceId) {
       await syncMultiDayGroupForInvoice(ctx, existing.invoiceId, now);

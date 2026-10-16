@@ -1,4 +1,5 @@
 import { allocateCrewHours, crewPersonKeys, crewTierMultiplier } from "@arbor/invoice-document/crew-hours";
+import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { findAuthUsersByIds } from "./auth";
@@ -10,7 +11,7 @@ import { staffingSlots } from "./crewShiftKinds";
 import { countableShiftHours, loadOverlappingOtherEventShifts } from "./crewShiftOverlap";
 import { normalizeEventStatus } from "./eventStatus";
 
-/** Other events re-priced when this one's crew changes (they share people's time). */
+/** Other events re-priced in one mutation when this one's crew changes (they share people's time). */
 const NEIGHBOR_RESYNC_CAP = 20;
 
 function roundCurrency(value: number) {
@@ -282,15 +283,43 @@ export async function syncEventCrewCostUsd(
     crewCostUsd: cost.totalCostUsd,
     updatedAt: now,
   });
-  const neighbors = [...new Set([...neighborEventIds, ...(options?.previousNeighborEventIds ?? [])])]
-    .filter((id) => id !== eventId)
-    .slice(0, NEIGHBOR_RESYNC_CAP);
-  for (const neighborId of neighbors) {
-    const neighbor = await ctx.db.get(neighborId);
-    if (!neighbor) continue;
-    const { cost: neighborCost } = await computeCrewCost(ctx, neighborId);
-    if (neighbor.crewCostUsd === neighborCost.totalCostUsd) continue;
-    await ctx.db.patch(neighborId, { crewCostUsd: neighborCost.totalCostUsd, updatedAt: now });
-  }
+  const neighbors = [...new Set([...neighborEventIds, ...(options?.previousNeighborEventIds ?? [])])].filter(
+    (id) => id !== eventId,
+  );
+  await repriceCrewCostEvents(ctx, neighbors, now);
   return cost;
+}
+
+/**
+ * Re-stores each event's crew cost (no cascade to their own neighbors). Past
+ * the per-mutation cap, the rest continue in a scheduled batch.
+ */
+export async function repriceCrewCostEvents(ctx: MutationCtx, eventIds: Array<Id<"events">>, now: number) {
+  for (const eventId of eventIds.slice(0, NEIGHBOR_RESYNC_CAP)) {
+    const event = await ctx.db.get(eventId);
+    if (!event) continue;
+    const { cost } = await computeCrewCost(ctx, eventId);
+    if (event.crewCostUsd === cost.totalCostUsd) continue;
+    await ctx.db.patch(eventId, { crewCostUsd: cost.totalCostUsd, updatedAt: now });
+  }
+  const rest = eventIds.slice(NEIGHBOR_RESYNC_CAP);
+  if (rest.length > 0) {
+    await ctx.scheduler.runAfter(0, internal.eventCrew.repriceCrewCostBatch, { eventIds: rest });
+  }
+}
+
+/**
+ * A cancelled event's shifts stop covering anyone's time (and count again once
+ * it's back), so the events sharing its crew's time re-price.
+ */
+export async function syncCrewCostAfterStatusChange(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  prevStatus: string | undefined,
+  nextStatus: string | undefined,
+  now: number,
+) {
+  const wasCancelled = normalizeEventStatus(prevStatus) === "cancelled";
+  if (wasCancelled === (normalizeEventStatus(nextStatus) === "cancelled")) return;
+  await syncEventCrewCostUsd(ctx, eventId, now);
 }

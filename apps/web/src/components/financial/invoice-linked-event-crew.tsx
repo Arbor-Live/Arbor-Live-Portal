@@ -233,6 +233,8 @@ export function InvoiceLinkedEventCrewSection({
 
   useEffect(() => {
     if (!scheduleHydratedRef.current) return;
+    // Until other events' shifts load, rows would bill shared time twice.
+    if (assignedUserIds.length > 0 && conflictsResult === undefined) return;
     onEventCrewRowsChange(
       buildCrewRowsFromShifts(blocks, shifts, {
         ratesByUserId,
@@ -241,7 +243,7 @@ export function InvoiceLinkedEventCrewSection({
         shiftCreationTimes,
       }),
     );
-  }, [blocks, shifts, onEventCrewRowsChange, ratesByUserId, defaultCrewHourlyRateUsd, otherShifts, shiftCreationTimes]);
+  }, [blocks, shifts, onEventCrewRowsChange, ratesByUserId, defaultCrewHourlyRateUsd, otherShifts, shiftCreationTimes, assignedUserIds, conflictsResult]);
 
   useEffect(() => {
     // Only rebase a draft hydrated for this event: in the render that hydrates,

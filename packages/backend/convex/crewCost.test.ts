@@ -1,7 +1,7 @@
 // @vitest-environment edge-runtime
 import { expect, test } from "vitest";
 import type { Id } from "./_generated/dataModel";
-import { calculateCrewCost, syncEventCrewCostUsd } from "./lib/crewCost";
+import { calculateCrewCost, syncCrewCostAfterStatusChange, syncEventCrewCostUsd } from "./lib/crewCost";
 import { makeTest, type Test } from "./test/setup.helpers";
 
 const H = 3_600_000;
@@ -165,4 +165,17 @@ test("syncing one event re-prices the event it shares time with", async () => {
   const [a, b] = await t.run(async (ctx) => [await ctx.db.get(eventA), await ctx.db.get(eventB)]);
   expect(a?.crewCostUsd).toBe(20);
   expect(b?.crewCostUsd).toBe(20);
+});
+
+test("cancelling an event re-prices the event it shared time with", async () => {
+  const t = makeTest();
+  const eventA = await seedPersonEvent(t, "A", [[1, 2]]);
+  const eventB = await seedPersonEvent(t, "B", [[1.75, 3]]);
+  await t.run((ctx) => syncEventCrewCostUsd(ctx, eventB, Date.now()));
+  expect((await t.run((ctx) => ctx.db.get(eventB)))?.crewCostUsd).toBe(20);
+  await t.run(async (ctx) => {
+    await ctx.db.patch(eventA, { status: "cancelled" });
+    await syncCrewCostAfterStatusChange(ctx, eventA, "confirmed", "cancelled", Date.now());
+  });
+  expect((await t.run((ctx) => ctx.db.get(eventB)))?.crewCostUsd).toBe(25);
 });
