@@ -21,6 +21,8 @@ import {
 } from "./lib/analyticsQuery";
 import { findAuthUsersByIds } from "./lib/auth";
 import { loadBackupUserIds } from "./lib/crewBackups";
+import { loadNightRows, loadProfilesForRows, profileMatchesEvent } from "./lib/crewNightAnswers";
+import { nightKeyForEvent } from "./lib/crewNights";
 import {
   CREW_HOURS_BANDS,
   CREW_QUARTER_EXPECTED_HOURS,
@@ -107,7 +109,7 @@ export const getCrewFillRate = query({
         .query("eventCrewShifts")
         .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
         .take(SHIFTS_PER_EVENT_LIMIT);
-      const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event._id));
+      const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event));
       totalShifts += stats.totalShifts;
       filledShifts += stats.filledShifts;
       if (!stats.isCrewConfirmed) unconfirmedEvents += 1;
@@ -291,10 +293,11 @@ export const getAvailabilityLatency = query({
     const latencies: number[] = [];
 
     for (const event of events) {
-      const responses = await ctx.db
-        .query("eventCrewAvailabilityResponses")
-        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-        .take(200);
+      // Answers are per night now; each night answer counts for the events that night.
+      // Only people whose crew teams match the event were asked about it.
+      const rows = await loadNightRows(ctx, nightKeyForEvent(event));
+      const profiles = await loadProfilesForRows(ctx, rows);
+      const responses = rows.filter((row) => profileMatchesEvent(profiles.get(row.userId), event));
       for (const response of responses) {
         // Proxy: event createdAt ≈ when crew was asked (no dedicated request-sent timestamp).
         if (response.respondedAt < event.createdAt) continue;
@@ -335,7 +338,7 @@ export const getCrewAttentionAging = query({
         .query("eventCrewShifts")
         .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
         .take(SHIFTS_PER_EVENT_LIMIT);
-      const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event._id));
+      const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event));
       if (stats.isCrewConfirmed) continue;
       unconfirmedEvents += 1;
       // Lead time only means something for events still ahead.
@@ -383,7 +386,7 @@ export const getCrewSchedulingKpis = query({
         .query("eventCrewShifts")
         .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
         .take(SHIFTS_PER_EVENT_LIMIT);
-      const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event._id));
+      const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event));
       totalShifts += stats.totalShifts;
       filledShifts += stats.filledShifts;
       backupShifts += stats.backupShifts;

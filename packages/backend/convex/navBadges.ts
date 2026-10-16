@@ -15,15 +15,9 @@ import { isBandPayeeComplete, payeeFieldsFromProfile } from "./lib/bandPayments"
 import { listCrewedEventsInRange } from "./lib/crewedEvents";
 import { loadBackupUserIds } from "./lib/crewBackups";
 import { computeShiftStats } from "./lib/crewShiftKinds";
-import {
-  DEFAULT_AVAILABILITY_WEEKS,
-  eventMatchesUserTeams,
-} from "./lib/crewTeams";
-import {
-  getDisciplinesForEventMatching,
-  profileHasCrewSpecialty,
-  resolveProfileMembership,
-} from "./lib/userVerticals";
+import { DEFAULT_AVAILABILITY_WEEKS } from "./lib/crewTeams";
+import { listMyPendingNights, weeksToMs } from "./lib/crewNightInbox";
+import { profileHasCrewSpecialty } from "./lib/userVerticals";
 import { countPendingPostEventWork, listMyPostEventWork } from "./lib/myEventActions";
 import { isTraineeDecisionNeeded, loadTrainingEndsAt } from "./lib/crewTraineeTraining";
 import { resolveUserStatus } from "./lib/userStatus";
@@ -164,11 +158,6 @@ export const getNavBadges = query({
   },
 });
 
-function weeksToMs(weeks: number) {
-  return weeks * 7 * 24 * 60 * 60 * 1000;
-}
-
-
 async function getCurrentUserProfile(ctx: QueryCtx, userId: string) {
   return await ctx.db
     .query("userAdminProfiles")
@@ -176,34 +165,22 @@ async function getCurrentUserProfile(ctx: QueryCtx, userId: string) {
     .unique();
 }
 
+/** Nights with matching crewed events (same window as My Availability) still unanswered. */
 async function countMyPendingAvailability(ctx: QueryCtx, userId: string, now: number) {
   const profile = await getCurrentUserProfile(ctx, userId);
   if (resolveUserStatus(profile) !== "active") return 0;
   if (!profileHasCrewSpecialty(profile ?? {})) return 0;
-  const userDisciplines = getDisciplinesForEventMatching(
-    resolveProfileMembership(profile ?? {}).disciplines,
-  );
   const windowEnd = now + weeksToMs(DEFAULT_AVAILABILITY_WEEKS);
-  const matchedEvents = (await listCrewedEventsInRange(ctx, now, windowEnd)).filter((event) =>
-    eventMatchesUserTeams(event.teamsInterested, userDisciplines),
-  );
-  if (matchedEvents.length === 0) return 0;
-
-  const myResponses = await ctx.db
-    .query("eventCrewAvailabilityResponses")
-    .withIndex("by_userId", (q) => q.eq("userId", userId))
-    .take(500);
-  const respondedEventIds = new Set(myResponses.map((response) => response.eventId));
-  return matchedEvents.filter((event) => !respondedEventIds.has(event._id)).length;
+  return (await listMyPendingNights(ctx, userId, profile, now, windowEnd)).length;
 }
 
-async function eventIsCrewUnconfirmed(ctx: QueryCtx, eventId: Doc<"events">["_id"]) {
+async function eventIsCrewUnconfirmed(ctx: QueryCtx, event: Doc<"events">) {
   const shifts = await ctx.db
     .query("eventCrewShifts")
-    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
     .take(UNCONFIRMED_CREW_SHIFT_CAP);
   // Match previous semantics: zero shifts ⇒ not confirmed.
-  return !computeShiftStats(shifts, await loadBackupUserIds(ctx, eventId)).isCrewConfirmed;
+  return !computeShiftStats(shifts, await loadBackupUserIds(ctx, event)).isCrewConfirmed;
 }
 
 async function countUnconfirmedCrew(ctx: QueryCtx, rangeStart: number, rangeEnd: number) {
@@ -215,7 +192,7 @@ async function countUnconfirmedCrew(ctx: QueryCtx, rangeStart: number, rangeEnd:
     UNCONFIRMED_CREW_EVENT_CAP,
   );
   const flags = await Promise.all(
-    upcomingCrewed.map((event) => eventIsCrewUnconfirmed(ctx, event._id)),
+    upcomingCrewed.map((event) => eventIsCrewUnconfirmed(ctx, event)),
   );
   return flags.filter(Boolean).length;
 }

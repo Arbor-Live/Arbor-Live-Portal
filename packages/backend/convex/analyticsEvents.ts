@@ -182,7 +182,7 @@ export const getUpcomingEventsInsights = query({
           .query("eventCrewShifts")
           .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
           .take(SHIFTS_PER_EVENT_LIMIT);
-        const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event._id));
+        const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event));
         unconfirmedCrewed = !stats.isCrewConfirmed;
       }
 

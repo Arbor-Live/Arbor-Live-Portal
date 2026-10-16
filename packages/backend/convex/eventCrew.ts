@@ -20,6 +20,8 @@ import { bumpInviteSequence } from "./email/inviteSequence";
 import { isSectionBlockType } from "./lib/scheduleBlockTypes";
 import { isTraineeShift } from "./lib/crewShiftKinds";
 import { normalizeEventStatus } from "./lib/eventStatus";
+import { loadNightRows } from "./lib/crewNightAnswers";
+import { nightKeyForEvent } from "./lib/crewNights";
 
 function hoursBetween(start: number, end: number) {
   return Number(((end - start) / 3_600_000).toFixed(2));
@@ -423,10 +425,8 @@ export const listCrewConflictsForEvent = query({
       ...ownShifts.map((shift) => shift.endsAt),
     );
 
-    const responses = await ctx.db
-      .query("eventCrewAvailabilityResponses")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(500);
+    // Anyone who answered this event's night is a candidate on the board.
+    const responses = await loadNightRows(ctx, nightKeyForEvent(event));
     // The board's own assignees are checked first; responders fill whatever
     // room is left under the cap, so a long responder list can't push an
     // assignee out and hide their double booking.

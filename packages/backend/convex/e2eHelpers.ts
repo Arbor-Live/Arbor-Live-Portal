@@ -38,6 +38,7 @@ import {
 import { listFulfillmentPackageBom } from "./lib/packageBom";
 import { eventStatusValue } from "./lib/eventStatus";
 import { syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
+import { eventCrewSpan, nightKeyForEvent } from "./lib/crewNights";
 
 const makeToken = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 24);
 const makeInvoiceSuffix = customAlphabet(
@@ -1006,6 +1007,12 @@ export const seedCrewedEventWithSchedule = mutation({
     openPosition: v.optional(v.boolean()),
     /** Also seeds an open "Opener" (live band) position, for multi-slot bills. */
     openerPosition: v.optional(v.boolean()),
+    /** Days from today (default 16), and Pacific `HH:mm` show times (default 18:00–22:00). */
+    daysAhead: v.optional(v.number()),
+    startTime: v.optional(v.string()),
+    endTime: v.optional(v.string()),
+    /** Adds a one-hour "Early setup" section before setup. */
+    earlySetup: v.optional(v.boolean()),
   },
   returns: v.object({
     eventId: v.id("events"),
@@ -1017,7 +1024,12 @@ export const seedCrewedEventWithSchedule = mutation({
   handler: async (ctx, args) => {
     assertE2eHelpersEnabled();
     const now = Date.now();
-    const { startAt, endAt } = futureEventWindow(16);
+    const window = futureEventWindow(args.daysAhead ?? 16);
+    const startAt = args.startTime
+      ? pacificDateAndTimeToMs(window.dateKey, args.startTime)!
+      : window.startAt;
+    let endAt = args.endTime ? pacificDateAndTimeToMs(window.dateKey, args.endTime)! : window.endAt;
+    if (endAt <= startAt) endAt = addPacificCalendarDays(endAt, 1);
     const title = args.title?.trim() || `E2E Seeded Event ${now}`;
     const eventId = await ctx.db.insert("events", {
       title,
@@ -1045,6 +1057,16 @@ export const seedCrewedEventWithSchedule = mutation({
     const strikeStart = showEnd;
     const strikeEnd = showEnd + 60 * 60 * 1000;
     const blocks = [
+      ...(args.earlySetup
+        ? [
+            {
+              blockType: "setup" as const,
+              label: "Early setup",
+              startsAt: setupStart - 60 * 60 * 1000,
+              endsAt: setupStart,
+            },
+          ]
+        : []),
       { blockType: "setup" as const, label: "Setup", startsAt: setupStart, endsAt: setupEnd },
       { blockType: "show" as const, label: "Show", startsAt: showStart, endsAt: showEnd },
       { blockType: "strike" as const, label: "Strike", startsAt: strikeStart, endsAt: strikeEnd },
@@ -2529,43 +2551,71 @@ export const ensureCrewUser = mutation({
 });
 
 /**
- * Test-only: insert a Yes availability response for a crew user on an event.
+ * Test-only: mark a crew user free for the whole night of an event (every
+ * event that night reads it as "yes").
  */
 export const seedCrewYesResponse = mutation({
   args: {
     eventId: v.id("events"),
     userId: v.string(),
   },
-  returns: v.object({ responseId: v.id("eventCrewAvailabilityResponses") }),
+  returns: v.object({ responseId: v.id("crewAvailabilityNights") }),
   handler: async (ctx, args) => {
     assertE2eHelpersEnabled();
     const now = Date.now();
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found");
+    const blocks = await ctx.db
+      .query("eventScheduleBlocks")
+      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
+      .take(200);
+    const nightKey = nightKeyForEvent(event);
+    const fields = {
+      userId: args.userId,
+      nightKey,
+      status: "free" as const,
+      windows: [eventCrewSpan(event, blocks)],
+      notes: "E2E seeded yes",
+      source: "answer" as const,
+      respondedAt: now,
+      updatedAt: now,
+    };
     const existing = await ctx.db
-      .query("eventCrewAvailabilityResponses")
-      .withIndex("by_eventId_and_userId", (q) =>
-        q.eq("eventId", args.eventId).eq("userId", args.userId),
-      )
+      .query("crewAvailabilityNights")
+      .withIndex("by_userId_and_nightKey", (q) => q.eq("userId", args.userId).eq("nightKey", nightKey))
       .unique();
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        responseStatus: "yes",
-        partialWindows: undefined,
-        notes: "E2E seeded yes",
-        respondedAt: now,
-        updatedAt: now,
-      });
+      await ctx.db.replace(existing._id, { ...fields, createdAt: existing.createdAt });
       return { responseId: existing._id };
     }
-    const responseId = await ctx.db.insert("eventCrewAvailabilityResponses", {
-      eventId: args.eventId,
-      userId: args.userId,
-      responseStatus: "yes",
-      notes: "E2E seeded yes",
-      respondedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
-    return { responseId };
+    return { responseId: await ctx.db.insert("crewAvailabilityNights", { ...fields, createdAt: now }) };
+  },
+});
+
+/** Test-only: forget a user's usual evenings and night answers in a window (to re-ask). */
+export const resetCrewAvailability = mutation({
+  args: { userId: v.string(), clearNights: v.optional(v.boolean()) },
+  returns: v.object({ deletedNights: v.number() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .unique();
+    if (profile) {
+      await ctx.db.patch(profile._id, { usualEvenings: undefined, usualEveningsSetAt: undefined });
+    }
+    let deletedNights = 0;
+    if (args.clearNights) {
+      for (const row of await ctx.db
+        .query("crewAvailabilityNights")
+        .withIndex("by_userId_and_nightKey", (q) => q.eq("userId", args.userId))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedNights += 1;
+      }
+    }
+    return { deletedNights };
   },
 });
 
@@ -5466,6 +5516,9 @@ export const pruneStaleE2eUsers = mutation({
         await ctx.db.delete(row._id);
       }
       for (const row of await ctx.db.query("eventCrewAvailabilityResponses").withIndex("by_userId", (q) => q.eq("userId", userId)).take(500)) {
+        await ctx.db.delete(row._id);
+      }
+      for (const row of await ctx.db.query("crewAvailabilityNights").withIndex("by_userId_and_nightKey", (q) => q.eq("userId", userId)).take(500)) {
         await ctx.db.delete(row._id);
       }
     };

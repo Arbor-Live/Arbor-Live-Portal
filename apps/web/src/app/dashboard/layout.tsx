@@ -5,6 +5,7 @@ import { DashboardBreadcrumb } from "@/components/dashboard-breadcrumb";
 import { FormSaveBarStackProvider } from "@/components/forms";
 import { OnboardingBanner } from "@/components/onboarding/onboarding-banner";
 import { InactiveAccountBanner } from "@/components/onboarding/inactive-account-banner";
+import { UsualEveningsBanner } from "@/components/availability/usual-evenings-banner";
 import { AppLaunchTracker } from "@/components/notifications/app-launch-tracker";
 import { InstallAppDialog } from "@/components/notifications/install-app-dialog";
 import { NotificationBell } from "@/components/notifications/notification-bell";
@@ -51,6 +52,7 @@ export default async function DashboardLayout({
             <InstallAppDialog />
             <OnboardingBanner />
             <InactiveAccountBanner />
+            <UsualEveningsBanner />
             {/* Stacks every FormSaveBar on the page so two forms on one tab
                 (e.g. event overview + pull list) don't cover each other. */}
             <FormSaveBarStackProvider>

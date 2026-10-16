@@ -23,6 +23,7 @@ import { ProfileStep } from "./crew/steps/profile-step";
 import { PasskeyStep } from "./crew/steps/passkey-step";
 import { WhatsappStep } from "./crew/steps/whatsapp-step";
 import { InstagramStep } from "./crew/steps/instagram-step";
+import { EveningsStep } from "./crew/steps/evenings-step";
 import { FwsStep } from "./crew/steps/fws-step";
 import { TrainingStep } from "./crew/steps/training-step";
 import { GettingPaidStep } from "./crew/steps/getting-paid-step";
@@ -229,6 +230,9 @@ function StepBody({
 
     case "instagram":
       return <InstagramStep form={form} patch={patch} fieldError={fieldError} />;
+
+    case "evenings":
+      return <EveningsStep form={form} patch={patch} fieldError={fieldError} />;
 
     case "fws":
       return <FwsStep form={form} patch={patch} fieldError={fieldError} />;

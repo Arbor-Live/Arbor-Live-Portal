@@ -9,41 +9,19 @@ import {
   requireArborInternalContext,
   requireAuth,
 } from "./lib/auth";
-import { listCrewedEventsInRange } from "./lib/crewedEvents";
-import {
-  DEFAULT_AVAILABILITY_WEEKS,
-  eventMatchesUserTeams,
-} from "./lib/crewTeams";
-import {
-  getDisciplinesForEventMatching,
-  profileHasCrewSpecialty,
-  resolveProfileMembership,
-} from "./lib/userVerticals";
+import { DEFAULT_AVAILABILITY_WEEKS } from "./lib/crewTeams";
+import { listMyPendingNights } from "./lib/crewNightInbox";
+import { profileHasCrewSpecialty } from "./lib/userVerticals";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { resolveUserStatus } from "./lib/userStatus";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { listMyPostEventWork as listMyPostEventWorkForUser } from "./lib/myEventActions";
-import { isSectionBlockType } from "./lib/scheduleBlockTypes";
 import { listShowShifts, userWorkedShowShift } from "./lib/showShift";
 
-const scheduleBlockSummaryValue = v.object({
-  _id: v.id("eventScheduleBlocks"),
-  blockType: v.string(),
-  label: v.string(),
-  startsAt: v.number(),
-  endsAt: v.number(),
-  notes: v.optional(v.string()),
-});
-
-const pendingEventValue = v.object({
-  _id: v.id("events"),
-  title: v.string(),
-  status: v.string(),
-  eventType: v.optional(v.string()),
-  venueName: v.optional(v.string()),
+const pendingNightValue = v.object({
+  nightKey: v.string(),
   startAt: v.number(),
-  endAt: v.number(),
-  scheduleBlocks: v.array(scheduleBlockSummaryValue),
+  events: v.array(v.object({ _id: v.id("events"), title: v.string() })),
 });
 
 const scheduledEventValue = v.object({
@@ -91,7 +69,7 @@ export const listMyPendingAvailability = query({
     now: v.number(),
     weeksAhead: v.optional(v.number()),
   },
-  returns: v.array(pendingEventValue),
+  returns: v.array(pendingNightValue),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
@@ -99,53 +77,14 @@ export const listMyPendingAvailability = query({
     const profile = await getCurrentUserProfile(ctx, userId);
     if (resolveUserStatus(profile) !== "active") return [];
     if (!profileHasCrewSpecialty(profile ?? {})) return [];
-    const userDisciplines = getDisciplinesForEventMatching(
-      resolveProfileMembership(profile ?? {}).disciplines,
-    );
     const weeksAhead = args.weeksAhead ?? DEFAULT_AVAILABILITY_WEEKS;
     const windowEnd = args.now + weeksToMs(weeksAhead);
-
-    const matchedEvents = (
-      await listCrewedEventsInRange(ctx, args.now, windowEnd)
-    ).filter((event) =>
-      eventMatchesUserTeams(event.teamsInterested, userDisciplines),
-    );
-
-    const myResponses = await ctx.db
-      .query("eventCrewAvailabilityResponses")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .take(500);
-    const respondedEventIds = new Set(myResponses.map((response) => response.eventId));
-
-    const pendingEvents = matchedEvents.filter((event) => !respondedEventIds.has(event._id));
-    const blockPages = await Promise.all(
-      pendingEvents.map((event) =>
-        ctx.db
-          .query("eventScheduleBlocks")
-          .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", event._id))
-          .take(100),
-      ),
-    );
-
-    return pendingEvents.map((event, index) => ({
-      _id: event._id,
-      title: event.title,
-      status: normalizeEventStatus(event.status),
-      eventType: event.eventType,
-      venueName: event.venueName,
-      startAt: event.startAt,
-      endAt: event.endAt,
-      // Crew are scheduled per section, so availability asks about sections only.
-      scheduleBlocks: (blockPages[index] ?? [])
-        .filter((block) => isSectionBlockType(block.blockType))
-        .map((block) => ({
-        _id: block._id,
-        blockType: block.blockType,
-        label: block.label,
-        startsAt: block.startsAt,
-        endsAt: block.endsAt,
-        notes: block.notes,
-      })),
+    // Availability is answered per night, so this lists unanswered nights.
+    const pending = await listMyPendingNights(ctx, userId, profile, args.now, windowEnd);
+    return pending.map((night) => ({
+      nightKey: night.nightKey,
+      startAt: Math.min(...night.events.map((event) => event.startAt)),
+      events: night.events.map((event) => ({ _id: event._id, title: event.title })),
     }));
   },
 });

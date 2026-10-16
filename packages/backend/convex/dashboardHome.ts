@@ -5,6 +5,8 @@ import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { computeShiftStats } from "./lib/crewShiftKinds";
 import { DEFAULT_AVAILABILITY_WEEKS, isCrewedEventType } from "./lib/crewTeams";
 import { loadBackupUserIds } from "./lib/crewBackups";
+import { loadNightRows } from "./lib/crewNightAnswers";
+import { nightKeyForEvent } from "./lib/crewNights";
 import { eligibleCrewProfilesForEvent, getActiveCrewProfiles } from "./lib/crewedEvents";
 import { normalizeEventStatus } from "./lib/eventStatus";
 
@@ -86,16 +88,14 @@ export const listUpcomingAdminEvents = query({
           .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
           .take(200);
         // A slot held by a backup ("only if necessary") still needs coverage.
-        const backupUserIds = crewed && inWindow ? await loadBackupUserIds(ctx, event._id) : undefined;
+        const backupUserIds = crewed && inWindow ? await loadBackupUserIds(ctx, event) : undefined;
         const stats = computeShiftStats(shifts, backupUserIds);
         const needsCrew = crewed && inWindow && !stats.isCrewConfirmed;
         let awaitingReplies = 0;
         if (needsCrew) {
-          const responses = await ctx.db
-            .query("eventCrewAvailabilityResponses")
-            .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-            .take(500);
-          const responded = new Set(responses.map((response) => response.userId));
+          // Availability is answered per night; anyone with this night's answer replied.
+          const nightRows = await loadNightRows(ctx, nightKeyForEvent(event));
+          const responded = new Set(nightRows.map((row) => row.userId));
           awaitingReplies = eligibleCrewProfilesForEvent(event.teamsInterested, crewProfiles).filter(
             (profile) => !responded.has(profile.userId),
           ).length;

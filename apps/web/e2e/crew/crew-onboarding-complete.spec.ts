@@ -73,6 +73,15 @@ test.describe("crew onboarding wizard", () => {
     await acknowledge(page, /followed both Instagram accounts/i);
     await next(page);
 
+    // Usual evenings — one answer each for Thursday, Friday and Saturday.
+    await expect(activeStep(page).getByText("Which evenings are you usually free?")).toBeVisible({
+      timeout: 20_000,
+    });
+    for (const day of ["Thursday", "Friday", "Saturday"]) {
+      await activeStep(page).getByRole("radiogroup", { name: day }).getByRole("radio", { name: "Usually free" }).click();
+    }
+    await next(page);
+
     // Federal Work Study — answer No, then acknowledge the standard pay path.
     await expect(
       activeStep(page).getByText("Federal Work Study", { exact: true }),

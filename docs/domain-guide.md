@@ -125,7 +125,8 @@ canonical description of the domain itself.
   a specialty — Crew: `Sound` / `Lights` / `Photography` / `Videography`,
   Marketing: `Design` / `Photography` / `Videography` (each with unsure) — and
   Crew picks Fri/Sat standing availability (5pm–midnight PT) as a scheduling
-  preference only — not auto-matched to shifts.
+  preference only — not auto-matched to shifts. It pre-fills the person's
+  usual evenings the first time they're asked (see Crew availability).
   While `submitted`, an application tracks outreach: an owner
   (`assigneeUserId`) and `outreachStage` (unset = not contacted, then
   `contacted` = Calendly sent, `meeting_booked`, `met`). Whoever first marks
@@ -249,17 +250,59 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   maps crew specialties onto these needs; events with no needs set are visible
   to all crew. The retired umbrella need `Marketing` was migrated to
   `Promotion`, and poster work now keys off `Design`.
-- **Crew availability** (`eventCrewAvailabilityResponses`, My Availability):
-  crew answer per event with one tap — *I can work it all* (`yes`), *Some of
-  it* (`partial`), *Backup only* (`only_if_necessary`), *Can't make it* (`no`).
-  *Some of it* ticks the Run of Show **sections** they can work (stored as
-  `partialWindows` with `scheduleBlockId`) and optional **busy times**
-  (`busyWindows`, "class 7–9pm"); a busy time unticks the sections it
-  overlaps. With no sections yet, the free time around busy times is saved.
-  Each answer stores a `scheduleFingerprint` of the sections; when the sections
-  change the answer shows as "schedule changed" to crew and admins
-  (`lib/crewAvailability.ts`). The inbox, nav badge, weekly digest, and admin
-  board all use the same window (`DEFAULT_AVAILABILITY_WEEKS`, 3 weeks).
+- **Crew availability** is physical time on the person, answered per
+  **night**, not per event (`crewAvailabilityNights`, `crewNights.ts`, pure
+  rules in `lib/crewNights.ts`):
+  - **Usual evenings** (`userAdminProfiles.usualEvenings` +
+    `usualEveningsSetAt`): per weekday *Usually free* / *Sometimes* / *Rarely*.
+    Everyone is asked once about Thursday, Friday and Saturday and may add
+    other evenings. It's a crew onboarding step, a one-time prompt on My
+    Availability (plus a dismissible dashboard banner while unset,
+    `viewer.needsUsualEvenings` on the session shell), and editable in Account
+    settings. The first ask is pre-filled from the crew application's Fri/Sat
+    (`crewAvailabilityDays`). It's stored only; it doesn't count as an answer
+    yet (staff ranking from it is a follow-up).
+  - **Nights.** My Availability shows one card per night that has crewed
+    events matching the person (teams/specialties, status, crewed types) in
+    the 3-week window (`DEFAULT_AVAILABILITY_WEEKS`); nights without events
+    never appear. A night is the Pacific day of an event's start; anything
+    starting before 6 AM belongs to the night before, so a show past midnight
+    stays on the night it started. The night's span runs from the earliest
+    crew call (any setup, including *Early setup*, or a daytime load-in) to the
+    last section or event end. The card lists the events, shows the usual
+    pattern as a chip, and answers with one tap: *I'm free* (*Confirm* when
+    usually free), *Only part* (tick sections or give free-from/to times minus
+    busy times), *Early setup only* (when an event that night has a setup
+    section labelled "Early setup…"), *Backup*, *Not this one*. *Dates I'm
+    away* writes `no` for every night in a range.
+  - **Stored as time.** A row per person per night (`nightKey` Pacific
+    `YYYY-MM-DD`): `status` `free` / `partial` / `backup` / `no`, and
+    `windows` (for `free` the night span when answered; for `partial` the free
+    parts; early setup only = its window). Every event that night reads the same
+    row, so one answer covers overlapping events and events added later. A
+    changed schedule doesn't make it stale; only time outside the saved windows
+    is uncovered (an "I'm free" night that later starts earlier shows as
+    needing a re-confirm). An event moved to another night reads that night's
+    answer instead.
+  - **Staff side (compatibility layer, `lib/crewNightAnswers.ts`).**
+    `getSummaryForEvent`, `listPendingCrewForEvent`, `listForAdminOverview`,
+    the conflict scan, backups (`loadBackupUserIds`), dashboard home, the nav
+    badge, the weekly digest and Insights read nights by `by_nightKey` and
+    derive the old per-event answer for team-matched people: every crew section
+    covered → `yes`; some time → `partial` (fully covered sections by id, plus
+    the free time as windows); none → `no`; `backup` → `only_if_necessary`; no
+    night row → not answered. `scheduleChanged` is always false now.
+  - **Old answers** (`eventCrewAvailabilityResponses`) were converted by
+    `migrations.convertAvailabilityToNights` for every non-cancelled event, past
+    nights included so Insights and backups keep their history (`yes` →
+    free over the event's crew span, `partial` → its windows minus busy times,
+    `only_if_necessary` → backup, `no` → no; on one night the most available
+    wins and partial time is unioned). It's idempotent and never touches a
+    night the person answered. The old table and rows are kept; nothing reads
+    them. `eventCrewAvailability.submitResponse` still works and writes the
+    event's night.
+  - The inbox, nav badge (unanswered nights), weekly digest (nights to
+    answer), home widget, and admin board all use the same 3-week window.
 - **Crew staffing** (`CrewStaffingBoard`, used on the event Schedule tab and the
   invoice crew section): a section's **headcount is its slot count** (open slots
   bill on quotes), set with the − / + stepper. Each section offers the people
