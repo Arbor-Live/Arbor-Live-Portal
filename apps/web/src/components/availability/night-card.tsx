@@ -2,31 +2,25 @@
 
 import { useState } from "react";
 import { useMutation, type useQuery } from "convex/react";
-import { CaretDownIcon, CheckIcon, MapPinIcon, PlusIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, CheckIcon, MapPinIcon, WarningIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { TimeInput } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import type { TimeWindow } from "@/lib/crew-availability";
 import {
   formatWindow,
-  freeAroundBusy,
-  mergeWindows,
   nightAnswerClass,
   nightAnswerLabel,
   nightDateLabel,
-  nightTimesToWindow,
-  timeOf,
   usualChipClass,
   usualChipLabel,
 } from "@/lib/crew-nights";
 import { cn } from "@/lib/utils";
+import { NightPartForm } from "@/components/availability/night-part-form";
 
 export type Night = NonNullable<ReturnType<typeof useQuery<typeof api.crewNights.listMine>>>[number];
 
@@ -40,8 +34,6 @@ const SAVED: Record<Choice, string> = {
   backup: "Saved as backup.",
   no: "Saved: not this one.",
 };
-
-type BusyDraft = { key: number; start: string; end: string; notes: string };
 
 export function needsAnswer(night: Night) {
   return !night.answer || !night.answer.coversNight;
@@ -119,39 +111,10 @@ function NightAnswerForm({ night }: { night: Night }) {
   const [notes, setNotes] = useState(night.answer?.notes ?? "");
   const [showNotes, setShowNotes] = useState(Boolean(night.answer?.notes));
 
-  const sections = night.events.flatMap((event) =>
-    event.sections.map((section) => ({ ...section, eventTitle: event.title })),
-  );
   const savedWindows = night.answer?.status === "partial" && !night.answer.earlySetupOnly ? night.answer.windows : [];
-  const [mode, setMode] = useState<"sections" | "times">(
-    sections.length > 0 && savedWindows.length === 0 ? "sections" : "times",
-  );
-  const [picked, setPicked] = useState<Set<string>>(
-    () =>
-      new Set(
-        sections
-          .filter((section) =>
-            savedWindows.some((window) => window.startsAt <= section.startsAt && window.endsAt >= section.endsAt),
-          )
-          .map((section) => section._id),
-      ),
-  );
-  const firstSaved = savedWindows[0];
-  const [from, setFrom] = useState(timeOf(firstSaved?.startsAt ?? night.startsAt));
-  const [to, setTo] = useState(timeOf(savedWindows.at(-1)?.endsAt ?? night.endsAt));
-  // Gaps between saved free windows come back as busy times.
-  const [busy, setBusy] = useState<BusyDraft[]>(() =>
-    savedWindows.slice(1).map((window, index) => ({
-      key: index,
-      start: timeOf(savedWindows[index]!.endsAt),
-      end: timeOf(window.startsAt),
-      notes: "",
-    })),
-  );
 
   const usualSuggestion: Choice | null =
     night.usual === "usually" ? "free" : night.usual === "rarely" ? "no" : null;
-  const multiEvent = night.events.length > 1;
 
   async function save(next: Choice, windows?: TimeWindow[], noteText = notes) {
     setError(null);
@@ -174,40 +137,6 @@ function NightAnswerForm({ night }: { night: Night }) {
     }
   }
 
-  function partWindows(): TimeWindow[] | null {
-    if (mode === "sections") {
-      const windows = mergeWindows(
-        sections.filter((section) => picked.has(section._id)).map(({ startsAt, endsAt }) => ({ startsAt, endsAt })),
-      );
-      if (windows.length === 0) {
-        setError("Tick at least one part, or choose Not this one.");
-        return null;
-      }
-      return windows;
-    }
-    const range = nightTimesToWindow(night.nightKey, from, to);
-    if (!range) {
-      setError("Give a start and an end time.");
-      return null;
-    }
-    const busyWindows: TimeWindow[] = [];
-    for (const draft of busy) {
-      if (!draft.start && !draft.end) continue;
-      const window = nightTimesToWindow(night.nightKey, draft.start, draft.end);
-      if (!window) {
-        setError("Give each busy time a start and an end.");
-        return null;
-      }
-      busyWindows.push(window);
-    }
-    const free = freeAroundBusy(range, busyWindows);
-    if (free.length === 0) {
-      setError("That leaves no free time. Choose Not this one instead.");
-      return null;
-    }
-    return free;
-  }
-
   function choose(value: string) {
     // Tapping the selected answer comes through as "": treat it as confirming it again.
     const next = (value || choice) as Choice | null;
@@ -217,11 +146,8 @@ function NightAnswerForm({ night }: { night: Night }) {
     if (next !== "part") void save(next);
   }
 
-  function savePart() {
-    const windows = partWindows();
-    if (!windows) return;
+  function savePart(windows: TimeWindow[], busyNotes: string[]) {
     // What they're busy with rides along on the night's note.
-    const busyNotes = mode === "times" ? busy.map((draft) => draft.notes.trim()).filter(Boolean) : [];
     const noteText = [notes.trim(), ...busyNotes.filter((note) => !notes.includes(note))]
       .filter(Boolean)
       .join(" · ");
@@ -241,7 +167,8 @@ function NightAnswerForm({ night }: { night: Night }) {
         onValueChange={choose}
         disabled={saving}
         aria-label="Your answer for this night"
-        className="flex-wrap"
+        // 40px tap targets on phones; compact on wider screens.
+        className="flex-wrap [&>button]:h-10 [&>button]:px-3 sm:[&>button]:h-7"
       >
         <ToggleGroupItem
           value="free"
@@ -282,144 +209,7 @@ function NightAnswerForm({ night }: { night: Night }) {
       ) : null}
 
       {choice === "part" ? (
-        <div className="space-y-3 border p-3" data-testid="crew-night-part">
-          {sections.length > 0 ? (
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              size="sm"
-              spacing={0}
-              value={mode}
-              onValueChange={(value) => value && setMode(value as "sections" | "times")}
-              aria-label="How to pick the part"
-            >
-              <ToggleGroupItem value="sections" className="px-3">
-                Pick parts
-              </ToggleGroupItem>
-              <ToggleGroupItem value="times" className="px-3">
-                Pick times
-              </ToggleGroupItem>
-            </ToggleGroup>
-          ) : null}
-
-          {mode === "sections" && sections.length > 0 ? (
-            <fieldset className="space-y-1.5">
-              <legend className="pb-1 text-sm font-medium">Which parts can you do?</legend>
-              {sections.map((section) => {
-                const id = `night-${night.nightKey}-${section._id}`;
-                return (
-                  <div key={section._id} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      id={id}
-                      checked={picked.has(section._id)}
-                      onCheckedChange={(checked) =>
-                        setPicked((current) => {
-                          const next = new Set(current);
-                          if (checked === true) next.add(section._id);
-                          else next.delete(section._id);
-                          return next;
-                        })
-                      }
-                    />
-                    <Label htmlFor={id} className="flex flex-wrap gap-x-1.5 font-normal">
-                      <span className="font-medium">{section.label || section.blockType}</span>
-                      <span className="text-muted-foreground tabular-nums">{formatWindow(section)}</span>
-                      {multiEvent ? <span className="text-muted-foreground">· {section.eventTitle}</span> : null}
-                    </Label>
-                  </div>
-                );
-              })}
-            </fieldset>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Label htmlFor={`night-from-${night.nightKey}`} className="text-sm font-medium">
-                  Free from
-                </Label>
-                <div className="w-32">
-                  <TimeInput id={`night-from-${night.nightKey}`} value={from} onChange={setFrom} />
-                </div>
-                <Label htmlFor={`night-to-${night.nightKey}`} className="text-sm text-muted-foreground">
-                  to
-                </Label>
-                <div className="w-32">
-                  <TimeInput id={`night-to-${night.nightKey}`} value={to} onChange={setTo} />
-                </div>
-              </div>
-              {busy.map((draft) => (
-                <div key={draft.key} className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Busy</span>
-                  <Input
-                    type="time"
-                    step={900}
-                    aria-label="Busy from"
-                    className="w-32"
-                    value={draft.start}
-                    onChange={(e) =>
-                      setBusy((prev) => prev.map((row) => (row.key === draft.key ? { ...row, start: e.target.value } : row)))
-                    }
-                  />
-                  <span className="text-sm text-muted-foreground">to</span>
-                  <Input
-                    type="time"
-                    step={900}
-                    aria-label="Busy until"
-                    className="w-32"
-                    value={draft.end}
-                    onChange={(e) =>
-                      setBusy((prev) => prev.map((row) => (row.key === draft.key ? { ...row, end: e.target.value } : row)))
-                    }
-                  />
-                  <Input
-                    placeholder="What (optional)"
-                    aria-label="What you're busy with"
-                    className="min-w-32 flex-1"
-                    value={draft.notes}
-                    onChange={(e) =>
-                      setBusy((prev) => prev.map((row) => (row.key === draft.key ? { ...row, notes: e.target.value } : row)))
-                    }
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Remove busy time"
-                    onClick={() => setBusy((prev) => prev.filter((row) => row.key !== draft.key))}
-                  >
-                    <XIcon />
-                  </Button>
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="-ml-2.5"
-                onClick={() =>
-                  setBusy((prev) => [...prev, { key: (prev.at(-1)?.key ?? -1) + 1, start: "", end: "", notes: "" }])
-                }
-              >
-                <PlusIcon weight="bold" />
-                Add a busy time
-              </Button>
-            </div>
-          )}
-
-          <div className="space-y-1">
-            <Label htmlFor={`night-notes-${night.nightKey}`} className="text-xs text-muted-foreground">
-              Note for the scheduler (optional)
-            </Label>
-            <Input
-              id={`night-notes-${night.nightKey}`}
-              placeholder="e.g. class until 7"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </div>
-          <Button type="button" size="sm" disabled={saving} onClick={savePart}>
-            {saving ? "Saving…" : "Save"}
-          </Button>
-        </div>
+        <NightPartForm night={night} savedWindows={savedWindows} saving={saving} onSave={savePart} />
       ) : choice && savedChoice === choice ? (
         showNotes ? (
           <div className="flex flex-wrap items-center gap-2">

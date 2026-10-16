@@ -161,3 +161,53 @@ export function mergeWindows(windows: TimeWindow[]): TimeWindow[] {
 export function freeAroundBusy(free: TimeWindow, busy: TimeWindow[]) {
   return freeWindowsAround(free, busy);
 }
+
+/** A busy block inside an "Only part" answer ("meeting 4–5pm"). */
+export type PartBusyDraft = { start: string; end: string };
+
+/**
+ * The free windows an "Only part" answer saves: from–to with the busy blocks
+ * cut out. Blank busy rows are skipped; a half-filled one is an error.
+ */
+export function partFreeWindows(
+  nightKey: string,
+  from: string,
+  to: string,
+  busy: PartBusyDraft[],
+): { free: TimeWindow[]; busy: TimeWindow[] } | { error: string } {
+  const range = nightTimesToWindow(nightKey, from, to);
+  if (!range) return { error: "Give a start and an end time." };
+  const busyWindows: TimeWindow[] = [];
+  for (const draft of busy) {
+    if (!draft.start && !draft.end) continue;
+    const window = nightTimesToWindow(nightKey, draft.start, draft.end);
+    if (!window) return { error: "Give each busy time a start and an end." };
+    busyWindows.push(window);
+  }
+  const free = freeAroundBusy(range, busyWindows);
+  if (free.length === 0) return { error: "That leaves no free time. Choose Not this one instead." };
+  return { free, busy: mergeWindows(busyWindows) };
+}
+
+/** Saved free windows back as from–to plus the gaps between them as busy blocks. */
+export function partDraftFromWindows(windows: TimeWindow[]) {
+  const sorted = mergeWindows(windows);
+  const first = sorted[0];
+  const last = sorted.at(-1);
+  if (!first || !last) return null;
+  return {
+    from: timeOf(first.startsAt),
+    to: timeOf(last.endsAt),
+    busy: sorted.slice(1).map((window, index) => ({
+      start: timeOf(sorted[index]!.endsAt),
+      end: timeOf(window.startsAt),
+    })),
+  };
+}
+
+/** "2:30–4:00 PM and 5:00–11:00 PM". */
+export function formatWindowList(windows: TimeWindow[]) {
+  const labels = windows.map(formatWindow);
+  if (labels.length <= 1) return labels[0] ?? "";
+  return `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+}
