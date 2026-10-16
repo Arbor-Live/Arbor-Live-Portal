@@ -11,6 +11,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import {
+  findAuthUserByEmail,
   findAuthUserById,
   getUserId,
   getActiveOrganizationContextOrNull,
@@ -237,7 +238,37 @@ async function getEffectivePayeeForPayment(
   payment: Doc<"eventBandPayments">,
 ) {
   const orgPayee = await getOrganizationProfilePayee(ctx, payment.organizationId);
-  return resolvePayeeSnapshot(orgPayee, payeeFieldsFromProfile(payment));
+  const payee = resolvePayeeSnapshot(orgPayee, payeeFieldsFromProfile(payment));
+  if (payee.designatedPayeeUserId) return payee;
+  return {
+    ...payee,
+    designatedPayeeUserId: await findMemberUserIdByEmail(
+      ctx,
+      payment.organizationId,
+      payee.designatedPayeeEmail,
+    ),
+  };
+}
+
+/**
+ * A payee picked as a pending invite is saved by email only, and nothing links
+ * them once they accept. Match them to an active member of the act by email.
+ */
+async function findMemberUserIdByEmail(
+  ctx: QueryCtx | MutationCtx,
+  organizationId: string,
+  email: string | undefined,
+) {
+  const user = await findAuthUserByEmail(ctx, email);
+  const userId = user ? getUserId(user) : undefined;
+  if (!userId) return undefined;
+  const membership = await ctx.db
+    .query("userOrganizationMemberships")
+    .withIndex("by_userId_and_organizationId", (q) =>
+      q.eq("userId", userId).eq("organizationId", organizationId),
+    )
+    .unique();
+  return membership?.active ? userId : undefined;
 }
 
 async function syncPayeeFromOrganizationForPayment(
@@ -1071,7 +1102,12 @@ async function sendSignatureRequest(
     );
   }
   if (!effectivePayee.designatedPayeeUserId) {
-    throw new Error("Designated payee must be linked to a member account before sending.");
+    const payeeLabel = effectivePayee.designatedPayeeEmail
+      ? `${effectivePayee.designatedPayeeName} (${effectivePayee.designatedPayeeEmail})`
+      : effectivePayee.designatedPayeeName;
+    throw new Error(
+      `${payeeLabel} isn't a member of this act yet, so they can't sign. Have them accept their invite, or pick a current member as the payee.`,
+    );
   }
 
   const event = await ctx.db.get(payment.eventId);
