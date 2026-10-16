@@ -457,11 +457,16 @@ export const markAway = mutation({
     const notes = cleanNotes(args.notes) ?? "Away";
     const now = Date.now();
     let key = args.fromNightKey < today ? today : args.fromNightKey;
-    let count = 0;
-    while (key <= args.toNightKey) {
-      if (count >= MAX_AWAY_NIGHTS) {
+    // Refuse a too-long range before writing any night.
+    let probe = key;
+    for (let nights = 0; probe <= args.toNightKey; nights += 1) {
+      if (nights >= MAX_AWAY_NIGHTS) {
         appError("AVAILABILITY_AWAY_TOO_LONG", `Mark at most ${MAX_AWAY_NIGHTS} days at a time.`);
       }
+      probe = addDaysToDateKey(probe, 1);
+    }
+    let count = 0;
+    while (key <= args.toNightKey) {
       await upsertNight(ctx, userId, key, { status: "no", windows: [], notes, source: "away" }, now);
       count += 1;
       key = addDaysToDateKey(key, 1);

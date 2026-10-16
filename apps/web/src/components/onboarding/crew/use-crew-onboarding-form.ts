@@ -120,7 +120,12 @@ export function useCrewOnboardingForm() {
   }, [onboarding, router, previewReady, devPreview]);
 
   const payrollMethod = onboarding?.payrollMethod ?? "stanford";
-  const stepOrder = stepOrderForPayroll(payrollMethod);
+  // Only crew with a crew specialty are asked about availability (`null` otherwise).
+  const asksEvenings = usualEvenings !== null || Boolean(devPreview && onboarding === null);
+  const stepOrder = useMemo(
+    () => stepOrderForPayroll(payrollMethod).filter((step) => step !== "evenings" || asksEvenings),
+    [payrollMethod, asksEvenings],
+  );
   const currentStep = item;
 
   const items = useMemo<QuestionnaireItemDefinition[]>(
@@ -211,11 +216,15 @@ export function useCrewOnboardingForm() {
       }
 
       if (currentStep === "evenings") {
+        if (!previewOnly && usualEvenings === null) return true;
+        if (!previewOnly && usualEvenings === undefined) {
+          setFieldError("Still loading your evenings. Try again in a moment.");
+          return false;
+        }
         if (!usualEveningsComplete(form.usualEvenings)) {
           setFieldError("Pick an answer for Thursday, Friday and Saturday.");
           return false;
         }
-        // Only crew with a crew specialty are asked about availability.
         if (previewOnly || !usualEvenings) return true;
         setIsSubmitting(true);
         await saveUsualEvenings({ usualEvenings: form.usualEvenings });

@@ -148,9 +148,8 @@ function NightAnswerForm({ night }: { night: Night }) {
 
   function savePart(windows: TimeWindow[], busyNotes: string[]) {
     // What they're busy with rides along on the night's note.
-    const noteText = [notes.trim(), ...busyNotes.filter((note) => !notes.includes(note))]
-      .filter(Boolean)
-      .join(" · ");
+    const segments = notes.split(" · ").map((segment) => segment.trim()).filter(Boolean);
+    const noteText = [...new Set([...segments, ...busyNotes])].join(" · ");
     setNotes(noteText);
     void save("part", windows, noteText);
   }

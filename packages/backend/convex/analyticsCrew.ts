@@ -21,7 +21,7 @@ import {
 } from "./lib/analyticsQuery";
 import { findAuthUsersByIds } from "./lib/auth";
 import { loadBackupUserIds } from "./lib/crewBackups";
-import { loadNightRows } from "./lib/crewNightAnswers";
+import { loadNightRows, loadProfilesForRows, profileMatchesEvent } from "./lib/crewNightAnswers";
 import { nightKeyForEvent } from "./lib/crewNights";
 import {
   CREW_HOURS_BANDS,
@@ -294,7 +294,10 @@ export const getAvailabilityLatency = query({
 
     for (const event of events) {
       // Answers are per night now; each night answer counts for the events that night.
-      const responses = await loadNightRows(ctx, nightKeyForEvent(event));
+      // Only people whose crew teams match the event were asked about it.
+      const rows = await loadNightRows(ctx, nightKeyForEvent(event));
+      const profiles = await loadProfilesForRows(ctx, rows);
+      const responses = rows.filter((row) => profileMatchesEvent(profiles.get(row.userId), event));
       for (const response of responses) {
         // Proxy: event createdAt ≈ when crew was asked (no dedicated request-sent timestamp).
         if (response.respondedAt < event.createdAt) continue;

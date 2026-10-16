@@ -203,6 +203,14 @@ describe("old per-event answers → one night", () => {
     expect(twice).toEqual(night);
   });
 
+  it("never repeats a note segment when a combined note is merged again (rerun)", () => {
+    const a: NightAnswer = { status: "backup", windows: [], notes: "a", respondedAt: 1 };
+    const b: NightAnswer = { status: "backup", windows: [], notes: "b", respondedAt: 2 };
+    const first = mergeNightAnswers(a, b);
+    expect(first.notes).toBe("a · b");
+    expect(mergeNightAnswers(first, a).notes).toBe("a · b");
+  });
+
   it("returns null for no answers", () => {
     expect(convertLegacyResponses([])).toBeNull();
   });

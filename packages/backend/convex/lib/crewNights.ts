@@ -191,8 +191,10 @@ export const NIGHT_STATUS_RANK: Record<NightStatus, number> = {
   no: 3,
 };
 
+/** Note segments are joined with " · "; merging dedupes segments, so a rerun never repeats one. */
 function joinNotes(...notes: Array<string | undefined>) {
-  const distinct = [...new Set(notes.map((note) => note?.trim()).filter((note): note is string => Boolean(note)))];
+  const segments = notes.flatMap((note) => (note ?? "").split(" · ").map((segment) => segment.trim()));
+  const distinct = [...new Set(segments.filter(Boolean))];
   return distinct.length > 0 ? distinct.join(" · ") : undefined;
 }
 

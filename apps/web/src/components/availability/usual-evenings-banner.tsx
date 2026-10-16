@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { XIcon } from "@phosphor-icons/react";
@@ -10,6 +10,18 @@ import { Button } from "@/components/ui/button";
 const DISMISS_KEY = "arbor-usual-evenings-banner-dismissed";
 const MY_AVAILABILITY = "/dashboard/events/my-availability";
 
+const dismissListeners = new Set<() => void>();
+function subscribeDismissed(listener: () => void) {
+  dismissListeners.add(listener);
+  return () => dismissListeners.delete(listener);
+}
+function readDismissed() {
+  return sessionStorage.getItem(DISMISS_KEY) === "1";
+}
+function notifyDismissed() {
+  for (const listener of dismissListeners) listener();
+}
+
 /**
  * Asks existing crew once for their usual evenings. Hidden while crew
  * onboarding is still open (it has its own step), on My Availability (which
@@ -18,9 +30,9 @@ const MY_AVAILABILITY = "/dashboard/events/my-availability";
 export function UsualEveningsBanner() {
   const shell = useSessionShell();
   const pathname = usePathname();
-  const [dismissed, setDismissed] = useState(
-    () => typeof window !== "undefined" && sessionStorage.getItem(DISMISS_KEY) === "1",
-  );
+  // Read after hydration (the server never sees sessionStorage), so the first
+  // client render matches the server's.
+  const dismissed = useSyncExternalStore(subscribeDismissed, readDismissed, () => false);
 
   const crewOnboarding = shell?.onboarding.crew;
   const onboardingOpen =
@@ -47,7 +59,7 @@ export function UsualEveningsBanner() {
           className="text-foreground/50 transition-colors hover:text-foreground"
           onClick={() => {
             sessionStorage.setItem(DISMISS_KEY, "1");
-            setDismissed(true);
+            notifyDismissed();
           }}
         >
           <XIcon className="size-4" />
