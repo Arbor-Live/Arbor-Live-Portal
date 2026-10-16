@@ -58,6 +58,7 @@ import {
 } from "./lib/r2Lifecycle";
 import {
   assertDisciplinesMatchVerticals,
+  hasCrewSpecialty,
   resolveProfileMembership,
   userDisciplineValue,
   userVerticalValue,
@@ -1562,6 +1563,8 @@ export const getSessionShell = query({
         status: userStatusValue,
         verticals: v.array(userVerticalValue),
         disciplines: v.array(userDisciplineValue),
+        /** Active crew who haven't told us their usual evenings yet (asked once). */
+        needsUsualEvenings: v.boolean(),
       }),
       account: v.object({
         name: v.string(),
@@ -1701,6 +1704,11 @@ export const getSessionShell = query({
         status: resolveUserStatus(profile),
         verticals: membership.verticals,
         disciplines: membership.disciplines,
+        needsUsualEvenings:
+          resolveUserStatus(profile) === "active" &&
+          hasCrewSpecialty(membership.disciplines) &&
+          resolveParticipationFlags(profile ?? {}).assignableAsCrew &&
+          !profile?.usualEveningsSetAt,
       },
       account: {
         name: user.name ?? user.email ?? "User",

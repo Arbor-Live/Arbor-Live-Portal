@@ -3,6 +3,12 @@ import { v } from "convex/values";
 import { riderContentFields, riderStatusValue } from "./lib/riderSchema";
 import { artistOrganizationTypeValue } from "./lib/organizationType";
 import { scheduleBlockTypeValue } from "./lib/scheduleBlockTypes";
+import {
+  nightSourceValue,
+  nightStatusValue,
+  timeWindowValue,
+  usualEveningsValue,
+} from "./lib/crewNightValues";
 import { userStatusValue } from "./lib/userStatus";
 import { eventSeriesPositionTemplateValue } from "./lib/eventSeriesPositions";
 import { artistNeedActTypeValue, artistNeedTypeValue } from "./lib/artistNeedTypes";
@@ -1206,6 +1212,13 @@ export default defineSchema({
     assignableAsCrew: v.optional(v.boolean()),
     /** Staff-set: may drive the golf cart to move gear. Missing ⇒ false. */
     cartEligible: v.optional(v.boolean()),
+    /**
+     * Usual evenings (standing availability) per weekday: usually free,
+     * sometimes, rarely. Asked once for Thu/Fri/Sat; people may add others.
+     */
+    usualEvenings: v.optional(usualEveningsValue),
+    /** When the person last confirmed `usualEvenings`. Unset ⇒ still to ask. */
+    usualEveningsSetAt: v.optional(v.number()),
     /** Email templates this user opted out of (keys from `email/constants.ts`). */
     emailOptOuts: v.optional(v.array(v.string())),
     /** Templates this user muted in the notification center (no row, so no push either). */
@@ -1489,6 +1502,30 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_eventId_and_userId", ["eventId", "userId"])
     .index("by_eventId_and_responseStatus", ["eventId", "responseStatus"]),
+
+  /**
+   * Crew availability as physical time on the person, one row per night
+   * (Pacific `YYYY-MM-DD`; past-midnight shows stay on the night they start).
+   * Every event that night reads the same answer through its windows
+   * (`lib/crewNights.ts`). Replaces `eventCrewAvailabilityResponses`, whose
+   * upcoming rows were converted (`migrations.convertAvailabilityToNights`).
+   */
+  crewAvailabilityNights: defineTable({
+    userId: v.string(),
+    nightKey: v.string(),
+    status: nightStatusValue,
+    /** `free`: the night span when answered. `partial`: the free parts. Else empty. */
+    windows: v.array(timeWindowValue),
+    /** `partial` picked as "Early setup only". */
+    earlySetupOnly: v.optional(v.boolean()),
+    notes: v.optional(v.string()),
+    source: v.optional(nightSourceValue),
+    respondedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_and_nightKey", ["userId", "nightKey"])
+    .index("by_nightKey", ["nightKey"]),
 
   /**
    * Event-level contacts that are not staff and not host-org billing people

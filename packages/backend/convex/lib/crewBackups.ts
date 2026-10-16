@@ -1,9 +1,8 @@
-import type { Doc, Id } from "../_generated/dataModel";
-import type { QueryCtx } from "../_generated/server";
+import type { LegacyResponseStatus } from "./crewNights";
 
-type AvailabilityResponse = Pick<Doc<"eventCrewAvailabilityResponses">, "userId" | "responseStatus">;
+type AvailabilityResponse = { userId: string; responseStatus: LegacyResponseStatus };
 
-/** People who answered "only if necessary" for an event. */
+/** People who answered "only if necessary" (a Backup night) for an event. */
 export function backupUserIdsFrom(responses: AvailabilityResponse[]) {
   return new Set(
     responses
@@ -12,13 +11,5 @@ export function backupUserIdsFrom(responses: AvailabilityResponse[]) {
   );
 }
 
-/** Backups for one event, for callers that haven't loaded its responses. */
-export async function loadBackupUserIds(ctx: Pick<QueryCtx, "db">, eventId: Id<"events">) {
-  const responses = await ctx.db
-    .query("eventCrewAvailabilityResponses")
-    .withIndex("by_eventId_and_responseStatus", (q) =>
-      q.eq("eventId", eventId).eq("responseStatus", "only_if_necessary"),
-    )
-    .take(500);
-  return backupUserIdsFrom(responses);
-}
+/** Backups for one event, for callers that haven't loaded its answers. */
+export { loadBackupUserIds } from "./crewNightAnswers";

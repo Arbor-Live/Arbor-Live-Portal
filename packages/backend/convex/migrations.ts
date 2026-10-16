@@ -29,6 +29,8 @@ import { artistTypesOf } from "./lib/artistNeedTypes";
 import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
 import { buildItemSearchText, listPreviousAssetIds } from "./lib/inventoryLifecycle";
 import { ensureChangeRequestRevision } from "./lib/invoiceRevisions";
+import { convertLegacyResponseRow } from "./lib/crewNightConversion";
+import { nightKeyForStart } from "./lib/crewNights";
 
 /**
  * Official @convex-dev/migrations runner.
@@ -884,6 +886,20 @@ export const backfillOpenChangeRequestRevisions = migrations.define({
 });
 
 /**
+ * Availability moved from per-event answers to per-night time on the person
+ * (`crewAvailabilityNights`). Fold each upcoming answer into its night: yes →
+ * free over the event's crew span, partial → its windows minus busy times,
+ * only if necessary → backup, no → no; on one night the most available wins.
+ * Old rows stay in place. See `lib/crewNightConversion.ts`.
+ */
+export const convertAvailabilityToNights = migrations.define({
+  table: "eventCrewAvailabilityResponses",
+  migrateOne: async (ctx, row) => {
+    await convertLegacyResponseRow(ctx, row, nightKeyForStart(Date.now()));
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -927,6 +943,7 @@ const MIGRATION_SERIES = [
   internal.migrations.migrateSeriesPositionTemplateArtistTypes,
   internal.migrations.migrateInventoryItemLifecycle,
   internal.migrations.backfillOpenChangeRequestRevisions,
+  internal.migrations.convertAvailabilityToNights,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);
