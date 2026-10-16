@@ -178,13 +178,12 @@ export function crewCountableHours(shifts: CrewOverlapShift[]): Map<string, numb
     // Merged, sorted intervals already counted by earlier shifts.
     let covered: Array<[number, number]> = [];
     for (const shift of [...personShifts].sort(overlapOrder)) {
-      if (shift.endsAt <= shift.startsAt) continue;
+      if (shift.endsAt <= shift.startsAt || shift.cancelled) continue;
       let overlapMs = 0;
       for (const [from, to] of covered) {
         overlapMs += Math.max(0, Math.min(to, shift.endsAt) - Math.max(from, shift.startsAt));
       }
       if (overlapMs > 0) result.set(shift.id, round2(Math.max(0, shift.hours - overlapMs / HOUR_MS)));
-      if (shift.cancelled) continue;
       covered = mergeInterval(covered, [shift.startsAt, shift.endsAt]);
     }
   }

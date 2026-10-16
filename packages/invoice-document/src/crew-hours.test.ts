@@ -136,6 +136,8 @@ describe("crewCountableHours", () => {
   it("never lets a cancelled event's shift cover anyone's time", () => {
     const result = crewCountableHours([shift("a", 18, 20, { cancelled: true }), shift("b", 19, 21)]);
     expect([result.get("a"), result.get("b")]).toEqual([2, 2]);
+    const later = crewCountableHours([shift("a", 18, 20), shift("b", 19, 21, { cancelled: true })]);
+    expect(later.get("b")).toBe(2);
   });
 
   it("only removes the overlap from custom hours, never below zero", () => {
