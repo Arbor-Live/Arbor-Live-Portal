@@ -77,6 +77,11 @@ function NightSummary({ night }: { night: Night }) {
         {night.events.map((event) => (
           <li key={event._id} className="flex flex-wrap items-center gap-x-2">
             <span className="font-medium text-foreground">{event.title}</span>
+            {event.otPremium ? (
+              <span className="border border-status-amber-500/40 bg-status-amber-500/10 px-1 text-3xs font-semibold tracking-wide text-status-amber-800 dark:text-status-amber-300">
+                OT
+              </span>
+            ) : null}
             <span className="tabular-nums">{formatWindow({ startsAt: event.crewStartsAt, endsAt: event.crewEndsAt })}</span>
             {event.venueName ? (
               <span className="inline-flex items-center gap-1">
@@ -87,6 +92,11 @@ function NightSummary({ night }: { night: Night }) {
           </li>
         ))}
       </ul>
+      {night.events.some((event) => event.otPremium) ? (
+        <p className="text-xs text-status-amber-800 dark:text-status-amber-300">
+          OT events pay 1.5×, then double time after 8 hrs.
+        </p>
+      ) : null}
       {onEvents.length > 0 ? (
         <p className="text-xs font-medium text-status-emerald-700 dark:text-status-emerald-300">
           You&apos;re on: {onEvents.map((event) => event.title).join(", ")}

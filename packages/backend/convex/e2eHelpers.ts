@@ -1013,6 +1013,8 @@ export const seedCrewedEventWithSchedule = mutation({
     endTime: v.optional(v.string()),
     /** Adds a one-hour "Early setup" section before setup. */
     earlySetup: v.optional(v.boolean()),
+    /** Marks the event as overtime (crew paid 1.5×, then double time). */
+    otPremium: v.optional(v.boolean()),
   },
   returns: v.object({
     eventId: v.id("events"),
@@ -1046,6 +1048,7 @@ export const seedCrewedEventWithSchedule = mutation({
       eventType: "Crewed Event",
       // Match crew discipline names used by availability filtering.
       teamsInterested: ["Sound"],
+      ...(args.otPremium ? { otPremium: true } : {}),
       createdAt: now,
       updatedAt: now,
     });
