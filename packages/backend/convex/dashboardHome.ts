@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { computeEventShiftStats } from "./lib/cartCrew";
 import { computeShiftStats } from "./lib/crewShiftKinds";
 import { DEFAULT_AVAILABILITY_WEEKS, isCrewedEventType } from "./lib/crewTeams";
 import { loadBackupUserIds } from "./lib/crewBackups";
@@ -87,9 +88,13 @@ export const listUpcomingAdminEvents = query({
           .query("eventCrewShifts")
           .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
           .take(200);
-        // A slot held by a backup ("only if necessary") still needs coverage.
+        // A slot held by a backup ("only if necessary") still needs coverage, and
+        // a cart event needs someone cart eligible on setup and strike.
         const backupUserIds = crewed && inWindow ? await loadBackupUserIds(ctx, event) : undefined;
-        const stats = computeShiftStats(shifts, backupUserIds);
+        const stats =
+          crewed && inWindow
+            ? await computeEventShiftStats(ctx, event, shifts, backupUserIds)
+            : computeShiftStats(shifts, backupUserIds);
         const needsCrew = crewed && inWindow && !stats.isCrewConfirmed;
         let awaitingReplies = 0;
         if (needsCrew) {

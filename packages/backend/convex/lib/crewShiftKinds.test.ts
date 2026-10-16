@@ -10,6 +10,7 @@ describe("crew shift kinds", () => {
       filledShifts: 1,
       unfilledShifts: 0,
       backupShifts: 0,
+      cartRequirementMet: true,
       isCrewConfirmed: true,
     });
   });
@@ -24,5 +25,13 @@ describe("crew shift kinds", () => {
     expect(stats).toMatchObject({ filledShifts: 2, unfilledShifts: 0, backupShifts: 1 });
     expect(stats.isCrewConfirmed).toBe(false);
     expect(computeShiftStats([{ userId: "u1" }], backups).isCrewConfirmed).toBe(true);
+  });
+
+  it("an unmet cart requirement keeps a full crew needing crew", () => {
+    const shifts = [{ userId: "u1" }, { userId: "u2" }];
+    const stats = computeShiftStats(shifts, undefined, { cartRequirementMet: false });
+    expect(stats).toMatchObject({ filledShifts: 2, unfilledShifts: 0, cartRequirementMet: false });
+    expect(stats.isCrewConfirmed).toBe(false);
+    expect(computeShiftStats(shifts, undefined, { cartRequirementMet: true }).isCrewConfirmed).toBe(true);
   });
 });

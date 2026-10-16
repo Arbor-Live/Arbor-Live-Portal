@@ -718,6 +718,7 @@ const PER_DAY_UPDATE_KEYS = new Set<string>([
   "actualTurnout",
   "crewCostUsd",
   "otPremium",
+  "needsCart",
   "crewCostBufferPercent",
   "notes",
   "openMicEnabled",
@@ -756,6 +757,8 @@ export const update = mutation({
     otherCostUsd: v.optional(v.number()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     otPremium: v.optional(v.boolean()),
+    /** Cart event: setup and strike each need someone cart eligible. */
+    needsCart: v.optional(v.boolean()),
     crewCostBufferPercent: v.optional(v.number()),
     notes: v.optional(v.string()),
     openMicEnabled: v.optional(v.boolean()),
@@ -867,6 +870,7 @@ export const update = mutation({
       otherCostUsd: args.otherCostUsd ?? existing.otherCostUsd,
       rentalFulfillmentMode: nextRentalFulfillmentMode,
       otPremium: args.otPremium ?? existing.otPremium,
+      needsCart: args.needsCart ?? existing.needsCart,
       crewCostBufferPercent: args.crewCostBufferPercent ?? existing.crewCostBufferPercent,
       notes: args.notes?.trim() ?? existing.notes,
       openMicEnabled: nextOpenMicEnabled,
@@ -983,6 +987,7 @@ export const update = mutation({
         visibility: patch.visibility,
       };
       if (patch.otPremium !== undefined) overrides.otPremium = patch.otPremium;
+      if (args.needsCart !== undefined) overrides.needsCart = args.needsCart;
       if (patch.crewCostBufferPercent !== undefined) {
         overrides.crewCostBufferPercent = patch.crewCostBufferPercent;
       }
@@ -1055,6 +1060,7 @@ export const update = mutation({
         const overrides: SeriesOverviewOverride = {};
         if (args.status !== undefined) overrides.status = nextStatus;
         if (args.visibility !== undefined) overrides.visibility = patch.visibility;
+        if (args.needsCart !== undefined) overrides.needsCart = args.needsCart;
         const propagated = await propagateSharedDayFields(
           ctx,
           existing.seriesId,
@@ -1243,6 +1249,8 @@ export const duplicate = mutation({
       externalRentalsCostUsd: existing.externalRentalsCostUsd,
       otherCostUsd: existing.otherCostUsd,
       rentalFulfillmentMode: existing.rentalFulfillmentMode,
+      // Same venue, same way of moving gear.
+      needsCart: existing.needsCart,
       notes: existing.notes,
       openMicEnabled: existing.openMicEnabled,
       openMicStatus: existing.openMicEnabled ? "scheduled" : undefined,

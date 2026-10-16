@@ -160,6 +160,7 @@ export function ScheduleCrewTab() {
             readOnly={readOnly}
             onDeleteUnlinked={onDeleteUnlinked}
             canAssignTrainees={isAdmin}
+            needsCart={draft.needsCart}
           />
         </CardContent>
       </Card>

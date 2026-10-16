@@ -36,6 +36,8 @@ import {
 } from "./lib/crewNightAnswers";
 import { eventCrewSpan, legacyResponseToNight, nightKeyForEvent } from "./lib/crewNights";
 import { computeShiftStats, isTraineeShift } from "./lib/crewShiftKinds";
+import { computeEventShiftStats, loadCartRequirement } from "./lib/cartCrew";
+import { CART_GROUPS } from "@arbor/format";
 
 /**
  * Staff-facing availability per event. Crew answer per *night*
@@ -70,6 +72,8 @@ const userSummaryValue = v.object({
   name: v.string(),
   email: v.string(),
   image: v.optional(v.string()),
+  /** `userAdminProfiles.cartEligible`, when the profile was already loaded. */
+  cartEligible: v.optional(v.boolean()),
 });
 
 const responsePersonValue = v.object({
@@ -77,6 +81,7 @@ const responsePersonValue = v.object({
   name: v.string(),
   email: v.string(),
   image: v.optional(v.string()),
+  cartEligible: v.optional(v.boolean()),
   responseStatus: crewAvailabilityResponseStatusValue,
   partialWindows: v.optional(v.array(partialWindowValue)),
   busyWindows: v.optional(v.array(busyWindowValue)),
@@ -134,13 +139,16 @@ function toUserSummary(
   userId: string,
   userByKey: Map<string, AuthUserRecord>,
   imageByUserId?: Map<string, string | undefined>,
+  profiles?: ReadonlyMap<string, { cartEligible?: boolean }>,
 ) {
   const user = userByKey.get(userId);
+  const profile = profiles?.get(userId);
   return {
     userId,
     name: user?.name ?? user?.email ?? userId,
     email: user?.email ?? "",
     image: imageByUserId?.get(userId) ?? user?.image ?? undefined,
+    cartEligible: profile ? profile.cartEligible === true : undefined,
   };
 }
 
@@ -170,9 +178,10 @@ function toResponsePerson(
   response: EventNightResponse,
   userByKey: Map<string, AuthUserRecord>,
   imageByUserId: Map<string, string | undefined>,
+  profiles?: ReadonlyMap<string, { cartEligible?: boolean }>,
 ) {
   return {
-    ...toUserSummary(response.userId, userByKey, imageByUserId),
+    ...toUserSummary(response.userId, userByKey, imageByUserId, profiles),
     responseStatus: response.responseStatus,
     // Section ids come straight from this event's blocks.
     partialWindows: response.partialWindows as PartialWindow[] | undefined,
@@ -212,6 +221,11 @@ export const listForAdminOverview = query({
       filledShifts: v.number(),
       unfilledShifts: v.number(),
       backupShifts: v.number(),
+      /** Cart event (`events.needsCart`): setup and strike each need someone cart eligible. */
+      needsCart: v.boolean(),
+      cartRequirementMet: v.boolean(),
+      /** Groups on a cart event with no one cart eligible yet. */
+      cartUnmetGroups: v.array(v.union(v.literal("setup"), v.literal("strike"))),
       isCrewConfirmed: v.boolean(),
       responseCounts: v.object({
         yes: v.number(),
@@ -287,7 +301,10 @@ export const listForAdminOverview = query({
     const rows = await Promise.all(
       bundles.map(async ({ event, blocks, shifts, responses, eligibleProfiles }) => {
         const backupUserIds = backupUserIdsFrom(responses);
-        const shiftStats = computeShiftStats(shifts, backupUserIds);
+        // Cart events need someone cart eligible on setup and strike. Known
+        // profiles cover most assignees; the rest are one indexed read each.
+        const cart = await loadCartRequirement(ctx, event, { shifts, blocks, knownProfiles: profiles });
+        const shiftStats = computeShiftStats(shifts, backupUserIds, { cartRequirementMet: cart.met });
         const responseCounts = aggregateResponses(responses);
         const eligibleCrew = eligibleProfiles.length;
         const respondedUserIds = new Set(responses.map((response) => response.userId));
@@ -319,6 +336,8 @@ export const listForAdminOverview = query({
           startAt: event.startAt,
           endAt: event.endAt,
           ...shiftStats,
+          needsCart: cart.needsCart,
+          cartUnmetGroups: CART_GROUPS.filter((group) => !cart[group].met),
           responseCounts: {
             ...responseCounts,
             pending: pendingUserIds.length,
@@ -326,9 +345,15 @@ export const listForAdminOverview = query({
           },
           sections: sectionStaffing(blocks, shifts, backupUserIds),
           traineeCount: shifts.filter(isTraineeShift).length,
-          responders: responses.map((response) => toResponsePerson(response, userByKey, imageByUserId)),
-          assignedCrew: assignedUserIds.map((userId) => toUserSummary(userId, userByKey, imageByUserId)),
-          pendingCrew: pendingUserIds.map((userId) => toUserSummary(userId, userByKey, imageByUserId)),
+          responders: responses.map((response) =>
+            toResponsePerson(response, userByKey, imageByUserId, profiles),
+          ),
+          assignedCrew: assignedUserIds.map((userId) =>
+            toUserSummary(userId, userByKey, imageByUserId, profiles),
+          ),
+          pendingCrew: pendingUserIds.map((userId) =>
+            toUserSummary(userId, userByKey, imageByUserId, profiles),
+          ),
         };
       }),
     );
@@ -345,6 +370,7 @@ const eventResponderValue = v.object({
   name: v.string(),
   email: v.string(),
   image: v.optional(v.string()),
+  cartEligible: v.optional(v.boolean()),
   responseStatus: crewAvailabilityResponseStatusValue,
   partialWindows: v.optional(v.array(partialWindowValue)),
   busyWindows: v.optional(v.array(busyWindowValue)),
@@ -376,6 +402,7 @@ export const getSummaryForEvent = query({
       filledShifts: v.number(),
       unfilledShifts: v.number(),
       backupShifts: v.number(),
+      cartRequirementMet: v.boolean(),
       isCrewConfirmed: v.boolean(),
       responseCounts: v.object({
         yes: v.number(),
@@ -405,7 +432,9 @@ export const getSummaryForEvent = query({
     ]);
     const responses = await loadEventNightResponses(ctx, event, blocks);
 
-    const shiftStats = computeShiftStats(shifts, backupUserIdsFrom(responses));
+    const shiftStats = await computeEventShiftStats(ctx, event, shifts, backupUserIdsFrom(responses), {
+      blocks,
+    });
     const responseCounts = aggregateResponses(responses);
 
     const assignedUserIds = new Set(

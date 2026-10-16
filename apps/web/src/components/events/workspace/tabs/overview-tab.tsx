@@ -2,6 +2,7 @@
 
 import {
   CalendarBlankIcon,
+  CarSimpleIcon,
   IdentificationBadgeIcon,
   MapPinIcon,
   NotepadIcon,
@@ -14,6 +15,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { VenuePicker } from "@/components/venues/venue-picker";
@@ -25,6 +27,7 @@ import {
   EventPostMortemSummary,
 } from "@/components/events/event-post-mortem-section";
 import {
+  eventTypeHasLogistics,
   FULFILLMENT_OPTIONS,
   RENTAL_EVENT_TYPES,
   type RentalFulfillmentMode,
@@ -102,6 +105,26 @@ export function OverviewTab() {
                     options={FULFILLMENT_OPTIONS}
                     placeholder="Search fulfillment..."
                   />
+                </Field>
+              ) : null}
+              {eventTypeHasLogistics(draft.eventType) ? (
+                <Field
+                  label="Cart event"
+                  htmlFor="event-needs-cart"
+                  icon={CarSimpleIcon}
+                  hint="Gear moves by cart: setup and strike each need someone cart eligible."
+                >
+                  <div className="flex h-9 items-center gap-2">
+                    <Switch
+                      id="event-needs-cart"
+                      checked={draft.needsCart}
+                      onCheckedChange={(needsCart) => updateDraft({ needsCart })}
+                      data-testid="event-needs-cart"
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      {draft.needsCart ? "Yes" : "No"}
+                    </span>
+                  </div>
                 </Field>
               ) : null}
               <Field

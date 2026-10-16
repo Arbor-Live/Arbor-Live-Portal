@@ -10,12 +10,12 @@ import { query } from "./_generated/server";
 import {
   analyticsRangeArgs,
   assertValidRange,
-  computeShiftStats,
   loadEventsFromNow,
   loadEventsInRange,
   requireAnalyticsAccess,
   SHIFTS_PER_EVENT_LIMIT,
 } from "./lib/analyticsQuery";
+import { computeEventShiftStats } from "./lib/cartCrew";
 import { loadBackupUserIds } from "./lib/crewBackups";
 import { isCrewedEventType } from "./lib/crewTeams";
 import {
@@ -182,7 +182,7 @@ export const getUpcomingEventsInsights = query({
           .query("eventCrewShifts")
           .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
           .take(SHIFTS_PER_EVENT_LIMIT);
-        const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event));
+        const stats = await computeEventShiftStats(ctx, event, shifts, await loadBackupUserIds(ctx, event));
         unconfirmedCrewed = !stats.isCrewConfirmed;
       }
 

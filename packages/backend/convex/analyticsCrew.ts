@@ -12,7 +12,6 @@ import {
 import {
   analyticsRangeArgs,
   assertValidRange,
-  computeShiftStats,
   CREWED_EVENT_SCAN_LIMIT,
   isShiftFilled,
   loadEventsInRange,
@@ -20,6 +19,7 @@ import {
   SHIFTS_PER_EVENT_LIMIT,
 } from "./lib/analyticsQuery";
 import { findAuthUsersByIds } from "./lib/auth";
+import { computeEventShiftStats } from "./lib/cartCrew";
 import { loadBackupUserIds } from "./lib/crewBackups";
 import { loadNightRows, loadProfilesForRows, profileMatchesEvent } from "./lib/crewNightAnswers";
 import { nightKeyForEvent } from "./lib/crewNights";
@@ -109,7 +109,7 @@ export const getCrewFillRate = query({
         .query("eventCrewShifts")
         .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
         .take(SHIFTS_PER_EVENT_LIMIT);
-      const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event));
+      const stats = await computeEventShiftStats(ctx, event, shifts, await loadBackupUserIds(ctx, event));
       totalShifts += stats.totalShifts;
       filledShifts += stats.filledShifts;
       if (!stats.isCrewConfirmed) unconfirmedEvents += 1;
@@ -338,7 +338,7 @@ export const getCrewAttentionAging = query({
         .query("eventCrewShifts")
         .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
         .take(SHIFTS_PER_EVENT_LIMIT);
-      const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event));
+      const stats = await computeEventShiftStats(ctx, event, shifts, await loadBackupUserIds(ctx, event));
       if (stats.isCrewConfirmed) continue;
       unconfirmedEvents += 1;
       // Lead time only means something for events still ahead.
@@ -386,7 +386,7 @@ export const getCrewSchedulingKpis = query({
         .query("eventCrewShifts")
         .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
         .take(SHIFTS_PER_EVENT_LIMIT);
-      const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event));
+      const stats = await computeEventShiftStats(ctx, event, shifts, await loadBackupUserIds(ctx, event));
       totalShifts += stats.totalShifts;
       filledShifts += stats.filledShifts;
       backupShifts += stats.backupShifts;

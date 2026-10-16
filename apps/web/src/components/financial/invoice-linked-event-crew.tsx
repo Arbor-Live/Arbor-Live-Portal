@@ -479,6 +479,7 @@ export function InvoiceLinkedEventCrewSection({
             askAvailability={showCrewTools}
             onDeleteUnlinked={() => void removeLegacyUnassignedShifts()}
             openSlotNote={`Open slot · bills at ${openSlotRateLabel} on this invoice`}
+            needsCart={eventData?.event.needsCart === true}
           />
         ) : null}
         <Button type="button" disabled={saving} onClick={() => void saveScheduleAndPersonnel()}>
