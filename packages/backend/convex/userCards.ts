@@ -39,6 +39,7 @@ export const getCard = query({
       gradYear: v.optional(v.number()),
       avatarUrl: v.optional(v.string()),
       status: v.union(v.literal("active"), v.literal("inactive"), v.literal("alumni")),
+      cartEligible: v.boolean(),
       weekHours: v.optional(v.number()),
       quarterHours: v.optional(v.number()),
     }),
@@ -83,6 +84,7 @@ export const getCard = query({
         authImage: user?.image,
       }),
       status: resolveUserStatus(profile),
+      cartEligible: profile?.cartEligible === true,
       weekHours,
       quarterHours,
     };

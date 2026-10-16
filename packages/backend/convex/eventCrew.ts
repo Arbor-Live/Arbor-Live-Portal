@@ -1,10 +1,15 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import schema from "./schema";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { appError, withReportableErrors } from "./lib/errors";
 import { requireEventEditAccess } from "./lib/eventAccess";
-import { calculateCrewCost, syncEventCrewCostUsd } from "./lib/crewCost";
+import {
+  calculateCrewCost,
+  crewCostNeighborEventIds,
+  repriceCrewCostEvents,
+  syncEventCrewCostUsd,
+} from "./lib/crewCost";
 import {
   loadInvoiceCrewRateSettings,
   resolveOpenSlotHourlyRateUsd,
@@ -56,7 +61,9 @@ const computedCrewCostValue = v.object({
           role: v.string(),
           startsAt: v.number(),
           endsAt: v.number(),
+          /** Billed hours: the shift's hours less time an earlier shift already counts. */
           totalHours: v.number(),
+          coveredHours: v.number(),
           regularHours: v.number(),
           overtimeHours: v.number(),
           baseRateUsd: v.number(),
@@ -161,6 +168,8 @@ export const upsertShifts = mutation({
       userId: row.userId,
       crewApplicationId: row.crewApplicationId,
     }));
+    // Events sharing someone's time before the edit get re-priced even if they stop overlapping.
+    const previousNeighborEventIds = await crewCostNeighborEventIds(ctx, args.eventId);
     const keepIds = new Set(args.shifts.map((s) => s.id).filter(Boolean));
     for (const row of existing) {
       if (!keepIds.has(row._id)) await ctx.db.delete(row._id);
@@ -253,7 +262,7 @@ export const upsertShifts = mutation({
       });
     }
 
-    await syncEventCrewCostUsd(ctx, args.eventId, now);
+    await syncEventCrewCostUsd(ctx, args.eventId, now, { previousNeighborEventIds });
     const inviteSequence = await bumpInviteSequence(ctx, args.eventId);
     await scheduleCrewScheduledEmails(
       ctx,
@@ -378,6 +387,10 @@ export const listCrewConflictsForEvent = query({
         eventTitle: v.string(),
         startsAt: v.number(),
         endsAt: v.number(),
+        /** The other shift itself, so crew lines can count shared time once (`crewCountableHours`). */
+        shiftId: v.id("eventCrewShifts"),
+        shiftCreationTime: v.number(),
+        hours: v.number(),
       }),
     ),
     /** People past the cap the overlap scan never reached. */
@@ -393,8 +406,22 @@ export const listCrewConflictsForEvent = query({
       .query("eventScheduleBlocks")
       .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
       .take(200);
-    const spanStart = Math.min(event.startAt, ...blocks.map((block) => block.startsAt));
-    const spanEnd = Math.max(event.endAt, ...blocks.map((block) => block.endsAt));
+    // Shifts can run outside the event and its sections (custom times); the
+    // span covers them so billing sees every overlap.
+    const ownShifts = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(500);
+    const spanStart = Math.min(
+      event.startAt,
+      ...blocks.map((block) => block.startsAt),
+      ...ownShifts.map((shift) => shift.startsAt),
+    );
+    const spanEnd = Math.max(
+      event.endAt,
+      ...blocks.map((block) => block.endsAt),
+      ...ownShifts.map((shift) => shift.endsAt),
+    );
 
     const responses = await ctx.db
       .query("eventCrewAvailabilityResponses")
@@ -448,9 +475,22 @@ export const listCrewConflictsForEvent = query({
           eventTitle: other.title,
           startsAt: shift.startsAt,
           endsAt: shift.endsAt,
+          shiftId: shift._id,
+          shiftCreationTime: shift._creationTime,
+          hours: shift.hours,
         },
       ];
     });
     return { conflicts, uncheckedUserIds };
+  },
+});
+
+/** Continues re-pricing events that share crew time once one mutation's cap is reached. */
+export const repriceCrewCostBatch = internalMutation({
+  args: { eventIds: v.array(v.id("events")) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await repriceCrewCostEvents(ctx, args.eventIds, Date.now());
+    return null;
   },
 });

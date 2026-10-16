@@ -1,6 +1,7 @@
 import { pacificDateTimeInputToMs } from "@arbor/format";
 import {
   allocateCrewHours,
+  crewCountableHours,
   crewPersonKeys,
   crewTierMultiplier,
   crewTierTag,
@@ -76,7 +77,56 @@ export type LinkedEventForInvoiceCrew = {
     crewApplicationId?: Id<"crewApplications">;
     hours: number;
     startsAt?: number;
+    /** Without an end the shift runs `hours` from its start. */
+    endsAt?: number;
+    _creationTime?: number;
   }>;
+};
+
+/**
+ * A crew member's shift outside the day being billed (another event, or
+ * another day of this booking). Their time already counted there isn't billed
+ * again here (`crewCountableHours`: shared time belongs to the shift that
+ * starts first).
+ */
+export type CrewOtherShift = {
+  id: string;
+  userId?: string;
+  startsAt: number;
+  endsAt: number;
+  hours?: number;
+  /** `_creationTime`: breaks a tie on start. */
+  createdAt?: number;
+  /** A cancelled event's shift never covers anyone's time. */
+  cancelled?: boolean;
+};
+
+/** Other events' overlapping shifts, from `eventCrew.listCrewConflictsForEvent` (cancelled already left out). */
+export function crewOtherShiftsFromConflicts(
+  conflicts: ReadonlyArray<{
+    userId: string;
+    startsAt: number;
+    endsAt: number;
+    shiftId?: string;
+    shiftCreationTime?: number;
+    hours?: number;
+  }>,
+): CrewOtherShift[] {
+  return conflicts.map((conflict, index) => ({
+    id: conflict.shiftId ?? `conflict-${index}`,
+    userId: conflict.userId,
+    startsAt: conflict.startsAt,
+    endsAt: conflict.endsAt,
+    hours: conflict.hours,
+    createdAt: conflict.shiftCreationTime,
+  }));
+}
+
+export type CrewRowOptions = {
+  ratesByUserId?: Map<string, CrewAssigneeRate>;
+  openSlotRateUsd?: number;
+  /** The crew's shifts elsewhere; omit to only count overlaps within this day. */
+  otherShifts?: CrewOtherShift[];
 };
 
 function formatAssigneeName(personName: string | undefined, rateMode: CrewCompensationRateMode | undefined) {
@@ -155,6 +205,9 @@ type CrewSlot = {
   userId?: string;
   estimatedHourlyRateUsd?: number;
   startsAt: number;
+  endsAt: number;
+  /** `_creationTime`; unset for a slot not saved yet. */
+  createdAt?: number;
   hours: number;
 };
 
@@ -176,9 +229,20 @@ function buildCrewRowsFromSlots(
   slots: CrewSlot[],
   /** The day's Run of Show sections in time order, staffed or not. */
   sectionOrder: string[],
-  options?: { ratesByUserId?: Map<string, CrewAssigneeRate>; openSlotRateUsd?: number },
+  options?: CrewRowOptions,
 ): InvoiceCrewRow[] {
   const personBySlot = crewPersonKeys(slots.map((slot) => ({ ...slot, day: "day" })));
+  // A person on two shifts at once bills the shared time once, on the shift
+  // that starts first (here or elsewhere); the later one bills only the rest.
+  const countable = crewCountableHours([
+    ...slots,
+    ...(options?.otherShifts ?? []).map((other) => ({
+      ...other,
+      id: `other:${other.id}`,
+      hours: other.hours ?? Math.max(0, other.endsAt - other.startsAt) / 3_600_000,
+    })),
+  ]);
+  const billedHours = (slot: CrewSlot) => countable.get(slot.id) ?? Math.max(0, slot.hours);
   const labelByRef = new Map(slots.map((slot) => [slot.sectionRef, slot.sectionLabel]));
   const people = new Map<string, CrewSlot[]>();
   for (const slot of [...slots].sort((a, b) => a.startsAt - b.startsAt || a.id.localeCompare(b.id))) {
@@ -189,7 +253,7 @@ function buildCrewRowsFromSlots(
   // Fill each person's day slot by slot (as event crew cost does), so a slot
   // stamped at its own rate bills its own hours at that rate.
   const hoursBySlot = allocateCrewHours(
-    slots.map((slot) => ({ ...slot, personKey: personBySlot.get(slot.id) ?? slot.id })),
+    slots.map((slot) => ({ ...slot, hours: billedHours(slot), personKey: personBySlot.get(slot.id) ?? slot.id })),
   );
   const rows: InvoiceCrewRow[] = [];
   for (const personSlots of people.values()) {
@@ -217,7 +281,7 @@ function buildCrewRowsFromSlots(
       });
       const split = hoursBySlot.get(slot.id);
       const tiers: Array<[CrewHoursTier, number]> = [
-        ["regular", split?.regularHours ?? Math.max(0, slot.hours)],
+        ["regular", split?.regularHours ?? billedHours(slot)],
         ["past_regular", split?.pastRegularHours ?? 0],
       ];
       for (const [hoursTier, hours] of tiers) {
@@ -255,9 +319,9 @@ function draftMs(value: string) {
 export function buildCrewRowsFromShifts(
   blocks: Array<Pick<TimelineBlockDraft, "id" | "clientId" | "label" | "blockType" | "startsAt">>,
   shifts: EventShiftDraft[],
-  options?: {
-    ratesByUserId?: Map<string, CrewAssigneeRate>;
-    openSlotRateUsd?: number;
+  options?: CrewRowOptions & {
+    /** Saved shifts' `_creationTime` by id (drafts don't carry it); breaks a tie on start. */
+    shiftCreationTimes?: ReadonlyMap<string, number>;
   },
 ): InvoiceCrewRow[] {
   const blockByRef = new Map<string, (typeof blocks)[number]>();
@@ -283,6 +347,8 @@ export function buildCrewRowsFromShifts(
       userId: shift.userId,
       estimatedHourlyRateUsd: shift.estimatedHourlyRateUsd,
       startsAt: draftMs(shift.startsAt),
+      endsAt: draftMs(shift.endsAt),
+      createdAt: shift.id ? options?.shiftCreationTimes?.get(shift.id) : undefined,
       hours: shiftHours(shift),
     };
   });
@@ -295,10 +361,7 @@ export function buildCrewRowsFromShifts(
 
 export function buildCrewRowsFromLinkedEvent(
   linkedEvent: LinkedEventForInvoiceCrew,
-  options?: {
-    ratesByUserId?: Map<string, CrewAssigneeRate>;
-    openSlotRateUsd?: number;
-  },
+  options?: CrewRowOptions,
 ): InvoiceCrewRow[] {
   const blockById = new Map(linkedEvent.blocks.map((block) => [block._id, block]));
   const slots = staffingSlots(linkedEvent.shifts).map((shift, index): CrewSlot => {
@@ -312,6 +375,12 @@ export function buildCrewRowsFromLinkedEvent(
       personName: shift.personName,
       userId: shift.userId,
       startsAt: shift.startsAt ?? 0,
+      // A shift with no saved time can't be placed, so it never overlaps.
+      endsAt:
+        shift.startsAt === undefined
+          ? 0
+          : (shift.endsAt ?? shift.startsAt + Math.max(0, Number(shift.hours ?? 0)) * 3_600_000),
+      createdAt: shift._creationTime,
       hours: Number(shift.hours ?? 0),
     };
   });

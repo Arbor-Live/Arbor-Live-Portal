@@ -1,7 +1,5 @@
 import type { QueryCtx } from "../_generated/server";
-
-/** Most shifts one person has in a window we'll read (a quarter is far below this). */
-const SHIFT_READ_CAP = 1000;
+import { countableShiftHours, loadUserShiftsWithLookback } from "./crewShiftOverlap";
 
 export type HoursWindow = { startMs: number; endMs: number };
 
@@ -11,7 +9,8 @@ function roundHours(value: number) {
 
 /**
  * Hours a person is on shifts that start inside each window (worked and still
- * scheduled alike), across every event. One indexed read covers all windows.
+ * scheduled alike), across every event. Overlapping shifts count their shared
+ * time once (`crewCountableHours`). One indexed read covers all windows.
  */
 export async function sumShiftHoursInWindows(
   ctx: QueryCtx,
@@ -21,17 +20,13 @@ export async function sumShiftHoursInWindows(
   if (windows.length === 0) return [];
   const from = Math.min(...windows.map((window) => window.startMs));
   const to = Math.max(...windows.map((window) => window.endMs));
-  const shifts = await ctx.db
-    .query("eventCrewShifts")
-    .withIndex("by_userId_and_startsAt", (q) =>
-      q.eq("userId", userId).gte("startsAt", from).lte("startsAt", to),
-    )
-    .take(SHIFT_READ_CAP);
+  const shifts = await loadUserShiftsWithLookback(ctx, userId, from, to);
+  const countable = await countableShiftHours(ctx, shifts);
   return windows.map((window) =>
     roundHours(
       shifts
         .filter((shift) => shift.startsAt >= window.startMs && shift.startsAt <= window.endMs)
-        .reduce((total, shift) => total + shift.hours, 0),
+        .reduce((total, shift) => total + (countable.get(shift._id) ?? shift.hours), 0),
     ),
   );
 }

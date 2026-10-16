@@ -44,7 +44,7 @@ import {
 import { isMultiDayGroup } from "./lib/eventGroupKind";
 import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
 import { requireEventEditAccess } from "./lib/eventAccess";
-import { syncEventCrewCostUsd } from "./lib/crewCost";
+import { syncCrewCostAfterStatusChange, syncEventCrewCostUsd } from "./lib/crewCost";
 import {
   detachInvoiceFromAdditionalLinks,
   replaceAdditionalInvoiceLinks,
@@ -861,6 +861,7 @@ export const cancelFuture = mutation({
         updatedAt: now,
       });
       cancelledCount += 1;
+      await syncCrewCostAfterStatusChange(ctx, occurrence._id, occurrence.status, "cancelled", now);
     }
     if (isMultiDayGroup(series) && series.invoiceId) {
       await syncMultiDayGroupForInvoice(ctx, series.invoiceId, now);

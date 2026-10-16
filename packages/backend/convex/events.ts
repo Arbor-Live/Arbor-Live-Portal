@@ -67,6 +67,8 @@ import {
 } from "./lib/statusTransitions";
 import { eventTeamValue } from "./lib/eventTeams";
 import { isActBlock } from "./lib/runOfShow";
+import { loadOverlappingOtherEventShifts } from "./lib/crewShiftOverlap";
+import { syncCrewCostAfterStatusChange } from "./lib/crewCost";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -516,6 +518,28 @@ export const getByInvoiceId = query({
         ),
       )
     ).flat();
+    // The crew's shifts on other (live) events that overlap these days, so crew
+    // lines count a person's shared time once (`crewCountableHours`).
+    const otherShifts = await loadOverlappingOtherEventShifts(ctx, new Set(eventIds), shifts);
+    const otherEventIds = [...new Set(otherShifts.map((shift) => shift.eventId))];
+    const otherEvents = await Promise.all(otherEventIds.map((id) => ctx.db.get(id)));
+    const liveOtherEventIds = new Set(
+      otherEventIds.filter((_, index) => {
+        const other = otherEvents[index];
+        return other && normalizeEventStatus(other.status) !== "cancelled";
+      }),
+    );
+    const otherEventShifts = otherShifts
+      .filter((shift) => liveOtherEventIds.has(shift.eventId))
+      .map((shift) => ({
+        _id: shift._id,
+        _creationTime: shift._creationTime,
+        eventId: shift.eventId,
+        userId: shift.userId,
+        startsAt: shift.startsAt,
+        endsAt: shift.endsAt,
+        hours: shift.hours,
+      }));
 
     return {
       _id: event._id,
@@ -525,6 +549,7 @@ export const getByInvoiceId = query({
       endAt: linkedEvents[linkedEvents.length - 1]?.endAt ?? event.endAt,
       blocks,
       shifts,
+      otherEventShifts,
       linkedEvents: linkedEvents.map((row) => ({
         _id: row._id,
         title: row.title,
@@ -1077,6 +1102,7 @@ export const update = mutation({
       if (occStatus === "cancelled" && normalizeEventStatus(occ.prevStatus) !== "cancelled") {
         await scheduleEventCancelledEmails(ctx, occ.id, now);
       }
+      await syncCrewCostAfterStatusChange(ctx, occ.id, occ.prevStatus, occStatus, now);
     }
     });
   },
@@ -1125,6 +1151,7 @@ export const setStatus = mutation({
     if (nextStatus === "cancelled" && !wasCancelled) {
       await scheduleEventCancelledEmails(ctx, args.id, now);
     }
+    await syncCrewCostAfterStatusChange(ctx, args.id, prevStatus, nextStatus, now);
     // Cancelled days don't count toward a multi-day booking.
     if (prevStatus !== nextStatus && existing.invoiceId) {
       await syncMultiDayGroupForInvoice(ctx, existing.invoiceId, now);

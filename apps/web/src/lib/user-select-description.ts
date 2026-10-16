@@ -44,6 +44,7 @@ export type UserSelectSource = {
   hourlyRateUsd?: number | null;
   avatarUrl?: string | null;
   image?: string | null;
+  cartEligible?: boolean | null;
 };
 
 export function toUserSelectOption(entry: UserSelectSource): UserSelectOption {
@@ -55,6 +56,7 @@ export function toUserSelectOption(entry: UserSelectSource): UserSelectOption {
     role: entry.role ?? undefined,
     email: entry.email ?? undefined,
     status: entry.status ?? undefined,
+    ...(entry.cartEligible ? { cartEligible: true } : {}),
   };
 }
 

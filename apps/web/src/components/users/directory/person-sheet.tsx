@@ -124,6 +124,7 @@ function valuesFromUser(user: AdminUser): UserAdminRowFormValues {
     requiresOnboarding: user.requiresOnboarding ?? true,
     includeInTimecards: user.includeInTimecards ?? true,
     assignableAsCrew: user.assignableAsCrew ?? true,
+    cartEligible: user.cartEligible ?? false,
     emailOptOuts: [],
     showOnPublicCrewPage: user.showOnPublicCrewPage ?? false,
     publicCrewDescription: user.publicCrewDescription ?? "",
@@ -282,6 +283,7 @@ function PersonSheetBody({
         requiresOnboarding: values.requiresOnboarding,
         includeInTimecards: values.includeInTimecards,
         assignableAsCrew: values.assignableAsCrew,
+        cartEligible: values.cartEligible,
         // Only touch preferences we actually loaded (or the admin changed), so
         // a save can never wipe opt-outs the editor never displayed.
         ...(emailPreferences !== undefined || form.formState.dirtyFields.emailOptOuts
@@ -364,11 +366,16 @@ function PersonSheetBody({
   }
 
   const field = (id: string) => `person-${user.id}-${id}`;
-  const participation = [
+  const participation: {
+    key: "requiresOnboarding" | "includeInTimecards" | "assignableAsCrew" | "cartEligible";
+    label: string;
+    hint?: string;
+  }[] = [
     { key: "requiresOnboarding", label: "Requires onboarding" },
     { key: "includeInTimecards", label: "Include in timecards" },
     { key: "assignableAsCrew", label: "Assignable as crew" },
-  ] as const;
+    { key: "cartEligible", label: "Cart eligible", hint: "Can drive the cart to move gear." },
+  ];
 
   return (
     <>
@@ -595,11 +602,14 @@ function PersonSheetBody({
           </div>
         </div>
         <div className="space-y-2">
-          {participation.map(({ key, label }) => (
+          {participation.map(({ key, label, hint }) => (
             <div key={key} className="flex items-center justify-between gap-3">
-              <Label htmlFor={field(key)} className="font-normal">
-                {label}
-              </Label>
+              <div className="space-y-0.5">
+                <Label htmlFor={field(key)} className="font-normal">
+                  {label}
+                </Label>
+                {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+              </div>
               <Switch
                 id={field(key)}
                 checked={form.watch(key)}

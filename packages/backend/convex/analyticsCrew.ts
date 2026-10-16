@@ -1,4 +1,5 @@
 import { pacificDateKey, pacificStartOfDayMs } from "@arbor/format";
+import { crewCountableHours } from "@arbor/invoice-document/crew-hours";
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import {
@@ -177,34 +178,51 @@ export const getCrewHoursAndOt = query({
     const users = new Set<string>();
     const perUser = new Map<string, { hours: number; shifts: number; events: Set<string> }>();
 
-    for (const event of events) {
-      const shifts = await ctx.db
-        .query("eventCrewShifts")
-        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-        .take(SHIFTS_PER_EVENT_LIMIT);
+    const filledShifts = (
+      await Promise.all(
+        events.map((event) =>
+          ctx.db
+            .query("eventCrewShifts")
+            .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+            .take(SHIFTS_PER_EVENT_LIMIT),
+        ),
+      )
+    )
+      .flat()
+      .filter((shift) => isShiftFilled(shift) && shift.userId);
+    // One person on two shifts at once counts the shared time once (`crewCountableHours`).
+    const countable = crewCountableHours(
+      filledShifts.map((shift) => ({
+        id: shift._id,
+        userId: shift.userId!.trim(),
+        startsAt: shift.startsAt,
+        endsAt: shift.endsAt,
+        hours: shift.hours,
+        createdAt: shift._creationTime,
+      })),
+    );
 
-      for (const shift of shifts) {
-        if (!isShiftFilled(shift) || !shift.userId) continue;
-        const userId = shift.userId.trim();
-        users.add(userId);
-        const dayKey = pacificDateKey(shift.startsAt);
-        const weekKey = getIsoWeekKey(dayKey);
+    for (const shift of filledShifts) {
+      const userId = shift.userId!.trim();
+      const hours = countable.get(shift._id) ?? shift.hours;
+      users.add(userId);
+      const dayKey = pacificDateKey(shift.startsAt);
+      const weekKey = getIsoWeekKey(dayKey);
 
-        hoursByWeek.set(weekKey, roundHours((hoursByWeek.get(weekKey) ?? 0) + shift.hours));
-        const totals = perUser.get(userId) ?? { hours: 0, shifts: 0, events: new Set<string>() };
-        totals.hours += shift.hours;
-        totals.shifts += 1;
-        totals.events.add(event._id);
-        perUser.set(userId, totals);
+      hoursByWeek.set(weekKey, roundHours((hoursByWeek.get(weekKey) ?? 0) + hours));
+      const totals = perUser.get(userId) ?? { hours: 0, shifts: 0, events: new Set<string>() };
+      totals.hours += hours;
+      totals.shifts += 1;
+      totals.events.add(shift.eventId);
+      perUser.set(userId, totals);
 
-        const dayMap = hoursByUserDay.get(userId) ?? new Map<string, number>();
-        dayMap.set(dayKey, roundHours((dayMap.get(dayKey) ?? 0) + shift.hours));
-        hoursByUserDay.set(userId, dayMap);
+      const dayMap = hoursByUserDay.get(userId) ?? new Map<string, number>();
+      dayMap.set(dayKey, roundHours((dayMap.get(dayKey) ?? 0) + hours));
+      hoursByUserDay.set(userId, dayMap);
 
-        const weekMap = hoursByUserWeek.get(userId) ?? new Map<string, number>();
-        weekMap.set(weekKey, roundHours((weekMap.get(weekKey) ?? 0) + shift.hours));
-        hoursByUserWeek.set(userId, weekMap);
-      }
+      const weekMap = hoursByUserWeek.get(userId) ?? new Map<string, number>();
+      weekMap.set(weekKey, roundHours((weekMap.get(weekKey) ?? 0) + hours));
+      hoursByUserWeek.set(userId, weekMap);
     }
 
     let otRiskUsers = 0;

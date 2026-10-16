@@ -370,6 +370,7 @@ export async function ensureUserProfileDefaults(
     requiresOnboarding,
     includeInTimecards,
     assignableAsCrew,
+    cartEligible,
     emailOptOuts,
     payrollMethod,
     defaultOrganizationId,
@@ -386,6 +387,7 @@ export async function ensureUserProfileDefaults(
     requiresOnboarding?: boolean;
     includeInTimecards?: boolean;
     assignableAsCrew?: boolean;
+    cartEligible?: boolean;
     emailOptOuts?: string[];
     payrollMethod?: PayrollMethod;
     defaultOrganizationId?: string;
@@ -416,6 +418,7 @@ export async function ensureUserProfileDefaults(
         includeInTimecards !== undefined ? includeInTimecards : existing.includeInTimecards,
       assignableAsCrew:
         assignableAsCrew !== undefined ? assignableAsCrew : existing.assignableAsCrew,
+      cartEligible: cartEligible !== undefined ? cartEligible : existing.cartEligible,
       emailOptOuts:
         emailOptOuts !== undefined ? emailOptOuts : existing.emailOptOuts,
       payrollMethod: payrollMethod ?? existing.payrollMethod,
@@ -438,6 +441,7 @@ export async function ensureUserProfileDefaults(
     requiresOnboarding,
     includeInTimecards,
     assignableAsCrew,
+    cartEligible,
     emailOptOuts,
     payrollMethod,
     defaultOrganizationId,
@@ -1890,6 +1894,7 @@ export const listUsersForAdmin = query({
           requiresOnboarding: participation.requiresOnboarding,
           includeInTimecards: participation.includeInTimecards,
           assignableAsCrew: participation.assignableAsCrew,
+          cartEligible: profile?.cartEligible === true,
           defaultOrganizationId: profile?.defaultOrganizationId ?? "",
           organizationMemberships: memberships,
           rateMode: rate?.rateMode ?? null,
@@ -2641,6 +2646,8 @@ export const updateUserAdmin = mutation({
     requiresOnboarding: v.optional(v.boolean()),
     includeInTimecards: v.optional(v.boolean()),
     assignableAsCrew: v.optional(v.boolean()),
+    /** Staff-set: may drive the golf cart to move gear. */
+    cartEligible: v.optional(v.boolean()),
     /** Full opt-out list; the editor sends every applicable template's state. */
     emailOptOuts: v.optional(v.array(v.string())),
     defaultOrganizationId: v.optional(v.string()),
@@ -2727,6 +2734,7 @@ export const updateUserAdmin = mutation({
         args.assignableAsCrew !== undefined
           ? args.assignableAsCrew
           : existingProfile?.assignableAsCrew,
+      cartEligible: args.cartEligible,
       emailOptOuts: [...disabledTemplates],
       payrollMethod: args.payrollMethod ?? existingProfile?.payrollMethod,
       defaultOrganizationId: args.defaultOrganizationId ?? existingProfile?.defaultOrganizationId,

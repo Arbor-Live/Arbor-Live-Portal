@@ -462,6 +462,11 @@ export function BillingTab() {
                             {row.missingRate ? (
                               <p className="text-2xs text-status-amber-700">Missing base rate</p>
                             ) : null}
+                            {row.coveredHours > 0 ? (
+                              <p className="text-2xs text-muted-foreground">
+                                {formatHours(row.coveredHours)} already counted on an earlier shift
+                              </p>
+                            ) : null}
                           </div>
                           <span className="w-full text-muted-foreground md:w-40 md:shrink-0">
                             {formatDateTime(row.startsAt)} – {formatDateTime(row.endsAt)}

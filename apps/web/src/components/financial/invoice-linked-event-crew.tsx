@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { CrewStaffingBoard } from "@/components/events/crew-staffing/crew-staffing-board";
+import { setSectionHeadcount } from "@/lib/crew-shift-assign";
 import { countStaffing, isTraineeShift } from "@/lib/crew-shift-kinds";
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { RunOfShowEditor } from "@/components/events/workspace/run-of-show/run-of-show-editor";
@@ -35,7 +36,12 @@ import {
 } from "@/lib/event-schedule-draft";
 import { requireLocalDateTimeInputMs } from "@/lib/crew-availability";
 import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
-import { buildCrewRowsFromShifts, CREW_OT_MULTIPLIER, type InvoiceCrewRow } from "@/lib/invoice-crew-from-event";
+import {
+  buildCrewRowsFromShifts,
+  CREW_OT_MULTIPLIER,
+  crewOtherShiftsFromConflicts,
+  type InvoiceCrewRow,
+} from "@/lib/invoice-crew-from-event";
 import { FormSaveBar } from "@/components/forms";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -206,15 +212,38 @@ export function InvoiceLinkedEventCrewSection({
     setScheduleEventId(eventData.event._id);
   }, [eventData]);
 
+  // Same args as the staffing board's conflict check, so both share one subscription.
+  const assignedUserIds = useMemo(
+    () => [...new Set(shifts.map((shift) => shift.userId?.trim()).filter((id): id is string => Boolean(id)))].sort(),
+    [shifts],
+  );
+  const conflictsResult = useQuery(
+    api.eventCrew.listCrewConflictsForEvent,
+    assignedUserIds.length > 0 ? { eventId, userIds: assignedUserIds } : "skip",
+  );
+  // Time a person already works on another event that started first isn't billed twice.
+  const otherShifts = useMemo(
+    () => crewOtherShiftsFromConflicts(conflictsResult?.conflicts ?? []),
+    [conflictsResult],
+  );
+  const shiftCreationTimes = useMemo(
+    () => new Map((eventData?.shifts ?? []).map((shift) => [shift._id as string, shift._creationTime])),
+    [eventData],
+  );
+
   useEffect(() => {
     if (!scheduleHydratedRef.current) return;
+    // Until other events' shifts load, rows would bill shared time twice.
+    if (assignedUserIds.length > 0 && conflictsResult === undefined) return;
     onEventCrewRowsChange(
       buildCrewRowsFromShifts(blocks, shifts, {
         ratesByUserId,
         openSlotRateUsd: defaultCrewHourlyRateUsd,
+        otherShifts,
+        shiftCreationTimes,
       }),
     );
-  }, [blocks, shifts, onEventCrewRowsChange, ratesByUserId, defaultCrewHourlyRateUsd]);
+  }, [blocks, shifts, onEventCrewRowsChange, ratesByUserId, defaultCrewHourlyRateUsd, otherShifts, shiftCreationTimes, assignedUserIds, conflictsResult]);
 
   useEffect(() => {
     // Only rebase a draft hydrated for this event: in the render that hydrates,
@@ -414,6 +443,9 @@ export function InvoiceLinkedEventCrewSection({
             const staffing = countStaffing(shifts.filter((shift) => shiftBelongsToBlock(shift, block)));
             return { total: staffing.slots, filled: staffing.filled };
           }}
+          onEarlySetupAdded={(block, headcount) =>
+            setShifts((prev) => setSectionHeadcount(prev, block, headcount, getBlockRef))
+          }
           quickAdd={{
             label: quickAddLabel,
             disabled: quickAddDisabled,

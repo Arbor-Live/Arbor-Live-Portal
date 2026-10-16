@@ -971,6 +971,7 @@ export const listManagers = query({
           rateMode: compensation?.rateMode,
           pronouns: profile?.pronouns ?? undefined,
           gradYear: profile?.gradYear ?? undefined,
+          cartEligible: profile?.cartEligible === true,
         };
       })
       .filter((user): user is NonNullable<typeof user> => user !== null)

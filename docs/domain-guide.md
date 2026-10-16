@@ -276,9 +276,15 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   Stanford quarter** come first (chips, person picker, *Fill open slots*, and
   the crew scheduling board's answers), so work spreads out. Hours are every
   shift starting in the quarter, worked or scheduled (`userCards.listShiftHours`).
+  **Cart eligible** (`userAdminProfiles.cartEligible`, staff admins set it in
+  the person sheet; missing ⇒ no) marks who may drive the golf cart with gear.
+  The board tags them "Cart" (picker, assigned rows, chips; carried on
+  `invoices.listManagers`) and its summary lists the cart-eligible assignees, or
+  notes that no one on the crew is.
 - **Person hover cards** (`UserHoverCard`, `userCards.getCard`): hovering a
   comment author or @mention, a staffing chip, or a name on the crew scheduling
-  board shows the person's phone, email, title and pronouns; staffing surfaces
+  board shows the person's phone, email, title, pronouns and whether they're
+  cart eligible; staffing surfaces
   add hours this week (Mon–Sun) and this quarter.
 - **Crew phones**: the event brief's People table and the event Contacts card
   ("Event team") list the event manager and day-of lead (email · phone), then
@@ -329,7 +335,12 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     of show" lays out soundchecks (reverse play order by default, ending at
     doors), doors, sets, and changeovers; changeover rows show the night rider's
     cable swaps. Warnings cover soundchecks into doors, overlaps, moments outside
-    or past their section, and tight changeovers. A platform act filling a slot
+    or past their section, and tight changeovers. *Add → Early setup…* adds a
+    setup section before the first setup (default 1 hr) for a small crew who
+    stage gear so setup starts with a cart run ready: they either stay on (the
+    section ends when setup starts) or leave when soundchecks start (the
+    section overlaps setup), and the dialog opens that many slots
+    (`planEarlySetup` in `lib/run-of-show.ts`). A platform act filling a slot
     inherits the slot's times. Copy day setup, duplicate event, and series
     templates skip act blocks. Artists see both windows on "Your shows".
   - **Outside acts** — a position can instead be filled by an act that is not on
@@ -568,6 +579,19 @@ Update `YEARS` there when the Registrar publishes new dates.
   time after 8 hrs (`· DT after 8 hrs`). The client quote and PDF read those
   tags back (`parseCrewLine`). Hand-added extra crew hours and recurring-series
   template lines keep their typed rate.
+- **Overlapping shifts count once.** When one person is on two shifts at the
+  same time (two events, or two sections of one event), the shared time counts
+  once: 7–8pm at A plus 7:45–9pm at B is 2 hrs, not 2¼. The shift that **starts
+  first** keeps the shared time; the later one counts `hours − time already
+  covered` (never below 0). Ties go to the earlier-created shift; a cancelled
+  event's shift never covers anything. One helper does it
+  (`crewCountableHours` in `@arbor/invoice-document/crew-hours`; backend reads
+  in `lib/crewShiftOverlap.ts`), used by event crew cost (which re-prices the
+  other event when they share time), quote crew lines (other events' shifts
+  come from `events.getByInvoiceId` / `listCrewConflictsForEvent`), timecards
+  (the overlap comes off the later shift's event row, so the day total counts
+  it once), hours this week/quarter, the OT forecast and Insights crew
+  utilization. Open slots have no person, so they are never deduplicated.
 - **Changing an approved quote** (#405). The client's approval pins a version
   (`invoiceRevisions`, kind `approved`; `invoices.approvedRevisionId` /
   `approvedTotalUsd`). Snapshots use the portal's pricing (`snapshotInvoice`),

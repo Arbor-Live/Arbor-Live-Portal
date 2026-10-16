@@ -6,6 +6,7 @@ import {
   LightningIcon,
   MagicWandIcon,
   PlusIcon,
+  SunHorizonIcon,
   TrashIcon,
   UsersThreeIcon,
   WarningIcon,
@@ -43,6 +44,7 @@ import {
 } from "@/lib/schedule-block-types";
 import { cn } from "@/lib/utils";
 import { BuildRunOfShowDialog } from "@/components/events/workspace/run-of-show/build-run-of-show-dialog";
+import { EarlySetupDialog } from "@/components/events/workspace/run-of-show/early-setup-dialog";
 import {
   durationLabel,
   MOMENT_ICONS,
@@ -79,6 +81,7 @@ export function RunOfShowEditor({
   crewFor,
   quickAdd,
   actsEditable = true,
+  onEarlySetupAdded,
 }: {
   blocks: TimelineBlockDraft[];
   onChange: (next: TimelineBlockDraft[]) => void;
@@ -96,8 +99,11 @@ export function RunOfShowEditor({
    * soundchecks and sets are shown but only change from the Run of Show tab.
    */
   actsEditable?: boolean;
+  /** Opens slots on a new early setup section; without it the section is added unstaffed. */
+  onEarlySetupAdded?: (block: TimelineBlockDraft, headcount: number) => void;
 }) {
   const [buildOpen, setBuildOpen] = useState(false);
+  const [earlySetupOpen, setEarlySetupOpen] = useState(false);
   const days = useMemo(() => nestRunOfShow(blocks), [blocks]);
   const issues = useMemo(
     () => runOfShowIssues(blocks, acts, { actName, swaps }),
@@ -170,6 +176,20 @@ export function RunOfShowEditor({
     commit([...latest(), block]);
   }
 
+  function addEarlySetup(plan: { start: number; end: number; label: string; headcount: number }) {
+    const block: TimelineBlockDraft = {
+      clientId: newClientId(),
+      blockType: "setup",
+      label: plan.label,
+      dayIndex: eventStartAt != null ? pacificDayIndexFromAnchor(eventStartAt, plan.start) : 0,
+      startsAt: toLocalDateTimeInput(plan.start),
+      endsAt: toLocalDateTimeInput(plan.end),
+      notes: "",
+    };
+    commit([...latest(), block]);
+    onEarlySetupAdded?.(block, plan.headcount);
+  }
+
   function build(input: BuildRunOfShowInput) {
     commit(buildRunOfShow(latest(), input, newClientId));
   }
@@ -224,6 +244,10 @@ export function RunOfShowEditor({
                   {SCHEDULE_BLOCK_TYPE_LABELS[type]}
                 </DropdownMenuItem>
               ))}
+              <DropdownMenuItem onSelect={() => setEarlySetupOpen(true)}>
+                <SunHorizonIcon className="size-4" />
+                Early setup…
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel>Moment</DropdownMenuLabel>
               <DropdownMenuItem onSelect={() => add("doors", "Doors", 30)}>Doors</DropdownMenuItem>
@@ -344,6 +368,15 @@ export function RunOfShowEditor({
           blocks={blocks}
           eventStartAt={eventStartAt}
           onBuild={build}
+        />
+      ) : null}
+      {earlySetupOpen ? (
+        <EarlySetupDialog
+          open={earlySetupOpen}
+          onOpenChange={setEarlySetupOpen}
+          blocks={blocks}
+          withHeadcount={onEarlySetupAdded != null}
+          onAdd={addEarlySetup}
         />
       ) : null}
     </div>
