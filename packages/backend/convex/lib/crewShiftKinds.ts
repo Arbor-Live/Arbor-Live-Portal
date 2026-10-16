@@ -25,11 +25,17 @@ export function staffingSlots<T extends ShiftLike>(shifts: T[]) {
 
 /**
  * "Fully staffed" when every staffing slot has someone, none of them is a
- * backup, and there is at least one slot. A slot held by a backup (answered
- * "only if necessary") counts as filled but keeps the event needing crew, so
- * it stays on the list until someone who can actually work it turns up.
+ * backup, there is at least one slot, and a cart event's cart requirement is
+ * met. A slot held by a backup (answered "only if necessary") counts as filled
+ * but keeps the event needing crew, so it stays on the list until someone who
+ * can actually work it turns up. A cart event with no one cart eligible on its
+ * setup or strike (`lib/cartCrew.ts`) stays on the list the same way.
  */
-export function computeShiftStats(shifts: ShiftLike[], backupUserIds?: ReadonlySet<string>) {
+export function computeShiftStats(
+  shifts: ShiftLike[],
+  backupUserIds?: ReadonlySet<string>,
+  options?: { cartRequirementMet?: boolean },
+) {
   const slots = staffingSlots(shifts);
   const totalShifts = slots.length;
   const filled = slots.filter(isShiftFilled);
@@ -37,12 +43,15 @@ export function computeShiftStats(shifts: ShiftLike[], backupUserIds?: ReadonlyS
   const backupShifts = backupUserIds
     ? filled.filter((shift) => backupUserIds.has(shift.userId?.trim() ?? "")).length
     : 0;
-  const isCrewConfirmed = totalShifts > 0 && filledShifts === totalShifts && backupShifts === 0;
+  const cartRequirementMet = options?.cartRequirementMet ?? true;
+  const isCrewConfirmed =
+    totalShifts > 0 && filledShifts === totalShifts && backupShifts === 0 && cartRequirementMet;
   return {
     totalShifts,
     filledShifts,
     unfilledShifts: totalShifts - filledShifts,
     backupShifts,
+    cartRequirementMet,
     isCrewConfirmed,
   };
 }

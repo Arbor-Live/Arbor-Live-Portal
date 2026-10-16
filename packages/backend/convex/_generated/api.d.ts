@@ -141,6 +141,7 @@ import type * as lib_bookingDayLoad from "../lib/bookingDayLoad.js";
 import type * as lib_bookingRequestQuote from "../lib/bookingRequestQuote.js";
 import type * as lib_bookingRequestStatus from "../lib/bookingRequestStatus.js";
 import type * as lib_briefRunOfShow from "../lib/briefRunOfShow.js";
+import type * as lib_cartCrew from "../lib/cartCrew.js";
 import type * as lib_cohoGiftCards from "../lib/cohoGiftCards.js";
 import type * as lib_contactName from "../lib/contactName.js";
 import type * as lib_crewAvailability from "../lib/crewAvailability.js";
@@ -447,6 +448,7 @@ declare const fullApi: ApiFromModules<{
   "lib/bookingRequestQuote": typeof lib_bookingRequestQuote;
   "lib/bookingRequestStatus": typeof lib_bookingRequestStatus;
   "lib/briefRunOfShow": typeof lib_briefRunOfShow;
+  "lib/cartCrew": typeof lib_cartCrew;
   "lib/cohoGiftCards": typeof lib_cohoGiftCards;
   "lib/contactName": typeof lib_contactName;
   "lib/crewAvailability": typeof lib_crewAvailability;

@@ -1088,6 +1088,11 @@ export default defineSchema({
     /** Owns filling this event's lineup (the Open positions board). */
     operationsLeadUserId: v.optional(v.string()),
     otPremium: v.optional(v.boolean()),
+    /**
+     * Cart event: gear moves by golf cart, so setup and strike each need
+     * someone cart eligible (`@arbor/format` `evaluateCartRequirement`).
+     */
+    needsCart: v.optional(v.boolean()),
     crewCostBufferPercent: v.optional(v.number()),
     crewCostUsd: v.optional(v.number()),
     /**

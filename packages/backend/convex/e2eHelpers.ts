@@ -2311,6 +2311,8 @@ export const ensureCrewUser = mutation({
     username: v.optional(v.string()),
     /** `["Operations"]` makes an Operations-team member; defaults to Crew (Sound). */
     verticals: v.optional(v.array(userVerticalValue)),
+    /** Marks the person cart eligible (`userAdminProfiles.cartEligible`). */
+    cartEligible: v.optional(v.boolean()),
   },
   returns: v.object({
     ok: v.literal(true),
@@ -2488,6 +2490,7 @@ export const ensureCrewUser = mutation({
         disciplines,
         defaultOrganizationId: organizationId,
         ...(assignedUsername ? { username: assignedUsername } : {}),
+        ...(args.cartEligible !== undefined ? { cartEligible: args.cartEligible } : {}),
         updatedAt: now,
       });
       if (!assignedUsername && existingUserProfile.username) {
@@ -2501,6 +2504,7 @@ export const ensureCrewUser = mutation({
         disciplines,
         defaultOrganizationId: organizationId,
         username: assignedUsername,
+        cartEligible: args.cartEligible,
         createdAt: now,
         updatedAt: now,
       });

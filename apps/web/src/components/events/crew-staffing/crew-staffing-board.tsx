@@ -5,6 +5,7 @@ import { memo, useMemo, useState, type Dispatch, type SetStateAction } from "rea
 import { useQuery } from "convex/react";
 import {
   CalendarXIcon,
+  CarSimpleIcon,
   CaretDownIcon,
   ClockIcon,
   GraduationCapIcon,
@@ -23,7 +24,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { UserHoverCard } from "@/components/users/user-hover-card";
-import { CartEligibleTag, UserSelect, type UserSelectOption } from "@/components/users/user-select";
+import { CartEligibleIcon, UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { AssignTraineeDialog } from "@/components/events/crew-staffing/assign-trainee-dialog";
 import { useCrewHoursWindows } from "@/hooks/use-crew-hours-windows";
 import {
@@ -53,6 +54,13 @@ import {
   type ShiftDraftForAssign,
 } from "@/lib/crew-shift-assign";
 import { formatHours } from "@/lib/crew-hours-windows";
+import {
+  cartGroupLines,
+  cartRequirementForDraft,
+  type CartGroupLine,
+  type CartGroupTone,
+} from "@/lib/cart-crew";
+import { cartGroupForBlockType } from "@/lib/format";
 import { countStaffing, isOpenSlot, isTraineeShift } from "@/lib/crew-shift-kinds";
 import { shiftBelongsToBlock, shiftTimesMatchBlock } from "@/lib/event-schedule-draft";
 import { formatDate, formatDateTimeRange } from "@/lib/format";
@@ -98,6 +106,7 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
   onDeleteUnlinked,
   openSlotNote,
   canAssignTrainees = false,
+  needsCart = false,
 }: {
   eventId: Id<"events">;
   sectionBlocks: TimelineBlockDraft[];
@@ -113,6 +122,8 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
   openSlotNote?: string;
   /** Staff admins assign trainees right here; otherwise it links to Crew applications. */
   canAssignTrainees?: boolean;
+  /** Cart event (`events.needsCart`): setup and strike each need someone cart eligible. */
+  needsCart?: boolean;
 }) {
   const [assignTraineeOpen, setAssignTraineeOpen] = useState(false);
   const summary = useQuery(
@@ -210,7 +221,6 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
     [responders],
   );
   const staffing = useMemo(() => countStaffing(shifts, backupUserIds), [shifts, backupUserIds]);
-  const stillLooking = staffing.open > 0 || staffing.backup > 0;
 
   const assignedUsers = useMemo(() => {
     const byId = new Map<string, { name: string; windows: SectionForAvailability[] }>();
@@ -232,6 +242,24 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
   const cartEligibleNames = assignedUsers
     .filter((person) => cartEligibleIds.has(person.userId))
     .map((person) => person.name);
+  // On a cart event, setup and strike each need one of them (`@arbor/format`).
+  const cart = useMemo(
+    () => cartRequirementForDraft({ needsCart, sectionBlocks, shifts, cartEligibleIds }),
+    [needsCart, sectionBlocks, shifts, cartEligibleIds],
+  );
+  const cartLines = useMemo(() => {
+    const nameById = new Map(assignedUsers.map((person) => [person.userId, person.name]));
+    return cartGroupLines(cart, (userId) => nameById.get(userId) ?? userId);
+  }, [cart, assignedUsers]);
+  const cartToneByGroup = new Map(cartLines.map((line) => [line.group, line.tone]));
+  /** The header note for an unmet setup/strike section, if any. */
+  function sectionCartTone(block: TimelineBlockDraft) {
+    const group = cartGroupForBlockType(block.blockType);
+    const tone = group ? cartToneByGroup.get(group) : undefined;
+    return tone && tone !== "met" ? tone : undefined;
+  }
+  // A cart event without its cart people isn't fully staffed, same as a backup.
+  const stillLooking = staffing.open > 0 || staffing.backup > 0 || !cart.met;
 
   function updateShift(index: number, next: S) {
     setShifts((prev) => prev.map((shift, i) => (i === index ? next : shift)));
@@ -282,6 +310,7 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
                 </span>
                 {staffing.open > 0 ? ` · ${staffing.open} open` : null}
                 {staffing.backup > 0 ? ` · ${staffing.backup} on backup` : null}
+                {!cart.met && staffing.open === 0 ? " · needs a cart person" : null}
                 {stillLooking ? null : " · fully staffed"}
               </>
             )}
@@ -324,7 +353,9 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
             </p>
           ) : null}
         </div>
-        {assignedUsers.length > 0 ? (
+        {needsCart ? (
+          <CartRequirementLine lines={cartLines} />
+        ) : assignedUsers.length > 0 ? (
           <p className="text-xs text-muted-foreground" data-testid="crew-cart-eligible">
             {cartEligibleNames.length > 0
               ? `Cart eligible: ${cartEligibleNames.join(", ")}`
@@ -367,6 +398,7 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
             responders={responders}
             responderById={responderById}
             cartEligibleIds={cartEligibleIds}
+            cartTone={sectionCartTone(block)}
             conflicts={conflicts}
             quarterHours={quarterHours}
             askAvailability={askAvailability}
@@ -490,6 +522,35 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
   );
 }
 
+const CART_TONE_CLASS: Record<CartGroupTone, string> = {
+  met: "text-status-emerald-700 dark:text-status-emerald-300",
+  missing: "text-status-amber-800 dark:text-status-amber-300",
+  waiting: "text-muted-foreground",
+};
+
+/** "Cart: setup ✓ Maya · strike needs someone cart eligible" on a cart event. */
+function CartRequirementLine({ lines }: { lines: CartGroupLine[] }) {
+  return (
+    <p
+      className="flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground"
+      data-testid="crew-cart-requirement"
+    >
+      <CarSimpleIcon className="size-3.5 shrink-0" aria-hidden />
+      <span>Cart:</span>
+      {lines.length === 0 ? (
+        <span>no setup or strike sections yet.</span>
+      ) : (
+        lines.map((line, index) => (
+          <span key={line.group} className={CART_TONE_CLASS[line.tone]}>
+            {index > 0 ? <span className="text-muted-foreground">· </span> : null}
+            {line.text}
+          </span>
+        ))
+      )}
+    </p>
+  );
+}
+
 function AvailabilityLine({
   summary,
   pending,
@@ -593,6 +654,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
   responders,
   responderById,
   cartEligibleIds,
+  cartTone,
   conflicts,
   quarterHours,
   askAvailability,
@@ -612,6 +674,8 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
   responders: AssignableResponder[];
   responderById: Map<string, AssignableResponder>;
   cartEligibleIds: Set<string>;
+  /** Cart event whose setup/strike group has no one cart eligible yet. */
+  cartTone?: Exclude<CartGroupTone, "met">;
   conflicts: CrewConflict[];
   quarterHours?: QuarterHoursById;
   askAvailability: boolean;
@@ -680,6 +744,21 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
         <p className="text-xs text-muted-foreground tabular-nums">
           {inputRangeLabel(block.startsAt, block.endsAt)}
         </p>
+        {cartTone ? (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 text-xs",
+              cartTone === "missing"
+                ? "rounded-md bg-status-amber-500/15 px-1.5 py-0.5 text-status-amber-800 dark:text-status-amber-300"
+                : "text-muted-foreground",
+            )}
+            title={`Cart event: someone cart eligible needs to be on ${block.blockType}`}
+            data-testid="crew-section-cart-note"
+          >
+            <CarSimpleIcon className="size-3.5" aria-hidden />
+            Needs cart person
+          </span>
+        ) : null}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <span
             className={cn(
@@ -1056,7 +1135,7 @@ function CandidateChip({
           "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs hover:brightness-95",
           booked ? CONFLICT_CLASS : LEVEL_CLASSES[candidate.level],
         )}
-        aria-label={`Add ${candidate.name} to ${sectionLabel}`}
+        aria-label={`Add ${candidate.name}${cartEligible ? " (cart eligible)" : ""} to ${sectionLabel}`}
         data-testid="crew-candidate"
         onClick={onAssign}
       >
@@ -1076,7 +1155,7 @@ function CandidateChip({
         {quarterHours !== undefined ? (
           <span className="tabular-nums opacity-60">· {formatHours(quarterHours)}</span>
         ) : null}
-        {cartEligible ? <CartEligibleTag className="border-0 p-0 text-current opacity-75" /> : null}
+        {cartEligible ? <CartEligibleIcon className="opacity-75" /> : null}
       </button>
     </UserHoverCard>
   );

@@ -312,18 +312,39 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   only fills existing open slots with people available for that section and
   free elsewhere; it never adds slots or touches trainees. An event is **fully
   staffed** when every slot has someone and none of them answered *Backup
-  only* (`lib/crewShiftKinds.ts`). A slot held by a backup counts as filled
-  ("3/3 · 1 on backup") but keeps the event on the needs-crew lists and the nav
-  badge, so a better-placed person can still replace them.
+  only* (`lib/crewShiftKinds.ts`), and, on a cart event, the cart rule below is
+  met. A slot held by a backup counts as filled ("3/3 · 1 on backup") but keeps
+  the event on the needs-crew lists and the nav badge, so a better-placed
+  person can still replace them.
   Within each availability level, people with the **fewest shift hours this
   Stanford quarter** come first (chips, person picker, *Fill open slots*, and
   the crew scheduling board's answers), so work spreads out. Hours are every
   shift starting in the quarter, worked or scheduled (`userCards.listShiftHours`).
   **Cart eligible** (`userAdminProfiles.cartEligible`, staff admins set it in
   the person sheet; missing ⇒ no) marks who may drive the golf cart with gear.
-  The board tags them "Cart" (picker, assigned rows, chips; carried on
-  `invoices.listManagers`) and its summary lists the cart-eligible assignees, or
-  notes that no one on the crew is.
+  The board tags them "Cart" in the picker and assigned rows, and availability
+  pills (the "Can work this" chips, the crew scheduling board's answers and
+  waiting-on lists) show a small cart icon labelled "Cart eligible"
+  (`CartEligibleIcon`; carried on `invoices.listManagers` and on the board's
+  responder and person summaries). The summary lists the cart-eligible
+  assignees, or notes that no one on the crew is.
+  **Cart events** (`events.needsCart`, *Cart event* switch in the event's
+  Details card; copied by *Duplicate*, and by series/multi-day edits that
+  aren't "this day only") move gear by cart, so **setup and strike each need
+  someone cart eligible**. The setup group is every `setup` section (early
+  setup included), the strike group every `strike` section; one cart-eligible
+  person anywhere in a group covers it, a group with no sections asks for
+  nothing, and trainees don't count (`evaluateCartRequirement` in
+  `@arbor/format`, shared by web and Convex). On a cart event the board's
+  summary reads "Cart: setup ✓ Maya · strike needs someone cart eligible", and
+  each unmet setup/strike section header says "Needs cart person" (muted until
+  someone is on that group, then amber). An unmet cart event isn't fully
+  staffed: like a backup-held slot it stays on the needs-crew lists (crew
+  scheduling board, which flags it, and its KPIs), the nav badge, dashboard
+  home, event group days, and Insights' unconfirmed counts. Convex reads it via
+  `lib/cartCrew.ts` (`computeEventShiftStats`): nothing extra for events that
+  aren't cart events, else the blocks plus one indexed profile read per
+  setup/strike assignee not already loaded.
 - **Person hover cards** (`UserHoverCard`, `userCards.getCard`): hovering a
   comment author or @mention, a staffing chip, or a name on the crew scheduling
   board shows the person's phone, email, title, pronouns and whether they're

@@ -31,6 +31,25 @@ export function CartEligibleTag({ className }: { className?: string }) {
   );
 }
 
+/**
+ * Just the cart icon, for tight availability pills (staffing chips, the crew
+ * scheduling board). Same icon as the "Cart" tag; labelled for screen readers
+ * and with a tooltip.
+ */
+export function CartEligibleIcon({ className }: { className?: string }) {
+  return (
+    <span
+      role="img"
+      aria-label="Cart eligible"
+      title="Cart eligible: can drive the cart to move gear"
+      className={cn("inline-flex shrink-0 items-center", className)}
+      data-testid="cart-eligible-icon"
+    >
+      <CarSimpleIcon className="size-3.5" aria-hidden />
+    </span>
+  );
+}
+
 function OptionAvatar({ option }: { option: UserSelectOption }) {
   // The clear entry has no person behind it — an avatar would be nonsense.
   if (!option.value) {

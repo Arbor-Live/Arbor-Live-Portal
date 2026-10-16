@@ -48,7 +48,10 @@ export async function loadNightRowsByKey(ctx: Pick<QueryCtx, "db">, nightKeys: I
   return new Map(keys.map((key, index) => [key, pages[index] ?? []]));
 }
 
-type ProfileForMatch = Pick<Doc<"userAdminProfiles">, "userId" | "teams" | "verticals" | "disciplines">;
+type ProfileForMatch = Pick<
+  Doc<"userAdminProfiles">,
+  "userId" | "teams" | "verticals" | "disciplines" | "cartEligible"
+>;
 
 /** Whether this person would have been asked about the event (crew specialty + its teams). */
 export function profileMatchesEvent(profile: ProfileForMatch | null | undefined, event: Doc<"events">) {

@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
-import { WarningIcon } from "@phosphor-icons/react";
+import { CarSimpleIcon, WarningIcon } from "@phosphor-icons/react";
 import { EventStateBadges } from "@/components/events/event-state-badges";
 import { TypeChip } from "@/components/events/workspace/run-of-show/run-of-show-styles";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AcademicPeriodPicks } from "@/components/academic-period-picks";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserHoverCard } from "@/components/users/user-hover-card";
+import { CartEligibleIcon } from "@/components/users/user-select";
 import { useCrewHoursWindows } from "@/hooks/use-crew-hours-windows";
 import { formatHours } from "@/lib/crew-hours-windows";
 import { compareHours } from "@/lib/crew-shift-assign";
@@ -48,6 +49,7 @@ type CrewPerson = {
   name: string;
   email: string;
   image?: string;
+  cartEligible?: boolean;
 };
 
 type PendingCrewRow = {
@@ -99,10 +101,12 @@ function PendingCrewSidebar({ rows }: { rows: PendingCrewRow[] | undefined }) {
                 <AvatarFallback>{initials(entry.name)}</AvatarFallback>
               </Avatar>
               <UserHoverCard userId={entry.userId} showHours side="left">
-                <button type="button" className="min-w-0 flex-1 truncate text-left text-sm hover:underline">
+                <button type="button" className="min-w-0 truncate text-left text-sm hover:underline">
                   {entry.name}
                 </button>
               </UserHoverCard>
+              {entry.cartEligible ? <CartEligibleIcon className="text-muted-foreground" /> : null}
+              <span className="flex-1" />
               <span className="rounded-full border border-status-amber-500/30 bg-status-amber-500/15 px-2 py-0.5 text-xs tabular-nums text-status-amber-700">
                 {entry.count}
               </span>
@@ -154,6 +158,16 @@ function SectionStaffingStrip({ row }: { row: BoardRow }) {
           </span>
         );
       })}
+      {row.needsCart && row.cartUnmetGroups.length > 0 ? (
+        <span
+          className="inline-flex items-center gap-1 rounded-md bg-status-amber-500/15 px-1.5 py-0.5 text-xs text-status-amber-800 dark:text-status-amber-300"
+          title="Cart event: setup and strike each need someone cart eligible"
+          data-testid="crew-board-cart-unmet"
+        >
+          <CarSimpleIcon className="size-3.5" aria-hidden />
+          Needs cart person on {row.cartUnmetGroups.join(" and ")}
+        </span>
+      ) : null}
       {row.traineeCount > 0 ? (
         <span className="text-xs text-muted-foreground">
           + {row.traineeCount} trainee{row.traineeCount === 1 ? "" : "s"}
@@ -235,6 +249,7 @@ function ResponsesList({ row }: { row: BoardRow }) {
                     {responder.name}
                   </button>
                 </UserHoverCard>
+                {responder.cartEligible ? <CartEligibleIcon className="text-muted-foreground" /> : null}
                 {hoursById.has(responder.userId) ? (
                   <span className="text-xs text-muted-foreground tabular-nums">
                     {formatHours(hoursById.get(responder.userId) ?? 0)} this quarter
@@ -420,6 +435,7 @@ export function CrewSchedulingDashboard() {
         </label>
         <p className="text-xs text-muted-foreground sm:ml-auto">
           An event needs crew until every slot on every section has someone. Trainees don&apos;t count.
+          Cart events also need someone cart eligible on setup and strike.
         </p>
       </div>
 
@@ -506,6 +522,7 @@ export function CrewSchedulingDashboard() {
                             <AvatarFallback>{initials(person.name)}</AvatarFallback>
                           </Avatar>
                           {person.name}
+                          {person.cartEligible ? <CartEligibleIcon className="text-muted-foreground" /> : null}
                         </button>
                       </UserHoverCard>
                     ))}

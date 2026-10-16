@@ -657,7 +657,12 @@ export async function propagateSharedDayFields(
 ): Promise<SeriesOverviewAffectedOccurrence[]> {
   const group = await ctx.db.get(groupId);
   if (!group) throw new Error("Event group not found.");
-  if (fields.length === 0 && overrides.status === undefined && overrides.visibility === undefined) {
+  if (
+    fields.length === 0 &&
+    overrides.status === undefined &&
+    overrides.visibility === undefined &&
+    overrides.needsCart === undefined
+  ) {
     return [];
   }
   await ctx.db.replace(groupId, {
@@ -767,6 +772,7 @@ export type SeriesOverviewOverride = {
   status?: EventStatus;
   visibility?: "public" | "internal" | "informational";
   otPremium?: boolean;
+  needsCart?: boolean;
   crewCostBufferPercent?: number;
 };
 

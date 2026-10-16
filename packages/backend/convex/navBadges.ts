@@ -14,7 +14,7 @@ import { isArtistOrganizationType } from "./lib/organizationType";
 import { isBandPayeeComplete, payeeFieldsFromProfile } from "./lib/bandPayments";
 import { listCrewedEventsInRange } from "./lib/crewedEvents";
 import { loadBackupUserIds } from "./lib/crewBackups";
-import { computeShiftStats } from "./lib/crewShiftKinds";
+import { computeEventShiftStats } from "./lib/cartCrew";
 import { DEFAULT_AVAILABILITY_WEEKS } from "./lib/crewTeams";
 import { listMyPendingNights, weeksToMs } from "./lib/crewNightInbox";
 import { profileHasCrewSpecialty } from "./lib/userVerticals";
@@ -180,7 +180,8 @@ async function eventIsCrewUnconfirmed(ctx: QueryCtx, event: Doc<"events">) {
     .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
     .take(UNCONFIRMED_CREW_SHIFT_CAP);
   // Match previous semantics: zero shifts ⇒ not confirmed.
-  return !computeShiftStats(shifts, await loadBackupUserIds(ctx, event)).isCrewConfirmed;
+  return !(await computeEventShiftStats(ctx, event, shifts, await loadBackupUserIds(ctx, event)))
+    .isCrewConfirmed;
 }
 
 async function countUnconfirmedCrew(ctx: QueryCtx, rangeStart: number, rangeEnd: number) {
