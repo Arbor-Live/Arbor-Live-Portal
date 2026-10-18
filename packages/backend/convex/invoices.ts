@@ -932,19 +932,30 @@ async function replaceLineItems(
 /**
  * Every quote line ever linked to one position. Real positions have a handful,
  * but a lock check that misses one could silently change an approved quote,
- * so read well past that (bounded, per Convex guidelines).
+ * so a read that hits the bound refuses rather than guessing.
  */
 const MAX_LINES_PER_POSITION = 200;
+
+async function readPositionLines(ctx: QueryCtx | MutationCtx, needId: Id<"eventArtistNeeds">) {
+  const lines = await ctx.db
+    .query("invoiceLineItems")
+    .withIndex("by_needId", (q) => q.eq("needId", needId))
+    .take(MAX_LINES_PER_POSITION + 1);
+  if (lines.length > MAX_LINES_PER_POSITION) {
+    appError(
+      "POSITION_TOO_MANY_QUOTE_LINES",
+      "This position has too many quote lines to check safely. Change its price from the quote instead.",
+    );
+  }
+  return lines;
+}
 
 /** The quotes (not void) whose artist line bills a position, and whether each still takes edits. */
 export async function quoteLinesForPosition(
   ctx: QueryCtx | MutationCtx,
   needId: Id<"eventArtistNeeds">,
 ) {
-  const lines = await ctx.db
-    .query("invoiceLineItems")
-    .withIndex("by_needId", (q) => q.eq("needId", needId))
-    .take(MAX_LINES_PER_POSITION);
+  const lines = await readPositionLines(ctx, needId);
   const out: Array<{
     invoiceId: Id<"invoices">;
     invoiceNumber: string;
@@ -979,10 +990,7 @@ export async function applyBookingPriceToQuoteLines(
   needId: Id<"eventArtistNeeds">,
   price: BookingPrice,
 ) {
-  const lines = await ctx.db
-    .query("invoiceLineItems")
-    .withIndex("by_needId", (q) => q.eq("needId", needId))
-    .take(MAX_LINES_PER_POSITION);
+  const lines = await readPositionLines(ctx, needId);
   const touched = new Set<Id<"invoices">>();
   const now = Date.now();
   for (const line of lines) {
