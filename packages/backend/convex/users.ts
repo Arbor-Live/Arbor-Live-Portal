@@ -112,6 +112,7 @@ import type { StanfordPosition } from "./lib/stanfordPosition";
 import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
 import { returnActTimesToPosition } from "./lib/actPositions";
 import { scheduleBandTimeEmails } from "./email/bandScheduleEmails";
+import { uniqueBandMemberNames } from "./lib/bandMembers";
 
 const invitationStatusValue = v.union(
   v.literal("pending"),
@@ -213,7 +214,7 @@ function patchBandListingProfileFields(
     demoURL: args.demoURL !== undefined ? args.demoURL.trim() || undefined : existing.demoURL,
     bandMembers:
       args.bandMembers !== undefined
-        ? normalizeStringList(args.bandMembers)
+        ? uniqueBandMemberNames(args.bandMembers)
         : existing.bandMembers,
     mainContactName:
       args.mainContactName !== undefined
