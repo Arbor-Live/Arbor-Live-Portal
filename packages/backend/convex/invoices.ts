@@ -929,6 +929,13 @@ async function replaceLineItems(
   }
 }
 
+/**
+ * Every quote line ever linked to one position. Real positions have a handful,
+ * but a lock check that misses one could silently change an approved quote,
+ * so read well past that (bounded, per Convex guidelines).
+ */
+const MAX_LINES_PER_POSITION = 200;
+
 /** The quotes (not void) whose artist line bills a position, and whether each still takes edits. */
 export async function quoteLinesForPosition(
   ctx: QueryCtx | MutationCtx,
@@ -937,7 +944,7 @@ export async function quoteLinesForPosition(
   const lines = await ctx.db
     .query("invoiceLineItems")
     .withIndex("by_needId", (q) => q.eq("needId", needId))
-    .take(10);
+    .take(MAX_LINES_PER_POSITION);
   const out: Array<{
     invoiceId: Id<"invoices">;
     invoiceNumber: string;
@@ -975,7 +982,7 @@ export async function applyBookingPriceToQuoteLines(
   const lines = await ctx.db
     .query("invoiceLineItems")
     .withIndex("by_needId", (q) => q.eq("needId", needId))
-    .take(10);
+    .take(MAX_LINES_PER_POSITION);
   const touched = new Set<Id<"invoices">>();
   const now = Date.now();
   for (const line of lines) {
