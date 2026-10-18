@@ -231,7 +231,7 @@ test.describe("staff band assignment on event", () => {
     await expect(card.getByText("Onboarding")).toBeVisible();
 
     // The price lives on the booking; the invite form doesn't take one.
-    await card.getByRole("button", { name: new RegExp(bandName) }).click();
+    await card.getByRole("button", { name: `Headliner ${bandName}` }).click();
     const sheet = page.getByTestId("position-sheet");
     await expect(sheet).toBeVisible({ timeout: 15_000 });
     const price = sheet.getByTestId("booking-price");
