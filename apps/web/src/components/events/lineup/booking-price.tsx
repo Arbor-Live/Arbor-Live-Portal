@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatUsd } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { bookingPriceFieldsSchema } from "@/lib/validations/bands";
 import { notify } from "@/lib/notify";
 
@@ -33,24 +34,27 @@ function plural(count: number, one: string, many: string) {
   return `${count} ${count === 1 ? one : many}`;
 }
 
-/** "5 people × 1 hr × $90" for a per-person price; empty for a fixed total. */
+/** "5 people × 1 hr × $90" for a per-person price; "lump sum" for a lump sum. */
 export function describeBookingPrice(
   price: Pick<BookingPrice, "pricingMode" | "memberCount" | "performanceHours" | "ratePerMemberPerHourUsd">,
 ) {
-  if (price.pricingMode !== "per_member_hourly") return "fixed total";
+  if (price.pricingMode !== "per_member_hourly") return "lump sum";
   if (price.memberCount == null || price.performanceHours == null || price.ratePerMemberPerHourUsd == null) {
     return "";
   }
   return `${plural(price.memberCount, "person", "people")} × ${plural(price.performanceHours, "hr", "hrs")} × ${formatUsd(price.ratePerMemberPerHourUsd)}`;
 }
 
-type Draft = {
+/** A price as typed: per person per hour, or one lump sum. */
+export type BookingPriceDraft = {
   pricingMode: BookingPrice["pricingMode"];
   memberCount: string;
   performanceHours: string;
   ratePerMemberPerHourUsd: string;
   fixedTotalUsd: string;
 };
+
+type Draft = BookingPriceDraft;
 
 function toDraft(price: BookingPrice | null, defaultHours: number | undefined): Draft {
   return {
@@ -62,12 +66,92 @@ function toDraft(price: BookingPrice | null, defaultHours: number | undefined): 
   };
 }
 
-function draftTotal(draft: Draft) {
+export function bookingPriceDraftTotal(draft: BookingPriceDraft) {
   if (draft.pricingMode === "fixed_total") return Number(draft.fixedTotalUsd || "0");
   return (
     Number(draft.memberCount || "0") *
     Number(draft.performanceHours || "0") *
     Number(draft.ratePerMemberPerHourUsd || "0")
+  );
+}
+
+/**
+ * Switch how a price is set without changing what it comes to: a lump sum
+ * starts at the per-person total, and back to per person starts as one
+ * person for one hour at that sum.
+ */
+function switchPricingMode(draft: BookingPriceDraft, mode: BookingPrice["pricingMode"]): BookingPriceDraft {
+  if (mode === draft.pricingMode) return draft;
+  const total = bookingPriceDraftTotal(draft);
+  const totalText = String(Number.isFinite(total) ? Number(total.toFixed(2)) : 0);
+  return mode === "fixed_total"
+    ? { ...draft, pricingMode: mode, fixedTotalUsd: totalText }
+    : { ...draft, pricingMode: mode, memberCount: "1", performanceHours: "1", ratePerMemberPerHourUsd: totalText };
+}
+
+/**
+ * The labeled price fields, shared by the Lineup's Price section and the
+ * quote's artist rows: per person per hour (people, hours, rate) or a lump sum.
+ */
+export function BookingPriceFields({
+  value,
+  onChange,
+  idPrefix,
+  className,
+}: {
+  value: BookingPriceDraft;
+  onChange: (next: BookingPriceDraft) => void;
+  /** Unique per form on the page, so each label points at its own input. */
+  idPrefix: string;
+  className?: string;
+}) {
+  const field = (key: keyof Omit<BookingPriceDraft, "pricingMode">) => ({
+    id: `${idPrefix}-${key}`,
+    value: value[key],
+    onChange: (event: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, [key]: event.target.value }),
+  });
+  return (
+    <div className={cn("flex flex-wrap items-end gap-x-3 gap-y-2", className)}>
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        value={value.pricingMode}
+        onValueChange={(mode) => {
+          if (mode === "per_member_hourly" || mode === "fixed_total") onChange(switchPricingMode(value, mode));
+        }}
+        aria-label="How the act is priced"
+      >
+        <ToggleGroupItem value="per_member_hourly">Per person per hour</ToggleGroupItem>
+        <ToggleGroupItem value="fixed_total">Lump sum</ToggleGroupItem>
+      </ToggleGroup>
+      {value.pricingMode === "per_member_hourly" ? (
+        <div className="grid grid-cols-3 gap-2">
+          <div className="space-y-1">
+            <Label htmlFor={`${idPrefix}-memberCount`}>People</Label>
+            <Input {...field("memberCount")} inputMode="numeric" placeholder="People" className="w-20" />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor={`${idPrefix}-performanceHours`}>Hours</Label>
+            <Input {...field("performanceHours")} inputMode="decimal" placeholder="Hours" className="w-20" />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor={`${idPrefix}-ratePerMemberPerHourUsd`}>Rate / person / hr</Label>
+            <Input
+              {...field("ratePerMemberPerHourUsd")}
+              inputMode="decimal"
+              placeholder="Rate / person / hr"
+              className="w-28"
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <Label htmlFor={`${idPrefix}-fixedTotalUsd`}>Total (USD)</Label>
+          <Input {...field("fixedTotalUsd")} inputMode="decimal" placeholder="Total" className="w-32" />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -101,7 +185,7 @@ export function BookingPriceForm({
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
 
   const locked = quotes.find((quote) => quote.locked);
-  const total = draftTotal(draft);
+  const total = bookingPriceDraftTotal(draft);
 
   async function save() {
     const parsed = bookingPriceFieldsSchema.safeParse(draft);
@@ -148,60 +232,7 @@ export function BookingPriceForm({
 
   return (
     <div className="space-y-3" data-testid="booking-price">
-      <ToggleGroup
-        type="single"
-        variant="outline"
-        size="sm"
-        value={draft.pricingMode}
-        onValueChange={(value) => {
-          if (value === "per_member_hourly" || value === "fixed_total") setDraft({ ...draft, pricingMode: value });
-        }}
-        aria-label="How the act is priced"
-      >
-        <ToggleGroupItem value="per_member_hourly">Per person per hour</ToggleGroupItem>
-        <ToggleGroupItem value="fixed_total">Fixed total</ToggleGroupItem>
-      </ToggleGroup>
-      {draft.pricingMode === "per_member_hourly" ? (
-        <div className="grid grid-cols-3 gap-2">
-          <div className="space-y-1">
-            <Label htmlFor="booking-price-people">People</Label>
-            <Input
-              id="booking-price-people"
-              inputMode="numeric"
-              value={draft.memberCount}
-              onChange={(event) => setDraft({ ...draft, memberCount: event.target.value })}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="booking-price-hours">Hours</Label>
-            <Input
-              id="booking-price-hours"
-              inputMode="decimal"
-              value={draft.performanceHours}
-              onChange={(event) => setDraft({ ...draft, performanceHours: event.target.value })}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="booking-price-rate">Rate / person / hr</Label>
-            <Input
-              id="booking-price-rate"
-              inputMode="decimal"
-              value={draft.ratePerMemberPerHourUsd}
-              onChange={(event) => setDraft({ ...draft, ratePerMemberPerHourUsd: event.target.value })}
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-1">
-          <Label htmlFor="booking-price-total">Total (USD)</Label>
-          <Input
-            id="booking-price-total"
-            inputMode="decimal"
-            value={draft.fixedTotalUsd}
-            onChange={(event) => setDraft({ ...draft, fixedTotalUsd: event.target.value })}
-          />
-        </div>
-      )}
+      <BookingPriceFields value={draft} onChange={setDraft} idPrefix="booking-price" />
       <p className="text-sm">
         <span className="text-muted-foreground">Total</span>{" "}
         <span className="font-medium tabular-nums" data-testid="booking-price-total">

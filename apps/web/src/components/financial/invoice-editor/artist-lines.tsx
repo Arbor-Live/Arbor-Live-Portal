@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { MicrophoneStageIcon } from "@phosphor-icons/react";
+import { MicrophoneStageIcon, TrashIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -11,6 +11,8 @@ import { notify } from "@/lib/notify";
 import { ArtistSelect, ARTIST_TBD_VALUE, artistSelectOptions } from "@/components/bands/artist-select";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { BookingPriceFields, type BookingPriceDraft } from "@/components/events/lineup/booking-price";
 import {
   ARTIST_TBD_LABEL,
   artistPersonHours,
@@ -23,7 +25,6 @@ import {
 } from "./invoice-draft-model";
 import {
   AmountCell,
-  LineColumnHeads,
   LineGroup,
   LineRow,
   StaticCell,
@@ -179,7 +180,6 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
       subtotalTestId="invoice-total-artists"
       testId="invoice-group-artists"
     >
-      <LineColumnHeads item="Artist" qty="Hours × people" rate="Rate / person / hr" />
       {billItems.map((item) => {
         if (item.kind === "open") {
           const { position } = item;
@@ -195,115 +195,147 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
         }
         const { idx } = item;
         const row = rows[idx]!;
-        const tbd = isTbdArtist(row);
         // An unscoped line applies to Day 1 on a multi-day booking (see
         // `lib/invoiceArtistDays.ts`), so show it there, not on the selected day.
         const dayId = row.eventId ?? days[0]?._id ?? "";
         return (
-          <LineRow
+          <ArtistLineCard
             key={`artist-${idx}`}
-            testId={`invoice-row-artist-${idx}`}
-            removeLabel={`Remove ${tbd ? "artist" : row.label} from the quote`}
-            onRemove={() => setRows((prev) => removeRow(prev, idx))}
-            context={multiDay ? (dayLabelByEventId.get(dayId) ?? "Pick a day") : undefined}
-            detailsLabel="artist day"
-            details={
+            idx={idx}
+            row={row}
+            bandOptions={bandOptions}
+            bandsLoading={bands === undefined}
+            dayLabel={multiDay ? (dayLabelByEventId.get(dayId) ?? "Pick a day") : undefined}
+            daySelect={
               multiDay ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Day</span>
-                  <div className="w-40">
-                    <SearchableSelect
-                      value={dayId}
-                      onChange={(value) => setRows((prev) => patchRow(prev, idx, { eventId: value }))}
-                      options={dayOptions}
-                      placeholder="Day"
-                      emptyLabel="Day"
-                    />
-                  </div>
+                <div className="w-32 space-y-1">
+                  <Label>Day</Label>
+                  <SearchableSelect
+                    value={dayId}
+                    onChange={(value) => setRows((prev) => patchRow(prev, idx, { eventId: value }))}
+                    options={dayOptions}
+                    placeholder="Day"
+                    emptyLabel="Day"
+                  />
                 </div>
               ) : undefined
             }
-          >
-            <div className="grid min-w-0 gap-2 @md/lines:grid-cols-2">
-              <ArtistSelect
-                value={tbd ? ARTIST_TBD_VALUE : row.organizationId}
-                onChange={(value) => onBandChange(idx, value)}
-                options={bandOptions}
-                placeholder={bands === undefined ? "Loading artists…" : "Search artists…"}
-                emptyLabel="Select artist"
-              />
-              {tbd ? (
-                <Input
-                  aria-label="Artist or role"
-                  placeholder="Artist / role"
-                  value={row.label === ARTIST_TBD_LABEL ? "" : row.label}
-                  onChange={(event) =>
-                    setRows((prev) => patchRow(prev, idx, { label: event.target.value || ARTIST_TBD_LABEL }))
-                  }
-                />
-              ) : (
-                <Input aria-label="Line label" value={row.label} readOnly className="bg-muted/40" />
-              )}
-              {tbd ? (
-                <p className="text-xs text-muted-foreground @md/lines:col-span-2">
-                  Estimate until a performer is booked.
-                </p>
-              ) : null}
-            </div>
-            {row.fixedTotal ? (
-              <div className="flex items-center gap-1 pt-1.5 text-sm text-muted-foreground">
-                Fixed total
-                <Button
-                  type="button"
-                  size="xs"
-                  variant="ghost"
-                  onClick={() =>
-                    setRows((prev) =>
-                      patchRow(prev, idx, { fixedTotal: undefined, hours: "1", people: "1" }),
-                    )
-                  }
-                >
-                  Per person
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1">
-                <Input
-                  aria-label="Hours"
-                  placeholder="Hours"
-                  inputMode="decimal"
-                  className="min-w-0 px-2"
-                  value={row.hours}
-                  onChange={(event) => setRows((prev) => patchRow(prev, idx, { hours: event.target.value }))}
-                />
-                <span className="text-muted-foreground" aria-hidden>
-                  ×
-                </span>
-                <Input
-                  aria-label="People"
-                  placeholder="People"
-                  inputMode="numeric"
-                  className="min-w-0 px-2"
-                  value={row.people}
-                  onChange={(event) => setRows((prev) => patchRow(prev, idx, { people: event.target.value }))}
-                />
-              </div>
-            )}
-            <Input
-              aria-label={row.fixedTotal ? "Total" : "Rate per person per hour"}
-              placeholder={row.fixedTotal ? "Total" : "Rate / person / hr"}
-              inputMode="decimal"
-              value={row.rateUsd}
-              onChange={(event) => setRows((prev) => patchRow(prev, idx, { rateUsd: event.target.value }))}
-            />
-            <AmountCell
-              amountUsd={artistRowAmountUsd(row)}
-              hint={row.fixedTotal ? undefined : `${plural(artistPersonHours(row), "person-hr", "person-hrs")}`}
-            />
-          </LineRow>
+            onBandChange={(value) => onBandChange(idx, value)}
+            onChange={(patch) => setRows((prev) => patchRow(prev, idx, patch))}
+            onRemove={() => setRows((prev) => removeRow(prev, idx))}
+          />
         );
       })}
     </LineGroup>
+  );
+}
+
+/** A line's price in the shared price fields' terms (a lump sum keeps its total in `rateUsd`). */
+function rowPriceDraft(row: ArtistRow): BookingPriceDraft {
+  return row.fixedTotal
+    ? { pricingMode: "fixed_total", memberCount: "1", performanceHours: "1", ratePerMemberPerHourUsd: "", fixedTotalUsd: row.rateUsd }
+    : {
+        pricingMode: "per_member_hourly",
+        memberCount: row.people,
+        performanceHours: row.hours,
+        ratePerMemberPerHourUsd: row.rateUsd,
+        fixedTotalUsd: "",
+      };
+}
+
+function rowPricePatch(draft: BookingPriceDraft): Partial<ArtistRow> {
+  return draft.pricingMode === "fixed_total"
+    ? { fixedTotal: true, rateUsd: draft.fixedTotalUsd, hours: "1", people: "1" }
+    : {
+        fixedTotal: undefined,
+        people: draft.memberCount,
+        hours: draft.performanceHours,
+        rateUsd: draft.ratePerMemberPerHourUsd,
+      };
+}
+
+/**
+ * One artist line, laid out like a position's Price section: who performs,
+ * then a labeled price (per person per hour, or a lump sum).
+ */
+function ArtistLineCard({
+  idx,
+  row,
+  bandOptions,
+  bandsLoading,
+  dayLabel,
+  daySelect,
+  onBandChange,
+  onChange,
+  onRemove,
+}: {
+  idx: number;
+  row: ArtistRow;
+  bandOptions: ReturnType<typeof artistSelectOptions>;
+  bandsLoading: boolean;
+  dayLabel?: string;
+  daySelect?: React.ReactNode;
+  onBandChange: (organizationId: string) => void;
+  onChange: (patch: Partial<ArtistRow>) => void;
+  onRemove: () => void;
+}) {
+  const tbd = isTbdArtist(row);
+  const amount = artistRowAmountUsd(row);
+  return (
+    <div className="space-y-3 px-3 py-3 text-sm" data-testid={`invoice-row-artist-${idx}`}>
+      {dayLabel ? (
+        <p className="text-2xs font-medium tracking-wide text-muted-foreground uppercase">{dayLabel}</p>
+      ) : null}
+      <div className="flex items-start gap-2">
+        <div className="grid min-w-0 flex-1 gap-2 @md/lines:grid-cols-2">
+          <ArtistSelect
+            value={tbd ? ARTIST_TBD_VALUE : row.organizationId}
+            onChange={onBandChange}
+            options={bandOptions}
+            placeholder={bandsLoading ? "Loading artists…" : "Search artists…"}
+            emptyLabel="Select artist"
+          />
+          {tbd ? (
+            <Input
+              aria-label="Artist or role"
+              placeholder="Artist / role"
+              value={row.label === ARTIST_TBD_LABEL ? "" : row.label}
+              onChange={(event) => onChange({ label: event.target.value || ARTIST_TBD_LABEL })}
+            />
+          ) : (
+            <Input aria-label="Line label" value={row.label} readOnly className="bg-muted/40" />
+          )}
+          {tbd ? (
+            <p className="text-xs text-muted-foreground @md/lines:col-span-2">Estimate until a performer is booked.</p>
+          ) : null}
+        </div>
+        <div className="w-24 shrink-0">
+          <AmountCell
+            amountUsd={amount}
+            hint={row.fixedTotal ? "lump sum" : plural(artistPersonHours(row), "person-hr", "person-hrs")}
+          />
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="mt-0.5"
+          aria-label={`Remove ${tbd ? "artist" : row.label} from the quote`}
+          title="Remove line"
+          onClick={onRemove}
+        >
+          <TrashIcon />
+        </Button>
+      </div>
+      <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+        <BookingPriceFields
+          value={rowPriceDraft(row)}
+          onChange={(next) => onChange(rowPricePatch(next))}
+          idPrefix={`invoice-artist-${idx}`}
+        />
+        {daySelect}
+      </div>
+    </div>
   );
 }
 
