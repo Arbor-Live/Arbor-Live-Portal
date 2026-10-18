@@ -424,9 +424,23 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   - **Swap positions** — a row's menu has **Swap with…** for when two acts
     trade slots (`eventArtistNeeds.swapPositions`). Positions keep their label
     and Run of Show times; the acts trade places, so each takes the other's
-    set and soundcheck. Payouts and invoice artist lines (`needId`) go with
-    the act. Swapping into an open position moves the act there.
-  - **Payout** — from the position's side panel, via `EventBandPaymentForm`.
+    set and soundcheck. Payouts, prices and invoice artist lines (`needId`) go
+    with the act. Swapping into an open position moves the act there.
+  - **Booking price** — each position stores what its act costs
+    (`eventArtistNeeds.price`: people × hours × rate per person per hour, or a
+    fixed total; `lib/bookingPrice.ts`). It is the one price: the quote's
+    artist line bills it and the act's payout pays it (billed = paid). Band
+    profile rate and members are only defaults, copied when an act is booked
+    into a position nothing prices yet (hours from the set length). The side
+    panel's **Price** section edits it (`eventArtistNeeds.setPrice`), which
+    rebills a draft quote's line; on an approved quote or a final invoice the
+    edit is refused and staff change it from the quote editor (approval
+    decision) or reopen billing.
+  - **Payout** — from the position's side panel, via `EventBandPaymentForm`:
+    payee and status only. Its amount is the booking price; every unpaid,
+    uncancelled payout follows price changes (a signed one goes back to
+    **Ready to send**, since the artist signed another amount). Paid payouts
+    never change.
   - **Invoice link** — an artist line tied to a day opens the position it
     stands for (`invoiceLineItems.needId`), and filling that position fills the
     line: an internal act sets its `organizationId`, an outside act clears it
@@ -439,12 +453,14 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     invoice prices are left out. **Add line → Artist** opens a new position
     (`opensPosition`). A line with no performer booked shows on the quote, PDF
     and public quote as an estimate (`ARTIST_ESTIMATE_NOTE`).
-  - **Payout from the price** — when an act fills a position a quote line
-    prices (or the line is priced after the booking), the act gets a payout
-    priced like the line (`bandPayments.seedFromInvoiceLineInternal`,
-    `payoutPricingFromLine`). Only when the act has no payout on the event yet,
-    so a payout staff set or removed is never overwritten. Unfilled positions
-    have no payout record (no `ALBPAY-`); the line's price is the plan. A line with no position first adopts one the day already has (its
+  - **Quote prices the booking** — saving a quote writes each artist line's
+    price to its position (`syncArtistSlotsForInvoice`), and a price set on the
+    Lineup comes back into an open editor (`adoptServerArtistChanges`), like
+    the Crew section follows the Run of Show. When an act fills a priced
+    position (or a staffed position is priced), it gets a payout at that price
+    (`bandPayments.seedFromBookingInternal`) — only when it has no payout on
+    the event yet, so a payout staff removed stays removed. Unfilled positions
+    have no payout record (no `ALBPAY-`); their price is the plan. A line with no position first adopts one the day already has (its
     act's, one with its name, then the first empty one) and only opens a new
     one when none is free, so a quote fills the bill instead of duplicating it.
     Removing a line's position on the event sets `positionRemoved`, and later
@@ -480,6 +496,9 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   email).
 - Event costs are direct fields on `events` (`crewCostUsd`, `bandsCostUsd`,
   `externalRentalsCostUsd`) — there is no generated expense-report workflow.
+  `bandsCostUsd` is derived and read-only (`syncEventBandsCost`): every
+  uncancelled payout, plus the booking price of each priced position whose act
+  has no payout yet (open and outside-act positions included).
   Artists and external rentals are pass-through expenses. Invoice lines may bill
   the host for transparency, but Insights *earned revenue* and net profit exclude
   them from Arbor margin (equipment / crew / fees). Matching `bandsCostUsd` /
@@ -619,10 +638,10 @@ Update `YEARS` there when the Registrar publishes new dates.
   per host organization (`invoiceGroups`). Host orgs support aliases and admin
   merge so duplicate names resolve to one canonical record; booking can search
   existing hosts or create from free text.
-- Artist lines pick an artist/DJ (or **Artist TBD**) and pull
+- Artist lines pick an artist/DJ (or **Artist TBD**); an unpriced row pulls
   `performerHourlyRateUsd` and member count (`bandMembers.length`) from the org
   profile when an artist is selected. Linked events auto-fill artist rows from
-  assigned performers / payout totals when the invoice has no artist lines yet.
+  the lineup's booking prices when the invoice has no artist lines yet.
   An artist line tagged to a day (`eventId`) applies to that day; an unscoped
   line applies to every occurrence of a recurring series and to Day 1 otherwise
   (`lib/invoiceArtistDays.ts`, from the owning group's kind).
@@ -742,8 +761,8 @@ Update `YEARS` there when the Registrar publishes new dates.
 
 - Payouts to performing bands (`eventBandPayments` in `bandPayments.ts`) are
   optional children of `eventBandParticipations`. Staff assign the band first
-  (or create a payout which also upserts participation), then set pricing on the
-  same overview row.
+  (or create a payout which also upserts participation); the payout pays the
+  booking price set on the act's position.
 - Each band org has a designated payee (name/email/mailing address + linked
   user id on `organizationProfiles`). Only an artist admin (`org_admin`
   membership) or Arbor staff can change the payee or rate. Members see them
@@ -778,10 +797,8 @@ Update `YEARS` there when the Registrar publishes new dates.
   see the artist portal; switch back via the sidebar. The payout side panel for
   pending-onboarding lists the missing steps and links to that org's panel.
 - When assigning artists, empty events with invoice artist lines get an
-  accept/confirm prompt (plus **Import from invoice** anytime). Payout money
-  defaults prefer the artist org profile (hourly rate, member count) — it is the
-  current source of truth — then the event invoice artist line (rate, hours,
-  members) as a snapshot, and leave anything still unknown blank.
+  import prompt (plus **Import from invoice** anytime); their price comes from
+  the quote.
 - Assigned artists with incomplete onboarding get a weekly reminder email
   (same Monday `weeklyJobs` cron as crew / payment-proof follow-ups, ~6-day
   cooldown) until onboarding is done — staff can also resend from the payout
