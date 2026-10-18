@@ -30,6 +30,7 @@ import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
 import { buildItemSearchText, listPreviousAssetIds } from "./lib/inventoryLifecycle";
 import { ensureChangeRequestRevision } from "./lib/invoiceRevisions";
 import { convertLegacyResponseRow } from "./lib/crewNightConversion";
+import { uniqueBandMemberNames } from "./lib/bandMembers";
 
 /**
  * Official @convex-dev/migrations runner.
@@ -490,6 +491,17 @@ export const backfillOrgArtistLinks = migrations.define({
   },
 });
 
+/** Drop repeated band member names (a contact listed twice inflated headcount). */
+export const dedupeBandMembers = migrations.define({
+  table: "organizationProfiles",
+  migrateOne: async (_ctx, profile) => {
+    if (!profile.bandMembers?.length) return;
+    const unique = uniqueBandMemberNames(profile.bandMembers);
+    if (unique.length === profile.bandMembers.length) return;
+    return { bandMembers: unique, updatedAt: Date.now() };
+  },
+});
+
 /** Flatten fixed band application link fields into the flexible artistLinks array. */
 export const backfillBandApplicationArtistLinks = migrations.define({
   table: "bandApplications",
@@ -945,6 +957,7 @@ const MIGRATION_SERIES = [
   internal.migrations.migrateInventoryItemLifecycle,
   internal.migrations.backfillOpenChangeRequestRevisions,
   internal.migrations.convertAvailabilityToNights,
+  internal.migrations.dedupeBandMembers,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);
