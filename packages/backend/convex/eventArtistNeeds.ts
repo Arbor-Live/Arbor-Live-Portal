@@ -37,6 +37,9 @@ import {
   upsertEventBandParticipation,
 } from "./eventBands";
 import { syncInvoiceLineForSlot } from "./lib/artistLineSync";
+import { normalizeBookingPrice, bookingPricingModeValue } from "./lib/bookingPrice";
+import { setPositionPrice, syncEventBandsCost } from "./lib/bookingPriceSync";
+import { applyBookingPriceToQuoteLines, quoteLinesForPosition } from "./invoices";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { removePositionRow as removeSlotRow } from "./lib/positionRows";
 import { syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
@@ -117,6 +120,12 @@ export const getForEvent = query({
       role: row.role,
     });
 
+    const quotesByNeed = new Map(
+      await Promise.all(
+        slots.map(async (slot) => [slot._id, await quoteLinesForPosition(ctx, slot._id)] as const),
+      ),
+    );
+
     return {
       slots: slots.map((slot) => {
         const filledBy = booking.lineup.filter((row) => row.needId === slot._id);
@@ -136,6 +145,10 @@ export const getForEvent = query({
           setEndsAt: slot.setEndsAt ?? null,
           soundcheckStartsAt: slot.soundcheckStartsAt ?? null,
           soundcheckEndsAt: slot.soundcheckEndsAt ?? null,
+          /** What the act in this position costs (billed and paid). */
+          price: slot.price ?? null,
+          /** Quotes whose artist line bills this position. */
+          quotes: quotesByNeed.get(slot._id) ?? [],
           filledBy: filledBy.map(describe),
           inquiries: inquiries
             .filter((row) => row.needId === slot._id)
@@ -181,6 +194,8 @@ export const listNeedStatusForEvents = query({
       external: boolean;
       /** Invoices with an artist line standing for this position. */
       invoiceIds: Id<"invoices">[];
+      /** The booking's price, which a new quote line starts from. */
+      price: Doc<"eventArtistNeeds">["price"] | null;
     }> = [];
     for (const eventId of args.eventIds.slice(0, MAX_NEED_CANDIDATES)) {
       const slots = await loadSlotsForEvent(ctx, eventId);
@@ -205,6 +220,7 @@ export const listNeedStatusForEvents = query({
           actName: act ? await nameFor(ctx, act.organizationId) : external,
           external: Boolean(external),
           invoiceIds: [...new Set(lines.map((line) => line.invoiceId))],
+          price: slot.price ?? null,
         });
       }
     }
@@ -357,6 +373,11 @@ export const swapPositions = mutation({
     delete nextSlotB.externalArtistName;
     if (externalB) nextSlotA.externalArtistName = externalB;
     if (externalA) nextSlotB.externalArtistName = externalA;
+    // An act's price goes with it, like its invoice line below.
+    delete nextSlotA.price;
+    delete nextSlotB.price;
+    if (slotB.price) nextSlotA.price = slotB.price;
+    if (slotA.price) nextSlotB.price = slotA.price;
     await ctx.db.replace(slotA._id, nextSlotA);
     await ctx.db.replace(slotB._id, nextSlotB);
 
@@ -393,6 +414,7 @@ export const swapPositions = mutation({
       await syncNeedBlocks(ctx, needId);
       await syncInvoiceLineForSlot(ctx, needId, now);
     }
+    await syncEventBandsCost(ctx, args.eventId);
     return null;
     });
   },
@@ -454,6 +476,47 @@ export const updateSlotLineup = mutation({
     await syncNeedBlocks(ctx, slot._id);
     await syncInvoiceLineForSlot(ctx, slot._id, next.updatedAt);
     return null;
+    });
+  },
+});
+
+/**
+ * Price the act in a position from the Lineup: people × hours × rate per
+ * person per hour, or a fixed total. The position is the booking, so this is
+ * the one price: the quote line billing it follows (refused when that quote
+ * is approved or final; change it from the quote then), and so does the act's
+ * unpaid payout. A booked act without a payout gets one at this price.
+ */
+export const setPrice = mutation({
+  args: {
+    needId: v.id("eventArtistNeeds"),
+    pricingMode: bookingPricingModeValue,
+    memberCount: v.optional(v.number()),
+    performanceHours: v.optional(v.number()),
+    ratePerMemberPerHourUsd: v.optional(v.number()),
+    /** Fixed total only; per-person prices compute theirs. */
+    totalUsd: v.optional(v.number()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    return await withReportableErrors("eventArtistNeeds.setPrice", async () => {
+      const slot = await ctx.db.get(args.needId);
+      if (!slot) appError("NEED_POSITION_NOT_FOUND", "Position not found.");
+      for (const value of [
+        args.memberCount,
+        args.performanceHours,
+        args.ratePerMemberPerHourUsd,
+        args.totalUsd,
+      ]) {
+        if (value !== undefined && (!Number.isFinite(value) || value < 0)) {
+          appError("BOOKING_PRICE_INVALID", "Prices, people and hours can't be negative.");
+        }
+      }
+      const price = normalizeBookingPrice(args);
+      await applyBookingPriceToQuoteLines(ctx, slot._id, price);
+      await setPositionPrice(ctx, slot._id, price, { seedPayout: true });
+      return null;
     });
   },
 });

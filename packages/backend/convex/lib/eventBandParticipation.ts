@@ -4,6 +4,7 @@ import { scheduleBandAssignedEmails } from "../email/bandAssignmentEmails";
 import { syncInvoiceLineForSlot } from "./artistLineSync";
 import { inheritSlotTimes, syncNeedBlocks, syncParticipationBlocks } from "./runOfShow";
 import { ensureActPosition } from "./actPositions";
+import { seedPositionPriceFromProfile, syncEventBandsCost } from "./bookingPriceSync";
 import { appError } from "./errors";
 
 /**
@@ -91,9 +92,12 @@ export async function upsertEventBandParticipation(
         await syncNeedBlocks(ctx, existing.needId);
       }
       await syncInvoiceLineForSlot(ctx, args.needId, now);
+      if (existing.needId !== args.needId) await seedPriceForBooking(ctx, existing._id);
     } else {
       await ensureActPosition(ctx, existing._id);
+      if (!existing.needId) await seedPriceForBooking(ctx, existing._id);
     }
+    await syncEventBandsCost(ctx, args.eventId);
     return existing._id;
   }
   const participationId = await ctx.db.insert("eventBandParticipations", {
@@ -112,10 +116,21 @@ export async function upsertEventBandParticipation(
   } else {
     await ensureActPosition(ctx, participationId);
   }
+  await seedPriceForBooking(ctx, participationId);
+  await syncEventBandsCost(ctx, args.eventId);
   await scheduleBandAssignedEmails(ctx, {
     eventId: args.eventId,
     organizationId: args.organizationId,
     role: args.role,
   });
   return participationId;
+}
+
+/** A newly booked act prices its position from its band profile, if nothing prices it yet. */
+async function seedPriceForBooking(
+  ctx: MutationCtx,
+  participationId: Id<"eventBandParticipations">,
+) {
+  const row = await ctx.db.get(participationId);
+  if (row?.needId) await seedPositionPriceFromProfile(ctx, row.needId, row);
 }

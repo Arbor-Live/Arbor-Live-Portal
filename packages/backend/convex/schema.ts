@@ -12,6 +12,7 @@ import {
 import { userStatusValue } from "./lib/userStatus";
 import { eventSeriesPositionTemplateValue } from "./lib/eventSeriesPositions";
 import { artistNeedActTypeValue, artistNeedTypeValue } from "./lib/artistNeedTypes";
+import { bookingPriceValue } from "./lib/bookingPrice";
 import { eventGroupKindValue } from "./lib/eventGroupKind";
 import { emailTemplateValue, notificationTemplateValue } from "./lib/emailTemplateValue";
 import {
@@ -1101,6 +1102,11 @@ export default defineSchema({
      * invite (same UID) as an update when this increases.
      */
     crewInviteSequence: v.optional(v.number()),
+    /**
+     * Artist cost, derived (never hand-edited): payouts plus booking prices
+     * not paid through a payout yet. Kept in step by
+     * `lib/bookingPriceSync.ts` `syncEventBandsCost`.
+     */
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
     otherCostUsd: v.optional(v.number()),
@@ -1653,6 +1659,12 @@ export default defineSchema({
     setEndsAt: v.optional(v.number()),
     soundcheckStartsAt: v.optional(v.number()),
     soundcheckEndsAt: v.optional(v.number()),
+    /**
+     * What the act in this position costs: the single source for the quote's
+     * artist line (billed) and the act's payout (paid). An open position may
+     * carry one when a quote prices it. See `lib/bookingPrice.ts`.
+     */
+    price: v.optional(bookingPriceValue),
     createdByUserId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),

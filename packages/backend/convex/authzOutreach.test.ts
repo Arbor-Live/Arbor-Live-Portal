@@ -126,8 +126,6 @@ test("refuses inviteBandFromEvent for Arbor crew without Operations", async () =
       email: "band@arbor.test",
       artistName: "Test Band",
       role: "headliner",
-      pricingMode: "fixed_total",
-      totalUsd: 100,
     }),
   ).rejects.toThrow(/Operations team access required/);
 });
@@ -143,8 +141,6 @@ test("passes inviteBandFromEvent gate for the Operations vertical", async () => 
       email: "band@arbor.test",
       artistName: "Test Band",
       role: "headliner",
-      pricingMode: "fixed_total",
-      totalUsd: 100,
     }),
   ).rejects.toThrow(/Event not found/);
 });
