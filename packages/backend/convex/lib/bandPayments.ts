@@ -107,22 +107,6 @@ export function queueStatusForEndedEvent(args: {
   return args.payeeComplete ? "pending_email" : "pending_payee";
 }
 
-export function computeBandPaymentTotal(args: {
-  pricingMode: BandPaymentPricingMode;
-  ratePerMemberPerHourUsd?: number;
-  performanceHours?: number;
-  memberCount?: number;
-  totalUsd?: number;
-}) {
-  if (args.pricingMode === "fixed_total") {
-    return Math.max(0, args.totalUsd ?? 0);
-  }
-  const rate = args.ratePerMemberPerHourUsd ?? 0;
-  const hours = args.performanceHours ?? 0;
-  const members = args.memberCount ?? 0;
-  return Math.max(0, rate * hours * members);
-}
-
 export function formatBandPaymentDate(startAt: number, timezone: string = EVENT_TIMEZONE) {
   return new Date(startAt).toLocaleDateString("en-US", {
     timeZone: timezone,

@@ -4,7 +4,7 @@ import { scheduleBandAssignedEmails } from "../email/bandAssignmentEmails";
 import { syncInvoiceLineForSlot } from "./artistLineSync";
 import { inheritSlotTimes, syncNeedBlocks, syncParticipationBlocks } from "./runOfShow";
 import { ensureActPosition } from "./actPositions";
-import { seedPositionPriceFromProfile, syncEventBandsCost } from "./bookingPriceSync";
+import { seedPositionPrice, syncEventBandsCost } from "./bookingPriceSync";
 import { appError } from "./errors";
 
 /**
@@ -126,11 +126,11 @@ export async function upsertEventBandParticipation(
   return participationId;
 }
 
-/** A newly booked act prices its position from its band profile, if nothing prices it yet. */
+/** A newly booked act prices its position (from its payout or band profile) if nothing prices it yet. */
 async function seedPriceForBooking(
   ctx: MutationCtx,
   participationId: Id<"eventBandParticipations">,
 ) {
   const row = await ctx.db.get(participationId);
-  if (row?.needId) await seedPositionPriceFromProfile(ctx, row.needId, row);
+  if (row?.needId) await seedPositionPrice(ctx, row.needId, row);
 }

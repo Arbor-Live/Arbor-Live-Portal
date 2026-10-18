@@ -3,6 +3,7 @@ import type { MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { bandPaymentStatusStamp, type BandPaymentStatus } from "./bandPayments";
 import {
+  bookingPriceFromPayout,
   bookingPriceFromProfile,
   eventArtistCostUsd,
   payoutFieldsFromPrice,
@@ -133,10 +134,11 @@ export async function setPositionPrice(
 
 /**
  * An act booked into a position nothing prices (no price yet, no quote line)
- * starts from its band profile: rate per person per hour × members × set
- * length. Copied once; later profile edits don't touch the booking.
+ * starts from the payout it already has on the event, else its band profile:
+ * rate per person per hour × members × set length. Copied once; later
+ * profile edits don't touch the booking.
  */
-export async function seedPositionPriceFromProfile(
+export async function seedPositionPrice(
   ctx: MutationCtx,
   needId: Id<"eventArtistNeeds">,
   act: Pick<Doc<"eventBandParticipations">, "organizationId" | "setStartsAt" | "setEndsAt">,
@@ -148,6 +150,19 @@ export async function seedPositionPriceFromProfile(
     .withIndex("by_needId", (q) => q.eq("needId", needId))
     .first();
   if (line) return;
+  // An act that already has a payout here (booked before prices lived on the
+  // booking) keeps what it was set to be paid.
+  const payouts = await ctx.db
+    .query("eventBandPayments")
+    .withIndex("by_eventId_and_organizationId", (q) =>
+      q.eq("eventId", slot.eventId).eq("organizationId", act.organizationId),
+    )
+    .take(10);
+  const payout = payouts.find((row) => row.status !== "cancelled");
+  if (payout) {
+    await setPositionPrice(ctx, needId, bookingPriceFromPayout(payout));
+    return;
+  }
   const profile = await ctx.db
     .query("organizationProfiles")
     .withIndex("by_organizationId", (q) => q.eq("organizationId", act.organizationId))

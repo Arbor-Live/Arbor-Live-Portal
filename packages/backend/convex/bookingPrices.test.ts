@@ -257,6 +257,57 @@ test("paid payouts are history; an event without a quote still pays the booking"
   expect((await get(t, eventId))?.bandsCostUsd).toBe(300);
 });
 
+test("an older act with a payout but no position keeps its payout's price", async () => {
+  const t = makeTest();
+  const { band, staff } = await bookedAct(t, { performerHourlyRateUsd: 150 });
+  const now = Date.now();
+  const { eventId, paymentId } = await t.run(async (ctx) => {
+    const eventId = await ctx.db.insert("events", {
+      title: "Before booking prices",
+      status: "ready",
+      visibility: "internal",
+      startAt: now + 86_400_000,
+      endAt: now + 90_000_000,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("eventBandParticipations", {
+      eventId,
+      organizationId: band.organizationId,
+      role: "headliner",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const paymentId = await ctx.db.insert("eventBandPayments", {
+      eventId,
+      organizationId: band.organizationId,
+      pricingMode: "fixed_total",
+      totalUsd: 250,
+      status: "draft",
+      confirmationToken: "legacy-token",
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { eventId, paymentId };
+  });
+
+  await staff.mutation(api.bandPayments.upsertForEvent, { eventId, paymentId, organizationId: band.organizationId });
+
+  expect((await get(t, paymentId))?.totalUsd).toBe(250);
+  const act = await t.run(async (ctx) =>
+    ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+      .first(),
+  );
+  expect((await get(t, act!.needId!))?.price).toEqual({ pricingMode: "fixed_total", totalUsd: 250 });
+});
+
 test("a signed payout whose amount changes needs a new signature", async () => {
   const t = makeTest();
   const { needId, paymentId, staff } = await bookedAct(t);
