@@ -82,14 +82,16 @@ type ArtistLinePricing = {
 
 /**
  * The price a quote's artist line bills: per person per hour when the line has
- * its people × hours split, else the line's amount as a fixed total.
+ * its people × hours split and that split is what it bills (people × hours =
+ * quantity), else the line's amount as a fixed total.
  */
 export function bookingPriceFromLine(line: ArtistLinePricing): BookingPrice {
   if (
     line.memberCount !== undefined &&
     line.memberCount > 0 &&
     line.performanceHours !== undefined &&
-    line.performanceHours > 0
+    line.performanceHours > 0 &&
+    Math.abs(line.memberCount * line.performanceHours - line.quantity) < 0.001
   ) {
     return normalizeBookingPrice({
       pricingMode: "per_member_hourly",
@@ -267,7 +269,8 @@ export function decideBookingPriceBackfill(args: {
   payouts: ReadonlyArray<PayoutPricing & { id: string; status: string }>;
 }): BookingPriceBackfill | null {
   const live = args.payouts.filter((payout) => payout.status !== "cancelled");
-  if (args.line) {
+  // A $0 line is a placeholder, not a price: it never overrides a payout.
+  if (args.line && args.line.amountUsd > 0) {
     const price = bookingPriceFromLine(args.line);
     return {
       price,

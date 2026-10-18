@@ -95,10 +95,10 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
   - `crewCostUsd`
   - `bandsCostUsd` (artist cost — derived, read-only: payouts plus unpaid
     booking prices; `lib/bookingPriceSync.ts`)
+  - `externalRentalsCostUsd` (pass-through expense — not revenue)
 - Each act's price lives once on its lineup position (`eventArtistNeeds.price`,
   `lib/bookingPrice.ts`): the quote's artist line bills it and the payout pays
   it. Never add a second editable price for artists.
-  - `externalRentalsCostUsd` (pass-through expense — not revenue)
 - Invoice artist and external-rental lines may bill the host for transparency.
   Insights earned revenue and net profit treat them as pass-through
   (`invoicePassThroughUsd` / `arborEarnedRevenueUsd` / `netProfitFromInvoiceUsd`).

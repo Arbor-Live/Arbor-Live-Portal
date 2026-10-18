@@ -674,8 +674,9 @@ async function syncArtistSlotsForInvoice(
     const slot = await ctx.db.get(slotId);
     if (!slot) continue;
     // The quote prices the booking: the line's people × hours × rate is the
-    // position's price, which the act's unpaid payout follows.
-    await setPositionPrice(ctx, slot._id, bookingPriceFromLine(line));
+    // position's price, which the act's unpaid payout follows. A $0 line is a
+    // placeholder and leaves the booking's price alone.
+    if (line.amountUsd > 0) await setPositionPrice(ctx, slot._id, bookingPriceFromLine(line));
     // An outside act already fills this position; the line still bills for its
     // own act, and saving an invoice must never fail on that disagreement.
     if (slot.externalArtistName?.trim()) continue;

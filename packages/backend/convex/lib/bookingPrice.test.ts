@@ -51,6 +51,12 @@ describe("quote line ↔ price", () => {
     });
   });
 
+  it("reads a line whose split doesn't add up to what it bills as a fixed total", () => {
+    expect(
+      bookingPriceFromLine({ quantity: 5, rateUsd: 90, amountUsd: 450, memberCount: 6, performanceHours: 1 }),
+    ).toEqual({ pricingMode: "fixed_total", totalUsd: 450 });
+  });
+
   it("round-trips through the line fields", () => {
     const fixed = normalizeBookingPrice({ pricingMode: "fixed_total", totalUsd: 750 });
     for (const price of [fivePeopleAt90, fixed]) {
@@ -169,6 +175,15 @@ describe("decideBookingPriceBackfill", () => {
       decideBookingPriceBackfill({ line: null, payouts: [payout("gone", "cancelled", 50), payout("p1", "paid", 600)] }),
     ).toEqual({
       price: { pricingMode: "per_member_hourly", memberCount: 6, performanceHours: 1, ratePerMemberPerHourUsd: 100, totalUsd: 600 },
+      source: "payout",
+      payoutIdsToUpdate: [],
+    });
+  });
+
+  it("ignores a $0 placeholder line and keeps the payout's price", () => {
+    const placeholder = { quantity: 1, rateUsd: 0, amountUsd: 0, memberCount: 1, performanceHours: 1 };
+    expect(decideBookingPriceBackfill({ line: placeholder, payouts: [payout("p1", "confirmed", 600)] })).toMatchObject({
+      price: { totalUsd: 600 },
       source: "payout",
       payoutIdsToUpdate: [],
     });

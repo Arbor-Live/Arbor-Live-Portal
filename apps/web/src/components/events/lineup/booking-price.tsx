@@ -188,7 +188,12 @@ export function BookingPriceForm({
   const total = bookingPriceDraftTotal(draft);
 
   async function save() {
-    const parsed = bookingPriceFieldsSchema.safeParse(draft);
+    // Only the active mode's fields count: hidden ones never block a save.
+    const parsed = bookingPriceFieldsSchema.safeParse(
+      draft.pricingMode === "fixed_total"
+        ? { ...draft, memberCount: "1", performanceHours: "1", ratePerMemberPerHourUsd: "0" }
+        : { ...draft, fixedTotalUsd: "0" },
+    );
     if (!parsed.success) {
       notify.error(parsed.error.issues[0]?.message ?? "Check the price and try again.");
       return;
