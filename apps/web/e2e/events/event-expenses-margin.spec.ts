@@ -24,6 +24,8 @@ test.describe("linked invoice margin and crew rate copy", () => {
     await expect(margin.getByText("Total Billed")).toBeVisible();
     await expect(margin.getByText("$100.00").first()).toBeVisible();
     await expect(margin.getByText("Net profit")).toBeVisible();
+    // Artist cost comes from the Lineup and can't be typed over.
+    await expect(page.getByTestId("event-artists-cost")).toHaveAttribute("readonly", "");
   });
 
   test("invoice crew schedule blurb uses a single dollar sign from formatUsd", async ({

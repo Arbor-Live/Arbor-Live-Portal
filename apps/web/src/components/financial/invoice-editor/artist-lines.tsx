@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import {
   ARTIST_TBD_LABEL,
   artistPersonHours,
+  artistRowAmountUsd,
+  artistRowPriceFields,
   isTbdArtist,
   layoutArtistBill,
   type ArtistRow,
@@ -47,10 +49,13 @@ export function defaultArtistDayId(draft: InvoiceDraft) {
 
 /**
  * Artist lines, laid out as the event's bill: one row per position on each
- * day, in bill order. A position this quote prices is an editable line; an
- * open one (no line yet) can be priced or removed from the event. Lines no
- * position backs yet (new, or on a series) follow. A line with no performer
- * booked prices an estimate.
+ * day, in bill order. Like Crew is the Run of Show, this section is the
+ * event's lineup: a line's people × hours × rate is the booking's price, so
+ * saving the quote reprices the booking (and the act's payout), and a price
+ * set on the Lineup shows up here. An open position (no line yet) can be
+ * priced from its booking or removed from the event. Lines no position backs
+ * yet (new, or on a series) follow. A line with no performer booked prices an
+ * estimate.
  */
 export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
   const { lines, setSection, bandsForArtists: bands, linkedEvent, linkedSeries, linkedDayEvents, activeInvoiceId } =
@@ -82,6 +87,7 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
       actOrganizationId: row.actOrganizationId,
       actName: row.actName,
       invoiceIds: row.invoiceIds as string[],
+      price: row.price,
     })),
     activeInvoiceId,
   );
@@ -97,6 +103,8 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
           return { ...row, organizationId: ARTIST_TBD_VALUE, label: ARTIST_TBD_LABEL, hours: "1", people: "1", rateUsd: "0" };
         }
         const band = bands?.find((entry) => entry.organizationId === organizationId);
+        // A priced row keeps its price; the profile only fills an unpriced one.
+        if (artistRowAmountUsd(row) > 0) return { ...row, organizationId, label: band?.name ?? row.label };
         return {
           ...row,
           organizationId,
@@ -104,6 +112,7 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
           people: band && band.memberCount > 0 ? band.memberCount.toString() : row.people,
           hours: row.hours || "1",
           rateUsd: band && band.performerHourlyRateUsd > 0 ? band.performerHourlyRateUsd.toString() : row.rateUsd,
+          fixedTotal: undefined,
         };
       }),
     );
@@ -118,9 +127,14 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
       {
         organizationId: position.actOrganizationId ?? ARTIST_TBD_VALUE,
         label: position.actName || position.label.trim() || ARTIST_TBD_LABEL,
-        hours: "1",
-        people: band && band.memberCount > 0 ? band.memberCount.toString() : "1",
-        rateUsd: band && band.performerHourlyRateUsd > 0 ? band.performerHourlyRateUsd.toString() : "0",
+        // The booking's price when the Lineup has one; else the act's profile.
+        ...(position.price
+          ? artistRowPriceFields(position.price)
+          : {
+              hours: "1",
+              people: band && band.memberCount > 0 ? band.memberCount.toString() : "1",
+              rateUsd: band && band.performerHourlyRateUsd > 0 ? band.performerHourlyRateUsd.toString() : "0",
+            }),
         eventId: position.eventId,
         needId: position.needId,
       },
@@ -154,7 +168,11 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
     <LineGroup
       icon={MicrophoneStageIcon}
       title="Artists"
-      detail={[plural(rows.length, "line"), openCount > 0 ? `${openCount} not priced` : null]
+      detail={[
+        plural(rows.length, "line"),
+        openCount > 0 ? `${openCount} not priced` : null,
+        linkedEvent && !linkedSeries ? "prices are the lineup's bookings, paid as billed" : null,
+      ]
         .filter(Boolean)
         .join(" · ")}
       subtotalUsd={draft.draftTotals.artistsSubtotalUsd}
@@ -232,37 +250,55 @@ export function ArtistLines({ draft }: { draft: InvoiceDraft }) {
                 </p>
               ) : null}
             </div>
-            <div className="flex items-center gap-1">
-              <Input
-                aria-label="Hours"
-                placeholder="Hours"
-                inputMode="decimal"
-                className="min-w-0 px-2"
-                value={row.hours}
-                onChange={(event) => setRows((prev) => patchRow(prev, idx, { hours: event.target.value }))}
-              />
-              <span className="text-muted-foreground" aria-hidden>
-                ×
-              </span>
-              <Input
-                aria-label="People"
-                placeholder="People"
-                inputMode="numeric"
-                className="min-w-0 px-2"
-                value={row.people}
-                onChange={(event) => setRows((prev) => patchRow(prev, idx, { people: event.target.value }))}
-              />
-            </div>
+            {row.fixedTotal ? (
+              <div className="flex items-center gap-1 pt-1.5 text-sm text-muted-foreground">
+                Fixed total
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  onClick={() =>
+                    setRows((prev) =>
+                      patchRow(prev, idx, { fixedTotal: undefined, hours: "1", people: "1" }),
+                    )
+                  }
+                >
+                  Per person
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                <Input
+                  aria-label="Hours"
+                  placeholder="Hours"
+                  inputMode="decimal"
+                  className="min-w-0 px-2"
+                  value={row.hours}
+                  onChange={(event) => setRows((prev) => patchRow(prev, idx, { hours: event.target.value }))}
+                />
+                <span className="text-muted-foreground" aria-hidden>
+                  ×
+                </span>
+                <Input
+                  aria-label="People"
+                  placeholder="People"
+                  inputMode="numeric"
+                  className="min-w-0 px-2"
+                  value={row.people}
+                  onChange={(event) => setRows((prev) => patchRow(prev, idx, { people: event.target.value }))}
+                />
+              </div>
+            )}
             <Input
-              aria-label="Rate per person per hour"
-              placeholder="Rate / person / hr"
+              aria-label={row.fixedTotal ? "Total" : "Rate per person per hour"}
+              placeholder={row.fixedTotal ? "Total" : "Rate / person / hr"}
               inputMode="decimal"
               value={row.rateUsd}
               onChange={(event) => setRows((prev) => patchRow(prev, idx, { rateUsd: event.target.value }))}
             />
             <AmountCell
-              amountUsd={artistPersonHours(row) * Number(row.rateUsd || "0")}
-              hint={`${plural(artistPersonHours(row), "person-hr", "person-hrs")}`}
+              amountUsd={artistRowAmountUsd(row)}
+              hint={row.fixedTotal ? undefined : `${plural(artistPersonHours(row), "person-hr", "person-hrs")}`}
             />
           </LineRow>
         );

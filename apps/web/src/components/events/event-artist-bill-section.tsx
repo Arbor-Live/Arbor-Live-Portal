@@ -95,6 +95,7 @@ function EventArtistBillPanel({
   const swapPositions = useMutation(api.eventArtistNeeds.swapPositions);
   const updateParticipationLineup = useMutation(api.eventBands.updateParticipationLineup);
   const cancelPayment = useMutation(api.bandPayments.cancelPayment);
+  const setPrice = useMutation(api.eventArtistNeeds.setPrice);
   const { confirm } = useAppDialog();
   // `?position=<needId>` (from Open Positions) opens that position's side panel;
   // `?act=<organizationId>` (from Artist payouts) opens the act's row.
@@ -130,13 +131,7 @@ function EventArtistBillPanel({
       }
       const organizationId = line.organizationId?.trim();
       if (!organizationId || map.has(organizationId)) continue;
-      map.set(organizationId, {
-        organizationId,
-        label: line.label?.trim() || "Artist",
-        rateUsd: line.rateUsd,
-        performanceHours: line.performanceHours,
-        memberCount: line.memberCount,
-      });
+      map.set(organizationId, { organizationId, label: line.label?.trim() || "Artist" });
     }
     return map;
   }, [invoiceDetail?.lineItems, eventId, artistDayScope]);
@@ -166,8 +161,8 @@ function EventArtistBillPanel({
       }
       notify.success(
         invoiceArtistSuggestions.length === 1
-          ? "Imported artist from invoice — confirm payout details."
-          : `Imported ${invoiceArtistSuggestions.length} artists from invoice — confirm payout details.`,
+          ? "Imported artist from invoice. Its price comes from the quote."
+          : `Imported ${invoiceArtistSuggestions.length} artists from invoice. Their prices come from the quote.`,
       );
       setDismissedInvoicePrompt(true);
     } catch (error) {
@@ -338,6 +333,8 @@ function EventArtistBillPanel({
       if (!ok) return false;
       return attempt(() => cancelPayment({ paymentId: payment._id }), "Payout removed.");
     },
+    savePrice: (slot, price) =>
+      attempt(() => setPrice({ needId: slot.needId, ...price }), "Price saved."),
     acceptInquiry: (inquiryId) =>
       attempt(() => acceptInquiry({ inquiryId }), "Inquiry accepted — artist booked."),
     dismissInquiry: (inquiryId) => attempt(() => dismissInquiry({ inquiryId }), "Inquiry dismissed."),
@@ -432,7 +429,7 @@ function EventArtistBillPanel({
                 disabled={importBusy}
                 onClick={() => void onImportFromInvoice()}
               >
-                {importBusy ? "Importing…" : "Accept and confirm money"}
+                {importBusy ? "Importing…" : "Add to the lineup"}
               </Button>
               <Button
                 type="button"
@@ -577,11 +574,19 @@ function EventArtistBillPanel({
                       ? `${formatTime(setStart)} – ${formatTime(setEnd)}`
                       : "No set time"}
                   </span>
-                  <span className="hidden w-36 shrink-0 text-right text-xs tabular-nums lg:block">
+                  <span
+                    className="hidden w-36 shrink-0 text-right text-xs tabular-nums lg:block"
+                    data-testid="bill-card-price"
+                  >
                     {row.performer?.payment ? (
                       <>
                         {formatUsd(row.performer.payment.totalUsd)}
                         <span className="text-muted-foreground"> · {row.performer.payment.statusLabel}</span>
+                      </>
+                    ) : row.slot?.price ? (
+                      <>
+                        {formatUsd(row.slot.price.totalUsd)}
+                        {row.performer ? <span className="text-muted-foreground"> · No payout</span> : null}
                       </>
                     ) : row.performer ? (
                       <span className="text-muted-foreground">No payout</span>
@@ -616,14 +621,6 @@ function EventArtistBillPanel({
         canEdit={canEdit}
         rider={selectedRow?.performer ? riderByOrg.get(selectedRow.performer.organizationId) : undefined}
         excludedOrganizationIds={performers.map((row) => row.organizationId)}
-        invoiceLine={
-          selectedRow?.performer
-            ? (invoiceArtistByOrg.get(selectedRow.performer.organizationId) ?? null)
-            : null
-        }
-        invoiceDefaultsReady={
-          !invoiceId || (invoiceDetail !== undefined && artistDayScope !== undefined)
-        }
         handlers={handlers}
       />
       {addOpen ? (

@@ -202,7 +202,7 @@ function PayoutSheetBody({
             ) : null}
             {row.status !== "paid" && row.status !== "cancelled" ? (
               <Button type="button" size="sm" variant="outline" onClick={() => setEditing(true)}>
-                Edit payout
+                Payout details
               </Button>
             ) : null}
           </div>

@@ -13,11 +13,12 @@ function row(partial: Partial<ArtistRow>): ArtistRow {
   return { organizationId: ARTIST_TBD_VALUE, label: "TBD artist", hours: "1", people: "1", rateUsd: "0", ...partial };
 }
 
-const tbd: ServerArtistLines = new Map([["n1", { label: "TBD artist", organizationId: ARTIST_TBD_VALUE }]]);
+const UNPRICED = { hours: "1", people: "1", rateUsd: "0" };
+const tbd: ServerArtistLines = new Map([["n1", { label: "TBD artist", organizationId: ARTIST_TBD_VALUE, ...UNPRICED }]]);
 
 describe("adoptServerArtistChanges", () => {
   it("follows an act booked on the lineup", () => {
-    const after: ServerArtistLines = new Map([["n1", { label: "The Foos", organizationId: "org-a" }]]);
+    const after: ServerArtistLines = new Map([["n1", { label: "The Foos", organizationId: "org-a", ...UNPRICED }]]);
     const next = adoptServerArtistChanges([row({ needId: "n1", rateUsd: "50" })], tbd, after);
     expect(next).toEqual([row({ needId: "n1", rateUsd: "50", label: "The Foos", organizationId: "org-a" })]);
   });
@@ -27,9 +28,33 @@ describe("adoptServerArtistChanges", () => {
   });
 
   it("keeps a row the user edited", () => {
-    const after: ServerArtistLines = new Map([["n1", { label: "The Foos", organizationId: "org-a" }]]);
+    const after: ServerArtistLines = new Map([["n1", { label: "The Foos", organizationId: "org-a", ...UNPRICED }]]);
     const edited = row({ needId: "n1", label: "The Bars", organizationId: "org-b" });
     expect(adoptServerArtistChanges([edited], tbd, after)).toBeNull();
+  });
+
+  it("follows a price set on the lineup, unless the user changed the price here", () => {
+    const priced = (fields: Partial<ArtistRow>) =>
+      new Map([["n1", { label: "The Foos", organizationId: "org-a", hours: "1", people: "5", rateUsd: "90", ...fields }]]);
+    const before = priced({});
+    const after = priced({ hours: "1", people: "1", rateUsd: "600", fixedTotal: true });
+    const clean = row({ needId: "n1", label: "The Foos", organizationId: "org-a", people: "5", rateUsd: "90" });
+    expect(adoptServerArtistChanges([clean], before, after)).toEqual([
+      { ...clean, people: "1", rateUsd: "600", fixedTotal: true },
+    ]);
+    expect(adoptServerArtistChanges([{ ...clean, rateUsd: "95" }], before, after)).toBeNull();
+  });
+
+  it("follows a booked act even when the price was edited here", () => {
+    const before: ServerArtistLines = new Map([
+      ["n1", { label: "TBD artist", organizationId: ARTIST_TBD_VALUE, hours: "1", people: "1", rateUsd: "0" }],
+    ]);
+    const after: ServerArtistLines = new Map([
+      ["n1", { label: "The Foos", organizationId: "org-a", hours: "1", people: "1", rateUsd: "0" }],
+    ]);
+    expect(adoptServerArtistChanges([row({ needId: "n1", rateUsd: "70" })], before, after)).toEqual([
+      row({ needId: "n1", rateUsd: "70", label: "The Foos", organizationId: "org-a" }),
+    ]);
   });
 
   it("returns null when nothing changed", () => {
