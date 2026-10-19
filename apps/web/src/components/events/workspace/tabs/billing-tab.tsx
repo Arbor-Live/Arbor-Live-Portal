@@ -10,6 +10,7 @@ import {
   ChartLineUpIcon,
   CoinsIcon,
   InfoIcon,
+  MicrophoneStageIcon,
   ReceiptIcon,
   RepeatIcon,
   UsersThreeIcon,
@@ -31,6 +32,7 @@ import {
   netProfitFromInvoiceUsd,
 } from "@/lib/invoice-profit";
 import { cn } from "@/lib/utils";
+import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
 import type { EventDraft } from "@/components/events/workspace/event-draft";
 import { Field } from "@/components/events/workspace/event-fields";
 import {
@@ -44,10 +46,12 @@ function UsdInput({
   value,
   onChange,
   readOnly,
+  "data-testid": testId,
 }: {
   value: string;
   onChange?: (value: string) => void;
   readOnly?: boolean;
+  "data-testid"?: string;
 }) {
   return (
     <div className="relative">
@@ -59,6 +63,7 @@ function UsdInput({
         className="pl-6 tabular-nums"
         value={value}
         readOnly={readOnly}
+        data-testid={testId}
         onChange={onChange ? (e) => onChange(e.target.value) : undefined}
       />
     </div>
@@ -136,7 +141,8 @@ export function BillingTab() {
   const tierNames = computedCrewCost?.otPremium
     ? { regular: "OT", regularTitle: "OT", overtime: "DT", columns: "OT / DT" }
     : { regular: "regular", regularTitle: "Regular", overtime: "OT", columns: "Reg / OT" };
-  const bandsCostTotal = Number(draft.bandsCostUsd || "0");
+  // Derived from the Lineup (booking prices and payouts); never typed here.
+  const bandsCostTotal = eventData?.event.bandsCostUsd ?? 0;
   const externalRentalsCostTotal = Number(draft.externalRentalsCostUsd || "0");
   const otherCostTotal = Number(draft.otherCostUsd || "0");
   const seriesRecurringTotalUsd =
@@ -191,7 +197,7 @@ export function BillingTab() {
   const hasInvoice = Boolean(draft.invoiceId) || draft.additionalInvoiceIds.length > 0;
   const costLabel = seriesMeta ? "Total series cost (projected)" : "Total event cost";
 
-  function costField(key: keyof Pick<EventDraft, "bandsCostUsd" | "externalRentalsCostUsd" | "otherCostUsd">) {
+  function costField(key: keyof Pick<EventDraft, "externalRentalsCostUsd" | "otherCostUsd">) {
     return (
       <UsdInput value={draft[key]} onChange={(value) => updateDraft({ [key]: value })} readOnly={readOnly} />
     );
@@ -338,9 +344,17 @@ export function BillingTab() {
             </Field>
             <Field
               label="Artists"
-              hint={seriesMeta ? "This occurrence only unless you pick a series scope on save." : undefined}
+              icon={MicrophoneStageIcon}
+              hint={
+                <>
+                  From the Lineup: payouts, and booking prices not paid yet.{" "}
+                  <Link href={getEventEditorTabPath(eventId, "artists")} className="underline">
+                    Open the Lineup
+                  </Link>
+                </>
+              }
             >
-              {costField("bandsCostUsd")}
+              <UsdInput value={bandsCostTotal.toFixed(2)} readOnly data-testid="event-artists-cost" />
             </Field>
             <Field label="External rentals">{costField("externalRentalsCostUsd")}</Field>
             <Field label="Other">{costField("otherCostUsd")}</Field>

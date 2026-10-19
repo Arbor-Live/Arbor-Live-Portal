@@ -126,7 +126,6 @@ export type EventDraft = {
   managerUserId: string;
   dayOfLeadUserId: string;
   operationsLeadUserId: string;
-  bandsCostUsd: string;
   externalRentalsCostUsd: string;
   otherCostUsd: string;
   otPremium: boolean;
@@ -157,7 +156,6 @@ export const EMPTY_EVENT_DRAFT: EventDraft = {
   managerUserId: "",
   dayOfLeadUserId: "",
   operationsLeadUserId: "",
-  bandsCostUsd: "0",
   externalRentalsCostUsd: "0",
   otherCostUsd: "0",
   otPremium: false,
@@ -195,7 +193,6 @@ const DRAFT_FIELD_SECTIONS: Record<EventDraftKey, DraftSection> = {
   managerUserId: "details",
   dayOfLeadUserId: "details",
   operationsLeadUserId: "details",
-  bandsCostUsd: "billing",
   externalRentalsCostUsd: "billing",
   otherCostUsd: "billing",
   otPremium: "billing",
@@ -236,7 +233,6 @@ export function draftFromEvent(
     managerUserId: event.eventManagerUserId ?? "",
     dayOfLeadUserId: event.dayOfLeadUserId ?? "",
     operationsLeadUserId: event.operationsLeadUserId ?? "",
-    bandsCostUsd: String(event.bandsCostUsd ?? 0),
     externalRentalsCostUsd: String(event.externalRentalsCostUsd ?? 0),
     otherCostUsd: String(event.otherCostUsd ?? 0),
     otPremium: event.otPremium === true,
@@ -296,7 +292,6 @@ export function buildEventUpdatePatch(
     eventManagerUserId?: string;
     dayOfLeadUserId?: string;
     operationsLeadUserId?: string;
-    bandsCostUsd?: number;
     externalRentalsCostUsd?: number;
     otherCostUsd?: number;
     otPremium?: boolean;
@@ -347,7 +342,6 @@ export function buildEventUpdatePatch(
   if (changed.has("operationsLeadUserId")) {
     patch.operationsLeadUserId = draft.operationsLeadUserId;
   }
-  if (changed.has("bandsCostUsd")) patch.bandsCostUsd = parseUsd(draft.bandsCostUsd);
   if (changed.has("externalRentalsCostUsd")) {
     patch.externalRentalsCostUsd = parseUsd(draft.externalRentalsCostUsd);
   }

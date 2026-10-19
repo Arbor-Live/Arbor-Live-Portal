@@ -107,22 +107,6 @@ export function queueStatusForEndedEvent(args: {
   return args.payeeComplete ? "pending_email" : "pending_payee";
 }
 
-export function computeBandPaymentTotal(args: {
-  pricingMode: BandPaymentPricingMode;
-  ratePerMemberPerHourUsd?: number;
-  performanceHours?: number;
-  memberCount?: number;
-  totalUsd?: number;
-}) {
-  if (args.pricingMode === "fixed_total") {
-    return Math.max(0, args.totalUsd ?? 0);
-  }
-  const rate = args.ratePerMemberPerHourUsd ?? 0;
-  const hours = args.performanceHours ?? 0;
-  const members = args.memberCount ?? 0;
-  return Math.max(0, rate * hours * members);
-}
-
 export function formatBandPaymentDate(startAt: number, timezone: string = EVENT_TIMEZONE) {
   return new Date(startAt).toLocaleDateString("en-US", {
     timeZone: timezone,
@@ -294,37 +278,4 @@ export function bandPaymentStageEnteredAt(
     case "cancelled":
       return payment.paidAt ?? payment.statusChangedAt ?? queuedAt;
   }
-}
-
-/**
- * A payout priced like the quote line that bills the act: per person per hour
- * when the line has its people × hours split, else the line's amount.
- */
-export function payoutPricingFromLine(line: {
-  rateUsd: number;
-  amountUsd: number;
-  memberCount?: number;
-  performanceHours?: number;
-}):
-  | {
-      pricingMode: "per_member_hourly";
-      ratePerMemberPerHourUsd: number;
-      memberCount: number;
-      performanceHours: number;
-    }
-  | { pricingMode: "fixed_total"; totalUsd: number } {
-  if (
-    line.memberCount !== undefined &&
-    line.memberCount > 0 &&
-    line.performanceHours !== undefined &&
-    line.performanceHours > 0
-  ) {
-    return {
-      pricingMode: "per_member_hourly",
-      ratePerMemberPerHourUsd: line.rateUsd,
-      memberCount: line.memberCount,
-      performanceHours: line.performanceHours,
-    };
-  }
-  return { pricingMode: "fixed_total", totalUsd: line.amountUsd };
 }

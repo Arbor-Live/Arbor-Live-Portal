@@ -1,7 +1,7 @@
 import { Migrations } from "@convex-dev/migrations";
 import { components, internal } from "./_generated/api";
 import type { DataModel, Doc, Id } from "./_generated/dataModel";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, type MutationCtx } from "./_generated/server";
 import { findAuthUserById } from "./lib/auth";
 import { resolveContactNameParts } from "./lib/contactName";
 import { resolveGlobalRoleForUser } from "./lib/globalRole";
@@ -31,6 +31,9 @@ import { buildItemSearchText, listPreviousAssetIds } from "./lib/inventoryLifecy
 import { ensureChangeRequestRevision } from "./lib/invoiceRevisions";
 import { convertLegacyResponseRow } from "./lib/crewNightConversion";
 import { uniqueBandMemberNames } from "./lib/bandMembers";
+import { decideBookingPriceBackfill } from "./lib/bookingPrice";
+import { payPayoutAtPrice, syncEventBandsCost } from "./lib/bookingPriceSync";
+import { listAdditionalInvoiceIds } from "./lib/eventInvoiceLinks";
 
 /**
  * Official @convex-dev/migrations runner.
@@ -913,6 +916,99 @@ export const convertAvailabilityToNights = migrations.define({
 });
 
 /**
+ * The quote line billing a position, on an invoice that isn't void: the line
+ * that stands for it, else (older lines no position was linked to yet) the
+ * line for its act on its day. Lines carry their day (`eventId`), so a series
+ * invoice covering several days matches only the right one; a line with no
+ * day is ambiguous across a series and is skipped.
+ */
+async function findBookingLine(
+  ctx: MutationCtx,
+  slot: Doc<"eventArtistNeeds">,
+  organizationId: string | undefined,
+) {
+  const isLive = async (invoiceId: Id<"invoices">) => {
+    const invoice = await ctx.db.get(invoiceId);
+    return Boolean(invoice && invoice.status !== "void");
+  };
+  const linked = await ctx.db
+    .query("invoiceLineItems")
+    .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+    .take(10);
+  for (const line of linked) {
+    if (line.section === "artist" && (await isLive(line.invoiceId))) return line;
+  }
+  if (!organizationId) return null;
+  const event = await ctx.db.get(slot.eventId);
+  if (!event) return null;
+  const invoiceIds = [
+    ...new Set([
+      ...(event.invoiceId ? [event.invoiceId] : []),
+      ...(await listAdditionalInvoiceIds(ctx, event._id)),
+    ]),
+  ];
+  for (const invoiceId of invoiceIds) {
+    if (!(await isLive(invoiceId))) continue;
+    const lines = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_section", (q) =>
+        q.eq("invoiceId", invoiceId).eq("section", "artist"),
+      )
+      .take(200);
+    const match = lines.find(
+      (line) =>
+        !line.needId && line.eventId === slot.eventId && line.organizationId === organizationId,
+    );
+    if (match) return match;
+  }
+  return null;
+}
+
+/**
+ * Prices live on the booking (`eventArtistNeeds.price`). Each position
+ * without one takes the quote line billing it (the quote wins, so billed =
+ * paid), else its act's payout. Unpaid, uncancelled payouts move to the
+ * quote's price; paid and cancelled ones never change. The event's artist cost
+ * is then recomputed. Positions that already have a price are skipped, so it
+ * is idempotent. See `decideBookingPriceBackfill`.
+ */
+export const backfillBookingPrices = migrations.define({
+  table: "eventArtistNeeds",
+  // Each row reads its lines, act, payouts and the event's lineup: keep batches small.
+  batchSize: 25,
+  migrateOne: async (ctx, slot) => {
+    if (slot.price) return;
+    const act = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+      .first();
+    const [line, payouts] = await Promise.all([
+      findBookingLine(ctx, slot, act?.organizationId),
+      act
+        ? ctx.db
+            .query("eventBandPayments")
+            .withIndex("by_eventId_and_organizationId", (q) =>
+              q.eq("eventId", slot.eventId).eq("organizationId", act.organizationId),
+            )
+            .take(10)
+        : Promise.resolve([]),
+    ]);
+    const decision = decideBookingPriceBackfill({
+      line,
+      payouts: payouts.map((payout) => ({ ...payout, id: payout._id })),
+    });
+    if (!decision) return;
+    await ctx.db.patch(slot._id, { price: decision.price, updatedAt: Date.now() });
+    for (const payout of payouts) {
+      if (decision.payoutIdsToUpdate.includes(payout._id)) {
+        await payPayoutAtPrice(ctx, payout, decision.price);
+      }
+    }
+    await syncEventBandsCost(ctx, slot.eventId);
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -958,6 +1054,7 @@ const MIGRATION_SERIES = [
   internal.migrations.backfillOpenChangeRequestRevisions,
   internal.migrations.convertAvailabilityToNights,
   internal.migrations.dedupeBandMembers,
+  internal.migrations.backfillBookingPrices,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

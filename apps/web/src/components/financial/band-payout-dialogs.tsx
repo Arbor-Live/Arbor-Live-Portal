@@ -160,8 +160,9 @@ function SendSignatureRequestBody({
 }
 
 /**
- * Edit a payout's pricing without leaving the queue. Reuses the Lineup's
- * payout form, which owns the validation and the upsert.
+ * A payout's details without leaving the queue: amount (read-only; it pays
+ * the booking's price, changed on the event's Lineup), payee and status.
+ * Reuses the Lineup's payout form, which owns the upsert.
  */
 export function EditPayoutDialog({
   row,
@@ -178,7 +179,7 @@ export function EditPayoutDialog({
         {row ? (
           <>
             <DialogHeader>
-              <DialogTitle>Edit {row.bandName}&apos;s payout</DialogTitle>
+              <DialogTitle>{row.bandName}&apos;s payout</DialogTitle>
               <DialogDescription>
                 {formatDate(row.eventStartAt)} · {row.eventTitle}
               </DialogDescription>

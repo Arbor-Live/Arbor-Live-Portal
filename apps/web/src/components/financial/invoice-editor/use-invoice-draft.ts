@@ -35,6 +35,7 @@ import {
   artistLineKey,
   adoptServerArtistChanges,
   artistRowFromLineItem,
+  artistRowPriceFields,
   buildInvoiceLineItems,
   buildInvoicePayload,
   emptyDraftFields,
@@ -568,44 +569,21 @@ export function useInvoiceDraft({
     setSection(
       "artists",
       eventPerformers.map((performer) => {
-        const payment = performer.payment;
-        const eventId = performer.eventId;
-        const needId = performer.needId ?? undefined;
-        if (payment && payment.totalUsd > 0) {
-          if (payment.pricingMode === "fixed_total") {
-            return {
-              organizationId: performer.organizationId,
-              label: performer.bandName,
-              hours: "1",
-              people: "1",
-              rateUsd: payment.totalUsd.toString(),
-              eventId,
-              needId,
-            };
-          }
-          const hours = payment.performanceHours && payment.performanceHours > 0 ? payment.performanceHours : 1;
-          const members = payment.memberCount && payment.memberCount > 0 ? payment.memberCount : 1;
-          const rate = payment.ratePerMemberPerHourUsd ?? rateByOrg.get(performer.organizationId) ?? 0;
-          return {
-            organizationId: performer.organizationId,
-            label: performer.bandName,
-            hours: String(hours),
-            people: String(members),
-            rateUsd: rate.toString(),
-            eventId,
-            needId,
-          };
-        }
+        const base = {
+          organizationId: performer.organizationId,
+          label: performer.bandName,
+          eventId: performer.eventId,
+          needId: performer.needId ?? undefined,
+        };
+        // The booking's price is the one the quote bills.
+        if (performer.price) return { ...base, ...artistRowPriceFields(performer.price) };
         const profileRate = rateByOrg.get(performer.organizationId) ?? 0;
         const profileMembers = membersByOrg.get(performer.organizationId) ?? 0;
         return {
-          organizationId: performer.organizationId,
-          label: performer.bandName,
+          ...base,
           hours: "1",
           people: profileMembers > 0 ? profileMembers.toString() : "1",
           rateUsd: profileRate > 0 ? profileRate.toString() : "0",
-          eventId,
-          needId,
         };
       }),
     );

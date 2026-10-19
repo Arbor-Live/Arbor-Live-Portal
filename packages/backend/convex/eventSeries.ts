@@ -1022,7 +1022,6 @@ export const updateSeriesCosts = mutation({
             ? { crewCostUsd: updatedSeries.occurrenceBudgetCrewCostUsd }
             : {};
         await ctx.db.patch(occurrence._id, {
-          bandsCostUsd: patch.bandsCostUsd,
           externalRentalsCostUsd: patch.externalRentalsCostUsd,
           otherCostUsd: patch.otherCostUsd,
           budgetUsd: patch.budgetUsd,

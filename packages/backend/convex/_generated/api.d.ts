@@ -138,6 +138,8 @@ import type * as lib_bandPayments from "../lib/bandPayments.js";
 import type * as lib_betterAuthRows from "../lib/betterAuthRows.js";
 import type * as lib_bookingChainDelete from "../lib/bookingChainDelete.js";
 import type * as lib_bookingDayLoad from "../lib/bookingDayLoad.js";
+import type * as lib_bookingPrice from "../lib/bookingPrice.js";
+import type * as lib_bookingPriceSync from "../lib/bookingPriceSync.js";
 import type * as lib_bookingRequestQuote from "../lib/bookingRequestQuote.js";
 import type * as lib_bookingRequestStatus from "../lib/bookingRequestStatus.js";
 import type * as lib_briefRunOfShow from "../lib/briefRunOfShow.js";
@@ -445,6 +447,8 @@ declare const fullApi: ApiFromModules<{
   "lib/betterAuthRows": typeof lib_betterAuthRows;
   "lib/bookingChainDelete": typeof lib_bookingChainDelete;
   "lib/bookingDayLoad": typeof lib_bookingDayLoad;
+  "lib/bookingPrice": typeof lib_bookingPrice;
+  "lib/bookingPriceSync": typeof lib_bookingPriceSync;
   "lib/bookingRequestQuote": typeof lib_bookingRequestQuote;
   "lib/bookingRequestStatus": typeof lib_bookingRequestStatus;
   "lib/briefRunOfShow": typeof lib_briefRunOfShow;

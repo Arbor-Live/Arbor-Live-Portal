@@ -202,7 +202,7 @@ test.describe("staff band assignment on event", () => {
     await bandContext.close();
   });
 
-  test("admin invites a new band with payout from the event page", async ({ page }) => {
+  test("admin invites a new band, prices the booking, and the payout follows", async ({ page }) => {
     test.setTimeout(120_000);
 
     const stamp = Date.now();
@@ -226,9 +226,23 @@ test.describe("staff band assignment on event", () => {
     await page.locator("#invite-band-email").fill(contactEmail);
     await page.getByRole("button", { name: "Send invite" }).click();
 
-    await expect(page.getByText(bandName).first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText("Onboarding").first()).toBeVisible();
-    await expect(page.getByText("$600.00").first()).toBeVisible();
+    const card = page.getByTestId("bill-card").filter({ hasText: bandName });
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    await expect(card.getByText("Onboarding")).toBeVisible();
+
+    // The price lives on the booking; the invite form doesn't take one.
+    await card.getByRole("button", { name: `Headliner ${bandName}` }).click();
+    const sheet = page.getByTestId("position-sheet");
+    await expect(sheet).toBeVisible({ timeout: 15_000 });
+    const price = sheet.getByTestId("booking-price");
+    await price.getByLabel("People").fill("4");
+    await price.getByLabel("Hours").fill("1");
+    await price.getByLabel("Rate / person / hr").fill("150");
+    await expect(price.getByTestId("booking-price-total")).toHaveText("$600.00");
+    await price.getByRole("button", { name: "Save price" }).click();
+    await expect(sheet.getByText("$600.00 · ").first()).toBeVisible({ timeout: 15_000 });
+    await page.keyboard.press("Escape");
+    await expect(card.getByTestId("bill-card-price")).toContainText("$600.00", { timeout: 15_000 });
 
     const portalInvite = await pollConvex<{ template: string; to: string }>(
       "e2eHelpers:getLatestEmailNotification",

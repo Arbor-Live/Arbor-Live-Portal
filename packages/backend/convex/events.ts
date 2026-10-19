@@ -619,7 +619,6 @@ export const create = mutation({
     eventManagerUserId: v.optional(v.string()),
     operationsLeadUserId: v.optional(v.string()),
     crewCostUsd: v.optional(v.number()),
-    bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
     otherCostUsd: v.optional(v.number()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
@@ -681,7 +680,6 @@ export const create = mutation({
       eventManagerUserId: trimOptional(args.eventManagerUserId),
       operationsLeadUserId: trimOptional(args.operationsLeadUserId),
       crewCostUsd: args.crewCostUsd,
-      bandsCostUsd: args.bandsCostUsd,
       externalRentalsCostUsd: args.externalRentalsCostUsd,
       otherCostUsd: args.otherCostUsd,
       rentalFulfillmentMode: resolveRentalFulfillmentMode(args.eventType, args.rentalFulfillmentMode),
@@ -752,7 +750,6 @@ export const update = mutation({
     eventManagerUserId: v.optional(v.union(v.string(), v.null())),
     operationsLeadUserId: v.optional(v.union(v.string(), v.null())),
     crewCostUsd: v.optional(v.number()),
-    bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
     otherCostUsd: v.optional(v.number()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
@@ -865,7 +862,6 @@ export const update = mutation({
       eventManagerUserId: args.eventManagerUserId?.trim() ?? existing.eventManagerUserId,
       operationsLeadUserId: args.operationsLeadUserId?.trim() ?? existing.operationsLeadUserId,
       crewCostUsd: args.crewCostUsd ?? existing.crewCostUsd,
-      bandsCostUsd: args.bandsCostUsd ?? existing.bandsCostUsd,
       externalRentalsCostUsd: args.externalRentalsCostUsd ?? existing.externalRentalsCostUsd,
       otherCostUsd: args.otherCostUsd ?? existing.otherCostUsd,
       rentalFulfillmentMode: nextRentalFulfillmentMode,
@@ -954,8 +950,6 @@ export const update = mutation({
         additionalHostGroupIds: patch.additionalHostGroupIds,
         expectedTurnout: patch.expectedTurnout,
         budgetUsd: patch.budgetUsd,
-        occurrenceBandsCostUsd:
-          args.bandsCostUsd !== undefined ? args.bandsCostUsd : series.occurrenceBandsCostUsd,
         occurrenceExternalRentalsCostUsd:
           args.externalRentalsCostUsd !== undefined
             ? args.externalRentalsCostUsd
@@ -1245,7 +1239,6 @@ export const duplicate = mutation({
       eventManagerUserId: existing.eventManagerUserId,
       operationsLeadUserId: existing.operationsLeadUserId,
       crewCostUsd: existing.crewCostUsd,
-      bandsCostUsd: existing.bandsCostUsd,
       externalRentalsCostUsd: existing.externalRentalsCostUsd,
       otherCostUsd: existing.otherCostUsd,
       rentalFulfillmentMode: existing.rentalFulfillmentMode,

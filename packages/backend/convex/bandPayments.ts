@@ -25,20 +25,19 @@ import {
   bandPaymentStatusLabel,
   bandPaymentStatusStamp,
   bandPayoutStageForStatus,
-  computeBandPaymentTotal,
   formatBandPaymentDate,
   formatPerformanceHours,
   isBandPayeeComplete,
   isOrganizationBandOnboardingComplete,
   payeeFieldsFromProfile,
-  payoutPricingFromLine,
   queueStatusForEndedEvent,
   resolvePayeeSnapshot,
   shouldPromoteBandPaymentToQueue,
-  type BandPaymentPricingMode,
   type BandPaymentStatus,
   type BandPayeeFields,
 } from "./lib/bandPayments";
+import { payoutFieldsFromPrice } from "./lib/bookingPrice";
+import { payPayoutAtPrice, syncEventBandsCost } from "./lib/bookingPriceSync";
 import { resolveBandName } from "./lib/bandIdentity";
 import {
   bandOnboardingIncompleteSteps,
@@ -516,17 +515,6 @@ function paymentMatchesQueue(payment: Doc<"eventBandPayments">, queue: QueueFilt
   return statusesForQueue(queue).includes(payment.status);
 }
 
-async function syncEventBandsCost(ctx: MutationCtx, eventId: Id<"events">) {
-  const payments = await ctx.db
-    .query("eventBandPayments")
-    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-    .take(50);
-  const total = payments
-    .filter((payment) => payment.status !== "cancelled")
-    .reduce((sum, payment) => sum + payment.totalUsd, 0);
-  await ctx.db.patch(eventId, { bandsCostUsd: total, updatedAt: Date.now() });
-}
-
 export const listBandMemberEmails = internalQuery({
   args: { userIds: v.array(v.string()) },
   returns: v.array(
@@ -675,11 +663,6 @@ const upsertForEventArgs = {
   eventId: v.id("events"),
   paymentId: v.optional(v.id("eventBandPayments")),
   organizationId: v.string(),
-  pricingMode: pricingModeValue,
-  ratePerMemberPerHourUsd: v.optional(v.number()),
-  performanceHours: v.optional(v.number()),
-  memberCount: v.optional(v.number()),
-  totalUsd: v.optional(v.number()),
   designatedPayeeName: v.optional(v.string()),
   designatedPayeeEmail: v.optional(v.string()),
   designatedPayeeUserId: v.optional(v.string()),
@@ -689,17 +672,19 @@ const upsertForEventArgs = {
   ),
 };
 
+/**
+ * Create or refresh an act's payout: its payee, status and album. The amount
+ * is never typed here; it is the act's booking price on the event (its
+ * position's `price`), so the payout pays exactly what the quote bills. An
+ * act whose position has no price keeps the amount it has (a new payout
+ * starts at $0 until the booking is priced).
+ */
 async function upsertEventBandPayment(
   ctx: MutationCtx,
   args: {
     eventId: Id<"events">;
     paymentId?: Id<"eventBandPayments">;
     organizationId: string;
-    pricingMode: BandPaymentPricingMode;
-    ratePerMemberPerHourUsd?: number;
-    performanceHours?: number;
-    memberCount?: number;
-    totalUsd?: number;
     designatedPayeeName?: string;
     designatedPayeeEmail?: string;
     designatedPayeeUserId?: string;
@@ -709,14 +694,6 @@ async function upsertEventBandPayment(
 ): Promise<Id<"eventBandPayments">> {
   const event = await ctx.db.get(args.eventId);
   if (!event) throw new Error("Event not found.");
-
-  const totalUsd = computeBandPaymentTotal({
-    pricingMode: args.pricingMode,
-    ratePerMemberPerHourUsd: args.ratePerMemberPerHourUsd,
-    performanceHours: args.performanceHours,
-    memberCount: args.memberCount,
-    totalUsd: args.totalUsd,
-  });
 
   const now = Date.now();
 
@@ -751,6 +728,35 @@ async function upsertEventBandPayment(
       throw new Error("This artist is already linked to the event.");
     }
   }
+  if (existing?.status === "paid") {
+    throw new Error("This artist payment has already been marked paid.");
+  }
+
+  // The act is on the bill in a position first: that position prices the payout.
+  const existingParticipation = await ctx.db
+    .query("eventBandParticipations")
+    .withIndex("by_eventId_and_organizationId", (q) =>
+      q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
+    )
+    .unique();
+  const participationId = await upsertEventBandParticipation(ctx, {
+    eventId: args.eventId,
+    organizationId: args.organizationId,
+    role: args.role ?? existingParticipation?.role ?? "headliner",
+  });
+  const participation = await ctx.db.get(participationId);
+  const position = participation?.needId ? await ctx.db.get(participation.needId) : null;
+  const pricing = position?.price
+    ? payoutFieldsFromPrice(position.price)
+    : existing
+      ? {
+          pricingMode: existing.pricingMode,
+          ratePerMemberPerHourUsd: existing.ratePerMemberPerHourUsd,
+          performanceHours: existing.performanceHours,
+          memberCount: existing.memberCount,
+          totalUsd: existing.totalUsd,
+        }
+      : { pricingMode: "fixed_total" as const, totalUsd: 0 };
 
   const payeeSnapshot = await refreshPayeeSnapshot(ctx, args.organizationId, {
     designatedPayeeName: args.designatedPayeeName,
@@ -773,11 +779,7 @@ async function upsertEventBandPayment(
   const payload = {
     eventId: args.eventId,
     organizationId: args.organizationId,
-    pricingMode: args.pricingMode,
-    ratePerMemberPerHourUsd: args.ratePerMemberPerHourUsd,
-    performanceHours: args.performanceHours,
-    memberCount: args.memberCount,
-    totalUsd,
+    ...pricing,
     designatedPayeeName: payeeSnapshot.designatedPayeeName,
     designatedPayeeEmail: payeeSnapshot.designatedPayeeEmail,
     designatedPayeeUserId: payeeSnapshot.designatedPayeeUserId,
@@ -789,43 +791,18 @@ async function upsertEventBandPayment(
     updatedAt: now,
   };
 
+  let paymentId: Id<"eventBandPayments">;
   if (existing) {
-    if (existing.status === "paid") {
-      throw new Error("This artist payment has already been marked paid.");
-    }
     await ctx.db.patch(existing._id, payload);
-    await syncEventBandsCost(ctx, args.eventId);
-    const existingParticipation = await ctx.db
-      .query("eventBandParticipations")
-      .withIndex("by_eventId_and_organizationId", (q) =>
-        q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
-      )
-      .unique();
-    await upsertEventBandParticipation(ctx, {
-      eventId: args.eventId,
-      organizationId: args.organizationId,
-      role: args.role ?? existingParticipation?.role ?? "headliner",
+    paymentId = existing._id;
+  } else {
+    paymentId = await ctx.db.insert("eventBandPayments", {
+      ...payload,
+      confirmationToken: await allocateBandPaymentConfirmationToken(ctx),
+      createdAt: now,
     });
-    return existing._id;
   }
-
-  const paymentId = await ctx.db.insert("eventBandPayments", {
-    ...payload,
-    confirmationToken: await allocateBandPaymentConfirmationToken(ctx),
-    createdAt: now,
-  });
   await syncEventBandsCost(ctx, args.eventId);
-  const existingParticipation = await ctx.db
-    .query("eventBandParticipations")
-    .withIndex("by_eventId_and_organizationId", (q) =>
-      q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
-    )
-    .unique();
-  await upsertEventBandParticipation(ctx, {
-    eventId: args.eventId,
-    organizationId: args.organizationId,
-    role: args.role ?? existingParticipation?.role ?? "headliner",
-  });
   return paymentId;
 }
 
@@ -833,38 +810,27 @@ export const upsertForEventInternal = internalMutation({
   args: upsertForEventArgs,
   returns: v.id("eventBandPayments"),
   handler: async (ctx, args) => {
-    return await upsertEventBandPayment(ctx, {
-      ...args,
-      pricingMode: args.pricingMode as BandPaymentPricingMode,
-    });
+    return await upsertEventBandPayment(ctx, args);
   },
 });
 
 /**
- * An act filling a priced position gets its payout from that price: the quote
- * line's people × hours × rate (or its amount when there is no split). Only
- * when the act has no payout on the event yet — never over one staff set or
- * removed ("cancelled"). Scheduled by `scheduleSeedPayoutFromLine`.
+ * An act filling a priced position gets its payout at that price. Only when
+ * the act has no payout on the event yet — never over one staff removed
+ * ("cancelled"). Scheduled by `scheduleSeedPayoutFromBooking` when a quote
+ * prices a booked act or staff price one on the Lineup.
  */
-export const seedFromInvoiceLineInternal = internalMutation({
+export const seedFromBookingInternal = internalMutation({
   args: { needId: v.id("eventArtistNeeds") },
   returns: v.null(),
   handler: async (ctx, args) => {
     const slot = await ctx.db.get(args.needId);
-    if (!slot) return null;
-    const [line, act] = await Promise.all([
-      ctx.db
-        .query("invoiceLineItems")
-        .withIndex("by_needId", (q) => q.eq("needId", args.needId))
-        .first(),
-      ctx.db
-        .query("eventBandParticipations")
-        .withIndex("by_needId", (q) => q.eq("needId", args.needId))
-        .first(),
-    ]);
-    if (!line || !act || line.amountUsd <= 0) return null;
-    const invoice = await ctx.db.get(line.invoiceId);
-    if (!invoice || invoice.status === "void") return null;
+    if (!slot?.price || slot.price.totalUsd <= 0) return null;
+    const act = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_needId", (q) => q.eq("needId", args.needId))
+      .first();
+    if (!act) return null;
     const existing = await ctx.db
       .query("eventBandPayments")
       .withIndex("by_eventId_and_organizationId", (q) =>
@@ -876,7 +842,6 @@ export const seedFromInvoiceLineInternal = internalMutation({
       eventId: slot.eventId,
       organizationId: act.organizationId,
       role: act.role,
-      ...payoutPricingFromLine(line),
     });
     return null;
   },
@@ -887,10 +852,7 @@ export const upsertForEvent = mutation({
   returns: v.id("eventBandPayments"),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
-    return await upsertEventBandPayment(ctx, {
-      ...args,
-      pricingMode: args.pricingMode as BandPaymentPricingMode,
-    });
+    return await upsertEventBandPayment(ctx, args);
   },
 });
 
@@ -1482,6 +1444,16 @@ export const restorePayment = mutation({
       ...bandPaymentStatusStamp("cancelled", status, now),
       updatedAt: now,
     });
+    // Back in play, it pays the booking's current price.
+    const act = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", payment.eventId).eq("organizationId", payment.organizationId),
+      )
+      .unique();
+    const position = act?.needId ? await ctx.db.get(act.needId) : null;
+    const restored = await ctx.db.get(payment._id);
+    if (position?.price && restored) await payPayoutAtPrice(ctx, restored, position.price);
     await syncEventBandsCost(ctx, payment.eventId);
     return null;
   },

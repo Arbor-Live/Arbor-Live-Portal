@@ -113,7 +113,7 @@ test.describe("band payouts queue", () => {
     expect(state.status).toBe("pending_email");
   });
 
-  test("admin can edit a payout's amount from the queue side panel", async ({ page }) => {
+  test("payout details show the booking's amount, not an amount to type", async ({ page }) => {
     test.setTimeout(120_000);
 
     const seeded = seedPayment("pending_email", "Edit");
@@ -123,22 +123,25 @@ test.describe("band payouts queue", () => {
 
     const sheet = page.getByTestId("payout-sheet");
     await expect(sheet).toBeVisible({ timeout: 15_000 });
-    await sheet.getByRole("button", { name: "Edit payout" }).click();
+    await sheet.getByRole("button", { name: "Payout details" }).click();
 
     const dialog = page.getByTestId("payout-edit-dialog");
     await expect(dialog).toBeVisible({ timeout: 15_000 });
-    await dialog.getByLabel("Total payout (USD)").fill("425");
+    // The amount is the booking's price, changed on the event's Lineup.
+    const amount = dialog.getByTestId("payout-amount");
+    await expect(amount.getByText("$250.00")).toBeVisible();
+    await expect(amount.getByRole("link", { name: "Change the price on the Lineup" })).toBeVisible();
+    await expect(dialog.getByRole("textbox")).toHaveCount(0);
     await dialog.getByRole("button", { name: "Save payout" }).click();
 
-    // The dialog closes once the save resolves and the panel shows the new amount.
+    // Saving refreshes payee and status; the amount stays as booked.
     await expect(dialog).toBeHidden({ timeout: 15_000 });
-    await expect(sheet.getByText("$425.00")).toBeVisible({ timeout: 15_000 });
     const state = await pollConvex<PaymentState>(
       "e2eHelpers:getBandPaymentState",
       { paymentId: seeded.paymentId },
-      (row) => row?.totalUsd === 425,
+      (row) => row?.status === "pending_email",
     );
-    expect(state.totalUsd).toBe(425);
+    expect(state.totalUsd).toBe(250);
   });
 
   test("admin can mark a signed payment paid from the pipeline", async ({ page }) => {

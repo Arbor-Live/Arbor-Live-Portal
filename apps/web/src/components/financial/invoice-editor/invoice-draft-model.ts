@@ -23,6 +23,12 @@ export type EquipmentRow = {
 };
 export type ExternalRentalRow = { provider: string; label: string; quantity: string; rateUsd: string };
 /** `organizationId` empty / TBD sentinel ⇒ band not chosen yet. */
+/**
+ * One act on the quote. Its price is the act's booking on the event (the
+ * position's price): saving the quote writes it there, and the act's payout
+ * pays it. Edits made on the event's Lineup come back here (see
+ * `adoptServerArtistChanges`).
+ */
 export type ArtistRow = {
   organizationId: string;
   label: string;
@@ -30,8 +36,10 @@ export type ArtistRow = {
   hours: string;
   /** Number of people in the artist / DJ act. */
   people: string;
-  /** Hourly rate per person. */
+  /** Hourly rate per person, or the whole price when `fixedTotal`. */
   rateUsd: string;
+  /** Priced as one fixed total (no people × hours split); `rateUsd` holds it. */
+  fixedTotal?: boolean;
   /** Linked day/event this slot belongs to on multi-day bookings. */
   eventId?: string;
   /** The bill position this line stands for, echoed back on save. */
@@ -56,6 +64,8 @@ export type BillPosition = InvoiceArtistPosition & {
   eventId: string;
   actOrganizationId?: string;
   actName?: string;
+  /** The booking's price on the event, which pricing this position starts from. */
+  price?: Parameters<typeof artistRowPriceFields>[0] | null;
 };
 
 export type ArtistBillItem = { kind: "line"; idx: number } | { kind: "open"; position: BillPosition };
@@ -193,6 +203,30 @@ export function artistPersonHours(row: Pick<ArtistRow, "hours" | "people">) {
   return hours * people;
 }
 
+/** What an artist row bills: people × hours × rate, or its fixed total. */
+export function artistRowAmountUsd(row: Pick<ArtistRow, "hours" | "people" | "rateUsd" | "fixedTotal">) {
+  const rate = Number(row.rateUsd || "0");
+  return row.fixedTotal ? rate : artistPersonHours(row) * rate;
+}
+
+/** A booking's price as an editor row's price fields. */
+export function artistRowPriceFields(price: {
+  pricingMode: "per_member_hourly" | "fixed_total";
+  memberCount?: number;
+  performanceHours?: number;
+  ratePerMemberPerHourUsd?: number;
+  totalUsd: number;
+}): Pick<ArtistRow, "hours" | "people" | "rateUsd" | "fixedTotal"> {
+  if (price.pricingMode === "fixed_total") {
+    return { hours: "1", people: "1", rateUsd: String(price.totalUsd), fixedTotal: true };
+  }
+  return {
+    hours: String(price.performanceHours ?? 1),
+    people: String(price.memberCount ?? 1),
+    rateUsd: String(price.ratePerMemberPerHourUsd ?? 0),
+  };
+}
+
 /** How a saved artist line and an editor row are matched: label, act, and day. */
 export function artistLineKey(label: string, organizationId?: string | null, eventId?: string | null) {
   return `${label.trim()}|${organizationId ?? ""}|${eventId ?? ""}`;
@@ -213,6 +247,8 @@ export function artistRowFromLineItem(row: {
     row.memberCount > 0 &&
     row.performanceHours != null &&
     row.performanceHours > 0;
+  // A single person-hour with no split is a fixed total (see `bookingPriceFromLine`).
+  const fixedTotal = !hasBreakdown && row.quantity === 1;
   return {
     organizationId: row.organizationId?.trim() || ARTIST_TBD_VALUE,
     eventId: row.eventId?.trim() || undefined,
@@ -222,30 +258,47 @@ export function artistRowFromLineItem(row: {
     // Legacy lines stored people in quantity with no hours breakdown.
     people: hasBreakdown ? String(row.memberCount) : String(row.quantity || 1),
     rateUsd: row.rateUsd.toString(),
+    ...(fixedTotal ? { fixedTotal } : {}),
   };
 }
 
-/** A saved artist line's act and name, by the position it stands for. */
-export type ServerArtistLines = ReadonlyMap<string, Pick<ArtistRow, "label" | "organizationId">>;
+type ServerArtistLine = Pick<
+  ArtistRow,
+  "label" | "organizationId" | "hours" | "people" | "rateUsd" | "fixedTotal"
+>;
+
+/** A saved artist line's act, name and price, by the position it stands for. */
+export type ServerArtistLines = ReadonlyMap<string, ServerArtistLine>;
 
 export function serverArtistLinesByNeed(
   lineItems: ReadonlyArray<Parameters<typeof artistRowFromLineItem>[0] & { section: string }>,
 ): ServerArtistLines {
-  const out = new Map<string, Pick<ArtistRow, "label" | "organizationId">>();
+  const out = new Map<string, ServerArtistLine>();
   for (const line of lineItems) {
     if (line.section !== "artist" || !line.needId) continue;
-    const row = artistRowFromLineItem(line);
-    out.set(line.needId, { label: row.label, organizationId: row.organizationId });
+    const { label, organizationId, hours, people, rateUsd, fixedTotal } = artistRowFromLineItem(line);
+    out.set(line.needId, { label, organizationId, hours, people, rateUsd, fixedTotal });
   }
   return out;
 }
 
+/** Who the line is for, and what it costs: each follows the server on its own. */
+const ARTIST_FIELD_GROUPS = [
+  ["label", "organizationId"],
+  ["hours", "people", "rateUsd", "fixedTotal"],
+] as const;
+
+function sameFields(a: ServerArtistLine, b: ServerArtistLine, fields: readonly (keyof ServerArtistLine)[]) {
+  return fields.every((field) => (a[field] ?? false) === (b[field] ?? false));
+}
+
 /**
  * Bring server-side changes to artist lines into an open draft. Filling or
- * clearing a position on the event's Lineup rewrites its line, and removing
- * the position unlinks it; a draft that kept the old values would undo that on
- * its next save. Only rows still as the server last had them follow; a row the
- * user edited keeps the edit. Returns null when nothing changed.
+ * clearing a position on the event's Lineup rewrites its line, pricing it
+ * there rebills it, and removing the position unlinks it; a draft that kept
+ * the old values would undo that on its next save. Only rows still as the
+ * server last had them follow; a row the user edited keeps the edit. Returns
+ * null when nothing changed.
  */
 export function adoptServerArtistChanges(
   rows: readonly ArtistRow[],
@@ -256,15 +309,24 @@ export function adoptServerArtistChanges(
   const next = rows.map((row) => {
     if (!row.needId) return row;
     const was = before.get(row.needId);
-    if (!was || row.label !== was.label || row.organizationId !== was.organizationId) return row;
+    if (!was) return row;
     const now = after.get(row.needId);
     if (!now) {
+      if (!sameFields(row, was, ARTIST_FIELD_GROUPS[0])) return row;
       changed = true;
       return { ...row, needId: undefined };
     }
-    if (now.label === was.label && now.organizationId === was.organizationId) return row;
-    changed = true;
-    return { ...row, label: now.label, organizationId: now.organizationId };
+    let adopted: ArtistRow = row;
+    for (const fields of ARTIST_FIELD_GROUPS) {
+      if (!sameFields(row, was, fields) || sameFields(now, was, fields)) continue;
+      adopted = { ...adopted };
+      for (const field of fields) {
+        if (now[field] === undefined) delete adopted[field];
+        else Object.assign(adopted, { [field]: now[field] });
+      }
+    }
+    if (adopted !== row) changed = true;
+    return adopted;
   });
   return changed ? next : null;
 }
@@ -421,7 +483,7 @@ export function buildInvoiceLineItems(lines: InvoiceDraftLines, ctx: LineItemCon
   }
   for (const row of lines.artists) {
     const label = row.label.trim();
-    const personHours = artistPersonHours(row);
+    const personHours = row.fixedTotal ? 1 : artistPersonHours(row);
     if (!label || personHours <= 0) continue;
     const people = Math.max(0, Number(row.people || "0"));
     const hours = Math.max(0, Number(row.hours || "0"));
@@ -435,8 +497,9 @@ export function buildInvoiceLineItems(lines: InvoiceDraftLines, ctx: LineItemCon
       eventId: (row.eventId as Id<"events"> | undefined) ?? ctx.singleDayEventId,
       needId: row.needId as Id<"eventArtistNeeds"> | undefined,
       opensPosition: !row.needId && row.opensPosition ? true : undefined,
-      memberCount: people > 0 ? people : undefined,
-      performanceHours: hours > 0 ? hours : undefined,
+      // A fixed total bills as one line with no split, so the booking keeps it fixed.
+      memberCount: !row.fixedTotal && people > 0 ? people : undefined,
+      performanceHours: !row.fixedTotal && hours > 0 ? hours : undefined,
     });
   }
   for (const row of lines.crewRows) {

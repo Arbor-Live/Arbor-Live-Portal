@@ -73,7 +73,7 @@ export function PayoutSheet({
 }
 
 function pricingSummary(row: PayoutRow) {
-  if (row.pricingMode !== "per_member_hourly") return "Fixed total";
+  if (row.pricingMode !== "per_member_hourly") return "Lump sum";
   const parts = [
     row.memberCount != null ? `${row.memberCount} member${row.memberCount === 1 ? "" : "s"}` : null,
     row.performanceHours != null ? `${row.performanceHours} hr` : null,
@@ -202,7 +202,7 @@ function PayoutSheetBody({
             ) : null}
             {row.status !== "paid" && row.status !== "cancelled" ? (
               <Button type="button" size="sm" variant="outline" onClick={() => setEditing(true)}>
-                Edit payout
+                Payout details
               </Button>
             ) : null}
           </div>

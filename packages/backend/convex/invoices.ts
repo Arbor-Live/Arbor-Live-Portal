@@ -79,11 +79,18 @@ import {
 import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
 import { ensureActPosition, returnActTimesToPosition } from "./lib/actPositions";
 import { scheduleBandTimeEmails } from "./email/bandScheduleEmails";
+import { type AdoptablePosition, pickPositionForLine } from "./lib/artistLineSync";
 import {
-  type AdoptablePosition,
-  pickPositionForLine,
-  scheduleSeedPayoutFromLine,
-} from "./lib/artistLineSync";
+  artistLineBillsPrice,
+  artistLineFieldsFromPrice,
+  bookingPriceFromLine,
+  type BookingPrice,
+} from "./lib/bookingPrice";
+import {
+  scheduleSeedPayoutFromBooking,
+  setPositionPrice,
+  syncEventBandsCost,
+} from "./lib/bookingPriceSync";
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
 const crewRateModeValue = v.union(
@@ -666,6 +673,10 @@ async function syncArtistSlotsForInvoice(
     }
     const slot = await ctx.db.get(slotId);
     if (!slot) continue;
+    // The quote prices the booking: the line's people × hours × rate is the
+    // position's price, which the act's unpaid payout follows. A $0 line is a
+    // placeholder and leaves the booking's price alone.
+    if (line.amountUsd > 0) await setPositionPrice(ctx, slot._id, bookingPriceFromLine(line));
     // An outside act already fills this position; the line still bills for its
     // own act, and saving an invoice must never fail on that disagreement.
     if (slot.externalArtistName?.trim()) continue;
@@ -690,7 +701,7 @@ async function syncArtistSlotsForInvoice(
     }
     if (seated?.organizationId === organizationId) {
       // Priced after the act was booked: the payout can start from this price.
-      await scheduleSeedPayoutFromLine(ctx, slot._id);
+      await scheduleSeedPayoutFromBooking(ctx, slot._id);
       continue;
     }
     const current = await ctx.db
@@ -914,7 +925,134 @@ async function replaceLineItems(
     }
     await ctx.db.delete(needId);
     await deleteActBlocks(ctx, { needId });
+    await syncEventBandsCost(ctx, slot.eventId);
   }
+}
+
+/**
+ * Every quote line ever linked to one position. Real positions have a handful,
+ * but a lock check that misses one could silently change an approved quote,
+ * so a read that hits the bound refuses rather than guessing.
+ */
+const MAX_LINES_PER_POSITION = 200;
+
+async function readPositionLines(ctx: QueryCtx | MutationCtx, needId: Id<"eventArtistNeeds">) {
+  const lines = await ctx.db
+    .query("invoiceLineItems")
+    .withIndex("by_needId", (q) => q.eq("needId", needId))
+    .take(MAX_LINES_PER_POSITION + 1);
+  if (lines.length > MAX_LINES_PER_POSITION) {
+    appError(
+      "POSITION_TOO_MANY_QUOTE_LINES",
+      "This position has too many quote lines to check safely. Change its price from the quote instead.",
+    );
+  }
+  return lines;
+}
+
+/** The quotes (not void) whose artist line bills a position, and whether each still takes edits. */
+export async function quoteLinesForPosition(
+  ctx: QueryCtx | MutationCtx,
+  needId: Id<"eventArtistNeeds">,
+) {
+  const lines = await readPositionLines(ctx, needId);
+  const out: Array<{
+    invoiceId: Id<"invoices">;
+    invoiceNumber: string;
+    /** "final": reopen billing first; "approved": change it from the quote editor. */
+    locked: "final" | "approved" | null;
+  }> = [];
+  for (const line of lines) {
+    if (line.section !== "artist") continue;
+    const invoice = await ctx.db.get(line.invoiceId);
+    if (!invoice || invoice.status === "void") continue;
+    out.push({
+      invoiceId: invoice._id,
+      invoiceNumber: invoice.invoiceNumber,
+      locked: invoice.billingFinalizedAt
+        ? "final"
+        : (invoice.clientApprovalStatus ?? "pending") === "approved"
+          ? "approved"
+          : null,
+    });
+  }
+  return out;
+}
+
+/**
+ * A price set on the Lineup rebills the quote line that stands for the
+ * position, so billed stays equal to paid. A quote the client approved, or
+ * the final invoice, never changes silently: that edit is refused and staff
+ * make it from the quote editor (approval decision) or reopen billing.
+ */
+export async function applyBookingPriceToQuoteLines(
+  ctx: MutationCtx,
+  needId: Id<"eventArtistNeeds">,
+  price: BookingPrice,
+) {
+  const lines = await readPositionLines(ctx, needId);
+  const touched = new Set<Id<"invoices">>();
+  const now = Date.now();
+  for (const line of lines) {
+    if (line.section !== "artist" || artistLineBillsPrice(line, price)) continue;
+    const invoice = await ctx.db.get(line.invoiceId);
+    if (!invoice || invoice.status === "void") continue;
+    if (invoice.billingFinalizedAt) {
+      appError(
+        "INVOICE_FINAL_REOPEN_TO_CHANGE",
+        `${invoice.invoiceNumber} is the final invoice and bills this act. Reopen billing on it to change the price.`,
+      );
+    }
+    if ((invoice.clientApprovalStatus ?? "pending") === "approved") {
+      appError(
+        "QUOTE_APPROVED_EDIT_IN_EDITOR",
+        `The client approved ${invoice.invoiceNumber}, which bills this act. Change the price in the quote editor, where you can send it back for approval.`,
+      );
+    }
+    // `replace`, since a fixed price clears the people × hours split.
+    const next: Doc<"invoiceLineItems"> = { ...line, updatedAt: now };
+    delete next.memberCount;
+    delete next.performanceHours;
+    await ctx.db.replace(line._id, { ...next, ...withoutUndefined(artistLineFieldsFromPrice(price)) });
+    touched.add(invoice._id);
+  }
+  for (const invoiceId of touched) {
+    const invoice = await ctx.db.get(invoiceId);
+    if (invoice) await patchTotalsFromStoredLines(ctx, invoice);
+  }
+}
+
+function withoutUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as Partial<T>;
+}
+
+/** Re-total an invoice from the lines it has stored. */
+async function patchTotalsFromStoredLines(ctx: MutationCtx, invoice: Doc<"invoices">) {
+  const lineItems = await ctx.db
+    .query("invoiceLineItems")
+    .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoice._id))
+    .take(500);
+  const totals = await computeTotals(
+    ctx,
+    lineItems.map(lineDocToInput),
+    invoice.equipmentPricingMode,
+    invoice.crewRateMode,
+    invoice.discountType,
+    invoice.discountValue,
+    invoice._id,
+  );
+  await ctx.db.patch(invoice._id, {
+    discountAmountUsd: totals.discountAmountUsd,
+    discountWarning: totals.discountWarning,
+    equipmentSubtotalUsd: totals.equipmentSubtotalUsd,
+    externalRentalsSubtotalUsd: totals.externalRentalsSubtotalUsd,
+    artistsSubtotalUsd: totals.artistsSubtotalUsd,
+    crewSubtotalUsd: totals.crewSubtotalUsd,
+    feesSubtotalUsd: totals.feesSubtotalUsd,
+    subtotalUsd: totals.subtotalUsd,
+    totalUsd: totals.totalUsd,
+    updatedAt: Date.now(),
+  });
 }
 
 export const listManagers = query({

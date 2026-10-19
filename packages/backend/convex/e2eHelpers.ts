@@ -38,6 +38,7 @@ import {
 import { listFulfillmentPackageBom } from "./lib/packageBom";
 import { eventStatusValue } from "./lib/eventStatus";
 import { syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
+import { syncEventBandsCost } from "./lib/bookingPriceSync";
 import { eventCrewSpan, nightKeyForEvent } from "./lib/crewNights";
 
 const makeToken = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 24);
@@ -3998,10 +3999,7 @@ export const seedDraftBandPayment = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.db.patch(args.eventId, {
-      bandsCostUsd: (event.bandsCostUsd ?? 0) + (args.totalUsd ?? 400),
-      updatedAt: now,
-    });
+    await syncEventBandsCost(ctx, args.eventId);
     return { paymentId, confirmationToken, status: "draft" as const };
   },
 });

@@ -12,6 +12,8 @@ import { resolveVenueLocation } from "./lib/crewTraineeIntro";
 import { loadShowRiderCandidates, pickShowRider } from "./lib/showRider";
 import { riderStatusValue } from "./lib/riderSchema";
 import { syncInvoiceLineForSlot } from "./lib/artistLineSync";
+import { bookingPriceValue } from "./lib/bookingPrice";
+import { syncEventBandsCost } from "./lib/bookingPriceSync";
 import {
   claimSlot,
   unclaimSlot,
@@ -41,11 +43,6 @@ const participationRoleValue = v.union(
   v.literal("headliner"),
   v.literal("support"),
   v.literal("other"),
-);
-
-const bandPricingModeValue = v.union(
-  v.literal("per_member_hourly"),
-  v.literal("fixed_total"),
 );
 
 const paymentStatusValue = v.union(
@@ -155,6 +152,8 @@ const performerRowFields = {
   role: participationRoleValue,
   /** Slot this act fills, when it was booked against one. */
   needId: v.union(v.id("eventArtistNeeds"), v.null()),
+  /** What the act costs on this event: its position's price (billed and paid). */
+  price: v.union(bookingPriceValue, v.null()),
   setStartsAt: v.union(v.number(), v.null()),
   setEndsAt: v.union(v.number(), v.null()),
   soundcheckStartsAt: v.union(v.number(), v.null()),
@@ -227,6 +226,7 @@ async function listPerformerRowsForEvent(ctx: QueryCtx, event: Doc<"events">) {
       .query("organizationOnboarding")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", row.organizationId))
       .unique();
+    const position = row.needId ? await ctx.db.get(row.needId) : null;
     const onboardingStatus = onboarding?.status ?? null;
     const awaitingOnboarding =
       onboardingStatus !== "completed" && onboardingStatus !== "waived";
@@ -236,6 +236,7 @@ async function listPerformerRowsForEvent(ctx: QueryCtx, event: Doc<"events">) {
       bandName: await getOrganizationName(ctx, row.organizationId),
       role: row.role,
       needId: row.needId ?? null,
+      price: position?.price ?? null,
       setStartsAt: row.setStartsAt ?? null,
       setEndsAt: row.setEndsAt ?? null,
       soundcheckStartsAt: row.soundcheckStartsAt ?? null,
@@ -816,11 +817,6 @@ export const inviteBandFromEvent = mutation({
     artistName: v.string(),
     role: participationRoleValue,
     needId: v.optional(v.id("eventArtistNeeds")),
-    pricingMode: bandPricingModeValue,
-    ratePerMemberPerHourUsd: v.optional(v.number()),
-    performanceHours: v.optional(v.number()),
-    memberCount: v.optional(v.number()),
-    totalUsd: v.optional(v.number()),
   },
   returns: v.object({
     organizationId: v.string(),
@@ -868,15 +864,11 @@ export const inviteBandFromEvent = mutation({
       needId: args.needId,
     });
 
+    // The payout tracks the new act's onboarding; it pays the booking's price.
     await ctx.runMutation(internal.bandPayments.upsertForEventInternal, {
       eventId: args.eventId,
       organizationId,
       role: args.role,
-      pricingMode: args.pricingMode,
-      ratePerMemberPerHourUsd: args.ratePerMemberPerHourUsd,
-      performanceHours: args.performanceHours,
-      memberCount: args.memberCount,
-      totalUsd: args.totalUsd,
     });
 
     await scheduleBandEventOnboardingInviteEmail(ctx, {
@@ -955,19 +947,7 @@ export async function removeParticipationFromEvent(
     });
   }
 
-  const remaining = await ctx.db
-    .query("eventBandPayments")
-    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-    .take(50);
-  let total = 0;
-  for (const row of remaining) {
-    if (row.status === "cancelled") continue;
-    total += row.totalUsd;
-  }
-  const event = await ctx.db.get(eventId);
-  if (event) {
-    await ctx.db.patch(eventId, { bandsCostUsd: total });
-  }
+  await syncEventBandsCost(ctx, eventId);
 }
 
 export const removeParticipation = mutation({
@@ -1035,16 +1015,7 @@ export const upsertParticipations = mutation({
         role: row.role,
       });
     }
-    const remaining = await ctx.db
-      .query("eventBandPayments")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(50);
-    let total = 0;
-    for (const payment of remaining) {
-      if (payment.status === "cancelled") continue;
-      total += payment.totalUsd;
-    }
-    await ctx.db.patch(args.eventId, { bandsCostUsd: total });
+    await syncEventBandsCost(ctx, args.eventId);
     return null;
     });
   },
