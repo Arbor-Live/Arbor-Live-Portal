@@ -346,6 +346,12 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   `lib/cartCrew.ts` (`computeEventShiftStats`): nothing extra for events that
   aren't cart events, else the blocks plus one indexed profile read per
   setup/strike assignee not already loaded.
+  When a cart event moves to **Ready** (`events.setStatus`, or `events.update`
+  for each day it touches) the `golf_cart_event_ready` email goes to the Ops
+  Center → Settings → *Golf cart* list (`golfCartSettings`, `golfCart.ts`),
+  with the setup and strike windows. The list starts empty and, unlike crew
+  onboarding, portal admins are not added automatically; turning the switch
+  on for an event that's already Ready sends nothing.
 - **Person hover cards** (`UserHoverCard`, `userCards.getCard`): hovering a
   comment author or @mention, a staffing chip, or a name on the crew scheduling
   board shows the person's phone, email, title, pronouns and whether they're

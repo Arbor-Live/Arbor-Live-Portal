@@ -54,6 +54,7 @@ import {
 } from "./lib/eventVisibility";
 import { EVENT_TIMEZONE } from "./email/constants";
 import { scheduleEventCancelledEmails } from "./email/triggers";
+import { scheduleGolfCartEventReadyEmails } from "./email/golfCartEmails";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 import { resolveVenueLink } from "./lib/venues";
 import {
@@ -1102,6 +1103,9 @@ export const update = mutation({
       if (occStatus === "cancelled" && normalizeEventStatus(occ.prevStatus) !== "cancelled") {
         await scheduleEventCancelledEmails(ctx, occ.id, now);
       }
+      if (occStatus === "ready" && normalizeEventStatus(occ.prevStatus) !== "ready") {
+        await scheduleGolfCartEventReadyEmails(ctx, occ.id, now);
+      }
       await syncCrewCostAfterStatusChange(ctx, occ.id, occ.prevStatus, occStatus, now);
     }
     });
@@ -1150,6 +1154,9 @@ export const setStatus = mutation({
     }
     if (nextStatus === "cancelled" && !wasCancelled) {
       await scheduleEventCancelledEmails(ctx, args.id, now);
+    }
+    if (nextStatus === "ready" && prevStatus !== "ready") {
+      await scheduleGolfCartEventReadyEmails(ctx, args.id, now);
     }
     await syncCrewCostAfterStatusChange(ctx, args.id, prevStatus, nextStatus, now);
     // Cancelled days don't count toward a multi-day booking.

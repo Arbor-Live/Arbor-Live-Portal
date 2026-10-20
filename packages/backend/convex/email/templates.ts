@@ -46,6 +46,7 @@ import {
   renderPaymentProofRejectedEmail,
   renderDamageReportAdminEmail,
   renderCohoGiftCardLowBalanceEmail,
+  renderGolfCartEventReadyEmail,
   renderArtistNeedInquiryEmail,
   renderWeeklyDigestEmail,
   renderThisWeekAtArborEmail,
@@ -97,6 +98,7 @@ import type {
   PaymentProofRejectedEmailProps,
   DamageReportAdminEmailProps,
   CohoGiftCardLowBalanceEmailProps,
+  GolfCartEventReadyEmailProps,
   ArtistNeedInquiryEmailProps,
   WeeklyDigestEmailProps,
   ThisWeekAtArborEmailProps,
@@ -209,6 +211,8 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderDamageReportAdminEmail(payload as DamageReportAdminEmailProps);
     case "coho_gift_card_low_balance":
       return renderCohoGiftCardLowBalanceEmail(payload as CohoGiftCardLowBalanceEmailProps);
+    case "golf_cart_event_ready":
+      return renderGolfCartEventReadyEmail(payload as GolfCartEventReadyEmailProps);
     case "artist_need_inquiry":
       return renderArtistNeedInquiryEmail(payload as ArtistNeedInquiryEmailProps);
     case "weekly_digest":
