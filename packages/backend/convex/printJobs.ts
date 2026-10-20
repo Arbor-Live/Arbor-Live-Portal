@@ -11,6 +11,7 @@ import {
 } from "./_generated/server";
 import { RENTAL_EVENT_TYPES } from "./eventPullLists";
 import { requireArborInternalContext } from "./lib/auth";
+import { eventNeedsCrew } from "./lib/crewTeams";
 import {
   MAX_POSTER_COPIES,
   printableFormatFromContentType,
@@ -183,6 +184,8 @@ export const enqueueDue = internalMutation({
       // Rentals print when their outbound delivery is processed, not on the
       // morning sweep, so the brief matches what was actually pulled.
       if (event.eventType && RENTAL_EVENT_TYPES.has(event.eventType)) continue;
+      // No crew on site (services only), so nobody needs a printed brief.
+      if (!eventNeedsCrew(event.teamsInterested)) continue;
       // Each event is handled in its own mutation: reading its brief source is
       // heavier than this sweep's transaction should carry.
       await ctx.scheduler.runAfter(0, internal.printJobs.enqueueForEvent, {
