@@ -519,6 +519,13 @@ export default defineSchema({
     updatedAt: v.number(),
   }),
 
+  /** Singleton row: Ops Center settings for who hears when a cart event goes Ready. */
+  golfCartSettings: defineTable({
+    /** Notified when a cart event moves to Ready; external addresses are allowed. */
+    alertRecipients: v.array(v.string()),
+    updatedAt: v.number(),
+  }),
+
   /** Singleton row: Ops Center settings for who is notified when crew finish onboarding. */
   crewOnboardingSettings: defineTable({
     /** Always notified; external addresses are allowed. */

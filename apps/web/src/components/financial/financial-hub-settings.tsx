@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { CohoGiftCardSettings } from "@/components/financial/coho-gift-card-settings";
 import { CrewOnboardingSettings } from "@/components/financial/crew-onboarding-settings";
+import { GolfCartSettings } from "@/components/financial/golf-cart-settings";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   feeDefinitionSchema,
@@ -171,6 +172,8 @@ export function FinancialHubSettings() {
       <CohoGiftCardSettings />
 
       <CrewOnboardingSettings />
+
+      <GolfCartSettings />
 
       <FormSaveBar
         tier="C"

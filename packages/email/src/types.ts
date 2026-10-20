@@ -175,6 +175,13 @@ export type CohoGiftCardLowBalanceEmailProps = {
   dashboardUrl: string;
 };
 
+export type GolfCartEventReadyEmailProps = EventEmailProps & {
+  /** First setup start → last setup end, when the event has setup sections. */
+  setupLabel?: string;
+  /** First strike start → last strike end, when the event has strike sections. */
+  strikeLabel?: string;
+};
+
 export type BookingQuoteReadyEmailProps = {
   recipientName?: string;
   requestNumber: string;
