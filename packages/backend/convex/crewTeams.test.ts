@@ -3,7 +3,9 @@ import { eventNeedsCrew } from "./lib/crewTeams";
 
 describe("eventNeedsCrew", () => {
   test("sound, lighting, photo or video count as crew", () => {
-    expect(eventNeedsCrew(["Sound"])).toBe(true);
+    for (const team of ["Sound", "Lighting", "Lights", "Photography", "Videography"]) {
+      expect(eventNeedsCrew([team])).toBe(true);
+    }
     expect(eventNeedsCrew(["Promotion", "Videography"])).toBe(true);
   });
 
