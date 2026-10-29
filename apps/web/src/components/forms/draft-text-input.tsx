@@ -22,7 +22,12 @@ export function useDraftText(value: string, onCommit: (value: string) => void) {
     setText(next);
     startTransition(() => onCommit(next));
   }
-  return [text, change] as const;
+  // Blur fires before a Save click lands, so a commit still pending as a
+  // transition reaches the draft first.
+  function flush() {
+    if (text !== value) onCommit(text);
+  }
+  return [text, change, flush] as const;
 }
 
 type DraftProps<T> = Omit<T, "value" | "onChange"> & {
@@ -30,12 +35,32 @@ type DraftProps<T> = Omit<T, "value" | "onChange"> & {
   onCommit: (value: string) => void;
 };
 
-export function DraftTextInput({ value, onCommit, ...props }: DraftProps<ComponentProps<typeof Input>>) {
-  const [text, change] = useDraftText(value, onCommit);
-  return <Input {...props} value={text} onChange={(event) => change(event.target.value)} />;
+export function DraftTextInput({ value, onCommit, onBlur, ...props }: DraftProps<ComponentProps<typeof Input>>) {
+  const [text, change, flush] = useDraftText(value, onCommit);
+  return (
+    <Input
+      {...props}
+      value={text}
+      onChange={(event) => change(event.target.value)}
+      onBlur={(event) => {
+        flush();
+        onBlur?.(event);
+      }}
+    />
+  );
 }
 
-export function DraftTextarea({ value, onCommit, ...props }: DraftProps<ComponentProps<typeof Textarea>>) {
-  const [text, change] = useDraftText(value, onCommit);
-  return <Textarea {...props} value={text} onChange={(event) => change(event.target.value)} />;
+export function DraftTextarea({ value, onCommit, onBlur, ...props }: DraftProps<ComponentProps<typeof Textarea>>) {
+  const [text, change, flush] = useDraftText(value, onCommit);
+  return (
+    <Textarea
+      {...props}
+      value={text}
+      onChange={(event) => change(event.target.value)}
+      onBlur={(event) => {
+        flush();
+        onBlur?.(event);
+      }}
+    />
+  );
 }

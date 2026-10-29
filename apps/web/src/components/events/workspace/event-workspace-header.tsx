@@ -68,8 +68,8 @@ function DraftPageTitle({
   onCommit,
   ...props
 }: Omit<ComponentProps<typeof EditablePageTitle>, "onChange"> & { onCommit: (value: string) => void }) {
-  const [text, change] = useDraftText(value, onCommit);
-  return <EditablePageTitle {...props} value={text} onChange={change} />;
+  const [text, change, flush] = useDraftText(value, onCommit);
+  return <EditablePageTitle {...props} value={text} onChange={change} onBlur={flush} />;
 }
 
 export function EventWorkspaceHeader() {
