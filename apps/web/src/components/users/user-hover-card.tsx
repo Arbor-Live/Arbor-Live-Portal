@@ -105,6 +105,25 @@ function UserCardBody({
         ) : null}
       </div>
 
+      {card.verticals.length > 0 || card.disciplines.length > 0 ? (
+        <ul
+          aria-label="Verticals and disciplines"
+          className="flex flex-wrap gap-1"
+          data-testid="user-hover-card-verticals"
+        >
+          {card.verticals.map((vertical) => (
+            <li key={vertical} className="rounded bg-muted px-1.5 py-0.5 text-2xs font-medium">
+              {vertical}
+            </li>
+          ))}
+          {card.disciplines.map((discipline) => (
+            <li key={discipline} className="rounded border px-1.5 py-0.5 text-2xs text-muted-foreground">
+              {discipline}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       {extra ? <div className="border-t pt-2">{extra}</div> : null}
 
       <div className="space-y-1 border-t pt-2">

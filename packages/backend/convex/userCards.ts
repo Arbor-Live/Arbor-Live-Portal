@@ -5,6 +5,7 @@ import { findAuthUsersByIds, requireArborInternalContext, requireAuth } from "./
 import { resolveUserProfileImageUrl } from "./lib/userProfileImage";
 import { resolveUserStatus } from "./lib/userStatus";
 import { sumShiftHoursInWindows } from "./lib/userShiftHours";
+import { resolveProfileMembership, userDisciplineValue, userVerticalValue } from "./lib/userVerticals";
 
 const MAX_PEOPLE = 200;
 
@@ -17,8 +18,9 @@ function assertWindow(window: { startMs: number; endMs: number }) {
 }
 
 /**
- * What a hover card on a person shows: who they are, how to reach them, and
- * (when windows are passed) the hours they're on shifts this week and quarter.
+ * What a hover card on a person shows: who they are, which verticals and
+ * disciplines they're in, how to reach them, and (when windows are passed)
+ * the hours they're on shifts this week and quarter.
  */
 export const getCard = query({
   args: {
@@ -40,6 +42,8 @@ export const getCard = query({
       avatarUrl: v.optional(v.string()),
       status: v.union(v.literal("active"), v.literal("inactive"), v.literal("alumni")),
       cartEligible: v.boolean(),
+      verticals: v.array(userVerticalValue),
+      disciplines: v.array(userDisciplineValue),
       weekHours: v.optional(v.number()),
       quarterHours: v.optional(v.number()),
     }),
@@ -69,6 +73,7 @@ export const getCard = query({
     const hours = await sumShiftHoursInWindows(ctx, userId, windows);
     const weekHours = args.week ? hours[0] : undefined;
     const quarterHours = args.quarter ? hours[args.week ? 1 : 0] : undefined;
+    const membership = resolveProfileMembership(profile ?? {});
 
     return {
       userId,
@@ -85,6 +90,8 @@ export const getCard = query({
       }),
       status: resolveUserStatus(profile),
       cartEligible: profile?.cartEligible === true,
+      verticals: membership.verticals,
+      disciplines: membership.disciplines,
       weekHours,
       quarterHours,
     };
