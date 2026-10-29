@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   PORTAL_TIMEZONE,
   addPacificWeeks,
@@ -164,6 +164,18 @@ describe("toPacificDateTimeInput / pacificDateTimeInputToMs", () => {
   it("returns null for empty or invalid input", () => {
     expect(pacificDateTimeInputToMs("")).toBeNull();
     expect(pacificDateTimeInputToMs("not-a-date")).toBeNull();
+  });
+
+  // Workspace pages parse every shift and section on each keystroke; building a
+  // formatter per probe made typing take ~1s a key on phones.
+  it("reuses its formatter across calls", () => {
+    pacificDateTimeInputToMs("2025-06-16T18:00");
+    const construct = vi.spyOn(Intl, "DateTimeFormat");
+    for (let day = 1; day <= 28; day += 1) {
+      pacificDateTimeInputToMs(`2025-02-${String(day).padStart(2, "0")}T18:00`);
+    }
+    expect(construct).not.toHaveBeenCalled();
+    construct.mockRestore();
   });
 
   it("round-trips 3am on the Nov 2025 fall-back day", () => {

@@ -16,6 +16,7 @@ import {
   pacificDateKey,
   pacificEndOfDayMs,
   pacificStartOfDayMs,
+  dateTimeFormat,
 } from "@/lib/format";
 import { quarterWeek } from "@/lib/academic-periods";
 
@@ -73,7 +74,7 @@ function weekStartKeyFromAnchor(anchorMs: number) {
   const key = pacificDateKey(anchorMs);
   const { year, month, day } = dateKeyParts(key);
   const noon = pacificStartOfDayMs(year, month, day) + 12 * 60 * 60 * 1000;
-  const weekday = new Intl.DateTimeFormat("en-US", {
+  const weekday = dateTimeFormat("en-US", {
     timeZone: PORTAL_TIMEZONE,
     weekday: "short",
   }).format(new Date(noon));
@@ -92,11 +93,11 @@ function weekStartKeyFromAnchor(anchorMs: number) {
 function dayHeaderLabel(dateKey: string, todayKey: string) {
   const { year, month, day } = dateKeyParts(dateKey);
   const noon = pacificStartOfDayMs(year, month, day) + 12 * 60 * 60 * 1000;
-  const weekday = new Intl.DateTimeFormat("en-US", {
+  const weekday = dateTimeFormat("en-US", {
     timeZone: PORTAL_TIMEZONE,
     weekday: "short",
   }).format(new Date(noon));
-  const monthLabel = new Intl.DateTimeFormat("en-US", {
+  const monthLabel = dateTimeFormat("en-US", {
     timeZone: PORTAL_TIMEZONE,
     month: "short",
   }).format(new Date(noon));
@@ -107,7 +108,7 @@ function dayHeaderLabel(dateKey: string, todayKey: string) {
     day,
     monthLabel: isFirstOfMonth || dateKey.endsWith("-01") ? monthLabel : null,
     isToday,
-    title: new Intl.DateTimeFormat("en-US", {
+    title: dateTimeFormat("en-US", {
       timeZone: PORTAL_TIMEZONE,
       weekday: "long",
       month: "long",
@@ -118,7 +119,7 @@ function dayHeaderLabel(dateKey: string, todayKey: string) {
 }
 
 function formatBoardTime(ms: number) {
-  return new Intl.DateTimeFormat("en-US", {
+  return dateTimeFormat("en-US", {
     timeZone: PORTAL_TIMEZONE,
     hour: "numeric",
     minute: "2-digit",
@@ -130,12 +131,12 @@ function formatBoardRange(startAt: number, endAt: number) {
   if (sameDay) {
     return `${formatBoardTime(startAt)} → ${formatBoardTime(endAt)}`;
   }
-  const startDay = new Intl.DateTimeFormat("en-US", {
+  const startDay = dateTimeFormat("en-US", {
     timeZone: PORTAL_TIMEZONE,
     month: "short",
     day: "numeric",
   }).format(new Date(startAt));
-  const endDay = new Intl.DateTimeFormat("en-US", {
+  const endDay = dateTimeFormat("en-US", {
     timeZone: PORTAL_TIMEZONE,
     month: "short",
     day: "numeric",
@@ -332,11 +333,11 @@ function formatWeekRangeLabel(weekDayKeys: string[]) {
     pacificStartOfDayMs(startParts.year, startParts.month, startParts.day) + 12 * 60 * 60 * 1000;
   const endNoon =
     pacificStartOfDayMs(endParts.year, endParts.month, endParts.day) + 12 * 60 * 60 * 1000;
-  const startMonth = new Intl.DateTimeFormat("en-US", {
+  const startMonth = dateTimeFormat("en-US", {
     timeZone: PORTAL_TIMEZONE,
     month: "short",
   }).format(new Date(startNoon));
-  const endMonth = new Intl.DateTimeFormat("en-US", {
+  const endMonth = dateTimeFormat("en-US", {
     timeZone: PORTAL_TIMEZONE,
     month: "short",
   }).format(new Date(endNoon));
@@ -419,11 +420,11 @@ export function EventsBoardView({ events }: { events: DashboardEvent[] }) {
   const rangeLabel = useMemo(() => {
     const startParts = dateKeyParts(dayKeys[0]);
     const endParts = dateKeyParts(dayKeys[dayKeys.length - 1]);
-    const startMonth = new Intl.DateTimeFormat("en-US", {
+    const startMonth = dateTimeFormat("en-US", {
       timeZone: PORTAL_TIMEZONE,
       month: "short",
     }).format(new Date(rangeStartMs + 12 * 60 * 60 * 1000));
-    const endMonth = new Intl.DateTimeFormat("en-US", {
+    const endMonth = dateTimeFormat("en-US", {
       timeZone: PORTAL_TIMEZONE,
       month: "short",
     }).format(new Date(rangeEndMs));

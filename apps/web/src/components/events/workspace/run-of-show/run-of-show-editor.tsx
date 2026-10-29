@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   CaretDownIcon,
   LightningIcon,
@@ -21,7 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
+import { DraftTextInput } from "@/components/forms/draft-text-input";
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { localDateTimeInputToMs, toLocalDateTimeInput } from "@/lib/crew-availability";
 import { formatDate, formatTime, pacificDayIndexFromAnchor } from "@/lib/format";
@@ -408,42 +408,6 @@ function IssueList({ issues }: { issues: string[] }) {
   );
 }
 
-/**
- * A name field that echoes keystrokes from local state and hands the edit to
- * the workspace draft as a transition. Each label change re-renders the whole
- * event workspace; as a transition React drops that work for the next
- * keystroke instead of blocking the field.
- */
-function LabelInput({
-  value,
-  onCommit,
-  "aria-label": ariaLabel,
-}: {
-  value: string;
-  onCommit: (value: string) => void;
-  "aria-label": string;
-}) {
-  const [text, setText] = useState(value);
-  const [synced, setSynced] = useState(value);
-  // Adopt outside changes (discard, server rebase).
-  if (value !== synced) {
-    setSynced(value);
-    setText(value);
-  }
-  return (
-    <Input
-      aria-label={ariaLabel}
-      className="h-8"
-      value={text}
-      onChange={(event) => {
-        const next = event.target.value;
-        setText(next);
-        startTransition(() => onCommit(next));
-      }}
-    />
-  );
-}
-
 function RowControls({
   block,
   readOnly,
@@ -512,8 +476,9 @@ function SectionCard({
           {readOnly ? (
             <p className="truncate text-sm font-medium">{block.label}</p>
           ) : (
-            <LabelInput
+            <DraftTextInput
               aria-label="Section name"
+              className="h-8"
               value={block.label}
               onCommit={(label) => onLabel(block, label)}
             />
@@ -598,8 +563,9 @@ function MomentRow({
         {block.actOwned || readOnly ? (
           <p className="truncate text-sm font-medium">{title}</p>
         ) : (
-          <LabelInput
+          <DraftTextInput
             aria-label={`${SCHEDULE_BLOCK_TYPE_LABELS[block.blockType]} name`}
+            className="h-8"
             value={block.label}
             onCommit={(label) => onLabel(block, label)}
           />

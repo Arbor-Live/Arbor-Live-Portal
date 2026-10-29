@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
+import { useDraftText } from "@/components/forms/draft-text-input";
 import {
   ArrowCounterClockwiseIcon,
   BuildingsIcon,
@@ -61,6 +62,15 @@ const STATUS_OPTIONS = EVENT_STATUS_EDITOR_OPTIONS.map((option) => ({
   ...option,
   tone: eventStatusBadgeTone(option.value),
 }));
+
+function DraftPageTitle({
+  value,
+  onCommit,
+  ...props
+}: Omit<ComponentProps<typeof EditablePageTitle>, "onChange"> & { onCommit: (value: string) => void }) {
+  const [text, change, flush] = useDraftText(value, onCommit);
+  return <EditablePageTitle {...props} value={text} onChange={change} onBlur={flush} />;
+}
 
 export function EventWorkspaceHeader() {
   const workspace = useEventWorkspace();
@@ -199,9 +209,9 @@ export function EventWorkspaceHeader() {
         readOnly ? (
           <PageTitle>{draft.title || event?.title}</PageTitle>
         ) : (
-          <EditablePageTitle
+          <DraftPageTitle
             value={draft.title}
-            onChange={(title) => updateDraft({ title })}
+            onCommit={(title) => updateDraft({ title })}
             label="Event title"
             data-testid="event-title-input"
             placeholder={event ? "Untitled event" : "Loading…"}

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { ArrowSquareOutIcon, MicrophoneIcon } from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { DraftTextarea } from "@/components/forms/draft-text-input";
 import { EventArtistBillSection } from "@/components/events/event-artist-bill-section";
 import { EventBandRidersSection } from "@/components/events/event-band-riders-section";
 import { OutreachCard } from "@/components/events/outreach/outreach-card";
@@ -77,11 +77,11 @@ function OpenMicCard() {
             Public sign-ups open until 4 hours after the event start.
           </p>
           <Field label="Open Mic notes" htmlFor="open-mic-notes">
-            <Textarea
+            <DraftTextarea
               id="open-mic-notes"
               className="min-h-20"
               value={draft.openMicNotes}
-              onChange={(e) => updateDraft({ openMicNotes: e.target.value })}
+              onCommit={(openMicNotes) => updateDraft({ openMicNotes })}
               placeholder="Theme, special instructions, etc."
             />
           </Field>

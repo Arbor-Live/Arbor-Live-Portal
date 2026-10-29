@@ -40,6 +40,23 @@ const datePreset: Intl.DateTimeFormatOptions = {
   year: "numeric",
 };
 
+const dateTimeFormats = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * Building an `Intl.DateTimeFormat` costs far more than formatting with one, and
+ * these helpers run per row on every render (the wall-clock parser alone formats
+ * ~28 times per call), so each locale and option set is built once.
+ */
+export function dateTimeFormat(locale: string, options: Intl.DateTimeFormatOptions) {
+  const key = `${locale}|${JSON.stringify(options)}`;
+  let format = dateTimeFormats.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat(locale, options);
+    dateTimeFormats.set(key, format);
+  }
+  return format;
+}
+
 export function formatUsd(value: number) {
   return usdFormatter.format(value);
 }
@@ -69,11 +86,11 @@ export function formatDateTime(
   timezone: string = PORTAL_TIMEZONE,
 ) {
   const preset = dateTimePresets[style];
-  return new Intl.DateTimeFormat("en-US", { ...preset, timeZone: timezone }).format(new Date(ms));
+  return dateTimeFormat("en-US", { ...preset, timeZone: timezone }).format(new Date(ms));
 }
 
 export function formatDate(ms: number, timezone: string = PORTAL_TIMEZONE) {
-  return new Intl.DateTimeFormat("en-US", { ...datePreset, timeZone: timezone }).format(new Date(ms));
+  return dateTimeFormat("en-US", { ...datePreset, timeZone: timezone }).format(new Date(ms));
 }
 
 /**
@@ -81,7 +98,7 @@ export function formatDate(ms: number, timezone: string = PORTAL_TIMEZONE) {
  * portal timezone is assumed (e.g. printed briefs).
  */
 export function formatTime(ms: number, timezone: string = PORTAL_TIMEZONE) {
-  return new Intl.DateTimeFormat("en-US", {
+  return dateTimeFormat("en-US", {
     timeZone: timezone,
     hour: "numeric",
     minute: "2-digit",
@@ -89,7 +106,7 @@ export function formatTime(ms: number, timezone: string = PORTAL_TIMEZONE) {
 }
 
 export function pacificDateKey(ms: number, timezone: string = PORTAL_TIMEZONE) {
-  return new Intl.DateTimeFormat("en-CA", {
+  return dateTimeFormat("en-CA", {
     timeZone: timezone,
     year: "numeric",
     month: "2-digit",
@@ -107,7 +124,7 @@ export function toPacificDateTimeInput(
 ) {
   const date = ms instanceof Date ? ms : new Date(ms);
   if (Number.isNaN(date.getTime())) return "";
-  const parts = new Intl.DateTimeFormat("en-US", {
+  const parts = dateTimeFormat("en-US", {
     timeZone: timezone,
     year: "numeric",
     month: "2-digit",
@@ -425,7 +442,7 @@ export type PayPeriod = {
 };
 
 function getPacificDateParts(ms: number, timezone: string) {
-  const parts = new Intl.DateTimeFormat("en-US", {
+  const parts = dateTimeFormat("en-US", {
     timeZone: timezone,
     year: "numeric",
     month: "numeric",

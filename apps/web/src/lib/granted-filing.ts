@@ -1,4 +1,4 @@
-import { PORTAL_TIMEZONE, pacificDateKey } from "@/lib/format";
+import { PORTAL_TIMEZONE, dateTimeFormat, pacificDateKey } from "@/lib/format";
 
 /**
  * The text staff paste into GrantED's Student Service Payment form for a
@@ -44,8 +44,8 @@ const SET_KIND: Record<string, string> = {
 /** `25-SEP-2026`, GrantED's date format. */
 export function grantedDate(ms: number) {
   const [year, month, day] = pacificDateKey(ms).split("-");
-  const monthName = new Date(Date.UTC(2000, Number(month) - 1, 1))
-    .toLocaleString("en-US", { month: "short", timeZone: "UTC" })
+  const monthName = dateTimeFormat("en-US", { month: "short", timeZone: "UTC" })
+    .format(new Date(Date.UTC(2000, Number(month) - 1, 1)))
     .toUpperCase();
   return `${day}-${monthName}-${year}`;
 }

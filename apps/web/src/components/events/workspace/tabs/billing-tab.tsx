@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RowCell } from "@/components/list-page";
 import { Input } from "@/components/ui/input";
+import { DraftTextInput } from "@/components/forms/draft-text-input";
 import type { SearchableSelectOption } from "@/components/inventory/searchable-select";
 import { EventLinkedInvoicesField } from "@/components/events/event-linked-invoices-field";
 import { formatDateTime, formatHours, formatUsd } from "@/lib/format";
@@ -44,28 +45,31 @@ import { useEventWorkspace } from "@/components/events/workspace/event-workspace
 
 function UsdInput({
   value,
-  onChange,
+  onCommit,
   readOnly,
   "data-testid": testId,
 }: {
   value: string;
-  onChange?: (value: string) => void;
+  onCommit?: (value: string) => void;
   readOnly?: boolean;
   "data-testid"?: string;
 }) {
+  const inputProps = {
+    inputMode: "decimal" as const,
+    className: "pl-6 tabular-nums",
+    readOnly,
+    "data-testid": testId,
+  };
   return (
     <div className="relative">
       <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
         $
       </span>
-      <Input
-        inputMode="decimal"
-        className="pl-6 tabular-nums"
-        value={value}
-        readOnly={readOnly}
-        data-testid={testId}
-        onChange={onChange ? (e) => onChange(e.target.value) : undefined}
-      />
+      {onCommit ? (
+        <DraftTextInput {...inputProps} value={value} onCommit={onCommit} />
+      ) : (
+        <Input {...inputProps} value={value} />
+      )}
     </div>
   );
 }
@@ -199,7 +203,7 @@ export function BillingTab() {
 
   function costField(key: keyof Pick<EventDraft, "externalRentalsCostUsd" | "otherCostUsd">) {
     return (
-      <UsdInput value={draft[key]} onChange={(value) => updateDraft({ [key]: value })} readOnly={readOnly} />
+      <UsdInput value={draft[key]} onCommit={(value) => updateDraft({ [key]: value })} readOnly={readOnly} />
     );
   }
 
@@ -382,9 +386,9 @@ export function BillingTab() {
                 OT premium (1.5×, double time after 8 hrs)
               </label>
               <Field label="Per-event crew buffer %">
-                <Input
+                <DraftTextInput
                   value={draft.crewCostBufferPercent}
-                  onChange={(e) => updateDraft({ crewCostBufferPercent: e.target.value })}
+                  onCommit={(crewCostBufferPercent) => updateDraft({ crewCostBufferPercent })}
                   placeholder="Use global default"
                 />
               </Field>

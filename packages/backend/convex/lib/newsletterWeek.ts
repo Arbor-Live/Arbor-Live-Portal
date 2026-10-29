@@ -1,6 +1,6 @@
 import type { QueryCtx } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
-import { PORTAL_TIMEZONE } from "@arbor/format";
+import { PORTAL_TIMEZONE, dateTimeFormat } from "@arbor/format";
 import {
   buildPublicEventUrl,
   isOpenMicSignupOpen,
@@ -92,7 +92,7 @@ export function weekLabelFor(now: number, days: number = NEWSLETTER_WINDOW_DAYS)
 
 /** "May 5" in portal time — no weekday/year, which the newsletter header omits. */
 function monthDayLabel(ms: number) {
-  return new Intl.DateTimeFormat("en-US", {
+  return dateTimeFormat("en-US", {
     timeZone: PORTAL_TIMEZONE,
     month: "short",
     day: "numeric",
@@ -101,7 +101,7 @@ function monthDayLabel(ms: number) {
 
 /** "Fri, May 9 · 7:00 PM" — weekday-anchored so readers can scan by day. */
 function eventWhenLabel(ms: number) {
-  return new Intl.DateTimeFormat("en-US", {
+  return dateTimeFormat("en-US", {
     timeZone: PORTAL_TIMEZONE,
     weekday: "short",
     month: "short",

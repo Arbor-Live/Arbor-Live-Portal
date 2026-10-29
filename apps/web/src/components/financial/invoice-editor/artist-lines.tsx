@@ -34,6 +34,7 @@ import {
 } from "./line-items-layout";
 import type { InvoiceDraft } from "./use-invoice-draft";
 import { artistTypesLabel } from "@/components/events/lineup/lineup-model";
+import { DraftTextInput } from "@/components/forms/draft-text-input";
 
 
 /** The linked days an artist line can belong to (multi-day bookings; none on a series). */
@@ -296,11 +297,11 @@ function ArtistLineCard({
             emptyLabel="Select artist"
           />
           {tbd ? (
-            <Input
+            <DraftTextInput
               aria-label="Artist or role"
               placeholder="Artist / role"
               value={row.label === ARTIST_TBD_LABEL ? "" : row.label}
-              onChange={(event) => onChange({ label: event.target.value || ARTIST_TBD_LABEL })}
+              onCommit={(value) => onChange({ label: value || ARTIST_TBD_LABEL })}
             />
           ) : (
             <Input aria-label="Line label" value={row.label} readOnly className="bg-muted/40" />

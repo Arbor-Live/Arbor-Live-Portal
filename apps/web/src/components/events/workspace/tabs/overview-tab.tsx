@@ -16,7 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { DraftTextarea } from "@/components/forms/draft-text-input";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { VenuePicker } from "@/components/venues/venue-picker";
 import { UserSelect } from "@/components/users/user-select";
@@ -140,11 +140,11 @@ export function OverviewTab() {
                 />
               </Field>
               <Field label="Notes" htmlFor="event-notes" icon={NotepadIcon} className="md:col-span-2">
-                <Textarea
+                <DraftTextarea
                   id="event-notes"
                   className="min-h-24"
                   value={draft.notes}
-                  onChange={(e) => updateDraft({ notes: e.target.value })}
+                  onCommit={(notes) => updateDraft({ notes })}
                   placeholder="Anything the team should know"
                 />
               </Field>

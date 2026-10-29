@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/message";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { notify } from "@/lib/notify";
-import { PORTAL_TIMEZONE } from "@/lib/format";
+import { PORTAL_TIMEZONE, dateTimeFormat } from "@/lib/format";
 import { buildUserSelectDescription } from "@/lib/user-select-description";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
@@ -133,7 +133,7 @@ function resolveMentionedUserIds(
 }
 
 function formatCommentTime(ms: number) {
-  return new Intl.DateTimeFormat("en-US", {
+  return dateTimeFormat("en-US", {
     timeZone: PORTAL_TIMEZONE,
     weekday: "short",
     month: "short",
