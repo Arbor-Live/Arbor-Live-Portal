@@ -9,6 +9,7 @@ import {
   type InsightsRangePreset,
   type InsightsRangeSelection,
 } from "@/lib/insights-range";
+import { dateTimeFormat } from "@/lib/format";
 
 /**
  * Stanford periods (this / last quarter, this / last academic year), rolling
@@ -99,12 +100,12 @@ export function InsightsRangePicker({
 function formatRangeDates(startDate: string, endDate: string) {
   const format = (key: string) => {
     const [year, month, day] = key.split("-").map(Number);
-    return new Date(Date.UTC(year!, month! - 1, day!)).toLocaleDateString("en-US", {
+    return dateTimeFormat("en-US", {
       timeZone: "UTC",
       month: "short",
       day: "numeric",
       year: "numeric",
-    });
+    }).format(new Date(Date.UTC(year!, month! - 1, day!)));
   };
   return `${format(startDate)} – ${format(endDate)}`;
 }

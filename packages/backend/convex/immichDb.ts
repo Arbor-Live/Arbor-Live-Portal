@@ -5,12 +5,13 @@ import { components } from "./_generated/api";
 import { requireBandContext } from "./lib/auth";
 import { requireEventMediaAccess as requireEventMediaAccessFromImmich } from "./lib/immichAccess";
 import { dedupeAlbumLinksForEntity, getCanonicalAlbumLink } from "./lib/immichAlbumLinks";
+import { dateTimeFormat } from "@arbor/format";
 
 const entityTypeValue = v.union(v.literal("band"), v.literal("event"));
 const assetTypeValue = v.union(v.literal("IMAGE"), v.literal("VIDEO"));
 
 function formatPacificDate(ms: number) {
-  return new Intl.DateTimeFormat("en-US", {
+  return dateTimeFormat("en-US", {
     timeZone: "America/Los_Angeles",
     month: "short",
     day: "numeric",

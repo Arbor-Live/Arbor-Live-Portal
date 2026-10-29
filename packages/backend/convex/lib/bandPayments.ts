@@ -1,5 +1,6 @@
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { dateTimeFormat } from "@arbor/format";
 import { EVENT_TIMEZONE } from "../email/constants";
 
 export { BAND_PAYMENT_REFERENCE_PREFIX as BAND_PAYMENT_TOKEN_PREFIX } from "./publicReferenceIds";
@@ -108,12 +109,12 @@ export function queueStatusForEndedEvent(args: {
 }
 
 export function formatBandPaymentDate(startAt: number, timezone: string = EVENT_TIMEZONE) {
-  return new Date(startAt).toLocaleDateString("en-US", {
+  return dateTimeFormat("en-US", {
     timeZone: timezone,
     month: "numeric",
     day: "numeric",
     year: "2-digit",
-  });
+  }).format(new Date(startAt));
 }
 
 export function formatPerformanceHours(hours: number | undefined) {

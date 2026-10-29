@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { getConvexErrorMessage } from "@/lib/convex-error";
-import { formatDateTime, formatUsd } from "@/lib/format";
+import { formatDateTime, formatUsd, dateTimeFormat } from "@/lib/format";
 import { notify } from "@/lib/notify";
 
 type Entry = FunctionReturnType<typeof api.grantedLedger.listEntries>["page"][number];
@@ -35,7 +35,7 @@ const PAGE_SIZE = 100;
 
 /** `2026-09-21` → "Sep 21, 2026" (a calendar day, so no timezone shift). */
 function formatDay(dateKey: string) {
-  return new Intl.DateTimeFormat("en-US", {
+  return dateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",

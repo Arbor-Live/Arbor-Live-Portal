@@ -1,4 +1,4 @@
-import { addPacificCalendarDays, pacificDateKey } from "@arbor/format";
+import { addPacificCalendarDays, pacificDateKey, dateTimeFormat } from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { findGroupByNameOrAlias, normalizeHostOrgName } from "./hostOrgIdentity";
@@ -276,7 +276,7 @@ function firstDayMsFromRequest(request: Doc<"eventRequests">) {
 }
 
 function pacificIssueDate(now = Date.now()) {
-  return new Intl.DateTimeFormat("en-CA", {
+  return dateTimeFormat("en-CA", {
     timeZone: "America/Los_Angeles",
     year: "numeric",
     month: "2-digit",

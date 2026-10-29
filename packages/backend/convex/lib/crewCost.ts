@@ -10,6 +10,7 @@ import {
 import { staffingSlots } from "./crewShiftKinds";
 import { countableShiftHours, loadOverlappingOtherEventShifts } from "./crewShiftOverlap";
 import { normalizeEventStatus } from "./eventStatus";
+import { dateTimeFormat } from "@arbor/format";
 
 /** Other events re-priced in one mutation when this one's crew changes (they share people's time). */
 const NEIGHBOR_RESYNC_CAP = 20;
@@ -19,7 +20,7 @@ function roundCurrency(value: number) {
 }
 
 function getShiftDayKey(startsAt: number) {
-  return new Intl.DateTimeFormat("en-CA", {
+  return dateTimeFormat("en-CA", {
     timeZone: "America/Los_Angeles",
     year: "numeric",
     month: "2-digit",

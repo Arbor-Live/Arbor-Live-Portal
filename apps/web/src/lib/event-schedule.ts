@@ -2,6 +2,7 @@ import {
   addPacificCalendarDays,
   pacificDateAndTimeToMs,
   PORTAL_TIMEZONE,
+  dateTimeFormat,
 } from "@/lib/format";
 
 export type ShowSlotInput = {
@@ -57,7 +58,7 @@ export function resolveShowSlots(slots: ShowSlotInput[]): ResolvedShowSlot[] {
 export function formatLongDate(date: string) {
   const ms = pacificDateAndTimeToMs(date, "12:00");
   if (ms == null) return date;
-  return new Intl.DateTimeFormat("en-US", {
+  return dateTimeFormat("en-US", {
     timeZone: PORTAL_TIMEZONE,
     month: "long",
     day: "numeric",

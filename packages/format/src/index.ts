@@ -47,7 +47,7 @@ const dateTimeFormats = new Map<string, Intl.DateTimeFormat>();
  * these helpers run per row on every render (the wall-clock parser alone formats
  * ~28 times per call), so each locale and option set is built once.
  */
-function dateTimeFormat(locale: string, options: Intl.DateTimeFormatOptions) {
+export function dateTimeFormat(locale: string, options: Intl.DateTimeFormatOptions) {
   const key = `${locale}|${JSON.stringify(options)}`;
   let format = dateTimeFormats.get(key);
   if (!format) {

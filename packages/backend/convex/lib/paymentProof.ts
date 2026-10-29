@@ -8,6 +8,7 @@ import {
   isSubmissionActive,
 } from "./invoicePaymentStatus";
 import { isRequestPublicTokenExpired } from "./requestToken";
+import { dateTimeFormat } from "@arbor/format";
 
 export const PAYMENT_PROOF_REMINDER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -25,7 +26,7 @@ export const paymentProofMethodValue = {
 };
 
 function formatZonedDateTime(ms: number, timezone: string) {
-  const formatter = new Intl.DateTimeFormat("en-US", {
+  const formatter = dateTimeFormat("en-US", {
     timeZone: timezone,
     year: "numeric",
     month: "2-digit",

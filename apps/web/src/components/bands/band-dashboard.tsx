@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "convex/react";
 import { MusicNotesIcon, WarningIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
-import { formatDate, formatUsd, PORTAL_TIMEZONE } from "@/lib/format";
+import { formatDate, formatUsd, PORTAL_TIMEZONE, dateTimeFormat } from "@/lib/format";
 import { BandPaymentSignSheet, type SignablePayment } from "@/components/bands/band-payment-sign-sheet";
 import {
   BandShowSheet,
@@ -34,9 +34,9 @@ function needsArtist(show: ShowRow) {
 function dateParts(ms: number, timezone: string | undefined) {
   const tz = timezone ?? PORTAL_TIMEZONE;
   return {
-    month: new Intl.DateTimeFormat("en-US", { month: "short", timeZone: tz }).format(ms),
-    day: new Intl.DateTimeFormat("en-US", { day: "numeric", timeZone: tz }).format(ms),
-    weekday: new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: tz }).format(ms),
+    month: dateTimeFormat("en-US", { month: "short", timeZone: tz }).format(ms),
+    day: dateTimeFormat("en-US", { day: "numeric", timeZone: tz }).format(ms),
+    weekday: dateTimeFormat("en-US", { weekday: "short", timeZone: tz }).format(ms),
   };
 }
 
