@@ -22,7 +22,7 @@ import { TypeChip } from "@/components/events/workspace/run-of-show/run-of-show-
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
-import { Input } from "@/components/ui/input";
+import { DraftTextInput } from "@/components/forms/draft-text-input";
 import { UserHoverCard } from "@/components/users/user-hover-card";
 import { CartEligibleIcon, UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { AssignTraineeDialog } from "@/components/events/crew-staffing/assign-trainee-dialog";
@@ -261,8 +261,10 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
   // A cart event without its cart people isn't fully staffed, same as a backup.
   const stillLooking = staffing.open > 0 || staffing.backup > 0 || !cart.met;
 
-  function updateShift(index: number, next: S) {
-    setShifts((prev) => prev.map((shift, i) => (i === index ? next : shift)));
+  // A patch, not the whole row: a role edit lands as a transition, so a row
+  // object captured before it would undo it.
+  function updateShift(index: number, patch: Partial<ShiftDraftForAssign>) {
+    setShifts((prev) => prev.map((shift, i) => (i === index ? { ...shift, ...patch } : shift)));
   }
 
   function removeShift(index: number) {
@@ -511,7 +513,7 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
                 askAvailability={askAvailability}
                 readOnly={readOnly}
                 openSlotNote={openSlotNote}
-                onChange={(next) => updateShift(index, next)}
+                onChange={(patch) => updateShift(index, patch)}
                 onRemove={() => removeShift(index)}
               />
             ))}
@@ -681,7 +683,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
   askAvailability: boolean;
   readOnly: boolean;
   openSlotNote?: string;
-  onChange: (index: number, next: S) => void;
+  onChange: (index: number, patch: Partial<ShiftDraftForAssign>) => void;
   onRemove: (index: number) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
@@ -818,7 +820,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
               askAvailability={askAvailability}
               readOnly={readOnly}
               openSlotNote={openSlotNote}
-              onChange={(next) => onChange(index, next)}
+              onChange={(patch) => onChange(index, patch)}
               onRemove={() => onRemove(index)}
             />
           ))
@@ -910,7 +912,7 @@ function ShiftRow<S extends ShiftDraftForAssign>({
   askAvailability: boolean;
   readOnly: boolean;
   openSlotNote?: string;
-  onChange: (next: S) => void;
+  onChange: (patch: Partial<ShiftDraftForAssign>) => void;
   onRemove: () => void;
 }) {
   const [editingTime, setEditingTime] = useState(false);
@@ -969,12 +971,12 @@ function ShiftRow<S extends ShiftDraftForAssign>({
     <div className="space-y-1" data-testid="crew-shift-row">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <div className="min-w-0 flex-1 basis-24">
-          <Input
+          <DraftTextInput
             placeholder="Role"
             aria-label="Role"
             value={shift.role}
             disabled={readOnly}
-            onChange={(e) => onChange({ ...shift, role: e.target.value })}
+            onCommit={(role) => onChange({ role })}
           />
         </div>
         <div className="min-w-0 flex-1 basis-40">
@@ -982,7 +984,6 @@ function ShiftRow<S extends ShiftDraftForAssign>({
             value={shift.userId ?? ""}
             onChange={(value) =>
               onChange({
-                ...shift,
                 userId: value || undefined,
                 personName: value
                   ? (userSelectOptions.find((option) => option.value === value)?.label ?? shift.personName)
@@ -1020,15 +1021,15 @@ function ShiftRow<S extends ShiftDraftForAssign>({
               endValue={shift.endsAt}
               onChange={({ start, end }) => {
                 if (!block) {
-                  onChange({ ...shift, startsAt: start, endsAt: end });
+                  onChange({ startsAt: start, endsAt: end });
                   return;
                 }
                 if (!start || !end) {
-                  onChange({ ...shift, startsAt: block.startsAt, endsAt: block.endsAt, timesOverridden: false });
+                  onChange({ startsAt: block.startsAt, endsAt: block.endsAt, timesOverridden: false });
                   return;
                 }
                 const timesOverridden = !shiftTimesMatchBlock({ startsAt: start, endsAt: end }, block);
-                onChange({ ...shift, startsAt: start, endsAt: end, timesOverridden });
+                onChange({ startsAt: start, endsAt: end, timesOverridden });
               }}
               placeholder="Shift start and end"
             />
