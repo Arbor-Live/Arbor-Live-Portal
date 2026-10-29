@@ -6,7 +6,7 @@ import { NotePencilIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { DraftTextarea } from "@/components/forms/draft-text-input";
 import type { InvoiceDraft } from "./use-invoice-draft";
 
 /**
@@ -70,23 +70,23 @@ export function InvoiceTermsCard({ draft }: { draft: InvoiceDraft }) {
           <Label htmlFor="invoice-additional-terms" className="text-xs">
             Additional terms
           </Label>
-          <Textarea
+          <DraftTextarea
             id="invoice-additional-terms"
             className="min-h-16"
             placeholder="Anything specific to this quote"
             value={fields.additionalTermsMarkdown}
-            onChange={(event) => setField("additionalTermsMarkdown", event.target.value)}
+            onCommit={(value) => setField("additionalTermsMarkdown", value)}
           />
         </div>
         <div className="space-y-2">
           <Label htmlFor="invoice-notes" className="text-xs">
             Notes
           </Label>
-          <Textarea
+          <DraftTextarea
             id="invoice-notes"
             className="min-h-32"
             value={fields.notes}
-            onChange={(event) => setField("notes", event.target.value)}
+            onCommit={(value) => setField("notes", value)}
           />
         </div>
       </CardContent>

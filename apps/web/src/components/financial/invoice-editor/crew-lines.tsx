@@ -11,7 +11,7 @@ import { LinkedEventDaySwitcher } from "@/components/events/linked-event-day-swi
 import { InvoiceLinkedEventCrewSection } from "@/components/financial/invoice-linked-event-crew";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Input } from "@/components/ui/input";
+import { DraftTextInput } from "@/components/forms/draft-text-input";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatUsd } from "@/lib/format";
 import { notify } from "@/lib/notify";
@@ -85,9 +85,13 @@ function ManualCrewRows({
         // Older rows saved only a total: read that as hours for one person.
         const hours = row.hours ?? row.quantity;
         const people = row.people ?? "1";
+        // Reads the latest row: hours and people commit as separate transitions.
         const setSplit = (next: { hours?: string; people?: string }) => {
-          const split = { hours, people, ...next };
-          setRows((prev) => patchRow(prev, idx, { ...split, quantity: crewPersonHours(split.hours, split.people) }));
+          setRows((prev) => {
+            const current = prev[idx]!;
+            const split = { hours: current.hours ?? current.quantity, people: current.people ?? "1", ...next };
+            return patchRow(prev, idx, { ...split, quantity: crewPersonHours(split.hours, split.people) });
+          });
         };
         return (
         <LineRow
@@ -96,40 +100,40 @@ function ManualCrewRows({
           removeLabel={`Remove ${row.label.trim() || (kind === "crew" ? "crew line" : "hours")}`}
           onRemove={() => setRows((prev) => removeRow(prev, idx))}
         >
-          <Input
+          <DraftTextInput
             aria-label={kind === "crew" ? "Crew role" : "Description"}
             placeholder={kind === "crew" ? "Crew role (e.g. Load-in)" : "Description"}
             value={row.label}
-            onChange={(event) => setRows((prev) => patchRow(prev, idx, { label: event.target.value }))}
+            onCommit={(value) => setRows((prev) => patchRow(prev, idx, { label: value }))}
           />
           <div className="flex items-center gap-1">
-            <Input
+            <DraftTextInput
               aria-label="Hours"
               placeholder="Hours"
               inputMode="decimal"
               className="min-w-0 px-2"
               value={hours}
-              onChange={(event) => setSplit({ hours: event.target.value })}
+              onCommit={(value) => setSplit({ hours: value })}
             />
             <span className="text-muted-foreground" aria-hidden>
               ×
             </span>
-            <Input
+            <DraftTextInput
               aria-label="People"
               placeholder="People"
               inputMode="numeric"
               className="min-w-0 px-2"
               value={people}
-              onChange={(event) => setSplit({ people: event.target.value })}
+              onCommit={(value) => setSplit({ people: value })}
             />
           </div>
           {custom ? (
-            <Input
+            <DraftTextInput
               aria-label="Rate per hour"
               placeholder="Rate (USD)"
               inputMode="decimal"
               value={row.rateUsd ?? "0"}
-              onChange={(event) => setRows((prev) => patchRow(prev, idx, { rateUsd: event.target.value }))}
+              onCommit={(value) => setRows((prev) => patchRow(prev, idx, { rateUsd: value }))}
             />
           ) : (
             <StaticCell

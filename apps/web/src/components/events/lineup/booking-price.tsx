@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { DraftTextInput } from "@/components/forms/draft-text-input";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatUsd } from "@/lib/format";
@@ -108,7 +108,7 @@ export function BookingPriceFields({
   const field = (key: keyof Omit<BookingPriceDraft, "pricingMode">) => ({
     id: `${idPrefix}-${key}`,
     value: value[key],
-    onChange: (event: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, [key]: event.target.value }),
+    onCommit: (next: string) => onChange({ ...value, [key]: next }),
   });
   return (
     <div className={cn("flex flex-wrap items-end gap-x-3 gap-y-2", className)}>
@@ -129,15 +129,15 @@ export function BookingPriceFields({
         <div className="grid grid-cols-3 gap-2">
           <div className="space-y-1">
             <Label htmlFor={`${idPrefix}-memberCount`}>People</Label>
-            <Input {...field("memberCount")} inputMode="numeric" placeholder="People" className="w-20" />
+            <DraftTextInput {...field("memberCount")} inputMode="numeric" placeholder="People" className="w-20" />
           </div>
           <div className="space-y-1">
             <Label htmlFor={`${idPrefix}-performanceHours`}>Hours</Label>
-            <Input {...field("performanceHours")} inputMode="decimal" placeholder="Hours" className="w-20" />
+            <DraftTextInput {...field("performanceHours")} inputMode="decimal" placeholder="Hours" className="w-20" />
           </div>
           <div className="space-y-1">
             <Label htmlFor={`${idPrefix}-ratePerMemberPerHourUsd`}>Rate / person / hr</Label>
-            <Input
+            <DraftTextInput
               {...field("ratePerMemberPerHourUsd")}
               inputMode="decimal"
               placeholder="Rate / person / hr"
@@ -148,7 +148,7 @@ export function BookingPriceFields({
       ) : (
         <div className="space-y-1">
           <Label htmlFor={`${idPrefix}-fixedTotalUsd`}>Total (USD)</Label>
-          <Input {...field("fixedTotalUsd")} inputMode="decimal" placeholder="Total" className="w-32" />
+          <DraftTextInput {...field("fixedTotalUsd")} inputMode="decimal" placeholder="Total" className="w-32" />
         </div>
       )}
     </div>

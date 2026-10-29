@@ -27,6 +27,7 @@ import {
   removeRow,
 } from "./line-items-layout";
 import type { InvoiceDraft } from "./use-invoice-draft";
+import { DraftTextInput } from "@/components/forms/draft-text-input";
 
 type PackageOption = NonNullable<ReturnType<InvoiceDraft["packageById"]["get"]>>;
 type TypeOption = NonNullable<ReturnType<InvoiceDraft["typeById"]["get"]>>;
@@ -251,12 +252,12 @@ export function EquipmentLines({ draft }: { draft: InvoiceDraft }) {
                 setRows((prev) => patchRow(prev, idx, { refId: value, excludedTypeIds: [], discountUsd: "" }))
               }
             />
-            <Input
+            <DraftTextInput
               aria-label="Quantity"
               placeholder="Qty"
               inputMode="decimal"
               value={row.quantity}
-              onChange={(event) => setRows((prev) => patchRow(prev, idx, { quantity: event.target.value }))}
+              onCommit={(value) => setRows((prev) => patchRow(prev, idx, { quantity: value }))}
             />
             <StaticCell title={discount > 0 ? `Original ${formatUsd(originalRate)}` : undefined}>
               {formatUsd(rate)}
@@ -290,12 +291,12 @@ export function EquipmentLines({ draft }: { draft: InvoiceDraft }) {
               value={row.refId}
               onChange={(value) => setRows((prev) => patchRow(prev, idx, { refId: value }))}
             />
-            <Input
+            <DraftTextInput
               aria-label="Quantity"
               placeholder="Qty"
               inputMode="decimal"
               value={row.quantity}
-              onChange={(event) => setRows((prev) => patchRow(prev, idx, { quantity: event.target.value }))}
+              onCommit={(value) => setRows((prev) => patchRow(prev, idx, { quantity: value }))}
             />
             <StaticCell>{formatUsd(rate)}</StaticCell>
             <AmountCell amountUsd={billedQty * rate} hint={hint} />

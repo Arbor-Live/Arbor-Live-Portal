@@ -2,7 +2,7 @@
 
 import { CurrencyDollarIcon, TruckIcon } from "@phosphor-icons/react";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
-import { Input } from "@/components/ui/input";
+import { DraftTextInput } from "@/components/forms/draft-text-input";
 import type { ExternalRentalRow, FeeRow } from "./invoice-draft-model";
 import { AmountCell, LineColumnHeads, LineGroup, LineRow, patchRow, plural, removeRow } from "./line-items-layout";
 import type { InvoiceDraft } from "./use-invoice-draft";
@@ -37,32 +37,32 @@ export function RentalLines({ draft }: { draft: InvoiceDraft }) {
           onRemove={() => setRows((prev) => removeRow(prev, idx))}
         >
           <div className="grid min-w-0 gap-2 @md/lines:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-            <Input
+            <DraftTextInput
               aria-label="Rental item"
               placeholder="Line item"
               value={row.label}
-              onChange={(event) => setRows((prev) => patchRow(prev, idx, { label: event.target.value }))}
+              onCommit={(value) => setRows((prev) => patchRow(prev, idx, { label: value }))}
             />
-            <Input
+            <DraftTextInput
               aria-label="Provider"
               placeholder="Provider"
               value={row.provider}
-              onChange={(event) => setRows((prev) => patchRow(prev, idx, { provider: event.target.value }))}
+              onCommit={(value) => setRows((prev) => patchRow(prev, idx, { provider: value }))}
             />
           </div>
-          <Input
+          <DraftTextInput
             aria-label="Quantity"
             placeholder="Qty"
             inputMode="decimal"
             value={row.quantity}
-            onChange={(event) => setRows((prev) => patchRow(prev, idx, { quantity: event.target.value }))}
+            onCommit={(value) => setRows((prev) => patchRow(prev, idx, { quantity: value }))}
           />
-          <Input
+          <DraftTextInput
             aria-label="Rate"
             placeholder="Rate"
             inputMode="decimal"
             value={row.rateUsd}
-            onChange={(event) => setRows((prev) => patchRow(prev, idx, { rateUsd: event.target.value }))}
+            onCommit={(value) => setRows((prev) => patchRow(prev, idx, { rateUsd: value }))}
           />
           <AmountCell amountUsd={lineAmount(row.quantity, row.rateUsd)} />
         </LineRow>
@@ -125,26 +125,26 @@ export function FeeLines({
                 placeholder="Search fee definition..."
                 emptyLabel="Select fee"
               />
-              <Input
+              <DraftTextInput
                 aria-label="Fee label"
                 placeholder="Label"
                 value={row.label}
-                onChange={(event) => setRows((prev) => patchRow(prev, idx, { label: event.target.value }))}
+                onCommit={(value) => setRows((prev) => patchRow(prev, idx, { label: value }))}
               />
             </div>
-            <Input
+            <DraftTextInput
               aria-label="Quantity"
               placeholder="Qty"
               inputMode="decimal"
               value={row.quantity}
-              onChange={(event) => setRows((prev) => patchRow(prev, idx, { quantity: event.target.value }))}
+              onCommit={(value) => setRows((prev) => patchRow(prev, idx, { quantity: value }))}
             />
-            <Input
+            <DraftTextInput
               aria-label="Rate"
               placeholder="Rate"
               inputMode="decimal"
               value={row.rateUsd}
-              onChange={(event) => setRows((prev) => patchRow(prev, idx, { rateUsd: event.target.value }))}
+              onCommit={(value) => setRows((prev) => patchRow(prev, idx, { rateUsd: value }))}
             />
             <AmountCell amountUsd={lineAmount(row.quantity, row.rateUsd)} />
           </LineRow>
