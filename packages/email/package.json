@@ -15,10 +15,10 @@
   },
   "dependencies": {
     "@arbor/format": "workspace:*",
-    "@react-email/render": "^2.1.0",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
-    "react-email": "^6.11.1"
+    "@react-email/render": "^2.1.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-email": "^6.11.3"
   },
   "devDependencies": {
     "@react-email/ui": "6.11.1",
