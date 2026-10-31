@@ -70,8 +70,11 @@ export function FormSaveBar({
       className={cn(
         "border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80",
         // Inside a stack the container owns positioning; standalone bars keep
-        // pinning themselves to the bottom of the viewport.
-        stackContainer ? "pointer-events-auto w-full" : cn("fixed bottom-0 z-40", horizontalPosition),
+        // pinning themselves to the bottom of the viewport. The bar touching
+        // the screen edge pads itself above the home indicator.
+        stackContainer
+          ? "pointer-events-auto w-full last:pb-safe"
+          : cn("fixed bottom-0 z-40 pb-safe", horizontalPosition),
         className,
       )}
     >

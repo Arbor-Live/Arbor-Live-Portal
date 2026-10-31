@@ -115,7 +115,7 @@ export function DashboardSleepGate({ children }: { children: React.ReactNode }) 
   if (!asleep) return <>{children}</>;
 
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-6 py-16 text-center">
+    <div className="flex min-h-[60svh] flex-col items-center justify-center gap-6 px-6 py-16 text-center">
       <Image
         src="/icon.svg"
         alt="Arbor Live"

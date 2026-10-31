@@ -144,7 +144,7 @@ export function MultiSelectFilter({
                 top: menuPosition.top,
                 left: menuPosition.left,
                 width: Math.max(menuPosition.width, 280),
-                maxHeight: "min(24rem, calc(100vh - 1rem))",
+                maxHeight: "min(24rem, calc(100dvh - 1rem))",
               }}
             >
               <Input

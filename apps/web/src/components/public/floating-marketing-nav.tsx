@@ -73,7 +73,7 @@ export function FloatingMarketingNav() {
     // Avoid pointer-events-none on this shell: Radix Sheet portals from here, and
     // iOS Safari often drops taps on dialog content nested under pointer-events-none.
     <>
-      <header className="fixed inset-x-0 top-0 z-40">
+      <header className="fixed inset-x-0 top-0 z-40 pt-safe pr-safe pl-safe">
         {/* When the banner shows it becomes the chrome's bottom edge (the nav
             cluster drops its bottom padding). Pages that reserve space under
             the header add the banner height via --happening-banner-height. */}
