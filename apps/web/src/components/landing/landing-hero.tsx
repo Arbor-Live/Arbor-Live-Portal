@@ -106,7 +106,7 @@ export function LandingHero() {
 
       <div className="relative z-2 px-4 sm:px-5">
         <motion.div
-          className="mx-auto flex min-h-[min(92vh,56rem)] max-w-6xl flex-col justify-center px-5 py-28 sm:px-6 sm:py-32"
+          className="mx-auto flex min-h-[min(92svh,56rem)] max-w-6xl flex-col justify-center px-5 py-28 sm:px-6 sm:py-32"
           initial={reduceMotion ? false : "hidden"}
           animate="visible"
           variants={heroStagger}

@@ -243,7 +243,7 @@ export function CommandPalette() {
               measured height includes it (otherwise the list always scrolls). */}
           <CommandList
             ref={listRef}
-            className="max-h-[min(30rem,60vh)] p-0 transition-[height] duration-200 ease-out motion-reduce:transition-none [&>[cmdk-list-sizer]]:p-2"
+            className="max-h-[min(30rem,60dvh)] p-0 transition-[height] duration-200 ease-out motion-reduce:transition-none [&>[cmdk-list-sizer]]:p-2"
           >
             {pending ? <ResultsSkeleton /> : (
               <CommandEmpty className="flex flex-col items-center justify-center gap-2 py-12">

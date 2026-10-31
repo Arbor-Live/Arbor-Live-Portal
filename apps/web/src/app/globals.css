@@ -275,6 +275,55 @@
     @apply font-sans;
     scroll-padding-top: 6rem;
     scrollbar-gutter: stable;
+    /* Phones paint a gray flash over anything tapped; buttons carry their own
+       :active feedback instead. */
+    -webkit-tap-highlight-color: transparent;
+    /* No font inflation when an iPhone turns to landscape. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* Native form controls, scrollbars, and date pickers follow the app theme
+       rather than the OS setting. */
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  /* viewport-fit=cover (root layout) puts the page under a landscape notch.
+     Pad the sides back out; fixed chrome pads itself. */
+  body {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  /* Controls fire click immediately (no double-tap-zoom wait), and a long
+     press doesn't select their label or pop the iOS callout. Links stay
+     selectable because they're usually content. */
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  label,
+  summary,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+  button,
+  summary,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="switch"] {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  /* Scrolling a popover or dialog to its end shouldn't start scrolling the
+     page behind it. */
+  [data-slot="dialog-content"],
+  [data-slot="sheet-content"],
+  [data-slot="popover-content"],
+  [data-slot="command-list"] {
+    overscroll-behavior: contain;
   }
   h1,
   h2,
@@ -322,6 +371,30 @@
 }
 @utility pt-banner-2xl {
   padding-top: calc(8rem + var(--happening-banner-height, 0px));
+}
+
+/* Safe-area padding for fixed chrome (headers, save bars, sheets) so it clears
+   the notch and home indicator. The root layout sets viewport-fit=cover;
+   without it these resolve to 0. */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@utility pl-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+@utility pr-safe {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+/* The same insets for absolutely positioned controls (a sheet's close button),
+   which sit on the padding edge and so ignore the *-safe padding above. */
+@utility top-safe-3 {
+  top: calc(0.75rem + env(safe-area-inset-top, 0px));
+}
+@utility right-safe-3 {
+  right: calc(0.75rem + env(safe-area-inset-right, 0px));
 }
 
 /* Larger day cells for the public booking calendar, which lays out full width
@@ -572,6 +645,17 @@
   --fc-classic-today: color-mix(in oklch, var(--primary) 8%, transparent);
   --fc-classic-now: color-mix(in oklch, var(--primary) 90%, transparent);
   --fc-classic-highlight: color-mix(in oklch, var(--primary) 12%, transparent);
+}
+
+/* iOS Safari zooms the page into any focused field under 16px and doesn't zoom
+   back out. Fields are text-sm (14px) by design, so lift them to 16px on touch
+   screens only. Unlayered so it beats the text-* utilities on each field. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
 }
 
 /* Unlayered: scrollbar pseudo-elements lose to UA defaults when inside @layer. */

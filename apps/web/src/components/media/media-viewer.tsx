@@ -46,13 +46,13 @@ export function MediaViewer({ asset, onClose, onPrevious, onNext }: MediaViewerP
             </Button>
           </div>
         </div>
-        <div className="relative flex min-h-[40vh] items-center justify-center overflow-hidden rounded-lg bg-black">
+        <div className="relative flex min-h-[40dvh] items-center justify-center overflow-hidden rounded-lg bg-black">
           {asset.type === "VIDEO" && asset.playbackUrl ? (
             <video
               src={asset.playbackUrl}
               controls
               autoPlay
-              className="max-h-[80vh] max-w-full"
+              className="max-h-[80dvh] max-w-full"
             />
           ) : (
             <Image
@@ -61,7 +61,7 @@ export function MediaViewer({ asset, onClose, onPrevious, onNext }: MediaViewerP
               width={1600}
               height={1200}
               unoptimized
-              className="max-h-[80vh] w-auto object-contain"
+              className="max-h-[80dvh] w-auto object-contain"
             />
           )}
         </div>
