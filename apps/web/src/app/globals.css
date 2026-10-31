@@ -388,6 +388,14 @@
 @utility pr-safe {
   padding-right: env(safe-area-inset-right, 0px);
 }
+/* The same insets for absolutely positioned controls (a sheet's close button),
+   which sit on the padding edge and so ignore the *-safe padding above. */
+@utility top-safe-3 {
+  top: calc(0.75rem + env(safe-area-inset-top, 0px));
+}
+@utility right-safe-3 {
+  right: calc(0.75rem + env(safe-area-inset-right, 0px));
+}
 
 /* Larger day cells for the public booking calendar, which lays out full width
    rather than inside a popover. */
