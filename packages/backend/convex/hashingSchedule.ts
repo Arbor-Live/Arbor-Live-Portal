@@ -576,7 +576,8 @@ export const closeLapsedHashes = internalMutation({
       .withIndex("by_status_and_dateKey", (q) => q.eq("status", "scheduled").lt("dateKey", today))
       .take(LAPSE_BATCH);
     for (const row of lapsed) {
-      await ctx.db.patch(row._id, { status: "lapsed" });
+      const bookings = await loadDateBookings(ctx, row);
+      await ctx.db.patch(row._id, { status: "lapsed", bookedWhenLapsed: bookings.map((booking) => booking.userId) });
       await closeHashEvent(ctx, row);
     }
     if (lapsed.length === LAPSE_BATCH) {

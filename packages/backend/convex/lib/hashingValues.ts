@@ -40,6 +40,8 @@ export const hashDateFields = {
   finishedAt: v.optional(v.number()),
   /** Snapshot at finish, so History doesn't read every check of every hash. */
   finalCounts: v.optional(v.object({ checked: v.number(), flagged: v.number(), total: v.number() })),
+  /** A lapse removes the shifts, so Mark as done starts from who they were. */
+  bookedWhenLapsed: v.optional(v.array(v.string())),
 };
 
 export const hashStandingValue = v.union(

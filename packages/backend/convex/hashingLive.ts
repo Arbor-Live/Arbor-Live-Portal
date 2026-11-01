@@ -479,16 +479,23 @@ export const correctAttendance = mutation({
     await settleHashAttendance(ctx, await loadHashDate(ctx, row._id), attendeeUserIds, {
       scheduledSubject: `Hash on ${hashDateLabel(row)}: you're marked as there`,
     });
-    if (row.status === "lapsed") await ctx.db.patch(row._id, { status: "finished", finishedAt: row.endsAt });
+    if (row.status === "lapsed") {
+      await ctx.db.patch(row._id, { status: "finished", finishedAt: row.endsAt, bookedWhenLapsed: undefined });
+    }
     return null;
   },
 });
 
-/** Who the correction dialog can tick: the crew, plus anyone credited who has since left it. */
+/**
+ * Who the correction dialog can tick: the crew, plus anyone credited or booked
+ * when it lapsed who has since left it. `rosterIds` start ticked but hold no
+ * credit yet, so saving them reads as an addition.
+ */
 export const getAttendance = query({
   args: { hashDateId: v.id("hashDates") },
   returns: v.object({
     attendeeIds: v.array(v.string()),
+    rosterIds: v.array(v.string()),
     crew: v.array(v.object({ userId: v.string(), name: v.string() })),
   }),
   handler: async (ctx, args) => {
@@ -496,10 +503,14 @@ export const getAttendance = query({
     const row = await loadHashDate(ctx, args.hashDateId);
     const [bookings, profiles] = await Promise.all([loadDateBookings(ctx, row), loadAdminProfilesByStatus(ctx, ["active"])]);
     const attendeeIds = bookings.map((booking) => booking.userId);
-    const userIds = [...new Set([...attendeeIds, ...profiles.filter(isHashCrew).map((profile) => profile.userId)])];
+    const rosterIds = row.bookedWhenLapsed ?? [];
+    const userIds = [
+      ...new Set([...attendeeIds, ...rosterIds, ...profiles.filter(isHashCrew).map((profile) => profile.userId)]),
+    ];
     const userByKey = await findAuthUsersByIds(ctx, userIds);
     return {
       attendeeIds,
+      rosterIds,
       crew: userIds
         .map((userId) => {
           const user = userByKey.get(userId);

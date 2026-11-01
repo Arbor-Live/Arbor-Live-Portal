@@ -45,12 +45,12 @@ function AttendanceForm({
   onClose,
 }: {
   target: AttendanceTarget;
-  attendance: { attendeeIds: string[]; crew: Person[] };
+  attendance: { attendeeIds: string[]; rosterIds: string[]; crew: Person[] };
   onClose: () => void;
 }) {
   const correct = useMutation(api.hashingLive.correctAttendance);
   const { confirm } = useAppDialog();
-  const [there, setThere] = useState(() => new Set(attendance.attendeeIds));
+  const [there, setThere] = useState(() => new Set([...attendance.attendeeIds, ...attendance.rosterIds]));
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
 

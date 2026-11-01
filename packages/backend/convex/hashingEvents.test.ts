@@ -785,6 +785,33 @@ describe("pay and attendance", () => {
       expect(attendance.crew.map((person) => person.name)).toEqual(["Ana Crew", "Ben Crew"]);
     });
 
+    test("a lapsed hash keeps who was booked, even someone who has left crew, until it's marked done", async () => {
+      const { t, opsApi, ana, ben, on } = await setup();
+      const hashDateId = on("2026-11-03")._id;
+      await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId, userId: ana._id });
+      await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId, userId: ben._id });
+      vi.setSystemTime(AFTER);
+      await t.mutation(internal.hashingSchedule.closeLapsedHashes, {});
+      await t.run(async (ctx) => {
+        const profile = await ctx.db
+          .query("userAdminProfiles")
+          .withIndex("by_userId", (q) => q.eq("userId", ben._id))
+          .unique();
+        await ctx.db.patch(profile!._id, { status: "alumni" });
+      });
+
+      const attendance = await opsApi.query(api.hashingLive.getAttendance, { hashDateId });
+      expect(attendance.attendeeIds).toEqual([]);
+      expect(attendance.rosterIds.sort()).toEqual([ana._id, ben._id].sort());
+      expect(attendance.crew.map((person) => person.name)).toEqual(["Ana Crew", "Ben Crew"]);
+
+      await opsApi.mutation(api.hashingLive.correctAttendance, { hashDateId, attendeeUserIds: attendance.rosterIds });
+      expect((await getRow(t, hashDateId))?.bookedWhenLapsed).toBeUndefined();
+      const after = await opsApi.query(api.hashingLive.getAttendance, { hashDateId });
+      expect(after.attendeeIds.sort()).toEqual([ana._id, ben._id].sort());
+      expect(after.rosterIds).toEqual([]);
+    });
+
     test("History lists lapsed hashes beside finished ones", async () => {
       const { t, opsApi, on } = await setup();
       vi.setSystemTime(AFTER);

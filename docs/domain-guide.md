@@ -690,7 +690,9 @@ lose them with the normal notice. It records who was there, so no booking rule
 applies: someone who has since left crew, holds another hash this quarter, or
 takes the date past capacity can still be credited and paid. A new person only
 needs a real profile, which refuses a junk id.
-Marking a lapsed hash as done revives its event. A lapsed add-on's event becomes a
+The lapse keeps who was booked in `hashDates.bookedWhenLapsed`, which starts them
+ticked in Mark as done even if they have since left crew. Marking a lapsed hash as
+done revives its event and clears that list. A lapsed add-on's event becomes a
 hash again only if it is still bare and hasn't moved.
 
 **Notifications.** Hashes use the crew assignment flow. Booking sends
