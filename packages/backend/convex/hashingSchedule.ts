@@ -565,7 +565,7 @@ async function addHashingToEvent(ctx: MutationCtx, event: Doc<"events">) {
   await ctx.db.patch(event._id, { hashingEnabled: true, updatedAt: now });
 }
 
-/** Past dates nobody started: no shift pays, the event closes, and crew owe a hash again. */
+/** Past dates nobody started: no shift pays, the hash closes, and crew owe a hash again. */
 export const closeLapsedHashes = internalMutation({
   args: {},
   returns: v.null(),
