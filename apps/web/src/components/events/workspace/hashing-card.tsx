@@ -58,7 +58,7 @@ export function HashingCard() {
         </CardTitle>
         <Switch
           checked={Boolean(addon)}
-          disabled={addon === undefined || saving || readOnly || started || addon?.origin === "regular"}
+          disabled={addon === undefined || saving || readOnly || started || (addon !== null && addon.origin !== "addon")}
           onCheckedChange={(enabled) => void toggle(enabled)}
           aria-label="Enable Hashing"
           data-testid="event-hashing-switch"

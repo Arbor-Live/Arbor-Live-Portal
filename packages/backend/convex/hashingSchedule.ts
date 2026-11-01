@@ -12,6 +12,7 @@ import { internal } from "./_generated/api";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { getUserAdminProfile, getUserId, requireAdminOrOperations } from "./lib/auth";
 import { appError } from "./lib/errors";
+import { isHashEvent } from "./lib/hashEvent";
 import {
   fillFromAvailability,
   followingHashingQuarter,
@@ -47,7 +48,7 @@ import {
   bookHashShifts,
   cancelHashEvent,
   clearHashShifts,
-  HASH_ROLE,
+  deleteHashEvent,
   insertHashEvent,
   moveHashEvent,
   reopenHashEvent,
@@ -99,12 +100,6 @@ function validateCapacity(capacity: number) {
   }
 }
 
-async function detachDate(ctx: MutationCtx, row: Doc<"hashDates">) {
-  await clearAvailability(ctx, row._id);
-  await ctx.db.delete(row._id);
-  if (row.eventId) await ctx.db.patch(row.eventId, { hashingEnabled: false, updatedAt: Date.now() });
-}
-
 function requireQuarter(quarterId: string) {
   const quarter = hashingQuarterById(quarterId);
   if (!quarter) appError("HASH_UNKNOWN_QUARTER", `Unknown quarter: ${quarterId}.`);
@@ -136,11 +131,26 @@ async function moveBookedDate(ctx: MutationCtx, row: Doc<"hashDates">, next: { s
   await moveHashEvent(ctx, row, next, { reconfirm: true });
 }
 
-/** Bookings end, those people go back to needing a hash, and the event stops running. */
+/**
+ * Bookings end and those people go back to needing a hash. An event Hashing made
+ * stops running. An add-on's event was never Hashing's, so it just stops being a hash.
+ */
 async function closeHashEvent(ctx: MutationCtx, row: Doc<"hashDates">) {
   if (!row.eventId) return;
   await clearHashShifts(ctx, row.eventId);
-  await cancelHashEvent(ctx, row.eventId);
+  if (row.origin === "addon") await ctx.db.patch(row.eventId, { hashingEnabled: false, updatedAt: Date.now() });
+  else await cancelHashEvent(ctx, row.eventId);
+}
+
+async function deleteDate(ctx: MutationCtx, row: Doc<"hashDates">) {
+  await clearAvailability(ctx, row._id);
+  await ctx.db.delete(row._id);
+}
+
+/** An add-on has no off week to come back from, so ending it takes the date too. */
+async function removeAddon(ctx: MutationCtx, row: Doc<"hashDates">) {
+  await closeHashEvent(ctx, row);
+  await deleteDate(ctx, row);
 }
 
 /**
@@ -459,7 +469,8 @@ export const addDate = mutation({
 
 /**
  * Off or on again. Turning a date off ends its bookings and cancels its event,
- * which stays linked so switching back on revives it. Answers stay too.
+ * which stays linked so switching back on revives it. Answers stay too. An
+ * add-on's event carries on without it.
  */
 export const setDateOff = mutation({
   args: { hashDateId: v.id("hashDates"), off: v.boolean() },
@@ -470,6 +481,10 @@ export const setDateOff = mutation({
     requireFuture(row, Date.now());
     if (args.off) {
       if (row.status === "off") return null;
+      if (row.origin === "addon") {
+        await removeAddon(ctx, row);
+        return null;
+      }
       await ctx.db.patch(row._id, { status: "off" });
       await closeHashEvent(ctx, row);
       return null;
@@ -492,17 +507,17 @@ export const removeDate = mutation({
   handler: async (ctx, args) => {
     await requireManager(ctx);
     const row = await loadHashDate(ctx, args.hashDateId);
-    if (row.origin !== "added") appError("HASH_NOT_ADDED", "Only added dates can be removed. Turn this one off.");
+    if (row.origin === "regular") appError("HASH_NOT_ADDED", "Only added dates can be removed. Turn this one off.");
     requireFuture(row, Date.now());
-    await closeHashEvent(ctx, row);
-    await detachDate(ctx, row);
+    if (row.origin === "addon") await removeAddon(ctx, row);
+    else await deleteHashEvent(ctx, requireHashEventId(row));
     return null;
   },
 });
 
 /**
- * The add-on switch on an event. On makes the event a hash in `added` form;
- * off stops it being one, and the event carries on as a plain internal event.
+ * The add-on switch on an event. On makes it an `addon` hash; off stops it being
+ * one, and the event carries on. A lapsed add-on's old date gives way to the new one.
  */
 export const setEventHashing = mutation({
   args: { eventId: v.id("events"), enabled: v.boolean() },
@@ -513,18 +528,20 @@ export const setEventHashing = mutation({
     if (!event) appError("EVENT_NOT_FOUND", "Event not found.");
     const row = await loadDateForEvent(ctx, event._id);
     if (args.enabled) {
-      if (!row) await addHashingToEvent(ctx, event);
+      if (isHashEvent(event)) return null;
+      if (row) await deleteDate(ctx, row);
+      await addHashingToEvent(ctx, event);
       return null;
     }
-    if (!row) return null;
+    if (!row || !isHashEvent(event)) return null;
     if (row.origin === "regular") {
       appError("HASH_NOT_ADDED", "This is a regular hash. Turn the date off in Hashing.");
     }
+    if (row.origin === "added") appError("HASH_NOT_ADDON", "Hashing made this event. Remove it in Hashing.");
     if (row.status === "in_progress" || row.status === "finished") {
       appError("HASH_ALREADY_STARTED", "This hash has already started, so hashing can't be turned off.");
     }
-    await clearHashShifts(ctx, event._id, (shift) => shift.role !== HASH_ROLE);
-    await detachDate(ctx, row);
+    await removeAddon(ctx, row);
     return null;
   },
 });
@@ -554,7 +571,7 @@ async function addHashingToEvent(ctx: MutationCtx, event: Doc<"events">) {
     dateKey,
     ...times,
     capacity: settings.spotsPerHash,
-    origin: "added",
+    origin: "addon",
     status: "scheduled",
     eventId: event._id,
     sectionBlockId: await adoptHashSection(ctx, event._id, times),

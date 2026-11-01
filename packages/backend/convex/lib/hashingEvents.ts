@@ -6,6 +6,7 @@ import { bumpInviteSequence } from "../email/inviteSequence";
 import { scheduleCrewScheduledEmails } from "../email/triggers";
 import { loadInvoiceCrewRateSettings, resolveUserCompensationHourlyRateUsd } from "./crewCompensation";
 import { crewCostNeighborEventIds, syncCrewCostAfterStatusChange, syncEventCrewCostUsd } from "./crewCost";
+import { deleteEventRecord } from "./bookingChainDelete";
 import { appError } from "./errors";
 import { type EventStatus, normalizeEventStatus } from "./eventStatus";
 import { normalizeEventVisibility } from "./eventVisibility";
@@ -22,6 +23,8 @@ const HASH_SECTION_LABEL = "Cleaning";
 const HASH_EVENT_TYPE = "Services Only";
 const EVENT_SHIFT_TAKE = 500;
 const EVENT_BLOCK_TAKE = 500;
+/** A few emails per person per change, on a hash of a handful of people. */
+const EVENT_EMAIL_TAKE = 500;
 
 type Times = { startsAt: number; endsAt: number };
 
@@ -178,6 +181,22 @@ export async function clearHashShifts(ctx: MutationCtx, eventId: Id<"events">, k
       if (!keep?.(shift)) await ctx.db.delete(shift._id);
     }
   });
+}
+
+/**
+ * Gone for good, so no cancelled husk reaches a list. The delete wipes the
+ * event's emails, so queued removal notices let go of the event first.
+ */
+export async function deleteHashEvent(ctx: MutationCtx, eventId: Id<"events">) {
+  await clearHashShifts(ctx, eventId);
+  const emails = await ctx.db
+    .query("emailNotifications")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(EVENT_EMAIL_TAKE);
+  for (const email of emails) {
+    if (email.status === "queued") await ctx.db.patch(email._id, { eventId: undefined });
+  }
+  await deleteEventRecord(ctx, eventId);
 }
 
 /** The one place a hash's times reach its event, section and shifts. */

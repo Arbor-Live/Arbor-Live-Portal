@@ -212,12 +212,13 @@ function DateRows({
 
   async function remove(row: SetupRow) {
     const label = hashDayLabel(row.dateKey);
+    const eventFate = row.origin === "addon" ? "The event stays." : "Its event is deleted.";
     const ok = await confirm({
       title: `Remove ${label}?`,
       description:
         row.filled > 0
-          ? `${plural(row.filled, "person", "people")} will go back to needing a hash.`
-          : "It comes off the schedule, and its event is cancelled.",
+          ? `${plural(row.filled, "person", "people")} will go back to needing a hash. ${eventFate}`
+          : `It comes off the schedule. ${eventFate}`,
       destructive: true,
       confirmLabel: "Remove date",
     });
@@ -233,7 +234,7 @@ function DateRows({
         data-date={row.dateKey}
         href={hashPath(row._id)}
         leading={
-          notStarted ? (
+          notStarted && row.origin !== "addon" ? (
             <Switch
               checked={row.status === "scheduled"}
               aria-label={`${hashDayLabel(row.dateKey)} on`}
@@ -254,7 +255,7 @@ function DateRows({
                   Open event
                 </DropdownMenuItem>
               ) : null}
-              {row.origin === "added" ? (
+              {row.origin !== "regular" ? (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onSelect={() => void remove(row)}>
@@ -272,6 +273,7 @@ function DateRows({
         />
         {row.status === "in_progress" ? <RowFlag tone="emerald">In progress</RowFlag> : null}
         {row.origin === "added" ? <RowFlag tone="neutral">Added</RowFlag> : null}
+        {row.origin === "addon" ? <RowFlag tone="neutral">Add-on</RowFlag> : null}
         {row.movedFromDateKey ? (
           <RowFlag className="hidden sm:inline">Moved from {hashDayLabel(row.movedFromDateKey)}</RowFlag>
         ) : null}

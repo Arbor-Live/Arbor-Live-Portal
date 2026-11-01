@@ -1,6 +1,7 @@
 import { v, type Infer } from "convex/values";
 
-export const hashDateOriginValue = v.union(v.literal("regular"), v.literal("added"));
+/** `regular` and `added` are events Hashing made. `addon` is someone else's event that carries a hash. */
+export const hashDateOriginValue = v.union(v.literal("regular"), v.literal("added"), v.literal("addon"));
 /** Every status but `off`, which alone may have no event yet. `lapsed`: the date passed unstarted. */
 export const hashLiveDateStatusValue = v.union(
   v.literal("scheduled"),

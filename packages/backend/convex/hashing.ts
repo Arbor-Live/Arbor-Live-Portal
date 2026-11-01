@@ -390,8 +390,8 @@ export const getEventAddon = query({
   returns: v.union(eventAddonValue, v.null()),
   handler: async (ctx, args) => {
     await requireAdminOrOperations(ctx);
-    const row = await loadDateForEvent(ctx, args.eventId);
-    if (!row) return null;
+    const [event, row] = await Promise.all([ctx.db.get(args.eventId), loadDateForEvent(ctx, args.eventId)]);
+    if (!event || !row || !isHashEvent(event)) return null;
     return {
       hashDateId: row._id,
       status: row.status,

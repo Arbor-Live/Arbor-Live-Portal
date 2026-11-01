@@ -272,18 +272,26 @@ describe("the event behind a hash", () => {
     expect((await getRow(t, hashDateId))?.eventId).toBe(eventId);
   });
 
-  test("removing an added date cancels its event, which stops being a hash", async () => {
-    const { t, opsApi } = await setup();
+  test("removing an added date deletes its event outright, and the removal notice still goes", async () => {
+    const { t, opsApi, ana } = await setup();
     const hashDateId = await opsApi.mutation(api.hashingSchedule.addDate, {
       quarterId: QUARTER,
       dateKey: "2026-11-06",
       startTime: "11:00",
       capacity: 2,
+      bookUserIds: [ana._id],
     });
     const eventId = (await getRow(t, hashDateId))?.eventId;
+    await markEmailsSent(t);
     await opsApi.mutation(api.hashingSchedule.removeDate, { hashDateId });
+
     expect(await getRow(t, hashDateId)).toBeNull();
-    expect(await getEvent(t, eventId!)).toMatchObject({ status: "cancelled", hashingEnabled: false });
+    expect(await getEvent(t, eventId!)).toBeNull();
+    expect(await blocksOf(t, eventId!)).toEqual([]);
+    expect(await shiftsOf(t, eventId!)).toEqual([]);
+    const [notice] = (await emailsTo(t, ana)).filter((row) => row.template === "crew_unscheduled");
+    expect(notice).toMatchObject({ status: "queued" });
+    expect(notice?.eventId).toBeUndefined();
   });
 
   test("deleting a hash event takes its sidecar, answers, checks and claims with it", async () => {
@@ -670,7 +678,7 @@ describe("the add-on", () => {
     const eventId = await insertPlainEvent(t, { eventType: "Crewed Event" });
     await opsApi.mutation(api.hashingSchedule.setEventHashing, { eventId, enabled: true });
     const addon = await opsApi.query(api.hashing.getEventAddon, { eventId });
-    expect(addon).toMatchObject({ origin: "added", status: "scheduled", capacity: 3, filled: 0 });
+    expect(addon).toMatchObject({ origin: "addon", status: "scheduled", capacity: 3, filled: 0 });
     expect(await getRow(t, addon!.hashDateId)).toMatchObject({ quarterId: QUARTER, dateKey: "2026-11-03", eventId });
     expect((await getEvent(t, eventId))?.hashingEnabled).toBe(true);
 
@@ -696,6 +704,73 @@ describe("the add-on", () => {
       await ctx.db.patch(invoiced, { invoiceId });
     });
     await expect(on(invoiced)).rejects.toThrow(/can't have an invoice/);
+  });
+
+  async function addonOn(context: Context, booked: TestUser[]) {
+    const { t, opsApi } = context;
+    const eventId = await insertPlainEvent(t);
+    await opsApi.mutation(api.hashingSchedule.setEventHashing, { eventId, enabled: true });
+    const addon = await opsApi.query(api.hashing.getEventAddon, { eventId });
+    for (const person of booked) {
+      await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId: addon!.hashDateId, userId: person._id });
+    }
+    return { eventId, hashDateId: addon!.hashDateId };
+  }
+
+  test("a lapsed add-on hash ends its bookings and leaves the event running as a plain event", async () => {
+    const context = await setup();
+    const { t, opsApi, ana } = context;
+    const { eventId, hashDateId } = await addonOn(context, [ana]);
+    vi.setSystemTime(new Date("2026-11-05T12:00:00Z").getTime());
+    await t.mutation(internal.hashingSchedule.closeLapsedHashes, {});
+
+    expect(await shiftsOf(t, eventId)).toEqual([]);
+    expect(await getEvent(t, eventId)).toMatchObject({ status: "ready", hashingEnabled: false });
+    expect(await getRow(t, hashDateId)).toMatchObject({ status: "lapsed", eventId });
+    expect(await opsApi.query(api.hashing.getEventAddon, { eventId })).toBeNull();
+    await opsApi.mutation(api.events.update, { id: eventId, startAt: NOW + 72 * HOUR, endAt: NOW + 73 * HOUR });
+    expect((await getEvent(t, eventId))?.startAt).toBe(NOW + 72 * HOUR);
+  });
+
+  test("an event whose add-on lapsed can become a hash again once it's ahead of now", async () => {
+    const context = await setup();
+    const { t, opsApi } = context;
+    const { eventId, hashDateId } = await addonOn(context, []);
+    const later = new Date("2026-11-05T12:00:00Z").getTime();
+    vi.setSystemTime(later);
+    await t.mutation(internal.hashingSchedule.closeLapsedHashes, {});
+    await opsApi.mutation(api.events.update, { id: eventId, startAt: later + 24 * HOUR, endAt: later + 25 * HOUR });
+
+    await opsApi.mutation(api.hashingSchedule.setEventHashing, { eventId, enabled: true });
+    const addon = await opsApi.query(api.hashing.getEventAddon, { eventId });
+    expect(addon).toMatchObject({ origin: "addon", status: "scheduled" });
+    expect(addon?.hashDateId).not.toBe(hashDateId);
+    expect(await getRow(t, hashDateId)).toBeNull();
+  });
+
+  test.each(["setDateOff", "removeDate"] as const)("%s on an add-on hash leaves the event, and takes the date", async (how) => {
+    const context = await setup();
+    const { t, opsApi, ana } = context;
+    const { eventId, hashDateId } = await addonOn(context, [ana]);
+    if (how === "setDateOff") await opsApi.mutation(api.hashingSchedule.setDateOff, { hashDateId, off: true });
+    else await opsApi.mutation(api.hashingSchedule.removeDate, { hashDateId });
+
+    expect(await getRow(t, hashDateId)).toBeNull();
+    expect(await shiftsOf(t, eventId)).toEqual([]);
+    expect(await getEvent(t, eventId)).toMatchObject({ status: "ready", hashingEnabled: false });
+  });
+
+  test("off is refused for an added date, whose event has no life outside Hashing", async () => {
+    const { t, opsApi } = await setup();
+    const hashDateId = await opsApi.mutation(api.hashingSchedule.addDate, {
+      quarterId: QUARTER,
+      dateKey: "2026-11-06",
+      startTime: "11:00",
+      capacity: 2,
+    });
+    const eventId = (await getRow(t, hashDateId))!.eventId!;
+    await expect(opsApi.mutation(api.hashingSchedule.setEventHashing, { eventId, enabled: false })).rejects.toThrow(/Remove it in Hashing/);
+    expect((await getEvent(t, eventId))?.hashingEnabled).toBe(true);
   });
 
   test("on refuses an event with any crew", async () => {
