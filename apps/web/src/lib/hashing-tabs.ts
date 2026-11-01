@@ -41,3 +41,8 @@ export function activeHashingTab(pathname: string): HashingTabId {
   const segment = pathname.slice(HASHING_BASE_PATH.length + 1).split("/")[0];
   return HASHING_TABS.find((tab) => tab === segment) ?? "mine";
 }
+
+/** Where a shift's link goes: crew run a hash from its runner, not its event page. */
+export function shiftPath(shift: { eventId: string; hashDateId?: string }) {
+  return shift.hashDateId ? hashPath(shift.hashDateId) : `/dashboard/events/${shift.eventId}`;
+}

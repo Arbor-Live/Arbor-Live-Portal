@@ -217,7 +217,7 @@ function DateRows({
       description:
         row.filled > 0
           ? `${plural(row.filled, "person", "people")} will go back to needing a hash.`
-          : "It comes off the schedule.",
+          : "It comes off the schedule, and its event is cancelled.",
       destructive: true,
       confirmLabel: "Remove date",
     });
@@ -249,6 +249,11 @@ function DateRows({
                 Move
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => router.push(hashPath(row._id))}>Open</DropdownMenuItem>
+              {row.eventId ? (
+                <DropdownMenuItem onSelect={() => router.push(`/dashboard/events/${row.eventId}`)}>
+                  Open event
+                </DropdownMenuItem>
+              ) : null}
               {row.origin === "added" ? (
                 <>
                   <DropdownMenuSeparator />

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   CalendarBlankIcon,
   CarSimpleIcon,
@@ -38,7 +39,10 @@ import {
   TeamsInterestedPicker,
 } from "@/components/events/workspace/event-fields";
 import { EventFilesCard } from "@/components/events/workspace/event-files-card";
+import { HashingCard } from "@/components/events/workspace/hashing-card";
 import { useEventWorkspace } from "@/components/events/workspace/event-workspace-provider";
+import { formatDateTimeRange } from "@/lib/format";
+import { HASHING_BASE_PATH } from "@/lib/hashing-tabs";
 
 export function OverviewTab() {
   const {
@@ -50,6 +54,8 @@ export function OverviewTab() {
     canEdit,
     linkedInvoice,
     userSelectOptions,
+    isHash,
+    hasOperationsAccess,
   } = useEventWorkspace();
   const showFulfillment = RENTAL_EVENT_TYPES.includes(draft.eventType);
 
@@ -75,12 +81,23 @@ export function OverviewTab() {
           <CardContent>
             <fieldset disabled={readOnly} className="grid gap-4 md:grid-cols-2">
               <Field label="When" icon={CalendarBlankIcon}>
-                <DateTimeRangePicker
-                  startValue={draft.startAt}
-                  endValue={draft.endAt}
-                  onChange={({ start, end }) => updateDraft({ startAt: start, endAt: end })}
-                  placeholder="Select start and end"
-                />
+                {isHash && eventData ? (
+                  <p className="flex min-h-9 flex-wrap items-center gap-x-3 text-sm" data-testid="event-when-locked">
+                    <span className="tabular-nums">
+                      {formatDateTimeRange(eventData.event.startAt, eventData.event.endAt)}
+                    </span>
+                    <Link href={`${HASHING_BASE_PATH}/setup`} className="text-primary hover:underline">
+                      Set in Hashing
+                    </Link>
+                  </p>
+                ) : (
+                  <DateTimeRangePicker
+                    startValue={draft.startAt}
+                    endValue={draft.endAt}
+                    onChange={({ start, end }) => updateDraft({ startAt: start, endAt: end })}
+                    placeholder="Select start and end"
+                  />
+                )}
               </Field>
               <Field label="Venue" icon={MapPinIcon}>
                 <VenuePicker
@@ -154,11 +171,12 @@ export function OverviewTab() {
 
         <EventContactsSection eventId={eventId} canEdit={canEdit} />
         <EventFilesCard eventId={eventId} artifacts={eventData?.artifacts ?? []} canEdit={canEdit} />
-        <EventPostMortemSection eventId={eventId} />
-        {canEdit ? <EventPostMortemSummary eventId={eventId} /> : null}
+        {isHash ? null : <EventPostMortemSection eventId={eventId} />}
+        {canEdit && !isHash ? <EventPostMortemSummary eventId={eventId} /> : null}
       </div>
 
       <aside className="min-w-0 space-y-4">
+        {isHash && hasOperationsAccess ? <HashingCard /> : null}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

@@ -10,6 +10,7 @@ import { EventArtistBillSection } from "@/components/events/event-artist-bill-se
 import { EventBandRidersSection } from "@/components/events/event-band-riders-section";
 import { OutreachCard } from "@/components/events/outreach/outreach-card";
 import { Field } from "@/components/events/workspace/event-fields";
+import { HashingCard } from "@/components/events/workspace/hashing-card";
 import { useEventWorkspace } from "@/components/events/workspace/event-workspace-provider";
 
 const OPEN_MIC_SIGNUP_CLOSES_AFTER_START_MS = 4 * 60 * 60 * 1000;
@@ -92,13 +93,14 @@ function OpenMicCard() {
 }
 
 export function LineupTab() {
-  const { eventId, canEdit, hasOperationsAccess } = useEventWorkspace();
+  const { eventId, canEdit, draft, hasOperationsAccess } = useEventWorkspace();
   return (
     <div className="space-y-4">
       <EventArtistBillSection eventId={eventId} canEdit={canEdit} />
       <OutreachCard eventId={eventId} canEdit={canEdit} />
       <EventBandRidersSection eventId={eventId} />
       {hasOperationsAccess ? <OpenMicCard /> : null}
+      {hasOperationsAccess && draft.visibility === "internal" ? <HashingCard /> : null}
     </div>
   );
 }

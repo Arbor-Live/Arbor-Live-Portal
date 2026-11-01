@@ -9,6 +9,7 @@ import { ListRow } from "@/components/list-row";
 import { Button } from "@/components/ui/button";
 import { api, type Id } from "@/lib/convex-api";
 import { formatTime } from "@/lib/format";
+import { shiftPath } from "@/lib/hashing-tabs";
 import { cn } from "@/lib/utils";
 
 const MINUTE_MS = 60_000;
@@ -20,6 +21,7 @@ type ActiveShift = {
   startsAt: number;
   endsAt: number;
   phase: "upcoming" | "now" | "ended";
+  hashDateId?: Id<"hashDates">;
 };
 
 const PHASES: Record<ActiveShift["phase"], { label: string; card: string; status: string }> = {
@@ -80,7 +82,7 @@ export function OnShiftCard({ shifts }: { shifts: ActiveShift[] | undefined }) {
           ) : null}
         </div>
         <Button asChild className="w-full sm:w-auto">
-          <Link href={`/dashboard/events/${shift.eventId}`}>Open event</Link>
+          <Link href={shiftPath(shift)}>{shift.hashDateId ? "Open hash" : "Open event"}</Link>
         </Button>
       </div>
       {others.length > 0 ? (
@@ -89,7 +91,7 @@ export function OnShiftCard({ shifts }: { shifts: ActiveShift[] | undefined }) {
             <ListRow
               key={other.eventId}
               className="border-0 px-0"
-              href={`/dashboard/events/${other.eventId}`}
+              href={shiftPath(other)}
               data-testid="home-on-shift-row"
             >
               <RowText

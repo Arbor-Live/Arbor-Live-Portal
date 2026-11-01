@@ -15,17 +15,17 @@ import {
 } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { UserAvatar } from "@/components/account/user-avatar";
+import { FinishDialog } from "@/components/hashing/live/finish-dialog";
 import { FlagSheet, type FlagTarget } from "@/components/hashing/live/flag-sheet";
 import { EmptyState, RowCell, RowFlag, RowList } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
-import { MetaItem, PageHeader, StatusPill, type Tone } from "@/components/page-header";
-import { useAppDialog } from "@/components/ui/app-dialog";
+import { MetaItem, PageHeader, StatusPill } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { pacificDateKey, plural } from "@/lib/format";
-import { FLAG_REASON_LABELS, hashDayLabel, hashTimeRange } from "@/lib/hashing";
+import { FLAG_REASON_LABELS, HASH_STATUS_PILLS, hashDayLabel, hashTimeRange } from "@/lib/hashing";
 import { applyTick } from "@/lib/hashing-live";
 import { HASHING_BASE_PATH, hashPath } from "@/lib/hashing-tabs";
 import { notify } from "@/lib/notify";
@@ -35,14 +35,6 @@ import type { useQuery as UseQuery } from "convex/react";
 type Live = NonNullable<ReturnType<typeof UseQuery<typeof api.hashingLive.get>>>;
 type Area = Live["areas"][number];
 type Row = Area["finalChecks"][number];
-type Status = Live["hash"]["status"];
-
-const STATUS_PILLS: Record<Status, { label: string; tone: Tone }> = {
-  scheduled: { label: "Not started", tone: "neutral" },
-  off: { label: "Off", tone: "neutral" },
-  in_progress: { label: "In progress", tone: "blue" },
-  finished: { label: "Finished", tone: "emerald" },
-};
 
 const isComplete = (rows: Row[]) => rows.every((row) => row.check);
 
@@ -356,7 +348,7 @@ export function HashLive({ hashDateId }: { hashDateId: Id<"hashDates"> }) {
   const live = useQuery(api.hashingLive.get, { hashDateId, today });
   const start = useMutation(api.hashingLive.start);
   const finish = useMutation(api.hashingLive.finish);
-  const { confirm } = useAppDialog();
+  const [finishing, setFinishing] = useState(false);
   const areaId = useSearchParams().get("area");
   const [busy, setBusy] = useState(false);
 
@@ -375,28 +367,13 @@ export function HashLive({ hashDateId }: { hashDateId: Id<"hashDates"> }) {
     }
   }
 
-  async function confirmFinish(data: Live) {
-    const left = data.totals.total - data.totals.checked;
-    const unconfirmed = data.people.filter((person) => person.status === "needs_confirmation");
-    const notes = [
-      left > 0 ? `${plural(left, "item")} still unchecked.` : null,
-      unconfirmed.length > 0
-        ? `${unconfirmed.map((person) => person.name).join(", ")} never confirmed and won't get credit.`
-        : null,
-    ].filter(Boolean);
-    if (notes.length > 0) {
-      const ok = await confirm({
-        title: left > 0 ? `Finish with ${plural(left, "item")} left?` : "Finish this hash?",
-        description: notes.join(" "),
-        confirmLabel: "Finish hash",
-      });
-      if (!ok) return;
-    }
-    await run(() => finish({ hashDateId }), "Hash finished.");
+  async function finishWith(attendeeUserIds: string[]) {
+    await run(() => finish({ hashDateId, attendeeUserIds }), "Hash finished.");
+    setFinishing(false);
   }
 
   const area = areaId ? live.areas.find((candidate) => candidate.id === areaId) : undefined;
-  const pill = STATUS_PILLS[live.hash.status];
+  const pill = HASH_STATUS_PILLS[live.hash.status];
   const running = live.hash.status === "in_progress";
 
   return (
@@ -422,7 +399,7 @@ export function HashLive({ hashDateId }: { hashDateId: Id<"hashDates"> }) {
                 variant="outline"
                 disabled={busy}
                 data-testid="hash-finish"
-                onClick={() => void confirmFinish(live)}
+                onClick={() => setFinishing(true)}
               >
                 Finish hash
               </Button>
@@ -440,6 +417,14 @@ export function HashLive({ hashDateId }: { hashDateId: Id<"hashDates"> }) {
       )}
       {area ? null : <Progress totals={live.totals} />}
       {area ? <AreaView key={area.id} live={live} area={area} /> : <AreaList live={live} />}
+      <FinishDialog
+        open={finishing}
+        onOpenChange={setFinishing}
+        people={live.people}
+        itemsLeft={live.totals.total - live.totals.checked}
+        busy={busy}
+        onFinish={(attendeeUserIds) => void finishWith(attendeeUserIds)}
+      />
     </div>
   );
 }

@@ -9,6 +9,14 @@ export const FLAG_REASON_LABELS = {
 
 export type FlagReason = keyof typeof FLAG_REASON_LABELS;
 
+export const HASH_STATUS_PILLS = {
+  scheduled: { label: "Not started", tone: "neutral" },
+  off: { label: "Off", tone: "neutral" },
+  in_progress: { label: "In progress", tone: "blue" },
+  finished: { label: "Finished", tone: "emerald" },
+  lapsed: { label: "Never ran", tone: "neutral" },
+} as const;
+
 export const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 
 /** "Tue, Nov 17" for a day key, without the viewer's timezone anywhere near it. */

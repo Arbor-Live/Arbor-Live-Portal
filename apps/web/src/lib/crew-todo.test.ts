@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Night } from "@/components/availability/night-card";
 import type { PostEventWorkRow } from "@/components/events/post-event-work-card";
+import type { Id } from "@/lib/convex-api";
 import { buildCrewTodos, endedLabel } from "@/lib/crew-todo";
 
 function night(nightKey: string, answer: { coversNight: boolean } | null = null) {
@@ -24,6 +25,22 @@ describe("buildCrewTodos", () => {
       "review:old",
       "photos:old",
     ]);
+  });
+
+  it("puts a moved hash first and the dates to answer after the nights, and defers them like any card", () => {
+    const hash = {
+      toConfirm: [{ hashDateId: "h1" as Id<"hashDates">, dateKey: "2026-11-03", startsAt: 1, endsAt: 2 }],
+      toAnswer: 4,
+    };
+    const todoKeys = (deferred: string[]) =>
+      buildCrewTodos([night("2026-11-06")], [row("old", 100)], deferred, hash).map((todo) => todo.key);
+    expect(todoKeys([])).toEqual(["hash:h1", "night:2026-11-06", "hash:answer", "review:old", "photos:old"]);
+    expect(todoKeys(["hash:h1"]).at(-1)).toBe("hash:h1");
+  });
+
+  it("has no hash cards when there's nothing to do", () => {
+    expect(buildCrewTodos([], [], [], { toConfirm: [], toAnswer: 0 })).toEqual([]);
+    expect(buildCrewTodos([], [], [], null)).toEqual([]);
   });
 
   it("skips answered nights and keeps ones whose answer no longer covers the night", () => {

@@ -340,6 +340,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     [account, managerList, viewerUserId],
   );
 
+  const isHash = eventData?.event.hashingEnabled === true;
   const visibleTabs = useMemo(
     () =>
       EVENT_EDITOR_TABS.filter((tab) => {
@@ -347,9 +348,10 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
           return false;
         }
         if (tab === "billing" && !canSeeBilling) return false;
+        if (isHash && (tab === "billing" || tab === "promo" || tab === "artists")) return false;
         return true;
       }),
-    [draft.eventType, canSeeBilling],
+    [draft.eventType, canSeeBilling, isHash],
   );
   const resolvedActiveTab: EventEditorTabId = visibleTabs.includes(activeTab) ? activeTab : "overview";
 
@@ -602,6 +604,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     readOnly,
     activeTab: resolvedActiveTab,
     visibleTabs,
+    isHash,
     draft,
     updateDraft,
     baseline,

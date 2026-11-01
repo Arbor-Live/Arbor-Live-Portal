@@ -1,4 +1,3 @@
-import { HashingWidget } from "@/components/crew-portal/widgets/hashing-widget";
 import { PayPeriodSummaryWidget } from "@/components/crew-portal/widgets/pay-period-summary-widget";
 import { BorrowRequestsWidget } from "@/components/crew-portal/widgets/borrow-requests-widget";
 import type { DashboardWidgetDefinition } from "@/components/dashboard/customizable-widget-dashboard";
@@ -15,11 +14,6 @@ export type CrewWidget = DashboardWidgetDefinition & {
 };
 
 export const DEFAULT_CREW_WIDGETS: CrewWidget[] = [
-  {
-    id: "hashing",
-    title: "Hashing",
-    component: HashingWidget,
-  },
   {
     id: "pay-period-summary",
     title: "Pay periods",

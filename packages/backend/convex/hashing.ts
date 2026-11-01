@@ -231,7 +231,9 @@ export const getMyPrompt = query({
     v.null(),
     v.object({
       quarterLabel: v.string(),
-      toConfirm: v.array(v.object({ startsAt: v.number() })),
+      toConfirm: v.array(
+        v.object({ hashDateId: v.id("hashDates"), dateKey: v.string(), startsAt: v.number(), endsAt: v.number() }),
+      ),
       toAnswer: v.number(),
     }),
   ),
@@ -253,7 +255,7 @@ export const getMyPrompt = query({
     });
     const toConfirm = mine
       .filter(({ booking, row }) => booking.status === "needs_confirmation" && row.status === "scheduled")
-      .map(({ row }) => ({ startsAt: row.startsAt }))
+      .map(({ row }) => ({ hashDateId: row._id, dateKey: row.dateKey, startsAt: row.startsAt, endsAt: row.endsAt }))
       .sort((a, b) => a.startsAt - b.startsAt);
 
     let toAnswer = 0;
