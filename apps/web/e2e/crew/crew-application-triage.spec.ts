@@ -113,6 +113,17 @@ test.describe("crew application triage", () => {
       (row) => Boolean(row?.token),
     );
     expect(invite.url).toContain(invite.token);
+
+    // Convert keeps the panel open on the Notion checklist, even though converted
+    // applications are outside the default Progress filter.
+    await expect(sheet).toBeVisible();
+    const notion = sheet.getByTestId("invite-notion-checklist");
+    await expect(notion).toBeVisible({ timeout: 20_000 });
+    const inviteToNotion = notion.getByRole("checkbox", { name: "Invite to Notion" });
+    await expect(inviteToNotion).not.toBeChecked();
+    await inviteToNotion.click();
+    await expect(inviteToNotion).toBeChecked({ timeout: 30_000 });
+    await expect(sheet).toBeVisible();
   });
 
   test("admin can assign a submitted applicant as a trainee on an event", async ({ page }) => {
