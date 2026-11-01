@@ -12,7 +12,7 @@ export async function generateMetadata({
   const { riderId } = await params;
   const rider = await fetchAuthQuery(api.bandRiders.get, {
     riderId: riderId as Id<"bandRiders">,
-  });
+  }).catch(() => null);
   const name = rider?.name?.trim();
   return { title: name ? `${name} · Technical rider` : "Technical rider" };
 }

@@ -12,7 +12,7 @@ export async function generateMetadata({
   const { id } = await params;
   const request = await fetchAuthQuery(api.eventRequests.get, {
     id: id as Id<"eventRequests">,
-  });
+  }).catch(() => null);
   if (!request) return { title: "Booking request" };
   const name = request.eventName?.trim() || `${request.firstName} ${request.lastName}`.trim();
   return { title: `${request.requestNumber} · ${name}` };

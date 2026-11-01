@@ -12,7 +12,7 @@ export async function eventGroupTabMetadata(
   tabLabel: string,
 ): Promise<Metadata> {
   const { seriesId } = await params;
-  const data = await fetchAuthQuery(api.eventSeries.get, { id: seriesId as Id<"eventSeries"> });
+  const data = await fetchAuthQuery(api.eventSeries.get, { id: seriesId as Id<"eventSeries"> }).catch(() => null);
   const title = data?.series.title?.trim();
   return { title: title ? `${title} · ${tabLabel}` : tabLabel };
 }

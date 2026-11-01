@@ -9,7 +9,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const data = await fetchAuthQuery(api.invoices.get, { id: id as Id<"invoices"> });
+  const data = await fetchAuthQuery(api.invoices.get, { id: id as Id<"invoices"> }).catch(() => null);
   const number = data?.invoice.invoiceNumber?.trim();
   return { title: number ? `Invoice ${number}` : "Invoice" };
 }

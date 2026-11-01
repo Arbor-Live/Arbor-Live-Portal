@@ -14,7 +14,7 @@ export async function generateMetadata({
   const data = await fetchAuthQuery(api.events.get, {
     id: id as Id<"events">,
     detail: "schedule",
-  });
+  }).catch(() => null);
   const title = data?.event.title?.trim();
   return { title: title ? `${title} · Open Mic` : "Open Mic" };
 }
