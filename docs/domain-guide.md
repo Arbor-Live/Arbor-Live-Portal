@@ -182,7 +182,7 @@ canonical description of the domain itself.
   went well / what could improve + resolving their photos/videos. The day-of lead
   and event manager are asked only when they were on the show shift; setup/strike
   crew and assignees with no shift are not. It appears inline on the event **Overview** and as one combined
-  **Events → My Post-event work** page (plus the crew Home widget); the email
+  **Events → My Post-event work** page (plus review and photos cards on crew Home); the email
   link points internal recipients at the event page. The emailed
   `/postmortem/[token]` form remains a fallback. One amber nav badge counts
   events still needing review or photos (subscribed only on home/event routes to

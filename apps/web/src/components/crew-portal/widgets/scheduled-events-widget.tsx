@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useHeldQuery } from "@/hooks/use-held-query";
 import { CalendarDotsIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { DashboardWidget, WidgetRows } from "@/components/dashboard/dashboard-widget";
@@ -9,7 +9,7 @@ import { ListRow } from "@/components/list-row";
 import { formatDateTime } from "@/lib/format";
 
 export function ScheduledEventsWidget({ now }: { now: number }) {
-  const events = useQuery(api.crewPortal.listMyScheduledEvents, { now, weeksAhead: 8 });
+  const events = useHeldQuery(api.crewPortal.listMyScheduledEvents, { now, weeksAhead: 8 });
 
   return (
     <DashboardWidget icon={CalendarDotsIcon} title="Upcoming shifts" testId="home-upcoming-shifts">

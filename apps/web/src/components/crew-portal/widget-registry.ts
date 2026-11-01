@@ -1,6 +1,5 @@
 import { PayPeriodSummaryWidget } from "@/components/crew-portal/widgets/pay-period-summary-widget";
 import { BorrowRequestsWidget } from "@/components/crew-portal/widgets/borrow-requests-widget";
-import { CohoGiftCardWidget } from "@/components/crew-portal/widgets/coho-gift-card-widget";
 import type { DashboardWidgetDefinition } from "@/components/dashboard/customizable-widget-dashboard";
 
 export type UserDiscipline =
@@ -24,11 +23,6 @@ export const DEFAULT_CREW_WIDGETS: CrewWidget[] = [
     id: "borrow-requests",
     title: "Equipment requests",
     component: BorrowRequestsWidget,
-  },
-  {
-    id: "coho-gift-card",
-    title: "CoHo gift card",
-    component: CohoGiftCardWidget,
   },
 ];
 

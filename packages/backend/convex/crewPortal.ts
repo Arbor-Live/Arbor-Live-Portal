@@ -1,6 +1,6 @@
 import { pacificDateKey, recentPayPeriods } from "@arbor/format";
 import { v } from "convex/values";
-import { mutation, query, type QueryCtx } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import {
   findAuthUsersByIds,
@@ -59,13 +59,6 @@ const payPeriodSummaryValue = v.object({
 
 function weeksToMs(weeks: number) {
   return weeks * 7 * 24 * 60 * 60 * 1000;
-}
-
-async function getCurrentUserProfile(ctx: QueryCtx, userId: string) {
-  return await ctx.db
-    .query("userAdminProfiles")
-    .withIndex("by_userId", (q) => q.eq("userId", userId))
-    .unique();
 }
 
 export const listMyScheduledEvents = query({

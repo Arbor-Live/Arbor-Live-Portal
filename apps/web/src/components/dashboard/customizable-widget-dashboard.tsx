@@ -69,15 +69,12 @@ export function CustomizableWidgetDashboard({
   title,
   description,
   widgets,
-  omitWidgetIds,
   layout,
 }: {
   dashboardKey: DashboardWidgetKey;
   title: string;
   description?: string;
   widgets: DashboardWidgetDefinition[];
-  /** Not drawn in the grid (shown elsewhere for now), but kept in the saved layout. */
-  omitWidgetIds?: string[];
   layout?: (parts: DashboardLayoutParts) => ReactNode;
 }) {
   const preference = useQuery(api.dashboardPreferences.getMyDashboardPreference, {
@@ -106,7 +103,7 @@ export function CustomizableWidgetDashboard({
     [widgetOrder, widgetsById],
   );
   const visibleWidgets = orderedWidgets.filter(
-    (widget) => !hiddenWidgetIds.includes(widget.id) && !omitWidgetIds?.includes(widget.id),
+    (widget) => !hiddenWidgetIds.includes(widget.id),
   );
 
   async function persist(nextOrder: string[], nextHidden: string[]) {

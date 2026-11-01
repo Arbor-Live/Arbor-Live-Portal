@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import { CustomizableWidgetDashboard } from "@/components/dashboard/customizable-widget-dashboard";
 import { CrewTodoStack } from "@/components/crew-portal/crew-todo-stack";
@@ -14,13 +14,32 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 const SECTION_LABEL = "text-xs font-semibold tracking-wide text-muted-foreground uppercase";
+const REFRESH_MS = 15 * 60_000;
+
+/**
+ * The time Home's lists are read at. Coarse, so an open tab doesn't re-run them
+ * every minute, and bumped when a shift changes phase so its work shows up then.
+ */
+function useListNow(shiftKey: string | undefined) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const refresh = () => setNow(Date.now());
+    const bump = window.setTimeout(refresh, 0);
+    const timer = window.setInterval(refresh, REFRESH_MS);
+    return () => {
+      window.clearTimeout(bump);
+      window.clearInterval(timer);
+    };
+  }, [shiftKey]);
+  return now;
+}
 
 export function CrewDashboard() {
   const viewer = useSessionViewer();
-  // Shared so the stack and both Upcoming shifts mounts are one subscription.
-  const [now] = useState(() => Date.now());
   const [moreOpen, setMoreOpen] = useState(false);
   const shifts = useActiveShifts();
+  // Shared so the stack and both Upcoming shifts mounts are one subscription.
+  const now = useListNow(shifts?.map((shift) => `${shift.eventId}:${shift.phase}`).join());
   // Undefined until known, so the stack doesn't flash open before folding away.
   const shiftActive = shifts?.some((shift) => shift.phase !== "ended");
 
@@ -38,12 +57,11 @@ export function CrewDashboard() {
       dashboardKey="crewHome"
       title="Home"
       widgets={getWidgetsForDisciplines(viewer.disciplines)}
-      omitWidgetIds={shiftActive ? ["coho-gift-card"] : undefined}
       layout={({ header, customize, reset, body }) => (
         <>
           <h1 className="sr-only lg:hidden">Home</h1>
           <div className="hidden lg:block">{header}</div>
-          <OnShiftCard />
+          <OnShiftCard shifts={shifts} />
 
           <div
             className={cn(
@@ -51,16 +69,16 @@ export function CrewDashboard() {
               shiftActive ? "lg:grid-cols-3" : "lg:grid-cols-[minmax(0,1fr)_22rem]",
             )}
           >
-            <div className="min-w-0">
+            <div className="min-w-0 empty:hidden">
               <CrewTodoStack now={now} collapsed={shiftActive} />
             </div>
-            {shiftActive ? (
+            <div className={cn("min-w-0 space-y-4", shiftActive && "lg:contents")}>
               <div className="min-w-0 empty:hidden">
                 <CohoGiftCardWidget />
               </div>
-            ) : null}
-            <div className="hidden min-w-0 lg:block">
-              <ScheduledEventsWidget now={now} />
+              <div className="hidden min-w-0 lg:block">
+                <ScheduledEventsWidget now={now} />
+              </div>
             </div>
           </div>
 

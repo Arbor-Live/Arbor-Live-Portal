@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { CalendarCheckIcon, CaretRightIcon, CheckIcon, ClipboardTextIcon, type Icon } from "@phosphor-icons/react";
 import { NightFacts, type Night } from "@/components/availability/night-card";
@@ -12,6 +12,7 @@ import { PostMortemForm } from "@/components/post-mortem/post-mortem-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useHeldQuery } from "@/hooks/use-held-query";
 import { useMediaAlbum } from "@/hooks/use-media-album";
 import { api } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
@@ -35,7 +36,7 @@ const CARD_HEIGHT = "h-80";
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 const LONG_TEXT = "wrap-anywhere";
 
-/** Hides the card straight away, and brings it back with `error` if the save fails. */
+/** Saves with the card still up, so a failure leaves it and anything typed in place. */
 type Commit = (work: () => Promise<unknown>, fallback: string) => void;
 
 function TodoCard({
@@ -85,7 +86,7 @@ function TodoCard({
 
 const ANSWER_BUTTON = "h-10 w-full sm:w-auto";
 
-function AvailabilityCard({ night, commit }: { night: Night; commit: Commit }) {
+function AvailabilityCard({ night, saving, commit }: { night: Night; saving: boolean; commit: Commit }) {
   const answerNight = useMutation(api.crewNights.answerNight);
   const [partOpen, setPartOpen] = useState(false);
   const notes = night.answer?.notes ?? "";
@@ -101,6 +102,7 @@ function AvailabilityCard({ night, commit }: { night: Night; commit: Commit }) {
       type="button"
       variant={suggested === "no" ? "outline" : "default"}
       className={ANSWER_BUTTON}
+      disabled={saving}
       onClick={() => answer("free")}
     >
       {suggested === "free" ? "Confirm" : "I'm free"}
@@ -112,6 +114,7 @@ function AvailabilityCard({ night, commit }: { night: Night; commit: Commit }) {
       type="button"
       variant={suggested === "no" ? "default" : "outline"}
       className={ANSWER_BUTTON}
+      disabled={saving}
       onClick={() => answer("no")}
     >
       Not this one
@@ -139,15 +142,16 @@ function AvailabilityCard({ night, commit }: { night: Night; commit: Commit }) {
           variant="outline"
           className={ANSWER_BUTTON}
           aria-expanded={partOpen}
+          disabled={saving}
           onClick={() => setPartOpen((open) => !open)}
         >
           Only part
         </Button>
-        <Button type="button" variant="outline" className={ANSWER_BUTTON} onClick={() => answer("backup")}>
+        <Button type="button" variant="outline" className={ANSWER_BUTTON} disabled={saving} onClick={() => answer("backup")}>
           Backup
         </Button>
         {night.earlySetup.length > 0 ? (
-          <Button type="button" variant="outline" className={ANSWER_BUTTON} onClick={() => answer("early")}>
+          <Button type="button" variant="outline" className={ANSWER_BUTTON} disabled={saving} onClick={() => answer("early")}>
             Early setup only
           </Button>
         ) : null}
@@ -158,7 +162,7 @@ function AvailabilityCard({ night, commit }: { night: Night; commit: Commit }) {
         <NightPartForm
           night={night}
           savedWindows={[]}
-          saving={false}
+          saving={saving}
           onSave={(windows, busyNotes) => answer("part", windows, mergeBusyNotes(notes, busyNotes))}
         />
       ) : null}
@@ -186,6 +190,7 @@ function ReviewCard({ row }: { row: PostEventWorkRow }) {
 function PhotosCard({
   row,
   resolved,
+  saving,
   commit,
   onUploadingChange,
   onBatchDone,
@@ -194,6 +199,7 @@ function PhotosCard({
   row: PostEventWorkRow;
   /** The first uploaded file resolves the row, while the rest of the batch is still going. */
   resolved: boolean;
+  saving: boolean;
   commit: Commit;
   onUploadingChange: (uploading: boolean) => void;
   onBatchDone: () => void;
@@ -227,7 +233,7 @@ function PhotosCard({
           type="button"
           variant="outline"
           className={ANSWER_BUTTON}
-          disabled={uploading}
+          disabled={uploading || saving}
           onClick={() =>
             commit(() => resolveMedia({ eventId: row.eventId, status: "no_media" }), "Couldn't save that.")
           }
@@ -298,9 +304,9 @@ function CaughtUp({ nextShift }: { nextShift?: { title: string; startAt: number 
  * query says it's done. `collapsed` folds it to a tile while a shift is on; undefined while that's unknown.
  */
 export function CrewTodoStack({ now, collapsed }: { now: number; collapsed: boolean | undefined }) {
-  const nights = useQuery(api.crewNights.listMine, { now, weeksAhead: DEFAULT_AVAILABILITY_WEEKS });
-  const rows = useQuery(api.crewPortal.listMyPostEventWork, { now });
-  const upcoming = useQuery(api.crewPortal.listMyScheduledEvents, { now, weeksAhead: 8 });
+  const nights = useHeldQuery(api.crewNights.listMine, { now, weeksAhead: DEFAULT_AVAILABILITY_WEEKS });
+  const rows = useHeldQuery(api.crewPortal.listMyPostEventWork, { now });
+  const upcoming = useHeldQuery(api.crewPortal.listMyScheduledEvents, { now, weeksAhead: 8 });
   const reduceMotion = useReducedMotion();
 
   const [deferred, setDeferred] = useState<string[]>([]);
@@ -309,6 +315,7 @@ export function CrewTodoStack({ now, collapsed }: { now: number; collapsed: bool
   const [held, setHeld] = useState<CrewTodo | null>(null);
   const [heldUploading, setHeldUploading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  if (expanded && collapsed === false) setExpanded(false);
   const [seen, setSeen] = useState<string[]>([]);
 
   const todos = useMemo(
@@ -318,9 +325,9 @@ export function CrewTodoStack({ now, collapsed }: { now: number; collapsed: bool
 
   const cards = useMemo(() => {
     if (!todos) return null;
-    const open = todos.filter((todo) => !saving.includes(todo.key) && todo.key !== held?.key);
+    const open = todos.filter((todo) => todo.key !== held?.key);
     return held ? [held, ...open] : open;
-  }, [todos, saving, held]);
+  }, [todos, held]);
 
   // A card seen this visit and no longer open is a done card, however it left:
   // the total then can't jump, whether a save or the query removed it first.
@@ -329,12 +336,16 @@ export function CrewTodoStack({ now, collapsed }: { now: number; collapsed: bool
 
   const top = cards?.[0];
   const topKey = top?.key;
+  const stackRef = useRef<HTMLElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
   const previousTop = useRef(topKey);
   useEffect(() => {
     const previous = previousTop.current;
     previousTop.current = topKey;
     if (!previous || !topKey || previous === topKey || !topRef.current) return;
+    // A card can change from another device; don't pull someone out of what they're using.
+    const active = document.activeElement;
+    if (active && active !== document.body && !stackRef.current?.contains(active)) return;
     topRef.current.focus({ preventScroll: true });
     if (topRef.current.getBoundingClientRect().top < 0) {
       topRef.current.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
@@ -372,7 +383,6 @@ export function CrewTodoStack({ now, collapsed }: { now: number; collapsed: bool
         await work();
       } catch (error) {
         setErrors((current) => ({ ...current, [key]: getConvexErrorMessage(error, fallback) }));
-        setDeferred((current) => current.filter((deferredKey) => deferredKey !== key));
       } finally {
         setSaving((current) => current.filter((savingKey) => savingKey !== key));
       }
@@ -381,6 +391,7 @@ export function CrewTodoStack({ now, collapsed }: { now: number; collapsed: bool
 
   function later(key: string) {
     setHeld(null);
+    setErrors(({ [key]: _cleared, ...rest }) => rest);
     setDeferred((current) => [...current.filter((deferredKey) => deferredKey !== key), key]);
   }
 
@@ -395,17 +406,18 @@ export function CrewTodoStack({ now, collapsed }: { now: number; collapsed: bool
         eyebrow={eyebrowOf(todo, now)}
         title={titleOf(todo)}
         onLater={() => later(todo.key)}
-        laterDisabled={cards!.length < 2 || heldUploading}
+        laterDisabled={cards!.length < 2 || heldUploading || saving.includes(todo.key)}
         error={errors[todo.key]}
       >
         {todo.kind === "availability" ? (
-          <AvailabilityCard night={todo.night} commit={commitTodo} />
+          <AvailabilityCard night={todo.night} saving={saving.includes(todo.key)} commit={commitTodo} />
         ) : todo.kind === "review" ? (
           <ReviewCard row={todo.row} />
         ) : (
           <PhotosCard
             row={todo.row}
             resolved={!todos?.some((candidate) => candidate.key === todo.key)}
+            saving={saving.includes(todo.key)}
             commit={commitTodo}
             onUploadingChange={(uploading) => {
               setHeldUploading(uploading);
@@ -422,7 +434,7 @@ export function CrewTodoStack({ now, collapsed }: { now: number; collapsed: bool
   const transition = reduceMotion ? { duration: 0 } : { duration: 0.2, ease: EASE_OUT };
 
   return (
-    <section className="space-y-3" aria-label="To do" data-testid="crew-todo-stack">
+    <section ref={stackRef} className="space-y-3" aria-label="To do" data-testid="crew-todo-stack">
       <div className="space-y-2">
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="text-sm font-semibold">To do</h2>

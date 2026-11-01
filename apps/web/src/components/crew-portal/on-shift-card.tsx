@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useHeldQuery } from "@/hooks/use-held-query";
 import { MapPinIcon } from "@phosphor-icons/react";
 import { RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
@@ -44,11 +44,6 @@ function shiftTimes({ startsAt, endsAt }: ActiveShift) {
   return `${formatTime(startsAt)} to ${formatTime(endsAt)}`;
 }
 
-/**
- * The viewer's active shifts. A new `now` makes `useQuery` return undefined
- * until the server answers, so the last answer is held to keep the card from
- * blinking off every minute.
- */
 export function useActiveShifts() {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -56,15 +51,11 @@ export function useActiveShifts() {
     return () => window.clearInterval(timer);
   }, []);
   const minute = Math.floor(now / MINUTE_MS) * MINUTE_MS;
-  const latest = useQuery(api.crewPortal.listMyActiveShifts, { now: minute });
-
-  const [shifts, setShifts] = useState<ActiveShift[]>();
-  if (latest !== undefined && latest !== shifts) setShifts(latest);
-  return latest ?? shifts;
+  return useHeldQuery(api.crewPortal.listMyActiveShifts, { now: minute });
 }
 
-export function OnShiftCard() {
-  const [shift, ...others] = useActiveShifts() ?? [];
+export function OnShiftCard({ shifts }: { shifts: ActiveShift[] | undefined }) {
+  const [shift, ...others] = shifts ?? [];
   if (!shift) return null;
 
   const phase = PHASES[shift.phase];
