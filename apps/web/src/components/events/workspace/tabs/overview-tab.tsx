@@ -100,11 +100,17 @@ export function OverviewTab() {
                 )}
               </Field>
               <Field label="Venue" icon={MapPinIcon}>
-                <VenuePicker
-                  value={draft.venueId}
-                  onChange={(venueId) => updateDraft({ venueId })}
-                  allowCreate
-                />
+                {isHash && !eventData?.event.venueId ? (
+                  <p className="flex min-h-9 items-center text-sm" data-testid="event-where-locked">
+                    {eventData?.event.venueName ?? "No venue"}
+                  </p>
+                ) : (
+                  <VenuePicker
+                    value={draft.venueId}
+                    onChange={(venueId) => updateDraft({ venueId })}
+                    allowCreate
+                  />
+                )}
               </Field>
               <Field label="Event Type" icon={ShapesIcon}>
                 <EventTypeSelect

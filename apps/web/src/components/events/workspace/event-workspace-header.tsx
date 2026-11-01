@@ -239,6 +239,8 @@ export function EventWorkspaceHeader() {
             <MetaItem icon={MapPinIcon} onClick={() => setVenueOpen(true)}>
               {event.venueName ?? "Venue"}
             </MetaItem>
+          ) : event?.venueName ? (
+            <MetaItem icon={MapPinIcon}>{event.venueName}</MetaItem>
           ) : (
             <MetaItem icon={MapPinIcon}>
               <span className="text-muted-foreground">No venue</span>

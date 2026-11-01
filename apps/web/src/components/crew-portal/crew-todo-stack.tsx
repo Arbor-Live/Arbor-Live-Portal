@@ -30,7 +30,7 @@ import {
 } from "@/lib/crew-nights";
 import { buildCrewTodos, endedLabel, type CrewTodo } from "@/lib/crew-todo";
 import { formatDateTime, plural } from "@/lib/format";
-import { hashTimeRange } from "@/lib/hashing";
+import { hashDayLabel, hashTimeRange } from "@/lib/hashing";
 import { HASHING_BASE_PATH } from "@/lib/hashing-tabs";
 import { optimisticResolveMyEventMedia } from "@/lib/crew-portal-optimistic";
 import { cn } from "@/lib/utils";
@@ -195,7 +195,9 @@ function HashConfirmCard({
   const { hashDateId } = hash;
   return (
     <>
-      <p className="font-medium tabular-nums">{hashTimeRange(hash.startsAt, hash.endsAt)}</p>
+      <p className="font-medium tabular-nums">
+        {hashDayLabel(hash.dateKey)} · {hashTimeRange(hash.startsAt, hash.endsAt)}
+      </p>
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <Button
           type="button"
