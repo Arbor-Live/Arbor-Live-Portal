@@ -6,6 +6,7 @@ import {
   flattenChecklist,
   followingHashingQuarter,
   hashingQuarterFor,
+  isLapsed,
   isOffWeek,
   planRegularDates,
   regularDateKeys,
@@ -112,6 +113,14 @@ describe("deriveQuarterState", () => {
     [{ bookings: [{ status: "needs_confirmation", hashStatus: "finished" }], standing: null }, "needs_hash"],
   ] as const)("%j is %s", (input, expected) => {
     expect(deriveQuarterState(input)).toBe(expected);
+  });
+});
+
+describe("isLapsed", () => {
+  it("is a date that passed without starting", () => {
+    expect(isLapsed({ status: "scheduled", dateKey: "2026-11-03" }, "2026-11-04")).toBe(true);
+    expect(isLapsed({ status: "scheduled", dateKey: "2026-11-03" }, "2026-11-03")).toBe(false);
+    expect(isLapsed({ status: "finished", dateKey: "2026-11-03" }, "2026-11-04")).toBe(false);
   });
 });
 

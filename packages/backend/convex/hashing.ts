@@ -4,7 +4,7 @@ import type { Doc } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import { findAuthUsersByIds } from "./lib/auth";
 import { appError } from "./lib/errors";
-import { deriveQuarterState, hashingQuarterFor } from "./lib/hashing";
+import { deriveQuarterState, hashingQuarterFor, isLapsed } from "./lib/hashing";
 import {
   loadDateBookings,
   loadHashDate,
@@ -71,8 +71,8 @@ export const getOverview = query({
   },
 });
 
-async function loadMyQuarterBookings(ctx: QueryCtx, userId: string, dates: Doc<"hashDates">[]) {
-  const rowById = new Map(dates.map((row) => [row._id, row]));
+async function loadMyQuarterBookings(ctx: QueryCtx, userId: string, dates: Doc<"hashDates">[], today: string) {
+  const rowById = new Map(dates.filter((row) => !isLapsed(row, today)).map((row) => [row._id, row]));
   const mine = await loadUserBookings(ctx, userId);
   return mine.flatMap((booking) => {
     const row = rowById.get(booking.hashDateId);
@@ -123,7 +123,6 @@ export const getMine = query({
       ),
       standing: v.optional(hashStandingValue),
       doneAt: v.optional(v.number()),
-      location: v.optional(v.string()),
       dates: v.array(
         v.object({
           _id: v.id("hashDates"),
@@ -149,12 +148,11 @@ export const getMine = query({
     const quarter = hashingQuarterFor(today);
     if (!quarter) return null;
 
-    const [dates, standingRow, settings] = await Promise.all([
+    const [dates, standingRow] = await Promise.all([
       loadQuarterDates(ctx, quarter.id),
       loadStanding(ctx, viewer.userId, quarter.id),
-      loadSettings(ctx),
     ]);
-    const mine = await loadMyQuarterBookings(ctx, viewer.userId, dates);
+    const mine = await loadMyQuarterBookings(ctx, viewer.userId, dates, today);
     const standing = standingRow?.standing;
     const state = deriveQuarterState({
       bookings: mine.map(({ booking, row }) => ({ status: booking.status, hashStatus: row.status })),
@@ -194,7 +192,6 @@ export const getMine = query({
       state,
       standing,
       doneAt: done.length ? Math.min(...done) : undefined,
-      location: settings?.location,
       dates: upcoming.map((row, index) => {
         const bookings = bookingLists[index] ?? [];
         const visible = bookings.length >= row.capacity || myBookingByDate.has(row._id);
@@ -242,7 +239,7 @@ export const getMyPrompt = query({
 
     const dates = await loadQuarterDates(ctx, quarter.id);
     const [mine, standingRow] = await Promise.all([
-      loadMyQuarterBookings(ctx, viewer.userId, dates),
+      loadMyQuarterBookings(ctx, viewer.userId, dates, today),
       loadStanding(ctx, viewer.userId, quarter.id),
     ]);
     const state = deriveQuarterState({

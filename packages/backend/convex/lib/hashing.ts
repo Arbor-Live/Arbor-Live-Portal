@@ -102,6 +102,11 @@ export function planRegularDates<Id>(args: {
 // A person's quarter
 // ---------------------------------------------------------------------------
 
+/** The date passed and nobody started it, so it can't count as a booking any more. */
+export function isLapsed(row: { status: HashDateStatus; dateKey: string }, todayKey: string) {
+  return row.status === "scheduled" && row.dateKey < todayKey;
+}
+
 export type HashQuarterState = "done" | "exempt" | "booked" | "no_dates_work" | "needs_hash";
 
 export function deriveQuarterState(args: {

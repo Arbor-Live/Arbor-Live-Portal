@@ -18,7 +18,7 @@ import { resolveParticipationFlags } from "./userParticipation";
 import { loadAdminProfilesByStatus } from "./userProfiles";
 import { resolveUserStatus } from "./userStatus";
 import { isStaffMember, resolveProfileMembership } from "./userVerticals";
-import { deriveQuarterState, type HashQuarterState } from "./hashing";
+import { deriveQuarterState, isLapsed, type HashQuarterState } from "./hashing";
 import type { HashStanding } from "./hashingValues";
 
 /** Regular weeks plus added dates. A quarter is about 11 weeks. */
@@ -210,10 +210,9 @@ export async function loadQuarterPicture(ctx: Ctx, quarterId: string, todayKey: 
     const user = userByKey.get(profile.userId);
     const standing: HashStanding | undefined = standingByUser.get(profile.userId);
     const state: HashQuarterState = deriveQuarterState({
-      bookings: (bookingsByUser.get(profile.userId) ?? []).map(({ status, row }) => ({
-        status,
-        hashStatus: row.status,
-      })),
+      bookings: (bookingsByUser.get(profile.userId) ?? [])
+        .filter(({ row }) => !isLapsed(row, todayKey))
+        .map(({ status, row }) => ({ status, hashStatus: row.status })),
       standing: standing?.kind,
     });
     return {

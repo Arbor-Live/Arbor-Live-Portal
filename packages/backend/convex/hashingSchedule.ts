@@ -18,6 +18,7 @@ import {
   hashingQuarterById,
   hashingQuarterFor,
   HASHING_DEFAULTS,
+  isLapsed,
   planRegularDates,
 } from "./lib/hashing";
 import { HASHING_CHECKLIST_SEED } from "./lib/hashingChecklistSeed";
@@ -339,7 +340,7 @@ async function requireBookable(ctx: MutationCtx, row: Doc<"hashDates">, userId: 
   for (const booking of mine) {
     if (booking.hashDateId === row._id) appError("HASH_ALREADY_BOOKED", "They're already booked on this date.");
     const other = await ctx.db.get(booking.hashDateId);
-    if (other?.quarterId === row.quarterId) {
+    if (other?.quarterId === row.quarterId && !isLapsed(other, pacificDateKey(Date.now()))) {
       appError("HASH_ALREADY_BOOKED", `They're already on ${hashDateLabel(other)}. Unbook that first.`);
     }
   }

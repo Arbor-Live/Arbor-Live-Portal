@@ -320,6 +320,16 @@ describe("availability and booking", () => {
     ).rejects.toThrow(/already on/);
   });
 
+  test("a date nobody started stops counting, and they can be booked again", async () => {
+    const { opsApi, anaApi, ana, on } = await setupWithDates();
+    await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId: on("2026-11-03")._id, userId: ana._id });
+    const later = new Date("2026-11-05T20:00:00Z").getTime();
+    expect((await anaApi.query(api.hashing.getMine, { now: later }))?.state).toBe("needs_hash");
+    vi.setSystemTime(later);
+    await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId: on("2026-11-10")._id, userId: ana._id });
+    expect((await anaApi.query(api.hashing.getMine, { now: later }))?.state).toBe("booked");
+  });
+
   test("confirming and giving up a spot", async () => {
     const { t, opsApi, anaApi, ana, on } = await setupWithDates();
     const row = on("2026-11-17");
