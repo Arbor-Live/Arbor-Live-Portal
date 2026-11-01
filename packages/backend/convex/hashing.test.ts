@@ -147,6 +147,8 @@ describe("setup", () => {
     vi.setSystemTime(new Date("2026-11-03T17:00:00Z").getTime());
     await opsApi.mutation(api.hashingSchedule.saveSetup, { ...SETUP, weekday: 1 });
     expect((await getDate(t, hashDateId))?.dateKey).toBe("2026-11-03");
+    await opsApi.mutation(api.hashingSchedule.saveSetup, { ...SETUP, weekday: 1, spotsPerHash: 5 });
+    expect(await getDate(t, hashDateId)).toMatchObject({ dateKey: "2026-11-03", capacity: 5 });
     expect(await bookingsOf(t)).toMatchObject([{ hashDateId, status: "booked" }]);
   });
 
@@ -594,7 +596,7 @@ describe("live hash", () => {
     await anaApi.mutation(api.hashingLive.setCheck, { hashDateId, itemKey: ITEM, done: true });
     await anaApi.mutation(api.hashingLive.flagItem, { hashDateId, itemKey: OTHER_ITEM, reason: "low", note: "gaff" });
     await anaApi.mutation(api.hashingLive.setAreaClaim, { hashDateId, areaId: "large-packout", claimed: true });
-    const live = await anaApi.query(api.hashingLive.get, { hashDateId, now: NOW });
+    const live = await anaApi.query(api.hashingLive.get, { hashDateId, today: "2026-11-01" });
     expect(live?.totals).toEqual({ total: 140, checked: 2, flagged: 1 });
     const area = live?.areas[0];
     expect(area).toMatchObject({ name: "Large Packout", total: 35, checked: 2, flagged: 1 });
@@ -612,7 +614,7 @@ describe("live hash", () => {
       areaIds: ["red-shelf"],
     });
     await opsApi.mutation(api.hashingLive.start, { hashDateId });
-    const live = await opsApi.query(api.hashingLive.get, { hashDateId, now: NOW });
+    const live = await opsApi.query(api.hashingLive.get, { hashDateId, today: "2026-11-01" });
     expect(live?.areas.map((area) => area.name)).toEqual(["Red shelf"]);
     expect(live?.totals.total).toBe(18);
     await expect(
@@ -651,7 +653,8 @@ describe("live hash", () => {
     expect((await anaApi.query(api.hashing.getMine, { now: NOW }))?.state).toBe("done");
     expect((await benApi.query(api.hashing.getMine, { now: NOW }))?.state).toBe("needs_hash");
 
-    await expect(benApi.mutation(api.hashing.confirmBooking, { hashDateId })).rejects.toThrow();
+    await expect(benApi.mutation(api.hashing.confirmBooking, { hashDateId })).rejects.toThrow(/already finished/);
+    await benApi.mutation(api.hashingLive.finish, { hashDateId });
     expect((await benApi.query(api.hashing.getMine, { now: NOW }))?.state).toBe("needs_hash");
 
     await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId: on("2026-11-10")._id, userId: ben._id });
@@ -665,12 +668,12 @@ describe("live hash", () => {
     edited.kits = edited.kits.filter((kit) => kit.id !== "red-shelf");
     await opsApi.mutation(api.hashingChecklist.publish, { baseVersion: version, ...edited });
 
-    const pinned = await opsApi.query(api.hashingLive.get, { hashDateId, now: NOW });
+    const pinned = await opsApi.query(api.hashingLive.get, { hashDateId, today: "2026-11-01" });
     expect(pinned?.totals.total).toBe(140);
 
     const next = on("2026-11-10")._id;
     await opsApi.mutation(api.hashingLive.start, { hashDateId: next });
-    expect((await opsApi.query(api.hashingLive.get, { hashDateId: next, now: NOW }))?.totals.total).toBe(122);
+    expect((await opsApi.query(api.hashingLive.get, { hashDateId: next, today: "2026-11-01" }))?.totals.total).toBe(122);
   });
 
   test("publish refuses a bad tree, and a stale draft", async () => {

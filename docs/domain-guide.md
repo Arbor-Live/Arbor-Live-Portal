@@ -584,10 +584,14 @@ the next working one. Saving Setup builds `hashDates` from today through finals,
 one regular date per week, and weeks `quarterWeek` doesn't number (Thanksgiving,
 finals) are created `off`. A regular date owns its week even after it moves, so
 saving again never rebuilds it. Changing the weekday or time shifts only regular,
-unmoved, unstarted dates; moved and added dates stay. A moved date's bookings
+unmoved, unstarted dates; moved and added dates stay, and so does a date whose
+week has no slot left, with its bookings. Dates run through finals. A moved
+date's bookings
 become `needs_confirmation`, its availability is cleared, and those people are
 notified. A date that passes without being started stops counting as a booking
-(`isLapsed`), so nobody stays stuck on it.
+(`isLapsed`), so nobody stays stuck on it, and neither does an unconfirmed
+booking on a finished hash (`holdsQuarterSpot`). A flag that ops resolved or that
+reached Damage & repair can't be removed.
 
 **A person's quarter** is derived, never stored, in `deriveQuarterState`: done
 (confirmed on a finished hash), exempt, booked, no_dates_work, needs_hash.

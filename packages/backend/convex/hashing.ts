@@ -253,7 +253,7 @@ export const getMyPrompt = query({
 
     let toAnswer = 0;
     if (state === "needs_hash") {
-      const upcoming = dates.filter((row) => row.status === "scheduled" && row.dateKey >= today);
+      const upcoming = dates.filter((row) => row.status === "scheduled" && row.startsAt > args.now);
       const answers = await Promise.all(
         upcoming.map((row) =>
           ctx.db
@@ -323,7 +323,7 @@ export const confirmBooking = mutation({
   handler: async (ctx, args) => {
     const { userId } = await requireHashCrew(ctx);
     const row = await loadHashDate(ctx, args.hashDateId);
-    requireFuture(row, Date.now());
+    if (row.status === "finished") appError("HASH_ALREADY_FINISHED", "This hash has already finished.");
     const booking = await loadMyBooking(ctx, row, userId);
     if (booking.status !== "booked") await ctx.db.patch(booking._id, { status: "booked" });
     return null;

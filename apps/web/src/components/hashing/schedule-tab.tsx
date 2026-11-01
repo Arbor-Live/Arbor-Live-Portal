@@ -79,7 +79,7 @@ function MatrixCell({ person, date, cell }: { person: Person; date: DateColumn; 
         className={CELL_BUTTON}
         aria-label={`Book ${label}`}
         title={full ? "This date is full" : person.booked ? "Already booked" : cell === "can" ? "Click to book" : "No answer. Click to book"}
-        data-testid="hash-cell-can"
+        data-testid={cell === "can" ? "hash-cell-can" : "hash-cell-unanswered"}
         onClick={() =>
           void run(() => book({ hashDateId: date._id, userId: person.userId }), "Couldn't book them.")
         }

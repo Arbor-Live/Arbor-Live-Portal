@@ -101,7 +101,7 @@ const liveRowValue = v.object({
 });
 
 export const get = query({
-  args: { hashDateId: v.id("hashDates"), now: v.number() },
+  args: { hashDateId: v.id("hashDates"), today: v.string() },
   returns: v.union(
     v.null(),
     v.object({
@@ -192,7 +192,6 @@ export const get = query({
       });
 
     const isBooked = bookings.some((booking) => booking.userId === viewer.userId);
-    const today = pacificDateKey(args.now);
     return {
       hash: {
         _id: row._id,
@@ -203,7 +202,7 @@ export const get = query({
       },
       location: settings?.location,
       viewerId: viewer.userId,
-      canStart: row.status === "scheduled" && (viewer.canManage || (isBooked && row.dateKey === today)),
+      canStart: row.status === "scheduled" && (viewer.canManage || (isBooked && row.dateKey === args.today)),
       canWork: viewer.canManage || isBooked,
       people: bookings.map((booking) => ({
         userId: booking.userId,
@@ -396,8 +395,8 @@ export const finish = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await loadHashDate(ctx, args.hashDateId);
-    await requireOnHash(ctx, row);
     if (row.status === "finished") return null;
+    await requireOnHash(ctx, row);
     requireRunning(row);
     const [areas, checks] = await Promise.all([checklistFor(ctx, row), loadChecks(ctx, row._id)]);
     await ctx.db.patch(row._id, {

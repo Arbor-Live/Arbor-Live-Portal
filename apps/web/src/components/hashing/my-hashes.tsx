@@ -134,16 +134,18 @@ function BookedActions({ row }: { row: HashRow }) {
           Confirm
         </Button>
       ) : null}
-      <Button
-        size="sm"
-        variant="outline"
-        className="h-10 sm:h-7"
-        disabled={saving}
-        data-testid="hash-give-up"
-        onClick={() => void giveUp()}
-      >
-        {needsConfirmation ? "Can't make it" : "Give up spot"}
-      </Button>
+      {row.inProgress ? null : (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-10 sm:h-7"
+          disabled={saving}
+          data-testid="hash-give-up"
+          onClick={() => void giveUp()}
+        >
+          {needsConfirmation ? "Can't make it" : "Give up spot"}
+        </Button>
+      )}
     </div>
   );
 }

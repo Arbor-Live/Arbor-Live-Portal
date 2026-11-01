@@ -1,4 +1,4 @@
-import { formatDateTime, pacificDateAndTimeToMs, pacificDateKey } from "@arbor/format";
+import { formatDateTime, pacificDateAndTimeToMs } from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { SITE_URL } from "../email/constants";
@@ -175,8 +175,7 @@ export async function ensureChecklist(ctx: MutationCtx): Promise<Doc<"hashCheckl
 
 
 /** The roster for one quarter: everyone who owes a hash, and where each one stands. */
-export async function loadQuarterPicture(ctx: Ctx, quarterId: string, now: number) {
-  const todayKey = pacificDateKey(now);
+export async function loadQuarterPicture(ctx: Ctx, quarterId: string, todayKey: string) {
   const [dates, profiles, standings] = await Promise.all([
     loadQuarterDates(ctx, quarterId),
     loadAdminProfilesByStatus(ctx, ["active"]),
@@ -187,7 +186,7 @@ export async function loadQuarterPicture(ctx: Ctx, quarterId: string, now: numbe
   ]);
   const crew = profiles.filter(isHashCrew);
   const standingByUser = new Map(standings.map((row) => [row.userId, row.standing]));
-  const open = dates.filter((row) => row.status === "scheduled" && row.startsAt > now);
+  const open = dates.filter((row) => row.status === "scheduled" && row.dateKey >= todayKey);
   const booked = await Promise.all(dates.map((row) => loadDateBookings(ctx, row._id)));
   const bookingsByDate = new Map(dates.map((row, index) => [row._id, booked[index] ?? []]));
   const answers = await Promise.all(open.map((row) => loadDateAvailability(ctx, row._id)));

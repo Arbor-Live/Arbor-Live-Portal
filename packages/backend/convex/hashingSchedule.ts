@@ -155,7 +155,14 @@ async function applySetup(
   const staying = new Set<string>(plan.stay);
   const shiftTo = new Map(plan.shift.map(({ id, dateKey }) => [id, dateKey]));
   for (const row of regular) {
-    if (staying.has(row._id) || !isShiftable(row)) continue;
+    if (!isShiftable(row)) continue;
+    if (staying.has(row._id)) {
+      const endsAt = row.startsAt + settings.durationMinutes * 60_000;
+      if (row.capacity !== settings.spotsPerHash || row.endsAt !== endsAt) {
+        await ctx.db.patch(row._id, { capacity: settings.spotsPerHash, endsAt });
+      }
+      continue;
+    }
     const dateKey = shiftTo.get(row._id) ?? row.dateKey;
     const times = hashTimes(dateKey, settings.startTime, settings.durationMinutes);
     const moved = times.startsAt !== row.startsAt;
@@ -373,7 +380,7 @@ export const addDate = mutation({
     if (times.startsAt <= Date.now()) appError("HASH_IN_PAST", "Pick a time that hasn't passed.");
     const dates = await loadQuarterDates(ctx, quarter.id);
     if (dates.length >= QUARTER_DATE_LIMIT) {
-      appError("HASH_TOO_MANY_DATES", `${quarter.label} already has ${dates.length} dates.`);
+      appError("HASH_TOO_MANY_DATES", `${quarter.label} is full: max ${QUARTER_DATE_LIMIT} dates, got ${dates.length}.`);
     }
     const tree = (await latestChecklist(ctx)) ?? HASHING_CHECKLIST_SEED;
     const areaIds = new Set(tree.areas.map((area) => area.id));
@@ -508,7 +515,7 @@ export const getSchedule = query({
     const quarter = hashingQuarterFor(today);
     if (!quarter) return null;
 
-    const picture = await loadQuarterPicture(ctx, quarter.id, args.now);
+    const picture = await loadQuarterPicture(ctx, quarter.id, today);
     const { open, dates, bookingsByDate, people } = picture;
     const count = (state: (typeof people)[number]["state"]) =>
       people.filter((person) => person.state === state).length;
@@ -598,8 +605,9 @@ export const unbookPerson = mutation({
   },
 });
 
-function planFill(picture: Awaited<ReturnType<typeof loadQuarterPicture>>) {
-  const { open, bookingsByDate, answersByDate, people } = picture;
+function planFill(picture: Awaited<ReturnType<typeof loadQuarterPicture>>, now: number) {
+  const { bookingsByDate, answersByDate, people } = picture;
+  const open = picture.open.filter((row) => row.startsAt > now);
   const needing = people.filter((person) => person.state === "needs_hash");
   const needingIds = new Set(needing.map((person) => person.userId));
   return fillFromAvailability({
@@ -628,8 +636,8 @@ export const previewFill = query({
     const today = pacificDateKey(args.now);
     const quarter = hashingQuarterFor(today);
     if (!quarter) return { placements: [], unplaced: [] };
-    const picture = await loadQuarterPicture(ctx, quarter.id, args.now);
-    const plan = planFill(picture);
+    const picture = await loadQuarterPicture(ctx, quarter.id, today);
+    const plan = planFill(picture, args.now);
     const nameOf = new Map(picture.people.map((person) => [person.userId, person.name]));
     const rowById = new Map<string, Doc<"hashDates">>(picture.open.map((row) => [row._id, row]));
     return {
@@ -650,8 +658,8 @@ export const applyFill = mutation({
     const today = pacificDateKey(now);
     const quarter = hashingQuarterFor(today);
     if (!quarter) return { booked: 0 };
-    const picture = await loadQuarterPicture(ctx, quarter.id, now);
-    const plan = planFill(picture);
+    const picture = await loadQuarterPicture(ctx, quarter.id, pacificDateKey(now));
+    const plan = planFill(picture, now);
     const rowById = new Map<string, Doc<"hashDates">>(picture.open.map((row) => [row._id, row]));
     const location = (await loadSettings(ctx))?.location;
     for (const { userId, dateId } of plan.placements) {

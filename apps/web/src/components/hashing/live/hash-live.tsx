@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getConvexErrorMessage } from "@/lib/convex-error";
-import { plural } from "@/lib/format";
+import { pacificDateKey, plural } from "@/lib/format";
 import { FLAG_REASON_LABELS, hashDayLabel, hashTimeRange } from "@/lib/hashing";
 import { applyTick } from "@/lib/hashing-live";
 import { HASHING_BASE_PATH, hashPath } from "@/lib/hashing-tabs";
@@ -352,8 +352,8 @@ function People({ people }: { people: Live["people"] }) {
 }
 
 export function HashLive({ hashDateId }: { hashDateId: Id<"hashDates"> }) {
-  const now = useNow(60_000);
-  const live = useQuery(api.hashingLive.get, { hashDateId, now });
+  const today = pacificDateKey(useNow(60_000));
+  const live = useQuery(api.hashingLive.get, { hashDateId, today });
   const start = useMutation(api.hashingLive.start);
   const finish = useMutation(api.hashingLive.finish);
   const { confirm } = useAppDialog();

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  holdsQuarterSpot,
   checklistProblems,
   deriveQuarterState,
   fillFromAvailability,
@@ -255,5 +256,19 @@ describe("checklistProblems", () => {
       ],
     });
     expect(problems).toEqual(['"final" is reserved for final checks.', "Final has an invalid id: a:b."]);
+  });
+});
+
+describe("holdsQuarterSpot", () => {
+  const today = "2026-11-10";
+  it("frees lapsed dates and no-shows, and keeps everything else", () => {
+    expect(holdsQuarterSpot({ status: "booked" }, { status: "scheduled", dateKey: "2026-11-03" }, today)).toBe(false);
+    expect(
+      holdsQuarterSpot({ status: "needs_confirmation" }, { status: "finished", dateKey: "2026-11-03" }, today),
+    ).toBe(false);
+    expect(holdsQuarterSpot({ status: "booked" }, { status: "finished", dateKey: "2026-11-03" }, today)).toBe(true);
+    expect(
+      holdsQuarterSpot({ status: "needs_confirmation" }, { status: "scheduled", dateKey: "2026-11-17" }, today),
+    ).toBe(true);
   });
 });
