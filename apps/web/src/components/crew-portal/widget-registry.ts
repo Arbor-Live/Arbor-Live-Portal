@@ -21,14 +21,14 @@ export const DEFAULT_CREW_WIDGETS: CrewWidget[] = [
     component: PayPeriodSummaryWidget,
   },
   {
-    id: "coho-gift-card",
-    title: "CoHo gift card",
-    component: CohoGiftCardWidget,
-  },
-  {
     id: "borrow-requests",
     title: "Equipment requests",
     component: BorrowRequestsWidget,
+  },
+  {
+    id: "coho-gift-card",
+    title: "CoHo gift card",
+    component: CohoGiftCardWidget,
   },
 ];
 

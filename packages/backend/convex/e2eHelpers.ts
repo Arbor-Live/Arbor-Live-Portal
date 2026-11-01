@@ -5224,7 +5224,7 @@ export const seedTimecardShift = mutation({
  * Test-only: an event that ended `hoursAgo` hours ago with a show shift for the
  * user, so it owes them a review and photos in post-event work.
  */
-export const seedEndedShowShift = mutation({
+export const seedEndedShowShift = internalMutation({
   args: {
     userId: v.string(),
     title: v.optional(v.string()),
@@ -5283,7 +5283,7 @@ export const seedEndedShowShift = mutation({
 });
 
 /** Test-only: mark every evening as usually free or rarely free. */
-export const seedUsualEvenings = mutation({
+export const seedUsualEvenings = internalMutation({
   args: { userId: v.string(), level: v.union(v.literal("usually"), v.literal("rarely")) },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -5311,7 +5311,7 @@ export const seedUsualEvenings = mutation({
 });
 
 /** Test-only: clear a user's ended show shifts, so Home's post-event cards start from none. */
-export const clearCrewShifts = mutation({
+export const clearCrewShifts = internalMutation({
   args: { userId: v.string() },
   returns: v.object({ deletedShifts: v.number() }),
   handler: async (ctx, args) => {
