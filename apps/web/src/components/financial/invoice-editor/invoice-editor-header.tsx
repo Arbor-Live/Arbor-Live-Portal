@@ -480,6 +480,10 @@ function InvoiceWorkflowStrip({
   const invoice = draft.invoice!;
   const invoiceId = draft.activeInvoiceId!;
   const approval = invoice.clientApprovalStatus ?? "pending";
+  const canSendRevised =
+    invoice.status !== "void" && approval !== "approved" && (!isRequestLinked || onRequestPortal);
+  const offerRevision = approval === "pending" && canSendRevised;
+  const openRevisedSheet = () => setReplySheet((current) => ({ open: true, key: current.key + 1 }));
 
   async function sendReply(message: string) {
     setSendingReply(true);
@@ -558,16 +562,19 @@ function InvoiceWorkflowStrip({
             Copy
           </Button>
         ) : (
-          <Button
-            data-testid="invoice-regenerate-token"
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void regenerateToken()}
-          >
-            <ArrowClockwiseIcon />
-            Regenerate
-          </Button>
+          <>
+            <Button
+              data-testid="invoice-regenerate-token"
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void regenerateToken()}
+            >
+              <ArrowClockwiseIcon />
+              Regenerate
+            </Button>
+            {offerRevision ? <SendRevisedButton onClick={openRevisedSheet} /> : null}
+          </>
         )}
       </div>
 
@@ -582,6 +589,7 @@ function InvoiceWorkflowStrip({
               <Button data-testid="invoice-withdraw-review" type="button" variant="outline" size="sm" onClick={onWithdraw}>
                 Withdraw
               </Button>
+              {offerRevision ? <SendRevisedButton onClick={openRevisedSheet} /> : null}
             </>
           ) : (
             <span>Not sent to the client yet. Send it from the header when the quote is ready.</span>
@@ -617,26 +625,26 @@ function InvoiceWorkflowStrip({
             <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => void resetApproval()}>
               Reset to pending
             </Button>
-          ) : (
+          ) : canSendRevised ? (
             <Button
               type="button"
               size="sm"
               data-testid="invoice-reply-to-changes"
-              disabled={invoice.status === "void"}
-              onClick={() => setReplySheet((current) => ({ open: true, key: current.key + 1 }))}
+              onClick={openRevisedSheet}
             >
               <ChatTextIcon />
               Reply with revised quote
             </Button>
-          )}
+          ) : null}
         </div>
       ) : null}
-      {approval === "changes_requested" ? (
+      {canSendRevised ? (
         <RevisedQuoteSheet
           key={replySheet.key}
           open={replySheet.open}
           onOpenChange={(open) => setReplySheet((current) => ({ ...current, open }))}
           invoiceId={invoiceId}
+          isReply={approval === "changes_requested"}
           toEmail={clientEmail}
           managerEmail={draft.fields.managerEmail || undefined}
           isRequestLinked={isRequestLinked}
@@ -647,5 +655,14 @@ function InvoiceWorkflowStrip({
       ) : null}
       {approval === "approved" && invoice.status !== "void" ? <InvoiceBillingState draft={draft} /> : null}
     </div>
+  );
+}
+
+function SendRevisedButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button data-testid="invoice-send-revised" type="button" variant="outline" size="sm" onClick={onClick}>
+      <ChatTextIcon />
+      Send revised quote
+    </Button>
   );
 }

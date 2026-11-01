@@ -205,14 +205,16 @@ export type QuoteUpdatedEmailProps = {
   venueName?: string;
   dateRangeLabel: string;
   invoiceNumber: string;
-  previousTotalUsd: number;
+  /** Missing when the client was never sent a version to compare against. */
+  previousTotalUsd?: number;
   newTotalUsd: number;
   changeNote?: string;
   /**
-   * Why it's back with the client: staff changed the quote they approved, or
-   * staff answered the changes they asked for. Older queued emails omit it.
+   * Why it's back with the client: staff changed the quote they approved,
+   * answered the changes they asked for, or revised it on their own. Older
+   * queued emails omit it.
    */
-  reason?: "approved" | "changes_requested";
+  reason?: "approved" | "changes_requested" | "revised";
   /** The client's change request this answers. */
   requestNote?: string;
   portalUrl: string;
