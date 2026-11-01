@@ -22,10 +22,10 @@ async function setup() {
 
 const crewArgs = { rateMode: "normal", payrollMethod: "external" } as const;
 
-async function convertApplication(t: Test, as: ReturnType<typeof asUser>) {
-  const applicationId = await t.run(async (ctx) =>
+function insertApplication(t: Test, status: "trainee" | "converted" = "trainee") {
+  return t.run(async (ctx) =>
     ctx.db.insert("crewApplications", {
-      status: "trainee",
+      status,
       name: "Applicant",
       email: "applicant@example.com",
       phone: "555-0100",
@@ -37,7 +37,15 @@ async function convertApplication(t: Test, as: ReturnType<typeof asUser>) {
       updatedAt: 1,
     }),
   );
-  return await as.mutation(api.crewApplications.convertToMember, { applicationId, ...crewArgs });
+}
+
+async function convertApplication(t: Test, as: ReturnType<typeof asUser>) {
+  const applicationId = await insertApplication(t);
+  const result = await as.mutation(api.crewApplications.convertToMember, {
+    applicationId,
+    ...crewArgs,
+  });
+  return { ...result, applicationId };
 }
 
 test("a crew invite lists an empty checklist, and ticking is reflected", async () => {
@@ -237,6 +245,45 @@ test("converting a crew application lists an empty checklist", async () => {
   const invites = await as.query(api.users.listInvitationsAdmin, {});
   const invite = invites.find((row) => row.id === invitationId);
   expect(invite?.notionChecklist).toEqual({ inviteToNotion: false, addToCrewGroup: false });
+});
+
+test("the crew application list carries the checklist and shares ticks with invitations", async () => {
+  const { t, as } = await setup();
+  const { invitationId, applicationId } = await convertApplication(t, as);
+  const listed = async () =>
+    (await as.query(api.crewApplications.listAdmin, {})).find((row) => row._id === applicationId);
+
+  expect(await listed()).toMatchObject({
+    status: "converted",
+    invitationId,
+    notionChecklist: { inviteToNotion: false, addToCrewGroup: false },
+  });
+
+  await as.mutation(api.users.setInviteNotionChecklistItem, {
+    invitationId,
+    item: "addToCrewGroup",
+    done: true,
+  });
+
+  expect((await listed())?.notionChecklist).toEqual({
+    inviteToNotion: false,
+    addToCrewGroup: true,
+  });
+  const invite = (await as.query(api.users.listInvitationsAdmin, {})).find(
+    (row) => row.id === invitationId,
+  );
+  expect(invite?.notionChecklist).toEqual({ inviteToNotion: false, addToCrewGroup: true });
+});
+
+test("an application converted before checklists were linked has no checklist", async () => {
+  const { t, as } = await setup();
+  const applicationId = await insertApplication(t, "converted");
+
+  const row = (await as.query(api.crewApplications.listAdmin, {})).find(
+    (application) => application._id === applicationId,
+  );
+  expect(row?.invitationId).toBeUndefined();
+  expect(row?.notionChecklist).toBeNull();
 });
 
 test("the backfill covers crew invites and skips advisor and band invites", async () => {

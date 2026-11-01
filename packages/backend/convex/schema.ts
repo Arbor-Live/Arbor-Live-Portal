@@ -2559,6 +2559,8 @@ export default defineSchema({
     reviewedAt: v.optional(v.number()),
     reviewedByUserId: v.optional(v.string()),
     convertedUserId: v.optional(v.string()),
+    /** Invitation `convertToMember` created; links the row to its Notion checklist. Unset on older conversions. */
+    invitationId: v.optional(v.string()),
     /** Admin handling the applicant (reaching out, the intro meeting). */
     assigneeUserId: v.optional(v.string()),
     /**

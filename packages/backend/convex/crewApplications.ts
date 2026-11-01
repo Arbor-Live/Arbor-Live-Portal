@@ -37,6 +37,7 @@ import { bumpInviteSequence } from "./email/inviteSequence";
 import {
   markInvitationAccepted,
   scheduleUserInviteEmail,
+  notionChecklistFlags,
   syncInviteNotionChecklist,
 } from "./email/invitations";
 import { scheduleCrewScheduledEmails } from "./email/triggers";
@@ -325,6 +326,12 @@ export const listAdmin = query({
       outreachUpdatedByName: v.optional(v.string()),
       /** Trainees only: when their last training shift ends ("Decision needed" after that). */
       trainingEndsAt: v.optional(v.number()),
+      invitationId: v.optional(v.string()),
+      /** Null when the application was converted before checklists were linked. */
+      notionChecklist: v.union(
+        v.null(),
+        v.object({ inviteToNotion: v.boolean(), addToCrewGroup: v.boolean() }),
+      ),
     }),
   ),
   handler: async (ctx, args) => {
@@ -360,6 +367,23 @@ export const listAdmin = query({
       ),
     );
 
+    const checklistByApplicationId = new Map(
+      await Promise.all(
+        rows
+          .filter((row) => row.invitationId)
+          .map(
+            async (row) =>
+              [
+                row._id,
+                await ctx.db
+                  .query("inviteNotionChecklists")
+                  .withIndex("by_invitationId", (q) => q.eq("invitationId", row.invitationId!))
+                  .unique(),
+              ] as const,
+          ),
+      ),
+    );
+
     return rows
       .map((row) => ({
         _id: row._id,
@@ -383,6 +407,8 @@ export const listAdmin = query({
         outreachUpdatedAt: row.outreachUpdatedAt,
         outreachUpdatedByName: authUserDisplayName(userByKey, row.outreachUpdatedByUserId),
         trainingEndsAt: trainingEndsAtById.get(row._id),
+        invitationId: row.invitationId,
+        notionChecklist: notionChecklistFlags(checklistByApplicationId.get(row._id)),
       }));
   },
 });
@@ -843,6 +869,7 @@ export const convertToMember = mutation({
       reviewedAt: now,
       reviewedByUserId: adminId,
       convertedUserId: existingUserId || undefined,
+      invitationId,
       updatedAt: now,
     });
 

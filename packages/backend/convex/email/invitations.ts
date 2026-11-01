@@ -1,4 +1,5 @@
 import { components } from "../_generated/api";
+import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { findAuthOrganizationById, findAuthUserById } from "../lib/auth";
 import {
@@ -276,6 +277,17 @@ export async function syncInviteNotionChecklist(
   } else if (!isCrewInvite && existing) {
     await ctx.db.delete(existing._id);
   }
+}
+
+/** Completed-at timestamps collapsed to the booleans the UI ticks. */
+export function notionChecklistFlags(
+  row: Pick<Doc<"inviteNotionChecklists">, "inviteToNotion" | "addToCrewGroup"> | null | undefined,
+) {
+  if (!row) return null;
+  return {
+    inviteToNotion: row.inviteToNotion !== undefined,
+    addToCrewGroup: row.addToCrewGroup !== undefined,
+  };
 }
 
 export async function markInvitationAccepted(ctx: MutationCtx, invitationId: string) {

@@ -32,6 +32,7 @@ import {
   markInvitationAccepted,
   markInvitationCancelled,
   scheduleUserInviteEmail,
+  notionChecklistFlags,
   syncInviteNotionChecklist,
   updatePendingInviteDetails,
 } from "./email/invitations";
@@ -2072,12 +2073,7 @@ export const listInvitationsAdmin = query({
           teams: (pending?.teams ?? []) as string[],
           verticals: (pending?.verticals ?? []) as UserVertical[],
           disciplines: (pending?.disciplines ?? []) as UserDiscipline[],
-          notionChecklist: checklist
-            ? {
-                inviteToNotion: checklist.inviteToNotion !== undefined,
-                addToCrewGroup: checklist.addToCrewGroup !== undefined,
-              }
-            : null,
+          notionChecklist: notionChecklistFlags(checklist),
         };
       })
       .filter((invite) => Boolean(invite.id))
