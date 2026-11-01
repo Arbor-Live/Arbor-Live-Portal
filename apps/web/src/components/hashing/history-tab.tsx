@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
+import { CorrectAttendanceDialog, type AttendanceTarget } from "@/components/hashing/correct-attendance-dialog";
 import { EmptyState, ListSummary, RowCell, RowFlag, RowGroup, RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 import { Button } from "@/components/ui/button";
@@ -38,8 +39,9 @@ function ResolveButton({ checkId }: { checkId: Id<"hashChecks"> }) {
 
 export function HistoryTab() {
   const history = useQuery(api.hashingLive.getHistory, {});
+  const [correcting, setCorrecting] = useState<AttendanceTarget | null>(null);
   if (history === undefined) return <Skeleton className="h-48 w-full" />;
-  const { finished, flags } = history;
+  const { finished, lapsed, flags } = history;
 
   return (
     <div className="space-y-4" data-testid="hash-history">
@@ -84,7 +86,21 @@ export function HistoryTab() {
       {finished.length > 0 ? (
         <RowGroup title="Finished" count={finished.length} testId="hash-finished">
           {finished.map((row) => (
-            <ListRow key={row._id} data-testid="hash-finished-row" href={hashPath(row._id)}>
+            <ListRow
+              key={row._id}
+              data-testid="hash-finished-row"
+              href={hashPath(row._id)}
+              actions={
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  data-testid="hash-correct"
+                  onClick={() => setCorrecting({ hashDateId: row._id, startsAt: row.startsAt, lapsed: false })}
+                >
+                  Correct
+                </Button>
+              }
+            >
               <RowText title={formatDate(row.startsAt)} detail={row.people.join(", ") || "Nobody booked"} />
               {row.counts && row.counts.flagged > 0 ? <RowFlag>{plural(row.counts.flagged, "flag")}</RowFlag> : null}
               {row.counts ? (
@@ -98,6 +114,32 @@ export function HistoryTab() {
       ) : (
         <EmptyState>No finished hashes yet.</EmptyState>
       )}
+
+      {lapsed.length > 0 ? (
+        <RowGroup title="Never ran" count={lapsed.length} testId="hash-lapsed">
+          {lapsed.map((row) => (
+            <ListRow
+              key={row._id}
+              data-testid="hash-lapsed-row"
+              href={hashPath(row._id)}
+              actions={
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  data-testid="hash-mark-done"
+                  onClick={() => setCorrecting({ hashDateId: row._id, startsAt: row.startsAt, lapsed: true })}
+                >
+                  Mark as done
+                </Button>
+              }
+            >
+              <RowText title={formatDate(row.startsAt)} />
+            </ListRow>
+          ))}
+        </RowGroup>
+      ) : null}
+
+      <CorrectAttendanceDialog target={correcting} onClose={() => setCorrecting(null)} />
     </div>
   );
 }

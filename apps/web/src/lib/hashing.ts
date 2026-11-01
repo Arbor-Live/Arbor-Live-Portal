@@ -49,6 +49,14 @@ export function hashStartTime(ms: number) {
   }).format(new Date(ms));
 }
 
+/** What saving a corrected list does to each person, for the confirm. */
+export function attendanceConfirmText({ added, removed }: { added: string[]; removed: string[] }) {
+  const sentences = [];
+  if (added.length > 0) sentences.push(`${added.join(", ")} will get credit and pay.`);
+  if (removed.length > 0) sentences.push(`${removed.join(", ")} will lose this shift and its pay, and need a hash again.`);
+  return sentences.join(" ");
+}
+
 /** Why a date falls in a week with no hash ("Thanksgiving"), or null. */
 export function offWeekLabel(dateKey: string) {
   const week = quarterWeek(dateKey);

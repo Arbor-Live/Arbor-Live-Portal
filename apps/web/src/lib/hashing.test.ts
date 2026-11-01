@@ -1,9 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { pacificDateAndTimeToMs } from "@/lib/format";
-import { hashDayLabel, hashSlotLabel, hashStartTime, hashTimeRange, offWeekLabel } from "./hashing";
+import { attendanceConfirmText, hashDayLabel, hashSlotLabel, hashStartTime, hashTimeRange, offWeekLabel } from "./hashing";
 import { activeHashingTab, hashingTabPath } from "./hashing-tabs";
 
 const at = (time: string) => pacificDateAndTimeToMs("2026-11-17", time)!;
+
+describe("attendanceConfirmText", () => {
+  it("says what each side of a correction gets", () => {
+    expect(attendanceConfirmText({ added: ["Ben"], removed: ["Ana", "Theo"] })).toBe(
+      "Ben will get credit and pay. Ana, Theo will lose this shift and its pay, and need a hash again.",
+    );
+    expect(attendanceConfirmText({ added: ["Ben"], removed: [] })).toBe("Ben will get credit and pay.");
+  });
+});
 
 describe("hashing labels", () => {
   it("names a day from its key", () => {

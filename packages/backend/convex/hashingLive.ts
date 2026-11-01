@@ -4,20 +4,24 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { fileDamageReport, operabilityValue } from "./damageReports";
 import { findAuthUsersByIds, getUserId, requireAdminOrOperations } from "./lib/auth";
+import { loadAdminProfilesByStatus } from "./lib/userProfiles";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { appError } from "./lib/errors";
 import { flattenChecklist, type ChecklistAreaView } from "./lib/hashing";
 import { HASHING_CHECKLIST_SEED } from "./lib/hashingChecklistSeed";
 import {
   ensureChecklist,
+  hashDateLabel,
+  isHashCrew,
   latestChecklist,
   loadDateBookings,
   loadHashDate,
   loadSettings,
+  requireBookingRules,
   requireHashEventId,
   requireHashingViewer,
 } from "./lib/hashingData";
-import { changeHashCrew, completeHashEvent } from "./lib/hashingEvents";
+import { completeHashEvent, reviveLapsedHash, settleHashAttendance } from "./lib/hashingEvents";
 import {
   hashBookingStatusValue,
   hashCheckStatusValue,
@@ -115,6 +119,7 @@ export const get = query({
       }),
       location: v.optional(v.string()),
       viewerId: v.string(),
+      canManage: v.boolean(),
       canStart: v.boolean(),
       canWork: v.boolean(),
       people: v.array(
@@ -204,6 +209,7 @@ export const get = query({
       },
       location: event?.venueName ?? settings?.location,
       viewerId: viewer.userId,
+      canManage: viewer.canManage,
       canStart: row.status === "scheduled" && (viewer.canManage || (isBooked && row.dateKey === args.today)),
       canWork: viewer.canManage || isBooked,
       people: bookings.map((booking) => ({
@@ -399,6 +405,8 @@ export const setAreaClaim = mutation({
 /**
  * Whoever was there keeps their shift, so they get credit and pay. Everyone else
  * loses it and needs a hash again. Being on the list settles a pending booking.
+ * Crew finish it on their phones in the closet, so one tap can't wipe the list or
+ * credit people with nobody there to vouch for them. Ops correct it afterwards.
  */
 export const finish = mutation({
   args: { hashDateId: v.id("hashDates"), attendeeUserIds: v.array(v.string()) },
@@ -406,31 +414,86 @@ export const finish = mutation({
   handler: async (ctx, args) => {
     const row = await loadHashDate(ctx, args.hashDateId);
     if (row.status === "finished") return null;
-    await requireOnHash(ctx, row);
+    const viewer = await requireOnHash(ctx, row);
     requireRunning(row);
     const eventId = requireHashEventId(row);
     const attendees = new Set(args.attendeeUserIds);
     const bookings = await loadDateBookings(ctx, row);
     const stranger = args.attendeeUserIds.find((userId) => !bookings.some((booking) => booking.userId === userId));
     if (stranger) appError("HASH_NOT_BOOKED", "Only people booked on this hash can be marked as there.");
+    if (attendees.size === 0 && bookings.length > 0) appError("HASH_NO_ATTENDEES", "Tick who was there.");
+    if (!viewer.canManage && !attendees.has(viewer.userId)) {
+      appError("HASH_FINISH_WITHOUT_YOU", "You can only finish a hash you were at, so tick yourself.");
+    }
 
-    await changeHashCrew(ctx, eventId, async () => {
-      for (const booking of bookings) {
-        for (const shiftId of booking.shiftIds) {
-          if (attendees.has(booking.userId)) await ctx.db.patch(shiftId, { needsConfirmation: undefined });
-          else await ctx.db.delete(shiftId);
-        }
-      }
-    });
+    await settleHashAttendance(ctx, row, args.attendeeUserIds);
     const [areas, checks] = await Promise.all([checklistFor(ctx, row), loadChecks(ctx, row._id)]);
     await ctx.db.patch(row._id, {
       status: "finished",
-      eventId,
       finishedAt: Date.now(),
       finalCounts: tally(areas, checks),
     });
     await completeHashEvent(ctx, eventId);
     return null;
+  },
+});
+
+/**
+ * Ops putting the record right after the fact: who was at a finished hash, or
+ * that a lapsed one did happen. People named get shifts, credit and pay; people
+ * left off lose them, with the normal notice. Capacity doesn't apply, since this
+ * records who was there.
+ */
+export const correctAttendance = mutation({
+  args: { hashDateId: v.id("hashDates"), attendeeUserIds: v.array(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireAdminOrOperations(ctx);
+    const row = await loadHashDate(ctx, args.hashDateId);
+    if (row.status !== "finished" && row.status !== "lapsed") {
+      appError("HASH_NOT_OVER", "Only a finished or lapsed hash can be corrected.");
+    }
+    const attendeeUserIds = [...new Set(args.attendeeUserIds)];
+    if (row.status === "lapsed" && attendeeUserIds.length === 0) {
+      appError("HASH_NO_ATTENDEES", "Name who was there to mark this hash as done.");
+    }
+    const booked = new Set((await loadDateBookings(ctx, row)).map((booking) => booking.userId));
+    for (const userId of attendeeUserIds) {
+      if (!booked.has(userId)) await requireBookingRules(ctx, row, userId, null);
+    }
+
+    if (row.status === "lapsed") await reviveLapsedHash(ctx, row);
+    await settleHashAttendance(ctx, await loadHashDate(ctx, row._id), attendeeUserIds, {
+      scheduledSubject: `Hash on ${hashDateLabel(row)}: you're marked as there`,
+    });
+    if (row.status === "lapsed") await ctx.db.patch(row._id, { status: "finished", finishedAt: row.endsAt });
+    return null;
+  },
+});
+
+/** Who the correction dialog can tick: the crew, plus anyone credited who has since left it. */
+export const getAttendance = query({
+  args: { hashDateId: v.id("hashDates") },
+  returns: v.object({
+    attendeeIds: v.array(v.string()),
+    crew: v.array(v.object({ userId: v.string(), name: v.string() })),
+  }),
+  handler: async (ctx, args) => {
+    await requireAdminOrOperations(ctx);
+    const row = await loadHashDate(ctx, args.hashDateId);
+    const [bookings, profiles] = await Promise.all([loadDateBookings(ctx, row), loadAdminProfilesByStatus(ctx, ["active"])]);
+    const attendeeIds = bookings.map((booking) => booking.userId);
+    const userIds = [...new Set([...attendeeIds, ...profiles.filter(isHashCrew).map((profile) => profile.userId)])];
+    const userByKey = await findAuthUsersByIds(ctx, userIds);
+    return {
+      attendeeIds,
+      crew: userIds
+        .map((userId) => {
+          const user = userByKey.get(userId);
+          return { userId, name: user?.name || user?.email || "Crew" };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    };
   },
 });
 
@@ -446,6 +509,7 @@ export const getHistory = query({
         counts: v.optional(v.object({ checked: v.number(), flagged: v.number(), total: v.number() })),
       }),
     ),
+    lapsed: v.array(v.object({ _id: v.id("hashDates"), startsAt: v.number() })),
     flags: v.array(
       v.object({
         _id: v.id("hashChecks"),
@@ -463,11 +527,15 @@ export const getHistory = query({
   }),
   handler: async (ctx) => {
     await requireAdminOrOperations(ctx);
-    const finished = await ctx.db
-      .query("hashDates")
-      .withIndex("by_status_and_dateKey", (q) => q.eq("status", "finished"))
-      .order("desc")
-      .take(HISTORY_TAKE);
+    const [finished, lapsed] = await Promise.all(
+      (["finished", "lapsed"] as const).map((status) =>
+        ctx.db
+          .query("hashDates")
+          .withIndex("by_status_and_dateKey", (q) => q.eq("status", status))
+          .order("desc")
+          .take(HISTORY_TAKE),
+      ),
+    );
     const flags = await ctx.db
       .query("hashChecks")
       .withIndex("by_status_and_resolvedAt", (q) => q.eq("status", "flagged").eq("resolvedAt", undefined))
@@ -501,6 +569,7 @@ export const getHistory = query({
         people: (credited[index] ?? []).map((booking) => nameOf(booking.userId)),
         counts: row.finalCounts,
       })),
+      lapsed: lapsed.map((row) => ({ _id: row._id, startsAt: row.startsAt })),
       flags: flags.flatMap((flag) => {
         const hash = hashById.get(flag.hashDateId);
         if (!hash) return [];

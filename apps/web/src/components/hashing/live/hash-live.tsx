@@ -421,6 +421,8 @@ export function HashLive({ hashDateId }: { hashDateId: Id<"hashDates"> }) {
         open={finishing}
         onOpenChange={setFinishing}
         people={live.people}
+        viewerId={live.viewerId}
+        canManage={live.canManage}
         itemsLeft={live.totals.total - live.totals.checked}
         busy={busy}
         onFinish={(attendeeUserIds) => void finishWith(attendeeUserIds)}

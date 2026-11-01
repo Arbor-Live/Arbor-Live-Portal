@@ -9,45 +9,37 @@ import { plural } from "@/lib/format";
 
 type Person = { userId: string; name: string; status: "booked" | "needs_confirmation" };
 
+type FinishFormProps = {
+  people: Person[];
+  viewerId: string;
+  canManage: boolean;
+  itemsLeft: number;
+  busy: boolean;
+  onFinish: (attendeeUserIds: string[]) => void;
+};
+
 /** Only who's ticked keeps their shift, so pay and credit come from this list. */
 export function FinishDialog({
   open,
   onOpenChange,
-  people,
-  itemsLeft,
-  busy,
-  onFinish,
+  ...form
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  people: Person[];
-  itemsLeft: number;
-  busy: boolean;
-  onFinish: (attendeeUserIds: string[]) => void;
-}) {
+} & FinishFormProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="hash-finish-dialog">
         <DialogHeader>
           <DialogTitle>Who was there?</DialogTitle>
         </DialogHeader>
-        {open ? <FinishForm people={people} itemsLeft={itemsLeft} busy={busy} onFinish={onFinish} /> : null}
+        {open ? <FinishForm {...form} /> : null}
       </DialogContent>
     </Dialog>
   );
 }
 
-function FinishForm({
-  people,
-  itemsLeft,
-  busy,
-  onFinish,
-}: {
-  people: Person[];
-  itemsLeft: number;
-  busy: boolean;
-  onFinish: (attendeeUserIds: string[]) => void;
-}) {
+function FinishForm({ people, viewerId, canManage, itemsLeft, busy, onFinish }: FinishFormProps) {
   const [absent, setAbsent] = useState(
     () => new Set(people.filter((person) => person.status === "needs_confirmation").map((person) => person.userId)),
   );
@@ -60,6 +52,14 @@ function FinishForm({
       return next;
     });
   }
+
+  const there = people.map((person) => person.userId).filter((userId) => !absent.has(userId));
+  const blocked =
+    people.length > 0 && there.length === 0
+      ? "Tick who was there."
+      : !canManage && !there.includes(viewerId)
+        ? "Tick yourself to finish. Only someone who was there can."
+        : null;
 
   return (
     <div className="space-y-4">
@@ -89,7 +89,11 @@ function FinishForm({
       ) : (
         <p className="text-sm text-muted-foreground">Nobody is booked on this hash.</p>
       )}
-      {absent.size > 0 ? (
+      {blocked ? (
+        <p className="text-sm text-destructive" data-testid="hash-finish-blocked">
+          {blocked}
+        </p>
+      ) : absent.size > 0 ? (
         <p className="text-sm text-muted-foreground" data-testid="hash-finish-absent">
           {plural(absent.size, "person", "people")} will lose this shift and need a hash again.
         </p>
@@ -98,11 +102,7 @@ function FinishForm({
         <p className="text-sm text-muted-foreground">{plural(itemsLeft, "item")} still unchecked.</p>
       ) : null}
       <DialogFooter>
-        <Button
-          disabled={busy}
-          data-testid="hash-finish-confirm"
-          onClick={() => onFinish(people.map((person) => person.userId).filter((userId) => !absent.has(userId)))}
-        >
+        <Button disabled={busy || blocked !== null} data-testid="hash-finish-confirm" onClick={() => onFinish(there)}>
           Finish hash
         </Button>
       </DialogFooter>

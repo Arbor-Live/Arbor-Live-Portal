@@ -10,7 +10,7 @@ import { deleteEventRecord } from "./bookingChainDelete";
 import { appError } from "./errors";
 import { type EventStatus, normalizeEventStatus } from "./eventStatus";
 import { normalizeEventVisibility } from "./eventVisibility";
-import { hashDateLabel, requireHashEventId } from "./hashingData";
+import { hashDateLabel, loadDateBookings, requireHashEventId } from "./hashingData";
 import { HASH_ROLE } from "./hashingValues";
 import { recordEventStatusTransition } from "./statusTransitions";
 
@@ -64,7 +64,8 @@ async function insertHashSection(ctx: MutationCtx, eventId: Id<"events">, times:
 export async function adoptHashSection(ctx: MutationCtx, eventId: Id<"events">, times: Times) {
   const [section] = await loadEventBlocks(ctx, eventId);
   if (!section) return await insertHashSection(ctx, eventId, times);
-  await ctx.db.patch(section._id, { ...times, dayIndex: 0, updatedAt: Date.now() });
+  const { startsAt, endsAt } = times;
+  await ctx.db.patch(section._id, { startsAt, endsAt, dayIndex: 0, updatedAt: Date.now() });
   return section._id;
 }
 
@@ -145,34 +146,65 @@ export async function changeHashCrew(
   );
 }
 
-/** Real shifts, priced the way any assigned shift is. */
-export async function bookHashShifts(ctx: MutationCtx, row: Doc<"hashDates">, userIds: string[]) {
-  if (userIds.length === 0) return;
+/** Real shifts, priced the way any assigned shift is. Runs inside `changeHashCrew`. */
+async function insertHashShifts(ctx: MutationCtx, row: Doc<"hashDates">, userIds: string[]) {
   const eventId = requireHashEventId(row);
   const times = { startsAt: row.startsAt, endsAt: row.endsAt };
   const rateSettings = await loadInvoiceCrewRateSettings(ctx);
-  await changeHashCrew(ctx, eventId, async () => {
-    const now = Date.now();
-    for (const userId of userIds) {
-      const rate = await ctx.db
-        .query("userCompensationRates")
-        .withIndex("by_userId", (q) => q.eq("userId", userId))
-        .first();
-      const hourlyRateUsd = resolveUserCompensationHourlyRateUsd(rate, rateSettings);
-      await ctx.db.insert("eventCrewShifts", {
-        eventId,
-        scheduleBlockId: row.sectionBlockId,
-        role: HASH_ROLE,
-        userId,
-        ...times,
-        hours: shiftHours(times),
-        estimatedHourlyRateUsd: hourlyRateUsd > 0 ? hourlyRateUsd : undefined,
-        postedToExpense: false,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-  });
+  const now = Date.now();
+  for (const userId of userIds) {
+    const rate = await ctx.db
+      .query("userCompensationRates")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .first();
+    const hourlyRateUsd = resolveUserCompensationHourlyRateUsd(rate, rateSettings);
+    await ctx.db.insert("eventCrewShifts", {
+      eventId,
+      scheduleBlockId: row.sectionBlockId,
+      role: HASH_ROLE,
+      userId,
+      ...times,
+      hours: shiftHours(times),
+      estimatedHourlyRateUsd: hourlyRateUsd > 0 ? hourlyRateUsd : undefined,
+      postedToExpense: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
+export async function bookHashShifts(ctx: MutationCtx, row: Doc<"hashDates">, userIds: string[]) {
+  if (userIds.length === 0) return;
+  await changeHashCrew(ctx, requireHashEventId(row), () => insertHashShifts(ctx, row, userIds));
+}
+
+/**
+ * Who was there, final: each person named has one settled shift, so they get
+ * credit and pay, and everyone else loses theirs.
+ */
+export async function settleHashAttendance(
+  ctx: MutationCtx,
+  row: Doc<"hashDates">,
+  attendeeUserIds: string[],
+  options?: { scheduledSubject?: string },
+) {
+  const attendees = new Set(attendeeUserIds);
+  const bookings = await loadDateBookings(ctx, row);
+  const booked = new Set(bookings.map((booking) => booking.userId));
+  await changeHashCrew(
+    ctx,
+    requireHashEventId(row),
+    async () => {
+      for (const booking of bookings) {
+        for (const shiftId of booking.shiftIds) {
+          if (attendees.has(booking.userId)) await ctx.db.patch(shiftId, { needsConfirmation: undefined });
+          else await ctx.db.delete(shiftId);
+        }
+      }
+      await insertHashShifts(ctx, row, [...attendees].filter((userId) => !booked.has(userId)));
+    },
+    options,
+  );
 }
 
 export async function clearHashShifts(ctx: MutationCtx, eventId: Id<"events">, keep?: (shift: Doc<"eventCrewShifts">) => boolean) {
@@ -264,4 +296,23 @@ export async function reopenHashEvent(ctx: MutationCtx, eventId: Id<"events">) {
 
 export async function completeHashEvent(ctx: MutationCtx, eventId: Id<"events">) {
   await setHashEventStatus(ctx, eventId, HASH_FINISHED_EVENT_STATUS);
+}
+
+/**
+ * A lapsed hash that did happen. An add-on's event has been a plain event since,
+ * so it has to still be the same bare event at the same time to become a hash again.
+ */
+export async function reviveLapsedHash(ctx: MutationCtx, row: Doc<"hashDates">) {
+  const eventId = requireHashEventId(row);
+  if (row.origin === "addon") {
+    const event = await ctx.db.get(eventId);
+    if (!event) appError("EVENT_NOT_FOUND", "This hash's event no longer exists.");
+    await requireAttachable(ctx, event);
+    if (event.startAt !== row.startsAt || event.endAt !== row.endsAt) {
+      appError("HASH_EVENT_MOVED", "This event has moved since its hash lapsed, so the hash can't be marked as done.");
+    }
+    await ctx.db.patch(eventId, { hashingEnabled: true, updatedAt: Date.now() });
+    await ctx.db.patch(row._id, { sectionBlockId: await adoptHashSection(ctx, eventId, row) });
+  }
+  await completeHashEvent(ctx, eventId);
 }
