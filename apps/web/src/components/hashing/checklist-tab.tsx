@@ -22,6 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SortableList, type SortableRowControls } from "@/components/ui/sortable-list";
+import { Textarea } from "@/components/ui/textarea";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
   addArea,
@@ -106,14 +107,18 @@ function LineList({
         renderItem={(line, _index, controls) => (
           <>
             <MoveButtons controls={controls} label={line.text || "item"} />
-            <Input
+            <Textarea
               aria-label="Item"
               autoFocus={line.id === focusId}
-              className="h-8 min-w-0 flex-1"
+              className="min-h-8 min-w-0 flex-1 resize-none py-1.5 field-sizing-content"
+              rows={1}
               value={line.text}
               onChange={(event) =>
                 onChange(lines.map((row) => (row.id === line.id ? { ...row, text: event.target.value } : row)))
               }
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.preventDefault();
+              }}
             />
             <Button
               type="button"

@@ -18,10 +18,6 @@ export const HASHING_DEFAULTS = {
   location: "The closet",
 } as const;
 
-// ---------------------------------------------------------------------------
-// Quarters
-// ---------------------------------------------------------------------------
-
 /** The quarter hashing is working on: in session, else the next. Summer has no requirement. */
 export function hashingQuarterFor(dateKey: string): AcademicQuarter | null {
   const quarter = stanfordCurrentOrNextQuarter(dateKey);
@@ -36,10 +32,6 @@ export function followingHashingQuarter(quarter: AcademicQuarter): AcademicQuart
 export function hashingQuarterById(quarterId: string): AcademicQuarter | null {
   return STANFORD_QUARTERS.find((quarter) => quarter.id === quarterId) ?? null;
 }
-
-// ---------------------------------------------------------------------------
-// Dates
-// ---------------------------------------------------------------------------
 
 /** A week `quarterWeek` doesn't number (Thanksgiving, finals, a break) has no hash. */
 export function isOffWeek(dateKey: string) {
@@ -98,10 +90,6 @@ export function planRegularDates<Id>(args: {
   return { create, shift, drop };
 }
 
-// ---------------------------------------------------------------------------
-// A person's quarter
-// ---------------------------------------------------------------------------
-
 /** The date passed and nobody started it, so it can't count as a booking any more. */
 export function isLapsed(row: { status: HashDateStatus; dateKey: string }, todayKey: string) {
   return row.status === "scheduled" && row.dateKey < todayKey;
@@ -119,10 +107,6 @@ export function deriveQuarterState(args: {
   if (args.standing === "no_dates_work") return "no_dates_work";
   return "needs_hash";
 }
-
-// ---------------------------------------------------------------------------
-// Filling dates from availability
-// ---------------------------------------------------------------------------
 
 /**
  * Place people on the dates they said they can do. Hardest to place go first
@@ -162,10 +146,6 @@ export function fillFromAvailability<Person extends string, DateId extends strin
   }
   return { placements, unplaced };
 }
-
-// ---------------------------------------------------------------------------
-// Checklist
-// ---------------------------------------------------------------------------
 
 export const FINAL_CHECKS_KIT = "final";
 
