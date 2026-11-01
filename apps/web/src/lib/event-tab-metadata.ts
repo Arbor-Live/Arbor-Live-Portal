@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { api, type Id } from "@/lib/convex-api";
-import { fetchAuthQuery } from "@/lib/auth-server";
+import { fetchAuthQueryOrNull } from "@/lib/auth-server";
 
 /**
  * Browser-tab title for an event workspace tab: "<event title> · <tab>".
@@ -12,7 +12,7 @@ export async function eventTabMetadata(
   tabLabel: string,
 ): Promise<Metadata> {
   const { id } = await params;
-  const data = await fetchAuthQuery(api.events.get, {
+  const data = await fetchAuthQueryOrNull(api.events.get, {
     id: id as Id<"events">,
     detail: "schedule",
   });

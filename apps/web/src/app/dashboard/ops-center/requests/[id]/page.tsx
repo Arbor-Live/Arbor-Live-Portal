@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { EventRequestDetailClient } from "@/components/events/event-request-detail";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { api, type Id } from "@/lib/convex-api";
-import { fetchAuthQuery } from "@/lib/auth-server";
+import { fetchAuthQueryOrNull } from "@/lib/auth-server";
 
 export async function generateMetadata({
   params,
@@ -10,7 +10,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const request = await fetchAuthQuery(api.eventRequests.get, {
+  const request = await fetchAuthQueryOrNull(api.eventRequests.get, {
     id: id as Id<"eventRequests">,
   });
   if (!request) return { title: "Booking request" };

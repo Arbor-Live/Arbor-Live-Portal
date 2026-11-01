@@ -126,7 +126,8 @@ export function CommandPalette() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key.toLowerCase() !== "k" || !(event.metaKey || event.ctrlKey)) return;
+      // Autofill dispatches keydown without a key despite the DOM typing.
+      if (event.key?.toLowerCase() !== "k" || !(event.metaKey || event.ctrlKey)) return;
       event.preventDefault();
       setSearch("");
       setOpen((current) => !current);

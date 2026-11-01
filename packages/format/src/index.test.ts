@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   PORTAL_TIMEZONE,
   addPacificWeeks,
+  formatDateTime,
   formatDateTimeRange,
   formatHours,
   formatUsd,
@@ -123,6 +124,15 @@ describe("pacificDayIndexFromAnchor", () => {
     expect(pacificDayIndexFromAnchor(eventStart, strikeStartMorning)).toBe(1);
   });
 });
+describe("formatDateTime", () => {
+  it("joins date and time with a comma, the same in every engine", () => {
+    const ms = Date.UTC(2026, 10, 2, 6, 13);
+    expect(formatDateTime(ms)).toBe("Sun, Nov 1, 10:13 PM");
+    expect(formatDateTime(ms, "long")).toBe("Sun, Nov 1, 2026, 10:13 PM");
+    expect(formatDateTime(ms, "timeOnly")).toBe("10:13 PM");
+  });
+});
+
 describe("formatDateTimeRange", () => {
   it("collapses to a single day with a time-only end", () => {
     const start = Date.UTC(2025, 5, 15, 19, 0, 0); // noon PDT

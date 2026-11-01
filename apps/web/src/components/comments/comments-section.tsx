@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/message";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { notify } from "@/lib/notify";
-import { PORTAL_TIMEZONE, dateTimeFormat } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { buildUserSelectDescription } from "@/lib/user-select-description";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
@@ -130,17 +130,6 @@ function resolveMentionedUserIds(
     seen.add(userId);
   }
   return ids;
-}
-
-function formatCommentTime(ms: number) {
-  return dateTimeFormat("en-US", {
-    timeZone: PORTAL_TIMEZONE,
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(ms));
 }
 
 const COMMENT_TIME_COLLAPSE_MS = 2 * 60 * 1000;
@@ -414,7 +403,7 @@ function CommentsPanel({
                     </Bubble>
                     {showTime || isOwn ? (
                       <MessageFooter className="gap-1">
-                        {showTime ? <span>{formatCommentTime(comment.createdAt)}</span> : null}
+                        {showTime ? <span>{formatDateTime(comment.createdAt)}</span> : null}
                         {isOwn ? (
                           <button
                             type="button"
