@@ -346,6 +346,8 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
   const visibleTabs = useMemo(
     () =>
       EVENT_EDITOR_TABS.filter((tab) => {
+        // A hash's section and crew live on the Run of Show, whatever its event type.
+        if (tab === "schedule" && isHash) return true;
         if ((tab === "schedule" || tab === "equipment") && !eventTypeHasLogistics(draft.eventType)) {
           return false;
         }
