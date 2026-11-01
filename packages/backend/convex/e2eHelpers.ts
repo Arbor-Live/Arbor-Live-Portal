@@ -5221,6 +5221,111 @@ export const seedTimecardShift = mutation({
 });
 
 /**
+ * Test-only: an event that ended `hoursAgo` hours ago with a show shift for the
+ * user, so it owes them a review and photos in post-event work.
+ */
+export const seedEndedShowShift = mutation({
+  args: {
+    userId: v.string(),
+    title: v.optional(v.string()),
+    hoursAgo: v.optional(v.number()),
+    venueName: v.optional(v.string()),
+  },
+  returns: v.object({ eventId: v.id("events"), title: v.string() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const title = args.title?.trim() || `E2E Ended Show ${now}`;
+    const endAt = now - (args.hoursAgo ?? 2) * 60 * 60 * 1000;
+    const startAt = endAt - 3 * 60 * 60 * 1000;
+    const eventId = await ctx.db.insert("events", {
+      title,
+      status: "completed",
+      visibility: "internal",
+      publicToken: makeToken(),
+      startAt,
+      endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      eventType: "Crewed Event",
+      teamsInterested: ["Sound"],
+      ...(args.venueName ? { venueName: args.venueName } : {}),
+      createdAt: now,
+      updatedAt: now,
+    });
+    const scheduleBlockId = await ctx.db.insert("eventScheduleBlocks", {
+      eventId,
+      blockType: "show",
+      label: "Show",
+      dayIndex: 0,
+      startsAt: startAt,
+      endsAt: endAt,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("eventCrewShifts", {
+      eventId,
+      scheduleBlockId,
+      role: "Sound",
+      userId: args.userId,
+      startsAt: startAt,
+      endsAt: endAt,
+      hours: 3,
+      postedToExpense: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { eventId, title };
+  },
+});
+
+/** Test-only: mark every evening as usually free or rarely free. */
+export const seedUsualEvenings = mutation({
+  args: { userId: v.string(), level: v.union(v.literal("usually"), v.literal("rarely")) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .unique();
+    if (!profile) throw new Error("Profile not found");
+    const { level } = args;
+    await ctx.db.patch(profile._id, {
+      usualEvenings: {
+        monday: level,
+        tuesday: level,
+        wednesday: level,
+        thursday: level,
+        friday: level,
+        saturday: level,
+        sunday: level,
+      },
+      usualEveningsSetAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/** Test-only: clear a user's ended show shifts, so Home's post-event cards start from none. */
+export const clearCrewShifts = mutation({
+  args: { userId: v.string() },
+  returns: v.object({ deletedShifts: v.number() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const shifts = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_userId_and_startsAt", (q) => q.eq("userId", args.userId))
+      .take(500);
+    for (const shift of shifts) await ctx.db.delete(shift._id);
+    return { deletedShifts: shifts.length };
+  },
+});
+
+/**
  * Test-only: short link lookup by slug for CRUD assertions.
  */
 export const getShortLinkBySlug = query({

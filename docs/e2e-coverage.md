@@ -17,7 +17,7 @@ plan. Opt into shared cloud Dev with `E2E_USE_CLOUD_DEV=1` or
 `CONVEX_AGENT_MODE=cloud`. `E2E_SKIP_BOOT=1` reuses a running stack and warns if
 the URL looks like cloud.
 
-**Last updated:** 2026-09-23 (artist-org invite resend/remove on `/dashboard/artists`)
+**Last updated:** 2026-11-01 (crew Home to-do stack, `crew/crew-home-todo.spec.ts`)
 
 ## Batch history
 
