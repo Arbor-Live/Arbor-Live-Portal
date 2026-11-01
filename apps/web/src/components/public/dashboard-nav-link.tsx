@@ -1,23 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useSyncExternalStore, type ComponentProps } from "react";
+import type { ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
-import { authClient } from "@/lib/auth-client";
+import { useHydratedSession } from "@/hooks/use-hydrated-session";
 import { cn } from "@/lib/utils";
-
-const subscribeNever = () => () => {};
-
-/**
- * Better Auth hands React the live session as the server snapshot too, so a
- * session loaded before hydration renders different links than the server
- * HTML. Until hydration, report what the server rendered: no session, pending.
- */
-function useHydratedSession() {
-  const hydrated = useSyncExternalStore(subscribeNever, () => true, () => false);
-  const { data, isPending } = authClient.useSession();
-  return hydrated ? { session: data, isPending } : { session: null, isPending: true };
-}
 
 type SessionNavLinkProps = {
   className?: string;

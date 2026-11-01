@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { BandOrAdminGuard } from "@/components/org-context-guard";
 import { RiderEditorClient } from "@/components/riders/rider-editor-client";
 import { api, type Id } from "@/lib/convex-api";
-import { fetchAuthQuery } from "@/lib/auth-server";
+import { fetchAuthQueryOrNull } from "@/lib/auth-server";
 
 export async function generateMetadata({
   params,
@@ -10,9 +10,9 @@ export async function generateMetadata({
   params: Promise<{ riderId: string }>;
 }): Promise<Metadata> {
   const { riderId } = await params;
-  const rider = await fetchAuthQuery(api.bandRiders.get, {
+  const rider = await fetchAuthQueryOrNull(api.bandRiders.get, {
     riderId: riderId as Id<"bandRiders">,
-  }).catch(() => null);
+  });
   const name = rider?.name?.trim();
   return { title: name ? `${name} · Technical rider` : "Technical rider" };
 }

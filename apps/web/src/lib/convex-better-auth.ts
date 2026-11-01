@@ -53,24 +53,30 @@ type TokenResponse = {
 
 const TOKEN_RETRY_DELAYS_MS = [500, 1_000, 2_000, 4_000, 8_000, 15_000, 30_000];
 
+/** After sleep a reused dead connection can hang; give up on it and retry. */
+const TOKEN_REQUEST_TIMEOUT_MS = 10_000;
+
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
  * Convex reads a null token as a sign-out and reruns every subscription
  * without auth, so each guarded query throws into the error boundary. A tab
- * waking from sleep refetches its token before the network is back, so only a
- * definite "no session" answer returns null; failed requests are retried.
+ * waking from sleep refetches its token before the network is back, so with
+ * `retry` only a definite "no session" answer returns null and failed requests
+ * are retried, for up to about two minutes with request timeouts. Convex holds
+ * the socket while this runs, so callers with no token to keep skip retries.
  */
 export async function fetchConvexToken(
   request: () => Promise<TokenResponse>,
-  sleep: (ms: number) => Promise<void> = wait,
+  { retry, sleep = wait }: { retry: boolean; sleep?: (ms: number) => Promise<void> },
 ): Promise<string | null> {
+  const delays = retry ? TOKEN_RETRY_DELAYS_MS : [];
   for (let attempt = 0; ; attempt++) {
     const result = await request().catch(() => null);
     if (result?.data?.token) return result.data.token;
     const status = result?.error?.status;
     const signedOut = result !== null && (!result.error || status === 401 || status === 403);
-    const delay = TOKEN_RETRY_DELAYS_MS[attempt];
+    const delay = delays[attempt];
     if (signedOut || delay === undefined) return null;
     await sleep(delay);
   }
@@ -122,11 +128,18 @@ export function useUseAuthFromBetterAuth(
             if (cachedTokenRef.current && !forceRefreshToken) {
               return cachedTokenRef.current;
             }
-            if (!forceRefreshToken && pendingTokenRef.current) {
+            // A forced refresh joins an in-flight fetch: it is already fresh, and a
+            // second retry loop could finish later and overwrite its token.
+            if (pendingTokenRef.current) {
               return pendingTokenRef.current;
             }
-            pendingTokenRef.current = fetchConvexToken(() =>
-              authClient.convex.token({ fetchOptions: { throw: false } }),
+            // Convex forces a refresh only for a session it already holds.
+            pendingTokenRef.current = fetchConvexToken(
+              () =>
+                authClient.convex.token({
+                  fetchOptions: { throw: false, timeout: TOKEN_REQUEST_TIMEOUT_MS },
+                }),
+              { retry: forceRefreshToken },
             )
               .then((token) => {
                 storeToken(token);

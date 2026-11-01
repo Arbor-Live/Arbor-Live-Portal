@@ -3,7 +3,7 @@ import { OpenMicRunner } from "@/components/events/open-mic-runner";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { PageHeader } from "@/components/page-header";
 import { api, type Id } from "@/lib/convex-api";
-import { fetchAuthQuery } from "@/lib/auth-server";
+import { fetchAuthQueryOrNull } from "@/lib/auth-server";
 
 export async function generateMetadata({
   params,
@@ -11,10 +11,10 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const data = await fetchAuthQuery(api.events.get, {
+  const data = await fetchAuthQueryOrNull(api.events.get, {
     id: id as Id<"events">,
     detail: "schedule",
-  }).catch(() => null);
+  });
   const title = data?.event.title?.trim();
   return { title: title ? `${title} · Open Mic` : "Open Mic" };
 }

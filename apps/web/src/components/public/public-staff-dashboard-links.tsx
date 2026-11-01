@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { authClient } from "@/lib/auth-client";
+import { useHydratedSession } from "@/hooks/use-hydrated-session";
 import type { Id } from "@/lib/convex-api";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +23,7 @@ export function PublicStaffDashboardLinks({
   requestId,
   className,
 }: PublicStaffDashboardLinksProps) {
-  const { data: session } = authClient.useSession();
+  const { session } = useHydratedSession();
   if (!session) return null;
 
   const links: { href: string; label: string }[] = [];
