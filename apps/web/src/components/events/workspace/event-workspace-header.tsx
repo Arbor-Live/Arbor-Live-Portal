@@ -109,7 +109,9 @@ export function EventWorkspaceHeader() {
   // A series applies its setup from its template tabs, not from one occurrence.
   const canApplySetup = hasSiblingDays && seriesMeta?.kind !== "recurring";
   const hasUnsavedEdits = workspace.dirty.size > 0;
-  const showMenu = canApplySetup || Boolean(seriesMeta) || isAdmin;
+  // Hashing owns a hash's status, so only a hash it already cancelled can be deleted here.
+  const canDelete = isAdmin && (!workspace.isHash || draft.status === "cancelled");
+  const showMenu = canApplySetup || Boolean(seriesMeta) || canDelete;
 
   return (
     <PageHeader
@@ -145,7 +147,7 @@ export function EventWorkspaceHeader() {
                 ) : null}
               </>
             ) : null}
-            {isAdmin ? (
+            {canDelete ? (
               <>
                 {canApplySetup || seriesMeta ? <DropdownMenuSeparator /> : null}
                 <DropdownMenuItem variant="destructive" onSelect={() => void workspace.deleteEvent()}>

@@ -477,7 +477,7 @@ export const setDateOff = mutation({
     }
     if (row.status !== "off") return null;
     if (row.eventId) {
-      await ctx.db.patch(row._id, { status: "scheduled", eventId: row.eventId });
+      await ctx.db.patch(row._id, { status: "scheduled" });
       await reopenHashEvent(ctx, row.eventId);
       return null;
     }
@@ -576,7 +576,7 @@ export const closeLapsedHashes = internalMutation({
       .withIndex("by_status_and_dateKey", (q) => q.eq("status", "scheduled").lt("dateKey", today))
       .take(LAPSE_BATCH);
     for (const row of lapsed) {
-      await ctx.db.patch(row._id, { status: "lapsed", eventId: requireHashEventId(row) });
+      await ctx.db.patch(row._id, { status: "lapsed" });
       await closeHashEvent(ctx, row);
     }
     if (lapsed.length === LAPSE_BATCH) {

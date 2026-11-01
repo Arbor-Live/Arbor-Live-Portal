@@ -256,7 +256,6 @@ export const start = mutation({
     }
     await ctx.db.patch(row._id, {
       status: "in_progress",
-      eventId: requireHashEventId(row),
       startedAt: Date.now(),
       checklistVersionId: checklist._id,
     });

@@ -1174,7 +1174,6 @@ export default defineSchema({
     .index("by_seriesId_and_occurrenceIndex", ["seriesId", "occurrenceIndex"])
     .index("by_sourceEventRequestId", ["sourceEventRequestId"])
     .index("by_openMicEnabled_and_startAt", ["openMicEnabled", "startAt"])
-    .index("by_hashingEnabled_and_startAt", ["hashingEnabled", "startAt"])
     .index("by_venueId", ["venueId"])
     .index("by_hostGroupId", ["hostGroupId"])
     .index("by_dayOfLeadUserId", ["dayOfLeadUserId"])
