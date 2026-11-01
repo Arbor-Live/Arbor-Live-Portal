@@ -20,7 +20,8 @@ import {
 } from "./lib/publicEventContacts";
 import { resolveArtistLineDayScope } from "./lib/invoiceArtistDays";
 import { isMultiDayGroup, isRecurringGroup } from "./lib/eventGroupKind";
-import { getActivePaymentProofSubmissionForInvoice, resolvePortalTokenForInvoice } from "./lib/paymentProof";
+import { getActivePaymentProofSubmissionForInvoice } from "./lib/paymentProof";
+import { isRequestPublicTokenExpired } from "./lib/requestToken";
 import {
   computeInvoiceListLabels,
   computeInvoiceListPaymentStatus,
@@ -2702,18 +2703,18 @@ async function revisedQuoteBlocker(ctx: QueryCtx | MutationCtx, invoice: Doc<"in
   if (!invoice.sourceEventRequestId && !invoice.clientEmail?.trim()) {
     return { code: "QUOTE_CLIENT_EMAIL_REQUIRED", message: "Add the client's email so they get the quote." };
   }
-  const portal = await resolvePortalTokenForInvoice(ctx, invoice);
-  const quoteLinkExpired =
-    portal?.portal === "quote" &&
-    invoice.publicApprovalTokenExpiresAt !== undefined &&
-    invoice.publicApprovalTokenExpiresAt < Date.now();
-  if (!portal || quoteLinkExpired) {
-    return {
-      code: "QUOTE_LINK_EXPIRED",
-      message: invoice.sourceEventRequestId
-        ? "The client's request portal link has expired."
-        : "The quote link has expired. Regenerate it, then send.",
-    };
+  if (invoice.sourceEventRequestId) {
+    const request = await ctx.db.get(invoice.sourceEventRequestId);
+    if (!request?.publicToken || isRequestPublicTokenExpired(request)) {
+      return { code: "QUOTE_LINK_EXPIRED", message: "The client's request portal link has expired." };
+    }
+    return null;
+  }
+  if (
+    !invoice.publicApprovalToken ||
+    (invoice.publicApprovalTokenExpiresAt !== undefined && invoice.publicApprovalTokenExpiresAt < Date.now())
+  ) {
+    return { code: "QUOTE_LINK_EXPIRED", message: "The quote link has expired. Regenerate it, then send." };
   }
   return null;
 }

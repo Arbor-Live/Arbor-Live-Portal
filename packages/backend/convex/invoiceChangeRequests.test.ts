@@ -3,6 +3,7 @@ import { expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { ensureChangeRequestRevision } from "./lib/invoiceRevisions";
+import { REQUEST_PUBLIC_TOKEN_TTL_MS } from "./lib/requestToken";
 import {
   addMembership,
   asUser,
@@ -231,6 +232,14 @@ test("a request-portal quote is revised on the portal once it's there", async ()
     expect(
       await staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Moved load-in." }),
     ).toEqual({ number: 2 });
+
+    const { requestId } = await t.mutation(api.e2eHelpers.seedRequestLinkedDraftQuote, {});
+    const stale = await t.run(async (ctx) => (await ctx.db.get(requestId))!.linkedInvoiceId!);
+    await staff.mutation(api.invoices.markReadyForClientReview, { id: stale, clientMessage: "First send." });
+    await t.run(async (ctx) => ctx.db.patch(requestId, { submittedAt: Date.now() - REQUEST_PUBLIC_TOKEN_TTL_MS - 1 }));
+    await expect(staff.mutation(api.invoices.sendRevisedQuote, { id: stale, message: "Hi" })).rejects.toThrow(
+      /request portal link has expired/,
+    );
 
     const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId));
     expect(invoice).toMatchObject({

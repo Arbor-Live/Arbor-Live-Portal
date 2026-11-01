@@ -193,7 +193,7 @@ export function RevisedQuoteSheet({
             type="button"
             data-testid="revised-quote-send"
             onClick={() => void handleSend()}
-            disabled={!trimmed || sending || Boolean(preview?.blocked)}
+            disabled={!trimmed || sending || !preview || Boolean(preview.blocked)}
           >
             {sending ? "Sending…" : unchanged ? "Resend unchanged" : "Send revised quote"}
           </Button>
