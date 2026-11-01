@@ -772,7 +772,7 @@ export const update = mutation({
     return await withReportableErrors("events.update", async () => {
     const existing = await ctx.db.get(args.id);
     if (!existing) appError("EVENT_NOT_FOUND", "Event not found.");
-    if (isHashEvent(existing)) requireHashEventEdit(existing, args);
+    if (isHashEvent(existing)) await requireHashEventEdit(ctx, existing, args);
     const startAt = args.startAt ?? existing.startAt;
     const endAt = args.endAt ?? existing.endAt;
     if (endAt <= startAt) appError("EVENT_END_BEFORE_START", "Event end time must be after start time.");

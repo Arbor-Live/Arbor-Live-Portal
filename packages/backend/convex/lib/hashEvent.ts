@@ -14,8 +14,13 @@ const HASH_ONE_WRITER = "Hashing sets a hash's date, time and status. Change the
 /** Same cap as `eventCrew.upsertShifts`, which reads these rows right after. */
 const HASH_SHIFT_TAKE = 500;
 
-/** Only Hashing moves or closes a hash, and nothing else makes one public or billable. */
-export function requireHashEventEdit(
+/**
+ * Only Hashing moves or closes a hash, and nothing else makes one public or
+ * billable. An event Hashing made gets its location from Setup; an add-on's event
+ * keeps its own venue.
+ */
+export async function requireHashEventEdit(
+  ctx: QueryCtx | MutationCtx,
   event: Doc<"events">,
   args: {
     startAt?: number;
@@ -25,6 +30,7 @@ export function requireHashEventEdit(
     invoiceId?: unknown;
     additionalInvoiceIds?: readonly unknown[];
     openMicEnabled?: boolean;
+    venueId?: unknown;
   },
 ) {
   if ((args.startAt ?? event.startAt) !== event.startAt || (args.endAt ?? event.endAt) !== event.endAt) {
@@ -38,6 +44,9 @@ export function requireHashEventEdit(
     appError("HASH_NO_INVOICE", "A hash can't have an invoice.");
   }
   if (args.openMicEnabled) appError("HASH_NO_OPEN_MIC", "A hash can't take public sign-ups.");
+  if (args.venueId !== undefined && (await loadDateForEvent(ctx, event._id))?.origin !== "addon") {
+    appError("HASH_LOCATION_FROM_HASHING", "A hash's location comes from Hashing. Change it in Setup.");
+  }
 }
 
 export function requireHashStatusUnchanged(event: Doc<"events">, status: string | undefined) {

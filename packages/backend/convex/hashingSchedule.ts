@@ -183,8 +183,11 @@ async function applySetup(
 
   const previousLocation = options?.previousLocation;
   if (previousLocation !== undefined && previousLocation !== settings.location) {
-    for (const row of regular) {
-      if (row.eventId && isShiftable(row)) await ctx.db.patch(row.eventId, { venueName: settings.location });
+    for (const row of dates) {
+      const notStarted = row.startsAt > now && (row.status === "scheduled" || row.status === "off");
+      if (row.eventId && notStarted && row.origin !== "addon") {
+        await ctx.db.patch(row.eventId, { venueName: settings.location });
+      }
     }
   }
 

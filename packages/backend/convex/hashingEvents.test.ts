@@ -327,6 +327,37 @@ describe("the event behind a hash", () => {
 });
 
 describe("one writer", () => {
+  test("a Hashing-made hash takes its location from Setup, and an add-on keeps its own venue", async () => {
+    const context = await setup();
+    const { t, opsApi, on, eventOf } = context;
+    const venueId = await t.run(async (ctx) => ctx.db.insert("venues", { name: "Bing", path: "Bing", kind: "indoor", venueType: "Hall", createdAt: NOW, updatedAt: NOW }));
+    await expect(opsApi.mutation(api.events.update, { id: eventOf("2026-11-17"), venueId })).rejects.toThrow(/location comes from Hashing/);
+    await expect(opsApi.mutation(api.events.update, { id: eventOf("2026-11-17"), venueId: null })).rejects.toThrow(/location comes from Hashing/);
+
+    const addon = await insertPlainEvent(t);
+    await opsApi.mutation(api.hashingSchedule.setEventHashing, { eventId: addon, enabled: true });
+    await opsApi.mutation(api.events.update, { id: addon, venueId });
+    expect((await getEvent(t, addon))?.venueId).toBe(venueId);
+
+    const hashDateId = on("2026-11-17")._id;
+    await opsApi.mutation(api.hashingSchedule.moveDate, { hashDateId, dateKey: "2026-11-19", startTime: "12:00" });
+    const added = await opsApi.mutation(api.hashingSchedule.addDate, { quarterId: QUARTER, dateKey: "2026-11-06", startTime: "11:00", capacity: 2 });
+    await opsApi.mutation(api.hashingSchedule.saveSetup, { ...SETUP, location: "The attic" });
+
+    expect((await getEvent(t, eventOf("2026-11-17")))?.venueName).toBe("The attic");
+    expect((await getEvent(t, (await getRow(t, added))!.eventId!))?.venueName).toBe("The attic");
+    expect((await getEvent(t, eventOf("2026-11-10")))?.venueName).toBe("The attic");
+    expect((await getEvent(t, addon))?.venueName).toBe("Bing");
+  });
+
+  test("a hash that has started keeps the location it ran at", async () => {
+    const context = await setup();
+    const { t, opsApi, ana, eventOf } = context;
+    await bookAndRun(context, "2026-11-03", [ana]);
+    await opsApi.mutation(api.hashingSchedule.saveSetup, { ...SETUP, location: "The attic" });
+    expect((await getEvent(t, eventOf("2026-11-03")))?.venueName).toBe("The closet");
+  });
+
   test("the event mutations refuse a hash's times, status, visibility and invoice", async () => {
     const { t, opsApi, on, eventOf } = await setup();
     const id = eventOf("2026-11-17");
