@@ -25,6 +25,7 @@ canonical description of the domain itself.
   checklist ("Invite to Notion", "Add to Crew group") in the Invitations side
   panel. Admins tick it by hand, there is no Notion integration, and the ticks
   live in `inviteNotionChecklists` so they survive the invite being accepted.
+  People added with a temporary password have no invite, so no checklist.
 - Staff roles inside Arbor Live: **admins** (everything); the **Operations
   team** (`Operations` vertical) runs events end to end and books acts. They
   edit every event (details, Run of Show, crew, lineup), create events and

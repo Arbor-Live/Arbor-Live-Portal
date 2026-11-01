@@ -2,6 +2,7 @@
 import { expect, test } from "vitest";
 import { api } from "./_generated/api";
 import { markInvitationAccepted } from "./email/invitations";
+import { backfillInviteNotionChecklist } from "./migrations";
 import {
   addMembership,
   asUser,
@@ -187,4 +188,95 @@ test("a non-admin cannot tick an item", async () => {
 
   const [invite] = await as.query(api.users.listInvitationsAdmin, {});
   expect(invite.notionChecklist).toEqual({ inviteToNotion: false, addToCrewGroup: false });
+});
+
+test("re-inviting a pending crew invite as an advisor removes its checklist", async () => {
+  const { t, as, arbor } = await setup();
+  const email = "switched@example.com";
+  await as.mutation(api.users.inviteUserAdmin, {
+    organizationId: arbor.organizationId,
+    email,
+    ...crewArgs,
+  });
+
+  await as.mutation(api.users.inviteUserAdmin, {
+    organizationId: arbor.organizationId,
+    email,
+    inviteKind: "advisor",
+  });
+
+  const [invite] = await as.query(api.users.listInvitationsAdmin, {});
+  expect(invite.notionChecklist).toBeNull();
+  const rows = await t.run(async (ctx) => ctx.db.query("inviteNotionChecklists").collect());
+  expect(rows).toHaveLength(0);
+});
+
+test("converting a crew application lists an empty checklist", async () => {
+  const { t, as } = await setup();
+  const applicationId = await t.run(async (ctx) =>
+    ctx.db.insert("crewApplications", {
+      status: "trainee",
+      name: "Applicant",
+      email: "applicant@example.com",
+      phone: "555-0100",
+      heardAboutUs: "Friend",
+      vertical: "Crew",
+      stanfordPosition: "undergrad",
+      submittedAt: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    }),
+  );
+
+  const { invitationId } = await as.mutation(api.crewApplications.convertToMember, {
+    applicationId,
+    ...crewArgs,
+  });
+
+  const invites = await as.query(api.users.listInvitationsAdmin, {});
+  const invite = invites.find((row) => row.id === invitationId);
+  expect(invite?.notionChecklist).toEqual({ inviteToNotion: false, addToCrewGroup: false });
+});
+
+test("the backfill covers crew invites and skips advisor and band invites", async () => {
+  const { t, as, admin, arbor } = await setup();
+  const band = await createOrg(t, { type: "band" });
+  await addMembership(t, admin._id, band.organizationId, "org_admin", true);
+  const crew = await as.mutation(api.users.inviteUserAdmin, {
+    organizationId: arbor.organizationId,
+    email: "pending-crew@example.com",
+    ...crewArgs,
+  });
+  const applicant = await as.mutation(api.users.inviteUserAdmin, {
+    organizationId: arbor.organizationId,
+    email: "pending-applicant@example.com",
+    ...crewArgs,
+  });
+  const advisor = await as.mutation(api.users.inviteUserAdmin, {
+    organizationId: arbor.organizationId,
+    email: "pending-advisor@example.com",
+    inviteKind: "advisor",
+  });
+  const member = await as.mutation(api.users.inviteUserAdmin, {
+    organizationId: band.organizationId,
+    email: "pending-band@example.com",
+  });
+
+  const covered = await t.run(async (ctx) => {
+    for (const row of await ctx.db.query("inviteNotionChecklists").collect()) {
+      await ctx.db.delete(row._id);
+    }
+    const pending = await ctx.db.query("pendingUserInvites").collect();
+    const applicantRow = pending.find((row) => row.invitationId === applicant.invitationId);
+    await ctx.db.patch(applicantRow!._id, { inviteKind: undefined });
+    for (const row of await ctx.db.query("pendingUserInvites").collect()) {
+      await backfillInviteNotionChecklist(ctx, row);
+    }
+    const rows = await ctx.db.query("inviteNotionChecklists").collect();
+    return rows.map((row) => row.invitationId).sort();
+  });
+
+  expect(covered).toEqual([crew.invitationId, applicant.invitationId].sort());
+  expect(covered).not.toContain(advisor.invitationId);
+  expect(covered).not.toContain(member.invitationId);
 });

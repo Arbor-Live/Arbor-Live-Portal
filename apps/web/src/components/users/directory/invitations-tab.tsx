@@ -238,10 +238,10 @@ function InviteRowItem({
 }) {
   const status = inviteStatus(invite.status);
   const pending = status === "pending";
-  const notionDone =
-    invite.notionChecklist && status !== "cancelled"
-      ? NOTION_CHECKLIST_ITEMS.filter((item) => invite.notionChecklist?.[item.key]).length
-      : NOTION_CHECKLIST_ITEMS.length;
+  const notionChecklist = status === "cancelled" ? null : invite.notionChecklist;
+  const notionDone = notionChecklist
+    ? NOTION_CHECKLIST_ITEMS.filter((item) => notionChecklist[item.key]).length
+    : null;
   return (
     <ListRow
       data-testid={`invite-row-${invite.id}`}
@@ -278,7 +278,7 @@ function InviteRowItem({
         <p className="truncate text-xs text-muted-foreground">
           <span data-testid="invite-role">{roleLabel(invite.role)}</span> · Invited by {invite.inviterName}
           {invite.createdAt ? ` · ${formatDate(invite.createdAt)}` : ""}
-          {notionDone < NOTION_CHECKLIST_ITEMS.length ? (
+          {notionDone !== null && notionDone < NOTION_CHECKLIST_ITEMS.length ? (
             <span data-testid="invite-notion-progress">
               {" · "}Notion {notionDone}/{NOTION_CHECKLIST_ITEMS.length}
             </span>

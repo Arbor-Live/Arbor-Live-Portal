@@ -29,10 +29,10 @@ import {
   resolveGlobalRoleForOrganization,
 } from "./lib/globalRole";
 import {
-  ensureInviteNotionChecklist,
   markInvitationAccepted,
   markInvitationCancelled,
   scheduleUserInviteEmail,
+  syncInviteNotionChecklist,
   updatePendingInviteDetails,
 } from "./email/invitations";
 import {
@@ -2177,9 +2177,11 @@ export const inviteUserAdmin = mutation({
       if (!invitationId) throw new Error("Failed to create invitation.");
     }
 
-    if (crewInvite.isArbor && crewInvite.inviteKind === "crew") {
-      await ensureInviteNotionChecklist(ctx, invitationId);
-    }
+    await syncInviteNotionChecklist(
+      ctx,
+      invitationId,
+      crewInvite.isArbor && crewInvite.inviteKind === "crew",
+    );
 
     const existingUser = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
       model: "user",
@@ -2271,7 +2273,7 @@ export const setInviteNotionChecklistItem = mutation({
       const row = await ctx.db
         .query("inviteNotionChecklists")
         .withIndex("by_invitationId", (q) => q.eq("invitationId", args.invitationId))
-        .first();
+        .unique();
       if (!row) {
         appError("INVITE_NOTION_CHECKLIST_NOT_FOUND", "This invitation has no Notion checklist.");
       }

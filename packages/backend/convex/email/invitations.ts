@@ -258,16 +258,24 @@ export async function markInvitationCancelled(ctx: MutationCtx, invitationId: st
 }
 
 /**
- * Idempotent: re-inviting reuses the invitation row, and must not clear ticks.
- * Survives `markInvitationAccepted`, which deletes the pending row.
+ * Idempotent: re-inviting reuses the invitation row, so crew keep their ticks
+ * and a pending invite switched to advisor loses its checklist. Survives
+ * `markInvitationAccepted`, which deletes the pending row.
  */
-export async function ensureInviteNotionChecklist(ctx: MutationCtx, invitationId: string) {
+export async function syncInviteNotionChecklist(
+  ctx: MutationCtx,
+  invitationId: string,
+  isCrewInvite: boolean,
+) {
   const existing = await ctx.db
     .query("inviteNotionChecklists")
     .withIndex("by_invitationId", (q) => q.eq("invitationId", invitationId))
-    .first();
-  if (existing) return;
-  await ctx.db.insert("inviteNotionChecklists", { invitationId });
+    .unique();
+  if (isCrewInvite && !existing) {
+    await ctx.db.insert("inviteNotionChecklists", { invitationId });
+  } else if (!isCrewInvite && existing) {
+    await ctx.db.delete(existing._id);
+  }
 }
 
 export async function markInvitationAccepted(ctx: MutationCtx, invitationId: string) {

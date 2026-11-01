@@ -6659,7 +6659,7 @@ export const deleteInvitationsByEmail = mutation({
       const checklist = await ctx.db
         .query("inviteNotionChecklists")
         .withIndex("by_invitationId", (q) => q.eq("invitationId", invitationId))
-        .first();
+        .unique();
       if (checklist) await ctx.db.delete(checklist._id);
       await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
         input: {

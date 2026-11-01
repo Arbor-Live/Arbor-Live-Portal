@@ -2,7 +2,7 @@ import { Migrations } from "@convex-dev/migrations";
 import { components, internal } from "./_generated/api";
 import type { DataModel, Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
-import { ensureInviteNotionChecklist } from "./email/invitations";
+import { syncInviteNotionChecklist } from "./email/invitations";
 import { findAuthUserById } from "./lib/auth";
 import { resolveContactNameParts } from "./lib/contactName";
 import { resolveGlobalRoleForUser } from "./lib/globalRole";
@@ -781,13 +781,21 @@ export const unsetLegacyPendingInviteEmailFlags = migrations.define({
   },
 });
 
-/** Crew invites already in flight get the manual Notion checklist. */
+/**
+ * Crew invites already in flight get the manual Notion checklist. Only Arbor
+ * crew invites carry a rate; crew application invites set no `inviteKind`.
+ */
+export async function backfillInviteNotionChecklist(
+  ctx: MutationCtx,
+  row: Doc<"pendingUserInvites">,
+) {
+  if (row.rateMode === undefined) return;
+  await syncInviteNotionChecklist(ctx, row.invitationId, true);
+}
+
 export const backfillInviteNotionChecklists = migrations.define({
   table: "pendingUserInvites",
-  migrateOne: async (ctx, row) => {
-    if (row.inviteKind !== "crew") return;
-    await ensureInviteNotionChecklist(ctx, row.invitationId);
-  },
+  migrateOne: backfillInviteNotionChecklist,
 });
 
 /** Event groups (#341), step 2: every existing series is a recurring group. */
