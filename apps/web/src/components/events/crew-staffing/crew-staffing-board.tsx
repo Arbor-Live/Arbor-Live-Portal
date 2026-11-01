@@ -64,6 +64,7 @@ import { cartGroupForBlockType } from "@/lib/format";
 import { countStaffing, isOpenSlot, isTraineeShift } from "@/lib/crew-shift-kinds";
 import { shiftBelongsToBlock, shiftTimesMatchBlock } from "@/lib/event-schedule-draft";
 import { formatDate, formatDateTimeRange } from "@/lib/format";
+import { HASH_ROLE } from "@/lib/hashing";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
@@ -107,6 +108,7 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
   openSlotNote,
   canAssignTrainees = false,
   needsCart = false,
+  isHash = false,
 }: {
   eventId: Id<"events">;
   sectionBlocks: TimelineBlockDraft[];
@@ -124,6 +126,8 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
   canAssignTrainees?: boolean;
   /** Cart event (`events.needsCart`): setup and strike each need someone cart eligible. */
   needsCart?: boolean;
+  /** A hash books people: no open slots, roles or custom times, which the server refuses or overwrites. */
+  isHash?: boolean;
 }) {
   const [assignTraineeOpen, setAssignTraineeOpen] = useState(false);
   const summary = useQuery(
@@ -298,7 +302,9 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
       <div className="space-y-2 border bg-muted/20 px-3 py-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <p className="text-sm" data-testid="crew-staffing-summary">
-            {staffing.slots === 0 ? (
+            {isHash ? (
+              <span className="font-medium tabular-nums">{staffing.filled} booked</span>
+            ) : staffing.slots === 0 ? (
               <span className="text-muted-foreground">No crew slots yet</span>
             ) : (
               <>
@@ -405,6 +411,7 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
             quarterHours={quarterHours}
             askAvailability={askAvailability}
             readOnly={readOnly}
+            isHash={isHash}
             openSlotNote={openSlotNote}
             onChange={updateShift}
             onRemove={removeShift}
@@ -512,6 +519,7 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
                 quarterHours={quarterHours}
                 askAvailability={askAvailability}
                 readOnly={readOnly}
+                isHash={isHash}
                 openSlotNote={openSlotNote}
                 onChange={(patch) => updateShift(index, patch)}
                 onRemove={() => removeShift(index)}
@@ -661,6 +669,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
   quarterHours,
   askAvailability,
   readOnly,
+  isHash,
   openSlotNote,
   onChange,
   onRemove,
@@ -682,6 +691,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
   quarterHours?: QuarterHoursById;
   askAvailability: boolean;
   readOnly: boolean;
+  isHash: boolean;
   openSlotNote?: string;
   onChange: (index: number, patch: Partial<ShiftDraftForAssign>) => void;
   onRemove: (index: number) => void;
@@ -773,9 +783,9 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
             )}
             data-testid="crew-section-count"
           >
-            {filled}/{headcount} filled
+            {isHash ? `${filled} booked` : `${filled}/${headcount} filled`}
           </span>
-          {!readOnly ? (
+          {!readOnly && !isHash ? (
             <div className="flex items-center border" role="group" aria-label={`Crew needed for ${label}`}>
               <Button
                 type="button"
@@ -819,6 +829,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
               quarterHours={quarterHours}
               askAvailability={askAvailability}
               readOnly={readOnly}
+              isHash={isHash}
               openSlotNote={openSlotNote}
               onChange={(patch) => onChange(index, patch)}
               onRemove={() => onRemove(index)}
@@ -826,7 +837,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
           ))
         ) : (
           <p className="text-xs text-muted-foreground">
-            No crew on this section. Use + to say how many people it needs.
+            {isHash ? "Nobody is booked." : "No crew on this section. Use + to say how many people it needs."}
           </p>
         )}
 
@@ -897,6 +908,7 @@ function ShiftRow<S extends ShiftDraftForAssign>({
   quarterHours,
   askAvailability,
   readOnly,
+  isHash,
   openSlotNote,
   onChange,
   onRemove,
@@ -911,12 +923,13 @@ function ShiftRow<S extends ShiftDraftForAssign>({
   quarterHours?: QuarterHoursById;
   askAvailability: boolean;
   readOnly: boolean;
+  isHash: boolean;
   openSlotNote?: string;
   onChange: (patch: Partial<ShiftDraftForAssign>) => void;
   onRemove: () => void;
 }) {
   const [editingTime, setEditingTime] = useState(false);
-  const showTimePicker = !block || editingTime;
+  const showTimePicker = !isHash && (!block || editingTime);
   const userId = shift.userId?.trim();
   // The person's own shift time is what matters (it may be custom), still tied
   // to the section so section-level answers apply.
@@ -974,8 +987,8 @@ function ShiftRow<S extends ShiftDraftForAssign>({
           <DraftTextInput
             placeholder="Role"
             aria-label="Role"
-            value={shift.role}
-            disabled={readOnly}
+            value={isHash ? HASH_ROLE : shift.role}
+            disabled={readOnly || isHash}
             onCommit={(role) => onChange({ role })}
           />
         </div>
@@ -992,11 +1005,11 @@ function ShiftRow<S extends ShiftDraftForAssign>({
             }
             options={options}
             emptyLabel="Open slot — pick crew"
-            clearable
+            clearable={!isHash}
             showCartTag
           />
         </div>
-        {block ? (
+        {block && !isHash ? (
           <Button
             type="button"
             variant="outline"

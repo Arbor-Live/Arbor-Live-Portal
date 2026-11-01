@@ -9,6 +9,9 @@ export const FLAG_REASON_LABELS = {
 
 export type FlagReason = keyof typeof FLAG_REASON_LABELS;
 
+/** Every shift on a hash has this role; the server sets it. */
+export const HASH_ROLE = "Hash";
+
 export const HASH_STATUS_PILLS = {
   scheduled: { label: "Not started", tone: "neutral" },
   off: { label: "Off", tone: "neutral" },
