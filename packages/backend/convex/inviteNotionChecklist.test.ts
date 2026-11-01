@@ -319,3 +319,34 @@ test("the backfill covers crew invites and skips advisor and band invites", asyn
 
   expect(covered).toEqual([crew.invitationId, applicant.invitationId].sort());
 });
+
+test("listAdmin finds one application by id past the per-status cap", async () => {
+  const { t, as } = await setup();
+  const ids = await t.run(async (ctx) => {
+    const inserted = [];
+    for (let submittedAt = 0; submittedAt <= 200; submittedAt += 1) {
+      inserted.push(
+        await ctx.db.insert("crewApplications", {
+          status: "converted",
+          name: `Applicant ${submittedAt}`,
+          email: `applicant-${submittedAt}@example.com`,
+          phone: "555-0100",
+          heardAboutUs: "Friend",
+          vertical: "Crew",
+          stanfordPosition: "undergrad",
+          submittedAt,
+          createdAt: 1,
+          updatedAt: 1,
+        }),
+      );
+    }
+    return inserted;
+  });
+  const oldest = ids[0];
+
+  const capped = await as.query(api.crewApplications.listAdmin, { statuses: ["converted"] });
+  expect(capped.map((row) => row._id)).not.toContain(oldest);
+
+  const single = await as.query(api.crewApplications.listAdmin, { applicationId: oldest });
+  expect(single.map((row) => row._id)).toEqual([oldest]);
+});

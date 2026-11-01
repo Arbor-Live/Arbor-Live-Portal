@@ -18,7 +18,7 @@ import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api } from "@/lib/convex-api";
+import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatDate, plural } from "@/lib/format";
 import { notify } from "@/lib/notify";
@@ -82,9 +82,9 @@ export function CrewApplicationsAdminClient() {
   const applied = activeFilters(filters);
   const statuses = statusesForProgressFilter(applied.progress);
   const applications = useQuery(api.crewApplications.listAdmin, statuses ? { statuses } : {});
-  const convertedApplications = useQuery(
+  const convertedApplication = useQuery(
     api.crewApplications.listAdmin,
-    convertedPanelId ? { statuses: ["converted"] } : "skip",
+    convertedPanelId ? { applicationId: convertedPanelId as Id<"crewApplications"> } : "skip",
   );
   const managers = useQuery(api.invoices.listManagers, {});
 
@@ -163,10 +163,10 @@ export function CrewApplicationsAdminClient() {
   const panelRow = panel
     ? (allRows.find((row) => row._id === panel) ??
       (convertedPanelId === panel
-        ? (convertedApplications as CrewApplicationRow[] | undefined)?.find((row) => row._id === panel)
+        ? (convertedApplication as CrewApplicationRow[] | undefined)?.[0]
         : undefined))
     : undefined;
-  const awaitingConverted = convertedPanelId === panel && convertedApplications === undefined;
+  const awaitingConverted = convertedPanelId === panel && convertedApplication === undefined;
 
   // A `?application=` link to a row that isn't loaded (deleted, or outside the
   // progress filter): drop the param rather than hold an empty panel open.

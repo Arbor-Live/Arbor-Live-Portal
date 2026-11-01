@@ -301,6 +301,8 @@ export const listAdmin = query({
   args: {
     /** Statuses to include; omit for all of them. */
     statuses: v.optional(v.array(applicationStatusValue)),
+    /** One application by id, past the per-status cap. Takes priority over `statuses`. */
+    applicationId: v.optional(v.id("crewApplications")),
   },
   returns: v.array(
     v.object({
@@ -341,19 +343,24 @@ export const listAdmin = query({
     const statuses = args.statuses
       ? [...new Set(args.statuses)]
       : (["submitted", "trainee", "converted", "closed"] as const);
-    const rows = (
-      await Promise.all(
-        statuses.map((status) =>
-          ctx.db
-            .query("crewApplications")
-            .withIndex("by_status_and_submittedAt", (q) => q.eq("status", status))
-            .order("desc")
-            .take(200),
-        ),
-      )
-    )
-      .flat()
-      .sort((a, b) => b.submittedAt - a.submittedAt);
+    const single = args.applicationId ? await ctx.db.get(args.applicationId) : null;
+    const rows = args.applicationId
+      ? single
+        ? [single]
+        : []
+      : (
+          await Promise.all(
+            statuses.map((status) =>
+              ctx.db
+                .query("crewApplications")
+                .withIndex("by_status_and_submittedAt", (q) => q.eq("status", status))
+                .order("desc")
+                .take(200),
+            ),
+          )
+        )
+          .flat()
+          .sort((a, b) => b.submittedAt - a.submittedAt);
 
     const userIds = rows.flatMap((row) =>
       [row.assigneeUserId, row.outreachUpdatedByUserId].filter((id): id is string => Boolean(id)),
