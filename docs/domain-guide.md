@@ -613,9 +613,9 @@ quarter), refuses open slots and trainees, and saves every shift with the `Hash`
 role on the hash's section. The event page merges a hash's server shifts into its
 draft by person (`mergeServerHashShifts`), because a schedule save deletes any
 shift the draft lacks, and a page left open must not unbook someone Hashing booked
-meanwhile. On a hash that's over, the same crew saves and any change is refused,
-so saving a label there still works. Pay and credit change only through the finish
-list and `correctAttendance`.
+meanwhile. On a hash that's over or a date that's off, a save with the same crew
+writes nothing at all and any change is refused, so saving a label there still
+works. Pay and credit change only through the finish list and `correctAttendance`.
 
 **The add-on.** The Hashing card sits beside Open Mic on an internal event's
 Lineup tab, and on the Overview of a hash. Turning it on makes an `addon` date

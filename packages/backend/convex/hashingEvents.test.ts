@@ -504,6 +504,43 @@ describe("one writer", () => {
     expect(await shiftsOf(t, edit.eventId)).toHaveLength(2);
   });
 
+  test("an off date has its own refusal, and saves nothing when its crew hasn't changed", async () => {
+    const context = await setup();
+    const { t, opsApi, ana, on } = context;
+    const hashDateId = on("2026-11-17")._id;
+    await opsApi.mutation(api.hashingSchedule.setDateOff, { hashDateId, off: true });
+    const edit = crewEdit(context, "2026-11-17");
+    await expect(edit.save(ana._id)).rejects.toThrow(/This date is off/);
+    const before = await getEvent(t, edit.eventId);
+    await edit.save();
+    expect(await getEvent(t, edit.eventId)).toEqual(before);
+  });
+
+  test("an unchanged crew save on a finished hash changes nothing at all", async () => {
+    const context = await setup();
+    const { t, opsApi, ana } = context;
+    const hashDateId = await bookAndRun(context, "2026-11-03", [ana]);
+    await opsApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [ana._id] });
+    const edit = crewEdit(context, "2026-11-03");
+    const [shift] = await shiftsOf(t, edit.eventId);
+    await t.run(async (ctx) => {
+      const expenseReportId = await ctx.db.insert("eventExpenseReports", {
+        eventId: edit.eventId,
+        title: "Hash",
+        status: "draft",
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+      await ctx.db.patch(shift!._id, { expenseReportId, postedToExpense: true, notes: "Kept" });
+    });
+    const before = { shifts: await shiftsOf(t, edit.eventId), event: await getEvent(t, edit.eventId) };
+    vi.setSystemTime(NOW + HOUR);
+
+    await opsApi.mutation(api.eventCrew.upsertShifts, { eventId: edit.eventId, shifts: [{ id: shift!._id, ...edit.slot(ana._id) }] });
+
+    expect({ shifts: await shiftsOf(t, edit.eventId), event: await getEvent(t, edit.eventId) }).toEqual(before);
+  });
+
   test("on a finished hash an unchanged crew save passes, and a real change is refused", async () => {
     const context = await setup();
     const { t, opsApi, ana, ben } = context;

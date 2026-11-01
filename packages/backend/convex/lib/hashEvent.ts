@@ -102,11 +102,11 @@ function sameCrew(existing: readonly Doc<"eventCrewShifts">[], next: readonly Ha
 /**
  * Crew edits on the event page are bookings, so they obey a booking's rules, and
  * the shifts to save come back as bookings: the `Hash` role on the hash's section.
- * Once a hash is over its pay and credit are settled, so the same crew saves and
- * any change is refused.
+ * Once a hash is over its pay and credit are settled, so a save carrying the same
+ * crew returns null, for the caller to write nothing, and any change is refused.
  */
 export async function requireHashCrewEdit<Shift extends HashCrewShift>(
-  ctx: QueryCtx | MutationCtx,
+  ctx: MutationCtx,
   eventId: Id<"events">,
   shifts: readonly Shift[],
 ) {
@@ -116,7 +116,10 @@ export async function requireHashCrewEdit<Shift extends HashCrewShift>(
     .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
     .take(HASH_SHIFT_TAKE);
   if (row?.status !== "scheduled" && row?.status !== "in_progress") {
-    if (sameCrew(existing, shifts)) return [...shifts];
+    if (sameCrew(existing, shifts)) return null;
+    if (row?.status === "off") {
+      appError("HASH_DATE_OFF", "This date is off, so it can't take crew. Switch it back on in Hashing first.");
+    }
     appError("HASH_CREW_CLOSED", "This hash is over, so its crew can't change here. Correct it in Hashing History.");
   }
   if (shifts.some((shift) => shift.crewApplicationId)) {

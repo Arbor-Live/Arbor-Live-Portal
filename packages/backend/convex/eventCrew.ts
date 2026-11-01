@@ -137,6 +137,7 @@ export const upsertShifts = mutation({
     const event = await ctx.db.get(args.eventId);
     const shifts =
       event && isHashEvent(event) ? await requireHashCrewEdit(ctx, args.eventId, args.shifts) : args.shifts;
+    if (!shifts) return null;
     for (const shift of shifts) {
       if (shift.endsAt <= shift.startsAt) {
         appError("SHIFT_END_BEFORE_START", "Shift end must be after shift start.");
