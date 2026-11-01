@@ -238,7 +238,7 @@ function InviteRowItem({
 }) {
   const status = inviteStatus(invite.status);
   const pending = status === "pending";
-  const notionChecklist = status === "cancelled" ? null : invite.notionChecklist;
+  const notionChecklist = pending || status === "accepted" ? invite.notionChecklist : null;
   const notionDone = notionChecklist
     ? NOTION_CHECKLIST_ITEMS.filter((item) => notionChecklist[item.key]).length
     : null;

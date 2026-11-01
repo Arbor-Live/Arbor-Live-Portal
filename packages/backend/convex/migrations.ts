@@ -783,13 +783,14 @@ export const unsetLegacyPendingInviteEmailFlags = migrations.define({
 
 /**
  * Crew invites already in flight get the manual Notion checklist. Only Arbor
- * crew invites carry a rate; crew application invites set no `inviteKind`.
+ * crew invites carry a rate or the `crew` kind; crew application invites set
+ * no `inviteKind`.
  */
 export async function backfillInviteNotionChecklist(
   ctx: MutationCtx,
   row: Doc<"pendingUserInvites">,
 ) {
-  if (row.rateMode === undefined) return;
+  if (row.rateMode === undefined && row.inviteKind !== "crew") return;
   await syncInviteNotionChecklist(ctx, row.invitationId, true);
 }
 

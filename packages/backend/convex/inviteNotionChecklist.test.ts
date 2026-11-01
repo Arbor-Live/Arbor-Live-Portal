@@ -9,6 +9,7 @@ import {
   createOrg,
   createUser,
   makeTest,
+  type Test,
 } from "./test/setup.helpers";
 
 async function setup() {
@@ -20,6 +21,24 @@ async function setup() {
 }
 
 const crewArgs = { rateMode: "normal", payrollMethod: "external" } as const;
+
+async function convertApplication(t: Test, as: ReturnType<typeof asUser>) {
+  const applicationId = await t.run(async (ctx) =>
+    ctx.db.insert("crewApplications", {
+      status: "trainee",
+      name: "Applicant",
+      email: "applicant@example.com",
+      phone: "555-0100",
+      heardAboutUs: "Friend",
+      vertical: "Crew",
+      stanfordPosition: "undergrad",
+      submittedAt: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    }),
+  );
+  return await as.mutation(api.crewApplications.convertToMember, { applicationId, ...crewArgs });
+}
 
 test("a crew invite lists an empty checklist, and ticking is reflected", async () => {
   const { as, arbor } = await setup();
@@ -213,25 +232,7 @@ test("re-inviting a pending crew invite as an advisor removes its checklist", as
 
 test("converting a crew application lists an empty checklist", async () => {
   const { t, as } = await setup();
-  const applicationId = await t.run(async (ctx) =>
-    ctx.db.insert("crewApplications", {
-      status: "trainee",
-      name: "Applicant",
-      email: "applicant@example.com",
-      phone: "555-0100",
-      heardAboutUs: "Friend",
-      vertical: "Crew",
-      stanfordPosition: "undergrad",
-      submittedAt: 1,
-      createdAt: 1,
-      updatedAt: 1,
-    }),
-  );
-
-  const { invitationId } = await as.mutation(api.crewApplications.convertToMember, {
-    applicationId,
-    ...crewArgs,
-  });
+  const { invitationId } = await convertApplication(t, as);
 
   const invites = await as.query(api.users.listInvitationsAdmin, {});
   const invite = invites.find((row) => row.id === invitationId);
@@ -247,17 +248,13 @@ test("the backfill covers crew invites and skips advisor and band invites", asyn
     email: "pending-crew@example.com",
     ...crewArgs,
   });
-  const applicant = await as.mutation(api.users.inviteUserAdmin, {
-    organizationId: arbor.organizationId,
-    email: "pending-applicant@example.com",
-    ...crewArgs,
-  });
-  const advisor = await as.mutation(api.users.inviteUserAdmin, {
+  const applicant = await convertApplication(t, as);
+  await as.mutation(api.users.inviteUserAdmin, {
     organizationId: arbor.organizationId,
     email: "pending-advisor@example.com",
     inviteKind: "advisor",
   });
-  const member = await as.mutation(api.users.inviteUserAdmin, {
+  await as.mutation(api.users.inviteUserAdmin, {
     organizationId: band.organizationId,
     email: "pending-band@example.com",
   });
@@ -266,9 +263,6 @@ test("the backfill covers crew invites and skips advisor and band invites", asyn
     for (const row of await ctx.db.query("inviteNotionChecklists").collect()) {
       await ctx.db.delete(row._id);
     }
-    const pending = await ctx.db.query("pendingUserInvites").collect();
-    const applicantRow = pending.find((row) => row.invitationId === applicant.invitationId);
-    await ctx.db.patch(applicantRow!._id, { inviteKind: undefined });
     for (const row of await ctx.db.query("pendingUserInvites").collect()) {
       await backfillInviteNotionChecklist(ctx, row);
     }
@@ -277,6 +271,4 @@ test("the backfill covers crew invites and skips advisor and band invites", asyn
   });
 
   expect(covered).toEqual([crew.invitationId, applicant.invitationId].sort());
-  expect(covered).not.toContain(advisor.invitationId);
-  expect(covered).not.toContain(member.invitationId);
 });
