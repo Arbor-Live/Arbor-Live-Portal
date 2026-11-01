@@ -1808,6 +1808,18 @@ export default defineSchema({
     .index("by_invitationId", ["invitationId"])
     .index("by_createdAt", ["createdAt"]),
 
+  /**
+   * Manual Notion onboarding checklist for Arbor Live crew invites. Separate
+   * from `pendingUserInvites` because that row is deleted on accept, and admins
+   * tick these after the person has joined. Row existence is the rule for "this
+   * invite has a checklist"; fields hold the completed-at timestamp.
+   */
+  inviteNotionChecklists: defineTable({
+    invitationId: v.string(),
+    inviteToNotion: v.optional(v.number()),
+    addToCrewGroup: v.optional(v.number()),
+  }).index("by_invitationId", ["invitationId"]),
+
   emailNotifications: defineTable({
     template: emailTemplateValue,
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),

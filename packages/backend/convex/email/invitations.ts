@@ -257,6 +257,19 @@ export async function markInvitationCancelled(ctx: MutationCtx, invitationId: st
   await revokePendingInvite(ctx, invitationId);
 }
 
+/**
+ * Idempotent: re-inviting reuses the invitation row, and must not clear ticks.
+ * Survives `markInvitationAccepted`, which deletes the pending row.
+ */
+export async function ensureInviteNotionChecklist(ctx: MutationCtx, invitationId: string) {
+  const existing = await ctx.db
+    .query("inviteNotionChecklists")
+    .withIndex("by_invitationId", (q) => q.eq("invitationId", invitationId))
+    .first();
+  if (existing) return;
+  await ctx.db.insert("inviteNotionChecklists", { invitationId });
+}
+
 export async function markInvitationAccepted(ctx: MutationCtx, invitationId: string) {
   await ctx.runMutation(components.betterAuth.adapter.updateOne, {
     input: {

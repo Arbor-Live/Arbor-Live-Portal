@@ -36,6 +36,7 @@ import { enqueueEmail } from "./email/enqueue";
 import { bumpInviteSequence } from "./email/inviteSequence";
 import {
   markInvitationAccepted,
+  ensureInviteNotionChecklist,
   scheduleUserInviteEmail,
 } from "./email/invitations";
 import { scheduleCrewScheduledEmails } from "./email/triggers";
@@ -816,6 +817,9 @@ export const convertToMember = mutation({
       });
       await markInvitationAccepted(ctx, invitationId);
     }
+
+    // This path always invites crew into Arbor Live (it sets no `inviteKind`).
+    await ensureInviteNotionChecklist(ctx, invitationId);
 
     await scheduleUserInviteEmail(ctx, {
       invitationId,
