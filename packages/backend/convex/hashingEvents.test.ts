@@ -726,9 +726,9 @@ describe("pay and attendance", () => {
       await expect(opsApi.mutation(api.hashingLive.correctAttendance, { hashDateId, attendeeUserIds: [ana._id] })).rejects.toThrow(/has crew/);
     });
 
-    test("it holds to who can be credited, who can do it, and which hashes it reaches", async () => {
+    test("it holds to who can do it, and which hashes it reaches", async () => {
       const context = await setup();
-      const { t, opsApi, anaApi, ops, ana, ben, on } = context;
+      const { t, opsApi, anaApi, ana, on } = context;
       const hashDateId = await bookAndRun(context, "2026-11-03", [ana]);
       const correct = (userIds: string[]) => opsApi.mutation(api.hashingLive.correctAttendance, { hashDateId, attendeeUserIds: userIds });
       await expect(correct([ana._id])).rejects.toThrow(/finished or lapsed/);
@@ -736,12 +736,42 @@ describe("pay and attendance", () => {
 
       await opsApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [ana._id] });
       await expect(anaApi.mutation(api.hashingLive.correctAttendance, { hashDateId, attendeeUserIds: [ana._id] })).rejects.toThrow(/access/i);
-      await expect(correct([ana._id, ops._id])).rejects.toThrow(/Only active crew/);
-      await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId: on("2026-11-10")._id, userId: ben._id });
-      await expect(correct([ana._id, ben._id])).rejects.toThrow(/They're already on/);
       await correct([]);
       expect(await shiftsOf(t, on("2026-11-03").eventId!)).toEqual([]);
       expect(await getRow(t, hashDateId)).toMatchObject({ status: "finished" });
+    });
+
+    test("it records reality: someone who left crew, or holds another hash, gets credit and pay", async () => {
+      const context = await setup();
+      const { t, opsApi, benApi, ops, ana, ben, on, eventOf } = context;
+      const hashDateId = await bookAndRun(context, "2026-11-03", [ana]);
+      await opsApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [ana._id] });
+      const later = on("2026-11-10")._id;
+      await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId: later, userId: ben._id });
+      await t.run(async (ctx) => {
+        const profile = await ctx.db
+          .query("userAdminProfiles")
+          .withIndex("by_userId", (q) => q.eq("userId", ana._id))
+          .unique();
+        await ctx.db.patch(profile!._id, { status: "alumni" });
+      });
+
+      await opsApi.mutation(api.hashingLive.correctAttendance, { hashDateId, attendeeUserIds: [ana._id, ben._id, ops._id] });
+
+      expect((await shiftsOf(t, eventOf("2026-11-03"))).map((shift) => shift.userId).sort()).toEqual([ana._id, ben._id, ops._id].sort());
+      expect(await shiftsOf(t, eventOf("2026-11-10"))).toMatchObject([{ userId: ben._id }]);
+      expect(await timecardTitles(benApi, AFTER)).toEqual([["Hash", 1], ["Hash", 1]]);
+      expect((await benApi.query(api.hashing.getMine, { now: NOW }))?.state).toBe("done");
+    });
+
+    test("it refuses an id that isn't a person", async () => {
+      const context = await setup();
+      const { opsApi, ana } = context;
+      const hashDateId = await bookAndRun(context, "2026-11-03", [ana]);
+      await opsApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [ana._id] });
+      await expect(opsApi.mutation(api.hashingLive.correctAttendance, { hashDateId, attendeeUserIds: ["junk"] })).rejects.toThrow(
+        /no profile for junk/,
+      );
     });
 
     test("the dialog gets everyone who could be credited, with the attendees marked", async () => {

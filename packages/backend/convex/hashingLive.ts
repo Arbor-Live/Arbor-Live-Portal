@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { fileDamageReport, operabilityValue } from "./damageReports";
-import { findAuthUsersByIds, getUserId, requireAdminOrOperations } from "./lib/auth";
+import { findAuthUsersByIds, getUserAdminProfile, getUserId, requireAdminOrOperations } from "./lib/auth";
 import { loadAdminProfilesByStatus } from "./lib/userProfiles";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { appError } from "./lib/errors";
@@ -18,7 +18,6 @@ import {
   loadDateBookings,
   loadHashDate,
   loadSettings,
-  requireBookingRules,
   requireHashEventId,
   requireHashingViewer,
 } from "./lib/hashingData";
@@ -452,8 +451,9 @@ export const finish = mutation({
 /**
  * Ops putting the record right after the fact: who was at a finished hash, or
  * that a lapsed one did happen. People named get shifts, credit and pay; people
- * left off lose them, with the normal notice. Capacity doesn't apply, since this
- * records who was there.
+ * left off lose them, with the normal notice. This records who was there, so no
+ * booking rule applies: not capacity, the one spot a quarter, or being on crew
+ * today. A person only has to exist.
  */
 export const correctAttendance = mutation({
   args: { hashDateId: v.id("hashDates"), attendeeUserIds: v.array(v.string()) },
@@ -470,7 +470,9 @@ export const correctAttendance = mutation({
     }
     const booked = new Set((await loadDateBookings(ctx, row)).map((booking) => booking.userId));
     for (const userId of attendeeUserIds) {
-      if (!booked.has(userId)) await requireBookingRules(ctx, row, userId, null);
+      if (!booked.has(userId) && !(await getUserAdminProfile(ctx, userId))) {
+        appError("HASH_UNKNOWN_PERSON", `There's no profile for ${userId}.`);
+      }
     }
 
     if (row.status === "lapsed") await reviveLapsedHash(ctx, row);

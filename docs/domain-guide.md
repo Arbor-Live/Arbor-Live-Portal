@@ -686,8 +686,10 @@ at the top of the Schedule tab with a link to the runner, and in the tab's badge
 **Corrections.** `correctAttendance` is ops-only and runs from History, as Correct
 on a finished hash and Mark as done on a lapsed one. It goes through
 `changeHashCrew`, so people added get a shift, credit and pay, and people removed
-lose them with the normal notice. New people must be active crew with no other
-spot this quarter, but capacity doesn't apply, because this records who was there.
+lose them with the normal notice. It records who was there, so no booking rule
+applies: someone who has since left crew, holds another hash this quarter, or
+takes the date past capacity can still be credited and paid. A new person only
+needs a real profile, which refuses a junk id.
 Marking a lapsed hash as done revives its event. A lapsed add-on's event becomes a
 hash again only if it is still bare and hasn't moved.
 
