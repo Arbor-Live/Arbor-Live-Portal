@@ -11,9 +11,9 @@ import { appError } from "./errors";
 import { type EventStatus, normalizeEventStatus } from "./eventStatus";
 import { normalizeEventVisibility } from "./eventVisibility";
 import { hashDateLabel, requireHashEventId } from "./hashingData";
+import { HASH_ROLE } from "./hashingValues";
 import { recordEventStatusTransition } from "./statusTransitions";
 
-export const HASH_ROLE = "Hash";
 /** Stored as-is: every reader normalizes it to `ready`, the end of the pipeline. */
 const HASH_FINISHED_EVENT_STATUS = "completed";
 const HASH_OPEN_EVENT_STATUS = "scheduling";

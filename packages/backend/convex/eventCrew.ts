@@ -135,8 +135,9 @@ export const upsertShifts = mutation({
     await requireEventEditAccess(ctx, args.eventId);
     return await withReportableErrors("eventCrew.upsertShifts", async () => {
     const event = await ctx.db.get(args.eventId);
-    if (event && isHashEvent(event)) await requireHashCrewEdit(ctx, args.eventId, args.shifts);
-    for (const shift of args.shifts) {
+    const shifts =
+      event && isHashEvent(event) ? await requireHashCrewEdit(ctx, args.eventId, args.shifts) : args.shifts;
+    for (const shift of shifts) {
       if (shift.endsAt <= shift.startsAt) {
         appError("SHIFT_END_BEFORE_START", "Shift end must be after shift start.");
       }
@@ -160,7 +161,7 @@ export const upsertShifts = mutation({
       .take(500);
     const existingIds = new Set(existing.map((row) => row._id));
     const existingById = new Map(existing.map((row) => [row._id, row]));
-    for (const shift of args.shifts) {
+    for (const shift of shifts) {
       if (shift.id && !existingIds.has(shift.id)) {
         appError("SHIFT_NOT_ON_EVENT", "Crew shift does not belong to this event.");
       }
@@ -175,14 +176,14 @@ export const upsertShifts = mutation({
     }));
     // Events sharing someone's time before the edit get re-priced even if they stop overlapping.
     const previousNeighborEventIds = await crewCostNeighborEventIds(ctx, args.eventId);
-    const keepIds = new Set(args.shifts.map((s) => s.id).filter(Boolean));
+    const keepIds = new Set(shifts.map((s) => s.id).filter(Boolean));
     for (const row of existing) {
       if (!keepIds.has(row._id)) await ctx.db.delete(row._id);
     }
 
     const now = Date.now();
     const crewRateSettings = await loadInvoiceCrewRateSettings(ctx);
-    for (const shift of args.shifts) {
+    for (const shift of shifts) {
       const hours = hoursBetween(shift.startsAt, shift.endsAt);
       const postedToExpense = shift.postedToExpense && !!shift.expenseReportId;
       const userId = shift.userId?.trim() || undefined;
@@ -275,7 +276,7 @@ export const upsertShifts = mutation({
       ctx,
       args.eventId,
       previousShifts,
-      args.shifts.map((shift) => ({
+      shifts.map((shift) => ({
         scheduleBlockId: shift.scheduleBlockId,
         role: shift.role.trim(),
         startsAt: shift.startsAt,

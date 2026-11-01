@@ -1,4 +1,4 @@
-import { formatDateTime, pacificDateAndTimeToMs } from "@arbor/format";
+import { formatDateTime, pacificDateAndTimeToMs, pacificDateKey } from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import {
@@ -16,8 +16,8 @@ import { resolveParticipationFlags } from "./userParticipation";
 import { loadAdminProfilesByStatus } from "./userProfiles";
 import { resolveUserStatus } from "./userStatus";
 import { isStaffMember, resolveProfileMembership } from "./userVerticals";
-import { deriveQuarterState, isLapsed, type HashQuarterState } from "./hashing";
-import type { HashBookingStatus, HashStanding } from "./hashingValues";
+import { deriveQuarterState, holdsQuarterSpot, isLapsed, type HashQuarterState } from "./hashing";
+import { HASH_ROLE, type HashBookingStatus, type HashStanding } from "./hashingValues";
 
 /** Regular weeks plus added dates. A quarter is about 11 weeks. */
 export const QUARTER_DATE_LIMIT = 60;
@@ -95,14 +95,14 @@ export type HashBooking = {
 };
 
 /**
- * A booking is a person's shift on the hash's event, whatever its role, so a
- * crew edit on the event page counts too. Two shifts for one person are one
- * booking. Trainees and open slots aren't bookings.
+ * A booking is a person's `Hash` shift on the hash's event, and a crew edit on the
+ * event page writes that role too. Two shifts for one person are one booking.
+ * Trainees and open slots aren't bookings.
  */
 function bookingsFromShifts(shifts: Doc<"eventCrewShifts">[]) {
   const byUser = new Map<string, HashBooking>();
   for (const shift of shifts) {
-    if (!isShiftFilled(shift) || isTraineeShift(shift)) continue;
+    if (shift.role !== HASH_ROLE || !isShiftFilled(shift) || isTraineeShift(shift)) continue;
     const userId = shift.userId!.trim();
     const booking = byUser.get(userId) ?? { userId, status: "booked" as HashBookingStatus, shiftIds: [] };
     booking.shiftIds.push(shift._id);
@@ -151,6 +151,27 @@ export async function loadStanding(ctx: Ctx, userId: string, quarterId: string) 
     .query("hashQuarterStanding")
     .withIndex("by_quarterId_and_userId", (q) => q.eq("quarterId", quarterId).eq("userId", userId))
     .unique();
+}
+
+/**
+ * What makes a person bookable on a date, wherever the booking comes from.
+ * `headcount` is how many the date would hold with them on it, and null means
+ * the date has no limit here.
+ */
+export async function requireBookingRules(ctx: Ctx, row: Doc<"hashDates">, userId: string, headcount: number | null) {
+  if (!isHashCrew(await getUserAdminProfile(ctx, userId))) {
+    appError("HASHING_CREW_ONLY", "Only active crew can be booked on a hash.");
+  }
+  if (headcount !== null && headcount > row.capacity) {
+    appError("HASH_FULL", `${hashDateLabel(row)} is full (${headcount - 1} of ${row.capacity}).`);
+  }
+  const mine = await loadUserBookings(ctx, userId, await loadQuarterDates(ctx, row.quarterId));
+  for (const { booking, row: other } of mine) {
+    if (other._id === row._id) appError("HASH_ALREADY_BOOKED", "They're already booked on this date.");
+    if (holdsQuarterSpot(booking, other, pacificDateKey(Date.now()))) {
+      appError("HASH_ALREADY_BOOKED", `They're already on ${hashDateLabel(other)}. Unbook that first.`);
+    }
+  }
 }
 
 export function requireFuture(row: Doc<"hashDates">, now: number) {

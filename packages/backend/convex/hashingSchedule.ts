@@ -10,7 +10,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { getUserAdminProfile, getUserId, requireAdminOrOperations } from "./lib/auth";
+import { getUserId, requireAdminOrOperations } from "./lib/auth";
 import { appError } from "./lib/errors";
 import { isHashEvent } from "./lib/hashEvent";
 import {
@@ -20,15 +20,12 @@ import {
   hashingQuarterContaining,
   hashingQuarterFor,
   HASHING_DEFAULTS,
-  holdsQuarterSpot,
   planRegularDates,
 } from "./lib/hashing";
 import { HASHING_CHECKLIST_SEED } from "./lib/hashingChecklistSeed";
 import {
   ensureChecklist,
-  hashDateLabel,
   hashTimes,
-  isHashCrew,
   latestChecklist,
   loadDateAvailability,
   loadDateBookings,
@@ -39,7 +36,7 @@ import {
   QUARTER_DATE_LIMIT,
   loadSettings,
   loadStanding,
-  loadUserBookings,
+  requireBookingRules,
   requireFuture,
   requireHashEventId,
 } from "./lib/hashingData";
@@ -397,24 +394,10 @@ async function bookUsers(ctx: MutationCtx, row: Doc<"hashDates">, userIds: strin
   }
 }
 
-/** Crew only, one open spot per quarter, and the date has room. */
 async function requireBookable(ctx: MutationCtx, row: Doc<"hashDates">, userId: string) {
   if (row.status !== "scheduled") appError("HASH_NOT_BOOKABLE", "This date can't take bookings.");
   if (row.startsAt <= Date.now()) appError("HASH_IN_PAST", "This hash is in the past.");
-  if (!isHashCrew(await getUserAdminProfile(ctx, userId))) {
-    appError("HASHING_CREW_ONLY", "Only active crew can be booked on a hash.");
-  }
-  const bookings = await loadDateBookings(ctx, row);
-  if (bookings.length >= row.capacity) {
-    appError("HASH_FULL", `${hashDateLabel(row)} is full (${bookings.length} of ${row.capacity}).`);
-  }
-  const mine = await loadUserBookings(ctx, userId, await loadQuarterDates(ctx, row.quarterId));
-  for (const { booking, row: other } of mine) {
-    if (other._id === row._id) appError("HASH_ALREADY_BOOKED", "They're already booked on this date.");
-    if (holdsQuarterSpot(booking, other, pacificDateKey(Date.now()))) {
-      appError("HASH_ALREADY_BOOKED", `They're already on ${hashDateLabel(other)}. Unbook that first.`);
-    }
-  }
+  await requireBookingRules(ctx, row, userId, (await loadDateBookings(ctx, row)).length + 1);
 }
 
 export const addDate = mutation({

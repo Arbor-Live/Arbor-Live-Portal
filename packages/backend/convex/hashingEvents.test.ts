@@ -413,6 +413,7 @@ describe("one writer", () => {
       postedToExpense: false,
     };
     await opsApi.mutation(api.eventCrew.upsertShifts, { eventId, shifts: [shift] });
+    expect(await shiftsOf(t, eventId)).toMatchObject([{ role: "Hash", userId: ana._id, scheduleBlockId: block!._id }]);
     const mine = await anaApi.query(api.hashing.getMine, { now: NOW });
     expect(mine?.state).toBe("booked");
     expect(mine?.dates.find((date) => date._id === row._id)?.booking).toBe("booked");
@@ -426,6 +427,89 @@ describe("one writer", () => {
         shifts: [{ ...shift, crewApplicationId: await insertApplication(t) }],
       }),
     ).rejects.toThrow(/doesn't take trainees/);
+  });
+
+  function crewEdit(context: Context, dateKey: string) {
+    const { opsApi, on, eventOf } = context;
+    const row = on(dateKey);
+    const eventId = eventOf(dateKey);
+    const slot = (userId?: string) => ({ role: "Hash", userId, startsAt: row.startsAt, endsAt: row.endsAt, postedToExpense: false });
+    return {
+      eventId,
+      slot,
+      save: (...userIds: (string | undefined)[]) =>
+        opsApi.mutation(api.eventCrew.upsertShifts, { eventId, shifts: userIds.map(slot) }),
+    };
+  }
+
+  test("a crew edit obeys the booking rules for anyone new", async () => {
+    const context = await setup();
+    const { t, opsApi, arbor, ops, ana, ben, on } = context;
+    await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId: on("2026-11-10")._id, userId: ana._id });
+    const edit = crewEdit(context, "2026-11-17");
+
+    await expect(edit.save(ops._id)).rejects.toThrow(/Only active crew/);
+    await expect(edit.save(ana._id)).rejects.toThrow(/They're already on/);
+    await expect(edit.save(undefined)).rejects.toThrow(/can't have an open slot/);
+    await expect(edit.save(ben._id, ben._id)).rejects.toThrow(/on this hash twice/);
+
+    await opsApi.mutation(api.hashingSchedule.saveSetup, { ...SETUP, spotsPerHash: 1 });
+    const carol = await member(t, arbor, { name: "Carol Crew" });
+    await edit.save(ben._id);
+    await expect(edit.save(ben._id, carol._id)).rejects.toThrow(/is full \(1 of 1\)/);
+    await edit.save(carol._id);
+    expect(await shiftsOf(t, edit.eventId)).toMatchObject([{ userId: carol._id }]);
+  });
+
+  test("a crew edit keeps anyone already on the hash, even past a lowered capacity", async () => {
+    const context = await setup();
+    const { t, opsApi, ana, ben, on } = context;
+    const hashDateId = on("2026-11-17")._id;
+    await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId, userId: ana._id });
+    await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId, userId: ben._id });
+    await opsApi.mutation(api.hashingSchedule.saveSetup, { ...SETUP, spotsPerHash: 1 });
+    const edit = crewEdit(context, "2026-11-17");
+    await edit.save(ana._id, ben._id);
+    expect(await shiftsOf(t, edit.eventId)).toHaveLength(2);
+  });
+
+  test("on a finished hash an unchanged crew save passes, and a real change is refused", async () => {
+    const context = await setup();
+    const { t, opsApi, ana, ben } = context;
+    const hashDateId = await bookAndRun(context, "2026-11-03", [ana]);
+    await opsApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [ana._id] });
+    const edit = crewEdit(context, "2026-11-03");
+    const [shift] = await shiftsOf(t, edit.eventId);
+    const kept = { id: shift!._id, scheduleBlockId: shift!.scheduleBlockId, ...edit.slot(ana._id) };
+
+    await opsApi.mutation(api.eventCrew.upsertShifts, { eventId: edit.eventId, shifts: [kept] });
+    await expect(
+      opsApi.mutation(api.eventCrew.upsertShifts, { eventId: edit.eventId, shifts: [{ ...kept, userId: ben._id }] }),
+    ).rejects.toThrow(/hash is over/);
+    await expect(opsApi.mutation(api.eventCrew.upsertShifts, { eventId: edit.eventId, shifts: [] })).rejects.toThrow(/hash is over/);
+    expect(await shiftsOf(t, edit.eventId)).toMatchObject([{ userId: ana._id }]);
+  });
+
+  test("booked, off and finish count the same people however the shift got there", async () => {
+    const context = await setup();
+    const { t, opsApi, ana, ben } = context;
+    const eventId = await insertPlainEvent(t);
+    await opsApi.mutation(api.hashingSchedule.setEventHashing, { eventId, enabled: true });
+    const addon = await opsApi.query(api.hashing.getEventAddon, { eventId });
+    const row = await getRow(t, addon!.hashDateId);
+    await opsApi.mutation(api.eventCrew.upsertShifts, {
+      eventId,
+      shifts: [ana, ben].map((person) => ({
+        role: "Sweeper",
+        userId: person._id,
+        startsAt: row!.startsAt,
+        endsAt: row!.endsAt,
+        postedToExpense: false,
+      })),
+    });
+    expect((await opsApi.query(api.hashing.getEventAddon, { eventId }))?.filled).toBe(2);
+    await opsApi.mutation(api.hashingSchedule.setEventHashing, { eventId, enabled: false });
+    expect(await shiftsOf(t, eventId)).toEqual([]);
   });
 
   test("handing a pending slot to someone else doesn't hand them the question", async () => {

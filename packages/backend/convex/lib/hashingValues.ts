@@ -1,5 +1,8 @@
 import { v, type Infer } from "convex/values";
 
+/** The role of every shift on a hash. A booking is a person's shift with it. */
+export const HASH_ROLE = "Hash";
+
 /** `regular` and `added` are events Hashing made. `addon` is someone else's event that carries a hash. */
 export const hashDateOriginValue = v.union(v.literal("regular"), v.literal("added"), v.literal("addon"));
 /** Every status but `off`, which alone may have no event yet. `lapsed`: the date passed unstarted. */
