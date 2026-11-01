@@ -208,7 +208,7 @@ function isStanfordEmail(email: string) {
 }
 
 function isValidEmail(email: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  return /^[^\s@,;<>"]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(email);
 }
 
 function makePublicToken() {
@@ -373,7 +373,7 @@ async function seedScheduleBlocksForConvertedEvent(
 
 // Public (unauthenticated) lookup used by the booking wizard to autofill a
 // returning requester's contact details. Returning last name and phone here is
-// deliberate and accepted: the query only runs for a verified Stanford email,
+// deliberate and accepted: the query only runs for a Stanford-format email,
 // and that person's name/phone are already discoverable in the public Stanford
 // directory. Contact IDs and group billing details beyond name/type are still
 // not exposed.
@@ -847,7 +847,8 @@ export const submitPublic = mutation({
         );
       }
     } else if (!isNonStanfordSponsorType || args.invoiceGroupId || organization) {
-      // The email is unverified, so a group here would let anyone bill a Stanford group.
+      // Keeps outside addresses off group billing. The address is unverified, so
+      // this doesn't stop someone typing a Stanford address they don't own.
       appError(
         "REQUEST_NON_STANFORD_INDIVIDUAL_ONLY",
         "Non-Stanford emails can only request as an individual.",

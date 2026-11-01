@@ -77,7 +77,36 @@ test("a non-Stanford email can request as a non-Stanford individual", async () =
   });
   expect(row?.invoiceGroupId).toBeUndefined();
   expect(row?.organization).toBeUndefined();
+  const billing = await t.run(async (ctx) => ({
+    groups: await ctx.db.query("invoiceGroups").collect(),
+    contacts: await ctx.db.query("invoiceContacts").collect(),
+  }));
+  expect(billing.groups).toEqual([]);
+  expect(billing.contacts.map((contact) => contact.groupId)).toEqual([undefined]);
 });
+
+test.each([
+  "a,b@gmail.com",
+  "<a>@gmail.com",
+  "a@gmail",
+  "a@gmail..com",
+  "a@gmail.com.",
+])("rejects the malformed email %s", async (email) => {
+  const t = makeTest();
+  expect(await errorCode(submit(t, { email, sponsorType: "Individual (non-Stanford)" }))).toBe(
+    "REQUEST_EMAIL_INVALID",
+  );
+});
+
+test.each(["individual (non-stanford)", "Other: Individual (non-Stanford)", "Individual Stanford Affiliate"])(
+  "a non-Stanford email cannot use the sponsor type %s",
+  async (sponsorType) => {
+    const t = makeTest();
+    expect(await errorCode(submit(t, { email: "ada@gmail.com", sponsorType }))).toBe(
+      "REQUEST_NON_STANFORD_INDIVIDUAL_ONLY",
+    );
+  },
+);
 
 test("the non-Stanford sponsor type maps to the individual group type", () => {
   expect(mapSponsorTypeToGroupType("Individual (non-Stanford)")).toBe("individual");

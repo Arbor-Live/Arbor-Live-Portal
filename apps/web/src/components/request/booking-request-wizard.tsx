@@ -105,6 +105,10 @@ type ContactLookup =
     }
   | { found: false };
 
+function sameEmail(a: string, b: string) {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
 function contactDetailsComplete(lookup: Extract<ContactLookup, { found: true }>) {
   return Boolean(lookup.firstName.trim() && lookup.lastName.trim() && lookup.phone.trim());
 }
@@ -254,6 +258,7 @@ export function BookingRequestWizard() {
 
   const applySponsorForEmail = useCallback(
     (email: string) => {
+      const emailChanged = Boolean(requesterEmail) && !sameEmail(requesterEmail, email);
       setRequesterEmail(email);
       if (!isStanfordEmail(email)) {
         form.setValue("sponsorType", NON_STANFORD_INDIVIDUAL_SPONSOR_TYPE, { shouldDirty: true });
@@ -261,11 +266,16 @@ export function BookingRequestWizard() {
         form.setValue("organization", "", { shouldDirty: true });
         form.setValue("invoiceGroupId", "", { shouldDirty: true });
         form.setValue("requestContext", undefined, { shouldDirty: true });
-      } else if (form.getValues("sponsorType") === NON_STANFORD_INDIVIDUAL_SPONSOR_TYPE) {
+      } else if (emailChanged || form.getValues("sponsorType") === NON_STANFORD_INDIVIDUAL_SPONSOR_TYPE) {
+        // A group chosen for the previous address must not carry over to this one.
         form.setValue("sponsorType", bookingRequestDefaultValues.sponsorType, { shouldDirty: true });
+        form.setValue("sponsorTypeOther", "", { shouldDirty: true });
+        form.setValue("organization", "", { shouldDirty: true });
+        form.setValue("invoiceGroupId", "", { shouldDirty: true });
+        form.setValue("requestContext", undefined, { shouldDirty: true });
       }
     },
-    [form],
+    [form, requesterEmail],
   );
 
   const handleItemChange = useCallback(
