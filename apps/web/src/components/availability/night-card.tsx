@@ -13,21 +13,22 @@ import { notify } from "@/lib/notify";
 import type { TimeWindow } from "@/lib/crew-availability";
 import {
   formatWindow,
+  mergeBusyNotes,
+  nightAnswerArgs,
   nightAnswerClass,
   nightAnswerLabel,
   nightDateLabel,
   usualChipClass,
   usualChipLabel,
+  usualSuggestion as usualSuggestionFor,
+  type NightChoice,
 } from "@/lib/crew-nights";
 import { cn } from "@/lib/utils";
 import { NightPartForm } from "@/components/availability/night-part-form";
 
 export type Night = NonNullable<ReturnType<typeof useQuery<typeof api.crewNights.listMine>>>[number];
 
-/** One tap per answer, except "Only part", which opens the details. */
-type Choice = "free" | "part" | "early" | "backup" | "no";
-
-const SAVED: Record<Choice, string> = {
+const SAVED: Record<NightChoice, string> = {
   free: "Saved: free all night.",
   part: "Saved the part you can do.",
   early: "Saved: early setup only.",
@@ -35,11 +36,7 @@ const SAVED: Record<Choice, string> = {
   no: "Saved: not this one.",
 };
 
-export function needsAnswer(night: Night) {
-  return !night.answer || !night.answer.coversNight;
-}
-
-function choiceOf(answer: Night["answer"]): Choice | null {
+function choiceOf(answer: Night["answer"]): NightChoice | null {
   if (!answer) return null;
   if (answer.status === "partial") return answer.earlySetupOnly ? "early" : "part";
   return answer.status;
@@ -60,8 +57,51 @@ function Chip({ className, children }: { className: string; children: React.Reac
   return <span className={cn("max-w-full rounded-md border px-2 py-0.5 text-xs", className)}>{children}</span>;
 }
 
-function NightSummary({ night }: { night: Night }) {
+/** The events that night and what changes the answer: OT pay, shifts you're on, a stale answer. */
+export function NightFacts({ night }: { night: Night }) {
   const onEvents = night.events.filter((event) => event.myShiftCount > 0);
+  return (
+    <>
+    <ul className="space-y-0.5 text-xs text-muted-foreground">
+      {night.events.map((event) => (
+        <li key={event._id} className="flex flex-wrap items-center gap-x-2">
+          <span className="min-w-0 font-medium wrap-anywhere text-foreground">{event.title}</span>
+          {event.otPremium ? (
+            <span className="border border-status-amber-500/40 bg-status-amber-500/10 px-1 text-3xs font-semibold tracking-wide text-status-amber-800 dark:text-status-amber-300">
+              OT
+            </span>
+          ) : null}
+          <span className="tabular-nums">{formatWindow({ startsAt: event.crewStartsAt, endsAt: event.crewEndsAt })}</span>
+          {event.venueName ? (
+            <span className="inline-flex items-center gap-1">
+              <MapPinIcon className="size-3.5" aria-hidden />
+              {event.venueName}
+            </span>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+    {night.events.some((event) => event.otPremium) ? (
+      <p className="text-xs text-status-amber-800 dark:text-status-amber-300">
+        OT events pay 1.5×, then double time after 8 hrs.
+      </p>
+    ) : null}
+    {onEvents.length > 0 ? (
+      <p className="text-xs font-medium text-status-emerald-700 dark:text-status-emerald-300">
+        You&apos;re on: {onEvents.map((event) => event.title).join(", ")}
+      </p>
+    ) : null}
+    {night.answer && !night.answer.coversNight ? (
+      <p className="flex items-center gap-1.5 text-xs text-status-amber-700">
+        <WarningIcon className="size-3.5" weight="fill" aria-hidden />
+        The night got longer after you answered. Check you can still do all of it.
+      </p>
+    ) : null}
+    </>
+  );
+}
+
+function NightSummary({ night }: { night: Night }) {
   return (
     <div className="min-w-0 flex-1 space-y-1.5">
       <div className="flex flex-wrap items-center gap-2">
@@ -73,41 +113,7 @@ function NightSummary({ night }: { night: Night }) {
           <Chip className={nightAnswerClass(night.answer.status)}>You: {nightAnswerLabel(night.answer)}</Chip>
         ) : null}
       </div>
-      <ul className="space-y-0.5 text-xs text-muted-foreground">
-        {night.events.map((event) => (
-          <li key={event._id} className="flex flex-wrap items-center gap-x-2">
-            <span className="font-medium text-foreground">{event.title}</span>
-            {event.otPremium ? (
-              <span className="border border-status-amber-500/40 bg-status-amber-500/10 px-1 text-3xs font-semibold tracking-wide text-status-amber-800 dark:text-status-amber-300">
-                OT
-              </span>
-            ) : null}
-            <span className="tabular-nums">{formatWindow({ startsAt: event.crewStartsAt, endsAt: event.crewEndsAt })}</span>
-            {event.venueName ? (
-              <span className="inline-flex items-center gap-1">
-                <MapPinIcon className="size-3.5" aria-hidden />
-                {event.venueName}
-              </span>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-      {night.events.some((event) => event.otPremium) ? (
-        <p className="text-xs text-status-amber-800 dark:text-status-amber-300">
-          OT events pay 1.5×, then double time after 8 hrs.
-        </p>
-      ) : null}
-      {onEvents.length > 0 ? (
-        <p className="text-xs font-medium text-status-emerald-700 dark:text-status-emerald-300">
-          You&apos;re on: {onEvents.map((event) => event.title).join(", ")}
-        </p>
-      ) : null}
-      {night.answer && !night.answer.coversNight ? (
-        <p className="flex items-center gap-1.5 text-xs text-status-amber-700">
-          <WarningIcon className="size-3.5" weight="fill" aria-hidden />
-          The night got longer after you answered. Check you can still do all of it.
-        </p>
-      ) : null}
+      <NightFacts night={night} />
     </div>
   );
 }
@@ -115,7 +121,7 @@ function NightSummary({ night }: { night: Night }) {
 function NightAnswerForm({ night }: { night: Night }) {
   const answerNight = useMutation(api.crewNights.answerNight);
   const savedChoice = choiceOf(night.answer);
-  const [choice, setChoice] = useState<Choice | null>(savedChoice);
+  const [choice, setChoice] = useState<NightChoice | null>(savedChoice);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState(night.answer?.notes ?? "");
@@ -123,20 +129,13 @@ function NightAnswerForm({ night }: { night: Night }) {
 
   const savedWindows = night.answer?.status === "partial" && !night.answer.earlySetupOnly ? night.answer.windows : [];
 
-  const usualSuggestion: Choice | null =
-    night.usual === "usually" ? "free" : night.usual === "rarely" ? "no" : null;
+  const usualSuggestion = usualSuggestionFor(night);
 
-  async function save(next: Choice, windows?: TimeWindow[], noteText = notes) {
+  async function save(next: NightChoice, windows?: TimeWindow[], noteText = notes) {
     setError(null);
     setSaving(true);
     try {
-      await answerNight({
-        nightKey: night.nightKey,
-        status: next === "free" ? "free" : next === "backup" ? "backup" : next === "no" ? "no" : "partial",
-        windows: next === "part" ? windows : undefined,
-        earlySetupOnly: next === "early" ? true : undefined,
-        notes: noteText.trim() || undefined,
-      });
+      await answerNight(nightAnswerArgs(night.nightKey, next, windows, noteText));
       notify.success(SAVED[next]);
       return true;
     } catch (saveError) {
@@ -149,7 +148,7 @@ function NightAnswerForm({ night }: { night: Night }) {
 
   function choose(value: string) {
     // Tapping the selected answer comes through as "": treat it as confirming it again.
-    const next = (value || choice) as Choice | null;
+    const next = (value || choice) as NightChoice | null;
     if (!next) return;
     setChoice(next);
     setError(null);
@@ -157,9 +156,7 @@ function NightAnswerForm({ night }: { night: Night }) {
   }
 
   function savePart(windows: TimeWindow[], busyNotes: string[]) {
-    // What they're busy with rides along on the night's note.
-    const segments = notes.split(" · ").map((segment) => segment.trim()).filter(Boolean);
-    const noteText = [...new Set([...segments, ...busyNotes])].join(" · ");
+    const noteText = mergeBusyNotes(notes, busyNotes);
     setNotes(noteText);
     void save("part", windows, noteText);
   }

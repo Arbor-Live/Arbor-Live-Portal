@@ -6,10 +6,10 @@ import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { AwayDialog } from "@/components/availability/away-dialog";
-import { NightCard, needsAnswer } from "@/components/availability/night-card";
+import { NightCard } from "@/components/availability/night-card";
 import { UsualEveningsCard } from "@/components/availability/usual-evenings-card";
 import { DEFAULT_AVAILABILITY_WEEKS, EXTENDED_AVAILABILITY_WEEKS } from "@/lib/crew-availability";
-import { summarizeUsualEvenings } from "@/lib/crew-nights";
+import { needsAnswer, summarizeUsualEvenings } from "@/lib/crew-nights";
 
 /** My Availability: one card per night with crewed events for you, soonest first. */
 export function NightsInbox() {

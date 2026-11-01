@@ -71,6 +71,41 @@ export function usualChipClass(level: UsualLevel) {
   }
 }
 
+/** One tap per answer, except "Only part", which opens the details. */
+export type NightChoice = "free" | "part" | "early" | "backup" | "no";
+
+export function needsAnswer(night: { answer: { coversNight: boolean } | null }) {
+  return !night.answer || !night.answer.coversNight;
+}
+
+/** "2026-11-06" → "Fridays". */
+export function nightWeekdayPlural(nightKey: string) {
+  const short = nightDateLabel(nightKey).slice(0, 3);
+  return `${Object.values(WEEKDAY_LABELS).find((label) => label.startsWith(short))}s`;
+}
+
+/** The answer a viewer's usual evenings point to, once they haven't answered yet. */
+export function usualSuggestion(night: { usual: UsualLevel | null }): "free" | "no" | null {
+  return night.usual === "usually" ? "free" : night.usual === "rarely" ? "no" : null;
+}
+
+/** `crewNights.answerNight` args for a choice. */
+export function nightAnswerArgs(nightKey: string, choice: NightChoice, windows: TimeWindow[] | undefined, notes: string) {
+  return {
+    nightKey,
+    status: choice === "part" || choice === "early" ? ("partial" as const) : choice,
+    windows: choice === "part" ? windows : undefined,
+    earlySetupOnly: choice === "early" ? true : undefined,
+    notes: notes.trim() || undefined,
+  };
+}
+
+/** What they're busy with rides along on the night's note. */
+export function mergeBusyNotes(notes: string, busyNotes: string[]) {
+  const segments = notes.split(" · ").map((segment) => segment.trim()).filter(Boolean);
+  return [...new Set([...segments, ...busyNotes])].join(" · ");
+}
+
 /** "Thu rarely · Fri usually free · Sat sometimes" for a one-line summary. */
 export function summarizeUsualEvenings(evenings: UsualEvenings) {
   return WEEKDAYS.filter((day) => evenings[day])
