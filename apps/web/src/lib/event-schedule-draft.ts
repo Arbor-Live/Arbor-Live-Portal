@@ -418,12 +418,13 @@ export function mergeServerActBlocks<T extends ShiftBlockLink & EventShiftDraft>
 }
 
 /** Every persisted field, so a local edit to any of them counts as an edit. */
-function traineeShiftKey(shift: ShiftBlockLink & EventShiftDraft) {
+function shiftKey(shift: ShiftBlockLink & EventShiftDraft) {
   return [
     shift.id,
     shift.scheduleBlockId,
     shift.scheduleBlockRef,
     shift.crewApplicationId,
+    shift.userId,
     shift.role,
     shift.personName,
     shift.startsAt,
@@ -434,51 +435,52 @@ function traineeShiftKey(shift: ShiftBlockLink & EventShiftDraft) {
 }
 
 /**
- * Three-way merge of trainee shifts. Trainees are assigned by their own
- * mutation (intro email, calendar invite), which writes straight to the server;
- * pull those rows into the draft so the next schedule save doesn't delete them.
- * Local edits to a trainee row win, as in `mergeServerActBlocks`. Returns null
- * when nothing changed.
+ * Three-way merge of shifts written behind this editor's back, matched by
+ * `rowKey`. Rows the server added or changed reach the draft unless the user
+ * edited them, so the next schedule save doesn't undo them. Rows without a key
+ * are left alone. Returns null when nothing changed.
  */
-export function mergeServerTraineeShifts<T extends ShiftBlockLink & EventShiftDraft>(
+function mergeServerShifts<T extends ShiftBlockLink & EventShiftDraft>(
   state: ScheduleState<T>,
   baseline: ScheduleState<T>,
-  serverTraineeShifts: T[],
+  serverShifts: T[],
+  rowKey: (shift: T) => string | undefined,
 ): { state: ScheduleState<T>; baseline: ScheduleState<T> } | null {
-  const byId = (shifts: T[]) =>
+  const byKey = (shifts: T[]) =>
     new Map(
-      shifts
-        .filter((shift) => shift.id && shift.crewApplicationId && !shift.userId)
-        .map((shift) => [shift.id!, shift]),
+      shifts.flatMap((shift) => {
+        const key = rowKey(shift);
+        return key ? [[key, shift] as const] : [];
+      }),
     );
-  const server = byId(serverTraineeShifts);
-  const base = byId(baseline.shifts);
-  const local = byId(state.shifts);
+  const server = byKey(serverShifts);
+  const base = byKey(baseline.shifts);
+  const local = byKey(state.shifts);
 
   let nextState = state.shifts;
   let nextBase = baseline.shifts;
-  const replace = (shifts: T[], id: string, next: T | null) => {
-    const index = shifts.findIndex((shift) => shift.id === id);
+  const replace = (shifts: T[], key: string, next: T | null) => {
+    const index = shifts.findIndex((shift) => rowKey(shift) === key);
     if (index === -1) return next ? [...shifts, next] : shifts;
     return next
       ? shifts.map((shift, i) => (i === index ? next : shift))
       : shifts.filter((_, i) => i !== index);
   };
 
-  for (const id of new Set([...server.keys(), ...base.keys()])) {
-    const s = server.get(id);
-    const b = base.get(id);
-    const l = local.get(id);
+  for (const key of new Set([...server.keys(), ...base.keys()])) {
+    const s = server.get(key);
+    const b = base.get(key);
+    const l = local.get(key);
     if (s && !b) {
-      nextBase = replace(nextBase, id, s);
-      if (!l) nextState = replace(nextState, id, s);
+      nextBase = replace(nextBase, key, s);
+      if (!l) nextState = replace(nextState, key, s);
     } else if (!s && b) {
       // Gone on the server: drop it even if edited, since saving its id would fail.
-      nextBase = replace(nextBase, id, null);
-      nextState = replace(nextState, id, null);
-    } else if (s && b && traineeShiftKey(s) !== traineeShiftKey(b)) {
-      nextBase = replace(nextBase, id, s);
-      if (l && traineeShiftKey(l) === traineeShiftKey(b)) nextState = replace(nextState, id, s);
+      nextBase = replace(nextBase, key, null);
+      nextState = replace(nextState, key, null);
+    } else if (s && b && shiftKey(s) !== shiftKey(b)) {
+      nextBase = replace(nextBase, key, s);
+      if (l && shiftKey(l) === shiftKey(b)) nextState = replace(nextState, key, s);
     }
   }
   if (nextState === state.shifts && nextBase === baseline.shifts) return null;
@@ -486,6 +488,33 @@ export function mergeServerTraineeShifts<T extends ShiftBlockLink & EventShiftDr
     state: { blocks: state.blocks, shifts: nextState },
     baseline: { blocks: baseline.blocks, shifts: nextBase },
   };
+}
+
+/**
+ * Trainees are assigned by their own mutation (intro email, calendar invite),
+ * which writes straight to the server.
+ */
+export function mergeServerTraineeShifts<T extends ShiftBlockLink & EventShiftDraft>(
+  state: ScheduleState<T>,
+  baseline: ScheduleState<T>,
+  serverTraineeShifts: T[],
+) {
+  return mergeServerShifts(state, baseline, serverTraineeShifts, (shift) =>
+    shift.id && shift.crewApplicationId && !shift.userId ? shift.id : undefined,
+  );
+}
+
+/**
+ * Hashing books and unbooks people straight on the server, and a schedule save
+ * deletes any shift the draft lacks. A booking is a person, so rows match by
+ * `userId`: a row this editor just saved has no id until the server sends it.
+ */
+export function mergeServerHashShifts<T extends ShiftBlockLink & EventShiftDraft>(
+  state: ScheduleState<T>,
+  baseline: ScheduleState<T>,
+  serverShifts: T[],
+) {
+  return mergeServerShifts(state, baseline, serverShifts, (shift) => shift.userId?.trim() || undefined);
 }
 
 /**
