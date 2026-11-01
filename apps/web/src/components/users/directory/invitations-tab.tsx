@@ -238,9 +238,10 @@ function InviteRowItem({
 }) {
   const status = inviteStatus(invite.status);
   const pending = status === "pending";
-  const notionDone = invite.notionChecklist
-    ? NOTION_CHECKLIST_ITEMS.filter((item) => invite.notionChecklist?.[item.key]).length
-    : NOTION_CHECKLIST_ITEMS.length;
+  const notionDone =
+    invite.notionChecklist && status !== "cancelled"
+      ? NOTION_CHECKLIST_ITEMS.filter((item) => invite.notionChecklist?.[item.key]).length
+      : NOTION_CHECKLIST_ITEMS.length;
   return (
     <ListRow
       data-testid={`invite-row-${invite.id}`}
