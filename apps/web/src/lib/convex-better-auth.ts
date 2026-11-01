@@ -46,6 +46,36 @@ export function nextAuthBinding(
   return { sessionId, key: sessionId };
 }
 
+type TokenResponse = {
+  data?: { token?: string | null } | null;
+  error?: { status?: number } | null;
+};
+
+const TOKEN_RETRY_DELAYS_MS = [500, 1_000, 2_000, 4_000, 8_000, 15_000, 30_000];
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Convex reads a null token as a sign-out and reruns every subscription
+ * without auth, so each guarded query throws into the error boundary. A tab
+ * waking from sleep refetches its token before the network is back, so only a
+ * definite "no session" answer returns null; failed requests are retried.
+ */
+export async function fetchConvexToken(
+  request: () => Promise<TokenResponse>,
+  sleep: (ms: number) => Promise<void> = wait,
+): Promise<string | null> {
+  for (let attempt = 0; ; attempt++) {
+    const result = await request().catch(() => null);
+    if (result?.data?.token) return result.data.token;
+    const status = result?.error?.status;
+    const signedOut = result !== null && (!result.error || status === 401 || status === 403);
+    const delay = TOKEN_RETRY_DELAYS_MS[attempt];
+    if (signedOut || delay === undefined) return null;
+    await sleep(delay);
+  }
+}
+
 // The server token is only good for the first mount; a remount fetches a fresh one.
 let initialTokenUsed = false;
 
@@ -95,16 +125,12 @@ export function useUseAuthFromBetterAuth(
             if (!forceRefreshToken && pendingTokenRef.current) {
               return pendingTokenRef.current;
             }
-            pendingTokenRef.current = authClient.convex
-              .token({ fetchOptions: { throw: false } })
-              .then(({ data }) => {
-                const token = data?.token || null;
+            pendingTokenRef.current = fetchConvexToken(() =>
+              authClient.convex.token({ fetchOptions: { throw: false } }),
+            )
+              .then((token) => {
                 storeToken(token);
                 return token;
-              })
-              .catch(() => {
-                storeToken(null);
-                return null;
               })
               .finally(() => {
                 pendingTokenRef.current = null;

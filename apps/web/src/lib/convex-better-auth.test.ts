@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialAuthBinding, nextAuthBinding } from "./convex-better-auth";
+import { fetchConvexToken, initialAuthBinding, nextAuthBinding } from "./convex-better-auth";
 
 describe("nextAuthBinding", () => {
   it("keeps the key when the session loads behind a server-rendered token", () => {
@@ -30,5 +30,41 @@ describe("nextAuthBinding", () => {
   it("returns the same binding for the same session", () => {
     const loaded = nextAuthBinding(initialAuthBinding(false), "session-a");
     expect(nextAuthBinding(loaded, "session-a")).toBe(loaded);
+  });
+});
+
+describe("fetchConvexToken", () => {
+  const noWait = async () => {};
+
+  it("retries through network failures until a token arrives", async () => {
+    const responses = [
+      () => Promise.reject(new TypeError("Load failed")),
+      () => Promise.resolve({ data: null, error: { status: 502 } }),
+      () => Promise.resolve({ data: { token: "jwt" }, error: null }),
+    ];
+    let calls = 0;
+    const token = await fetchConvexToken(() => responses[calls++](), noWait);
+    expect(token).toBe("jwt");
+    expect(calls).toBe(3);
+  });
+
+  it("returns null at once when there is no session", async () => {
+    let calls = 0;
+    const token = await fetchConvexToken(async () => {
+      calls++;
+      return { data: null, error: { status: 401 } };
+    }, noWait);
+    expect(token).toBeNull();
+    expect(calls).toBe(1);
+  });
+
+  it("gives up after the last retry", async () => {
+    let calls = 0;
+    const token = await fetchConvexToken(async () => {
+      calls++;
+      throw new TypeError("Load failed");
+    }, noWait);
+    expect(token).toBeNull();
+    expect(calls).toBe(8);
   });
 });
