@@ -698,6 +698,98 @@ describe("the add-on", () => {
     await expect(on(invoiced)).rejects.toThrow(/can't have an invoice/);
   });
 
+  test("on refuses an event with any crew", async () => {
+    const { t, opsApi, ana } = await setup();
+    const on = (eventId: Id<"events">) => opsApi.mutation(api.hashingSchedule.setEventHashing, { eventId, enabled: true });
+    const crew = /Remove its crew first/;
+    const addShift = (eventId: Id<"events">, fields: { role: string; userId?: string; crewApplicationId?: Id<"crewApplications"> }) =>
+      t.run(async (ctx) => {
+        await ctx.db.insert("eventCrewShifts", {
+          eventId,
+          startsAt: NOW + 48 * HOUR,
+          endsAt: NOW + 50 * HOUR,
+          hours: 2,
+          postedToExpense: false,
+          createdAt: NOW,
+          updatedAt: NOW,
+          ...fields,
+        });
+      });
+
+    const staffed = await insertPlainEvent(t);
+    await addShift(staffed, { role: "FOH", userId: ana._id });
+    await expect(on(staffed)).rejects.toThrow(crew);
+
+    const openSlot = await insertPlainEvent(t);
+    await addShift(openSlot, { role: "FOH" });
+    await expect(on(openSlot)).rejects.toThrow(crew);
+
+    const trainee = await insertPlainEvent(t);
+    await addShift(trainee, { role: "Trainee", crewApplicationId: await insertApplication(t) });
+    await expect(on(trainee)).rejects.toThrow(crew);
+
+    expect((await getEvent(t, staffed))?.hashingEnabled).toBeUndefined();
+    expect(await t.run(async (ctx) => (await ctx.db.query("hashDates").collect()).filter((row) => row.eventId === staffed))).toEqual([]);
+  });
+
+  test("on takes an event with no blocks or one custom section, and refuses any other schedule", async () => {
+    const { t, opsApi, ana } = await setup();
+    const on = (eventId: Id<"events">) => opsApi.mutation(api.hashingSchedule.setEventHashing, { eventId, enabled: true });
+    const addBlock = (eventId: Id<"events">, blockType: "custom" | "show", startsAt: number, endsAt: number) =>
+      t.run(async (ctx) =>
+        ctx.db.insert("eventScheduleBlocks", {
+          eventId,
+          blockType,
+          label: "Deep clean",
+          dayIndex: 0,
+          startsAt,
+          endsAt,
+          createdAt: NOW,
+          updatedAt: NOW,
+        }),
+      );
+
+    const show = await insertPlainEvent(t);
+    await addBlock(show, "show", NOW + 48 * HOUR, NOW + 49 * HOUR);
+    await expect(on(show)).rejects.toThrow(/Clear its schedule first/);
+
+    const two = await insertPlainEvent(t);
+    await addBlock(two, "custom", NOW + 48 * HOUR, NOW + 49 * HOUR);
+    await addBlock(two, "custom", NOW + 49 * HOUR, NOW + 50 * HOUR);
+    await expect(on(two)).rejects.toThrow(/Clear its schedule first/);
+
+    const eventId = await insertPlainEvent(t);
+    const blockId = await addBlock(eventId, "custom", NOW + 48 * HOUR, NOW + 49 * HOUR);
+    await on(eventId);
+    const addon = await opsApi.query(api.hashing.getEventAddon, { eventId });
+    const row = await getRow(t, addon!.hashDateId);
+    expect(row?.sectionBlockId).toBe(blockId);
+    expect(await blocksOf(t, eventId)).toMatchObject([
+      { _id: blockId, label: "Deep clean", startsAt: NOW + 48 * HOUR, endsAt: NOW + 50 * HOUR },
+    ]);
+
+    await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId: addon!.hashDateId, userId: ana._id });
+    const [block] = await blocksOf(t, eventId);
+    const saved = { id: block!._id, blockType: block!.blockType, label: "Sweep", startsAt: block!.startsAt, endsAt: block!.endsAt };
+    await opsApi.mutation(api.eventSchedule.upsertBlocks, { eventId, blocks: [saved] });
+    const [shift] = await shiftsOf(t, eventId);
+    await opsApi.mutation(api.eventCrew.upsertShifts, {
+      eventId,
+      shifts: [
+        {
+          id: shift!._id,
+          scheduleBlockId: shift!.scheduleBlockId,
+          role: shift!.role,
+          userId: shift!.userId,
+          startsAt: shift!.startsAt,
+          endsAt: shift!.endsAt,
+          postedToExpense: false,
+        },
+      ],
+    });
+    expect(await shiftsOf(t, eventId)).toMatchObject([{ scheduleBlockId: blockId, userId: ana._id }]);
+  });
+
   test("off is refused once started, and for a regular date", async () => {
     const context = await setup();
     const { t, opsApi, ana, eventOf } = context;
@@ -792,11 +884,12 @@ describe("where a hash shows up", () => {
     expect(await anaApi.query(api.cohoGiftCard.getMyCohoGiftCard, { refreshTick: 1 })).toEqual({ cardNumber: "6001234567890" });
   });
 
-  test("no review or photos after a hash, even on an event with a show section", async () => {
+  test("no review or photos after a hash, even if a show block reaches it", async () => {
     const context = await setup();
     const { t, opsApi, anaApi, ana } = context;
     const eventId = await insertPlainEvent(t);
     const event = await getEvent(t, eventId);
+    await opsApi.mutation(api.hashingSchedule.setEventHashing, { eventId, enabled: true });
     await t.run(async (ctx) => {
       await ctx.db.insert("eventScheduleBlocks", {
         eventId,
@@ -809,7 +902,6 @@ describe("where a hash shows up", () => {
         updatedAt: NOW,
       });
     });
-    await opsApi.mutation(api.hashingSchedule.setEventHashing, { eventId, enabled: true });
     const addon = await opsApi.query(api.hashing.getEventAddon, { eventId });
     await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId: addon!.hashDateId, userId: ana._id });
     const block = (await blocksOf(t, eventId)).find((candidate) => candidate.blockType === "show");

@@ -43,17 +43,16 @@ import {
   requireHashEventId,
 } from "./lib/hashingData";
 import {
+  adoptHashSection,
   bookHashShifts,
   cancelHashEvent,
   clearHashShifts,
   HASH_ROLE,
   insertHashEvent,
-  insertHashSection,
   moveHashEvent,
   reopenHashEvent,
+  requireAttachable,
 } from "./lib/hashingEvents";
-import { normalizeEventStatus } from "./lib/eventStatus";
-import { normalizeEventVisibility } from "./lib/eventVisibility";
 import { hashDateOriginValue, hashDateStatusValue, hashBookingStatusValue } from "./lib/hashingValues";
 import { quarterRefValue, settingsValue } from "./hashing";
 
@@ -531,21 +530,7 @@ export const setEventHashing = mutation({
 });
 
 async function addHashingToEvent(ctx: MutationCtx, event: Doc<"events">) {
-  if (normalizeEventVisibility(event.visibility) !== "internal") {
-    appError("HASH_EVENT_NOT_INTERNAL", "Hashing only runs on internal events. Set this event to Internal first.");
-  }
-  if (normalizeEventStatus(event.status) === "cancelled") {
-    appError("HASH_EVENT_CANCELLED", "This event is cancelled.");
-  }
-  if (event.seriesId) appError("HASH_EVENT_IN_SERIES", "A day in a series or booking can't be a hash.");
-  if (event.openMicEnabled) appError("HASH_NO_OPEN_MIC", "Turn Open Mic off first: a hash can't take public sign-ups.");
-  const links = await ctx.db
-    .query("eventInvoiceLinks")
-    .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-    .take(1);
-  if (event.invoiceId || links.length > 0) {
-    appError("HASH_EVENT_HAS_INVOICE", "A hash can't have an invoice. Unlink it first.");
-  }
+  await requireAttachable(ctx, event);
   const now = Date.now();
   if (event.startAt <= now) appError("HASH_IN_PAST", "This event has already started.");
   const minutes = Math.round((event.endAt - event.startAt) / 60_000);
@@ -572,7 +557,7 @@ async function addHashingToEvent(ctx: MutationCtx, event: Doc<"events">) {
     origin: "added",
     status: "scheduled",
     eventId: event._id,
-    sectionBlockId: await insertHashSection(ctx, event._id, times),
+    sectionBlockId: await adoptHashSection(ctx, event._id, times),
   });
   await ctx.db.patch(event._id, { hashingEnabled: true, updatedAt: now });
 }

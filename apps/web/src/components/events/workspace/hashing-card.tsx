@@ -22,6 +22,7 @@ export function HashingCard() {
   const setHashing = useMutation(api.hashingSchedule.setEventHashing);
   const { confirm } = useAppDialog();
   const [saving, setSaving] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   async function toggle(enabled: boolean) {
     if (!enabled && addon && addon.filled > 0) {
@@ -34,11 +35,12 @@ export function HashingCard() {
       if (!ok) return;
     }
     setSaving(true);
+    setRefusal(null);
     try {
       await setHashing({ eventId, enabled });
       notify.success(enabled ? "This event is now a hash." : "Hashing is off.");
     } catch (error) {
-      notify.error(getConvexErrorMessage(error, "Couldn't change hashing on this event."));
+      setRefusal(getConvexErrorMessage(error, "Couldn't change hashing on this event."));
     } finally {
       setSaving(false);
     }
@@ -76,6 +78,13 @@ export function HashingCard() {
             Open hash
             <ArrowSquareOutIcon className="size-3" />
           </Link>
+        </CardContent>
+      ) : null}
+      {refusal ? (
+        <CardContent>
+          <p role="alert" className="text-sm text-destructive" data-testid="event-hashing-refusal">
+            {refusal}
+          </p>
         </CardContent>
       ) : null}
     </Card>

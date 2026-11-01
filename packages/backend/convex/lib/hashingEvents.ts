@@ -8,6 +8,7 @@ import { loadInvoiceCrewRateSettings, resolveUserCompensationHourlyRateUsd } fro
 import { crewCostNeighborEventIds, syncCrewCostAfterStatusChange, syncEventCrewCostUsd } from "./crewCost";
 import { appError } from "./errors";
 import { type EventStatus, normalizeEventStatus } from "./eventStatus";
+import { normalizeEventVisibility } from "./eventVisibility";
 import { hashDateLabel, requireHashEventId } from "./hashingData";
 import { recordEventStatusTransition } from "./statusTransitions";
 
@@ -42,7 +43,7 @@ async function loadEventBlocks(ctx: MutationCtx, eventId: Id<"events">) {
     .take(EVENT_BLOCK_TAKE);
 }
 
-export async function insertHashSection(ctx: MutationCtx, eventId: Id<"events">, times: Times) {
+async function insertHashSection(ctx: MutationCtx, eventId: Id<"events">, times: Times) {
   const now = Date.now();
   return await ctx.db.insert("eventScheduleBlocks", {
     eventId,
@@ -54,6 +55,43 @@ export async function insertHashSection(ctx: MutationCtx, eventId: Id<"events">,
     createdAt: now,
     updatedAt: now,
   });
+}
+
+/** The event's one custom section takes on the hash's times, or it gets a new one. */
+export async function adoptHashSection(ctx: MutationCtx, eventId: Id<"events">, times: Times) {
+  const [section] = await loadEventBlocks(ctx, eventId);
+  if (!section) return await insertHashSection(ctx, eventId, times);
+  await ctx.db.patch(section._id, { ...times, dayIndex: 0, updatedAt: Date.now() });
+  return section._id;
+}
+
+/**
+ * Hashing owns a hash's crew and schedule, so an event brings neither: no shift
+ * of any kind, and at most one custom section. Every later guard relies on it.
+ */
+export async function requireAttachable(ctx: MutationCtx, event: Doc<"events">) {
+  if (normalizeEventVisibility(event.visibility) !== "internal") {
+    appError("HASH_EVENT_NOT_INTERNAL", "Hashing only runs on internal events. Set this event to Internal first.");
+  }
+  if (normalizeEventStatus(event.status) === "cancelled") {
+    appError("HASH_EVENT_CANCELLED", "This event is cancelled.");
+  }
+  if (event.seriesId) appError("HASH_EVENT_IN_SERIES", "A day in a series or booking can't be a hash.");
+  if (event.openMicEnabled) appError("HASH_NO_OPEN_MIC", "Turn Open Mic off first: a hash can't take public sign-ups.");
+  const links = await ctx.db
+    .query("eventInvoiceLinks")
+    .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+    .take(1);
+  if (event.invoiceId || links.length > 0) {
+    appError("HASH_EVENT_HAS_INVOICE", "A hash can't have an invoice. Unlink it first.");
+  }
+  if ((await loadEventShifts(ctx, event._id)).length > 0) {
+    appError("HASH_EVENT_HAS_CREW", "This event has crew. Remove its crew first: a hash's only crew are its bookings.");
+  }
+  const blocks = await loadEventBlocks(ctx, event._id);
+  if (blocks.length > 1 || blocks.some((block) => block.blockType !== "custom")) {
+    appError("HASH_EVENT_HAS_SCHEDULE", "This event has a schedule. Clear its schedule first: a hash has one section.");
+  }
 }
 
 /** An internal event with no invoice, one section, and a location that's just a name. */
