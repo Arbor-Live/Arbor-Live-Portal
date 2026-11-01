@@ -23,7 +23,8 @@ canonical description of the domain itself.
   `/dashboard/users/access` redirects to People.
 - Arbor Live crew invites (not advisors or band orgs) carry a manual **Notion**
   checklist ("Invite to Notion", "Add to Crew group") in the Invitations side
-  panel. Admins tick it by hand, there is no Notion integration, and the ticks
+  panel, and on the crew application panel right after "Convert to member"
+  (which stays open for it). Admins tick it by hand, there is no Notion integration, and the ticks
   live in `inviteNotionChecklists` so they survive the invite being accepted.
   People added with a temporary password have no invite, so no checklist.
 - Staff roles inside Arbor Live: **admins** (everything); the **Operations
