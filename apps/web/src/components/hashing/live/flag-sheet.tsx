@@ -46,6 +46,8 @@ function FlagForm({
   const [error, setError] = useState<string | null>(null);
 
   const reporting = reason === "damaged" && sendToDamage && !flagged?.sentToDamage;
+  const severityValue = Number(severity);
+  const severityValid = Number.isInteger(severityValue) && severityValue >= 1 && severityValue <= 5;
 
   async function run(action: () => Promise<unknown>, success: string) {
     setSaving(true);
@@ -179,7 +181,7 @@ function FlagForm({
         </Button>
         <Button
           className="h-11"
-          disabled={saving || !reason || (reporting && !inventoryItemId)}
+          disabled={saving || !reason || (reporting && (!inventoryItemId || !severityValid))}
           data-testid="hash-flag-save"
           onClick={save}
         >

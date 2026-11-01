@@ -278,15 +278,18 @@ export const getMyPrompt = query({
     let toAnswer = 0;
     if (state === "needs_hash") {
       const upcoming = dates.filter((row) => row.status === "scheduled" && row.startsAt > args.now);
-      const answers = await Promise.all(
-        upcoming.map((row) =>
-          ctx.db
+      const answerable = await Promise.all(
+        upcoming.map(async (row) => {
+          const bookings = await loadDateBookings(ctx, row);
+          if (bookings.length >= row.capacity) return false;
+          const answer = await ctx.db
             .query("hashAvailability")
             .withIndex("by_hashDateId_and_userId", (q) => q.eq("hashDateId", row._id).eq("userId", viewer.userId))
-            .unique(),
-        ),
+            .unique();
+          return !answer;
+        }),
       );
-      toAnswer = answers.filter((answer) => !answer).length;
+      toAnswer = answerable.filter(Boolean).length;
     }
     if (toConfirm.length === 0 && toAnswer === 0) return null;
     return { quarterLabel: quarter.label, toConfirm, toAnswer };

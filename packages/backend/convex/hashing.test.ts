@@ -402,6 +402,26 @@ describe("availability and booking", () => {
     expect((await anaApi.query(api.hashing.getMine, { now: NOW }))?.state).toBe("needs_hash");
   });
 
+  test("the home prompt skips a full date, which has nothing to answer", async () => {
+    const { t, opsApi, anaApi, ben, on, dates } = await setupWithDates();
+    const scheduled = dates.filter((row) => row.status === "scheduled");
+    const full = on("2026-11-10");
+    await t.run(async (ctx) => ctx.db.patch(full._id, { capacity: 1 }));
+    await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId: full._id, userId: ben._id });
+    expect((await anaApi.query(api.hashing.getMyPrompt, { now: NOW }))?.toAnswer).toBe(scheduled.length - 1);
+  });
+
+  test("a hash's cost counts as unbooked cost, but the hash isn't an unbooked event", async () => {
+    const { t, opsApi, on } = await setupWithDates();
+    const eventId = on("2026-11-03").eventId!;
+    await t.run(async (ctx) => ctx.db.patch(eventId, { crewCostUsd: 40 }));
+    const profit = await opsApi.query(api.analyticsProfit.getProfitability, {
+      startMs: NOW,
+      endMs: NOW + 7 * 24 * 60 * 60 * 1000,
+    });
+    expect(profit).toMatchObject({ unbookedCostUsd: 40, unbookedEvents: 0 });
+  });
+
   test("the home prompt appears only for someone with something to do", async () => {
     const { opsApi, anaApi, ana, on, dates } = await setupWithDates();
     const scheduled = dates.filter((row) => row.status === "scheduled");

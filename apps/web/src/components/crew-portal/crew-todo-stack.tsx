@@ -10,6 +10,7 @@ import { NightPartForm } from "@/components/availability/night-part-form";
 import type { PostEventWorkRow } from "@/components/events/post-event-work-card";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
 import { PostMortemForm } from "@/components/post-mortem/post-mortem-form";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -192,7 +193,19 @@ function HashConfirmCard({
 }) {
   const confirmBooking = useMutation(api.hashing.confirmBooking);
   const giveUpSpot = useMutation(api.hashing.giveUpSpot);
+  const { confirm } = useAppDialog();
   const { hashDateId } = hash;
+
+  async function giveUp() {
+    const ok = await confirm({
+      title: `Can't make ${hashDayLabel(hash.dateKey)}?`,
+      description: "The spot opens up, and you'll need another hash this quarter.",
+      destructive: true,
+      confirmLabel: "Can't make it",
+    });
+    if (ok) commit(() => giveUpSpot({ hashDateId }), "Couldn't give up your spot.");
+  }
+
   return (
     <>
       <p className="font-medium tabular-nums">
@@ -213,7 +226,7 @@ function HashConfirmCard({
           variant="outline"
           className={ANSWER_BUTTON}
           disabled={saving}
-          onClick={() => commit(() => giveUpSpot({ hashDateId }), "Couldn't give up your spot.")}
+          onClick={() => void giveUp()}
         >
           Can&apos;t make it
         </Button>

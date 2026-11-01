@@ -14,6 +14,7 @@ import {
   roundUsd,
 } from "./lib/analyticsBookings";
 import { normalizeEventStatus } from "./lib/eventStatus";
+import { isHashEvent } from "./lib/hashEvent";
 
 const SEGMENT_LIMIT = 8;
 const LOWEST_MARGIN_LIMIT = 6;
@@ -117,7 +118,7 @@ export const getProfitability = query({
       if (!booking.booked) {
         const costs = eventCostUsd(event);
         if (costs > 0) {
-          unbookedEvents += 1;
+          if (!isHashEvent(event)) unbookedEvents += 1;
           unbookedCostUsd += costs;
         }
         continue;

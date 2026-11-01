@@ -360,16 +360,17 @@ export function HashLive({ hashDateId }: { hashDateId: Id<"hashDates"> }) {
     try {
       await action();
       notify.success(success);
+      return true;
     } catch (error) {
       notify.error(getConvexErrorMessage(error, "Couldn't update this hash."));
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
   async function finishWith(attendeeUserIds: string[]) {
-    await run(() => finish({ hashDateId, attendeeUserIds }), "Hash finished.");
-    setFinishing(false);
+    if (await run(() => finish({ hashDateId, attendeeUserIds }), "Hash finished.")) setFinishing(false);
   }
 
   const area = areaId ? live.areas.find((candidate) => candidate.id === areaId) : undefined;

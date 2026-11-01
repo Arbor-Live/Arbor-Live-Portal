@@ -146,7 +146,7 @@ const KITS: ChecklistTree["kits"] = [
     "Keyboard is in good condition and tidy",
     "Drums are in good condition and tidy",
     "DJ Table looking good",
-    "Dollies piled up and the nuts looks tight",
+    "Dollies piled up and the nuts look tight",
     "Hazer on top of chauvet moving lights",
     "Batteries charged to over 80%",
     "Cable ramp packouts have everything",
