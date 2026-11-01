@@ -17,8 +17,8 @@ import {
   pacificEndOfDayMs,
   pacificStartOfDayMs,
   dateTimeFormat,
+  quarterWeek,
 } from "@/lib/format";
-import { quarterWeek } from "@/lib/academic-periods";
 
 type DashboardEvent = {
   _id: string;

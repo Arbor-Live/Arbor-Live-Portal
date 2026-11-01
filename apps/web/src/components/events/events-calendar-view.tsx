@@ -13,8 +13,7 @@ import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } fr
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { normalizeEventStatus } from "@/lib/event-status";
-import { quarterWeek } from "@/lib/academic-periods";
-import { PORTAL_TIMEZONE } from "@/lib/format";
+import { PORTAL_TIMEZONE, quarterWeek } from "@/lib/format";
 
 type DashboardEvent = {
   _id: string;
