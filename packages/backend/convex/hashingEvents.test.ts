@@ -487,7 +487,7 @@ describe("one writer", () => {
     await opsApi.mutation(api.hashingSchedule.saveSetup, { ...SETUP, spotsPerHash: 1 });
     const carol = await member(t, arbor, { name: "Carol Crew" });
     await edit.save(ben._id);
-    await expect(edit.save(ben._id, carol._id)).rejects.toThrow(/is full \(1 of 1\)/);
+    await expect(edit.save(ben._id, carol._id)).rejects.toThrow(/holds 1, and this crew has 2/);
     await edit.save(carol._id);
     expect(await shiftsOf(t, edit.eventId)).toMatchObject([{ userId: carol._id }]);
   });
@@ -502,6 +502,48 @@ describe("one writer", () => {
     const edit = crewEdit(context, "2026-11-17");
     await edit.save(ana._id, ben._id);
     expect(await shiftsOf(t, edit.eventId)).toHaveLength(2);
+  });
+
+  test("a crew edit that's too big counts the crew, not one less than it", async () => {
+    const context = await setup();
+    const { t, opsApi, arbor, ana, ben } = context;
+    await opsApi.mutation(api.hashingSchedule.saveSetup, { ...SETUP, spotsPerHash: 2 });
+    const carol = await member(t, arbor, { name: "Carol Crew" });
+    const edit = crewEdit(context, "2026-11-17");
+    await expect(edit.save(ana._id, ben._id, carol._id)).rejects.toThrow(/holds 2, and this crew has 3/);
+  });
+
+  test("ops can add a walk-in to a running hash, past its spots, and finish can tick them", async () => {
+    const context = await setup();
+    const { t, opsApi, arbor, ana, ben, eventOf } = context;
+    await opsApi.mutation(api.hashingSchedule.saveSetup, { ...SETUP, spotsPerHash: 1 });
+    const hashDateId = await bookAndRun(context, "2026-11-03", [ana]);
+    const edit = crewEdit(context, "2026-11-03");
+    const [booked] = await shiftsOf(t, edit.eventId);
+    await opsApi.mutation(api.eventCrew.upsertShifts, {
+      eventId: edit.eventId,
+      shifts: [{ id: booked!._id, ...edit.slot(ana._id) }, edit.slot(ben._id)],
+    });
+    expect((await shiftsOf(t, edit.eventId)).map((shift) => shift.userId).sort()).toEqual([ana._id, ben._id].sort());
+
+    const notCrew = await member(t, arbor, { verticals: ["Operations"], includeInTimecards: false });
+    await expect(edit.save(ana._id, ben._id, notCrew._id)).rejects.toThrow(/Only active crew/);
+
+    await opsApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [ana._id, ben._id] });
+    expect(await shiftsOf(t, eventOf("2026-11-03"))).toHaveLength(2);
+  });
+
+  test("a walk-in takes ops: an event lead can't add one to a running hash", async () => {
+    const context = await setup();
+    const { t, ana, ben, anaApi } = context;
+    await bookAndRun(context, "2026-11-03", [ana]);
+    const edit = crewEdit(context, "2026-11-03");
+    await t.run(async (ctx) => {
+      await ctx.db.patch(edit.eventId, { dayOfLeadUserId: ana._id });
+    });
+    await expect(
+      anaApi.mutation(api.eventCrew.upsertShifts, { eventId: edit.eventId, shifts: [edit.slot(ana._id), edit.slot(ben._id)] }),
+    ).rejects.toThrow(/Only ops can add someone/);
   });
 
   test("an off date has its own refusal, and saves nothing when its crew hasn't changed", async () => {

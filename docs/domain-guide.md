@@ -607,10 +607,11 @@ the date too. A lapse keeps it for History, with `eventId` still set, and
 moved and they haven't answered. Hashing writes shifts through `changeHashCrew`,
 which runs the crew assignment flow: crew cost, invite sequence, emails.
 
-A crew edit on the event page is a booking too. `requireHashCrewEdit` runs
-`requireBookingRules` on anyone new (active crew, room on the date, one spot per
-quarter), refuses open slots and trainees, and saves every shift with the `Hash`
-role on the hash's section. The event page merges a hash's server shifts into its
+A crew edit on the event page is a booking too. `requireHashCrewEdit` holds anyone
+new to the booking rules (active crew, room on the date, one spot per quarter),
+refuses open slots and trainees, and saves every shift with the `Hash` role on the
+hash's section. A running hash takes a walk-in the same way, so finish can tick
+them, but only from ops, and past capacity because they are already there. The event page merges a hash's server shifts into its
 draft by person (`mergeServerHashShifts`), because a schedule save deletes any
 shift the draft lacks, and a page left open must not unbook someone Hashing booked
 meanwhile. On a hash that's over or a date that's off, a save with the same crew

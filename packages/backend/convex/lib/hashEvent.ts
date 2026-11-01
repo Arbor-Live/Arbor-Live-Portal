@@ -2,7 +2,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { appError } from "./errors";
 import { normalizeEventStatus } from "./eventStatus";
-import { loadDateForEvent, requireBookingRules } from "./hashingData";
+import { hashDateLabel, loadDateForEvent, requireBookingRules, requireHashingViewer } from "./hashingData";
 import { HASH_ROLE } from "./hashingValues";
 
 /** A hash, not a show: the one test behind every surface that treats hashes differently. */
@@ -104,6 +104,7 @@ function sameCrew(existing: readonly Doc<"eventCrewShifts">[], next: readonly Ha
  * the shifts to save come back as bookings: the `Hash` role on the hash's section.
  * Once a hash is over its pay and credit are settled, so a save carrying the same
  * crew returns null, for the caller to write nothing, and any change is refused.
+ * A running hash takes a walk-in from ops, past its spots, because they're here.
  */
 export async function requireHashCrewEdit<Shift extends HashCrewShift>(
   ctx: MutationCtx,
@@ -135,8 +136,18 @@ export async function requireHashCrewEdit<Shift extends HashCrewShift>(
   if (new Set(userIds).size < userIds.length) appError("HASH_ALREADY_BOOKED", "Someone is on this hash twice.");
 
   const onHash = new Set(existing.map((shift) => shift.userId));
-  for (const userId of userIds) {
-    if (userId && !onHash.has(userId)) await requireBookingRules(ctx, row, userId, userIds.length);
+  const newcomers = userIds.filter((userId) => userId !== undefined && !onHash.has(userId));
+  if (newcomers.length > 0) {
+    if (row.status === "in_progress") {
+      if (!(await requireHashingViewer(ctx)).canManage) {
+        appError("HASH_WALK_IN_OPS", "Only ops can add someone to a running hash.");
+      }
+    } else if (userIds.length > row.capacity) {
+      appError("HASH_FULL", `${hashDateLabel(row)} holds ${row.capacity}, and this crew has ${userIds.length}.`);
+    }
+  }
+  for (const userId of newcomers) {
+    if (userId) await requireBookingRules(ctx, row, userId, null);
   }
   return shifts.map((shift) => ({
     ...shift,
