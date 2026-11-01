@@ -294,6 +294,53 @@ describe("the event behind a hash", () => {
     expect(notice?.eventId).toBeUndefined();
   });
 
+  test("removing an added date keeps every queued removal notice and nothing else, past a full page", async () => {
+    const { t, opsApi, ana } = await setup();
+    const hashDateId = await opsApi.mutation(api.hashingSchedule.addDate, {
+      quarterId: QUARTER,
+      dateKey: "2026-11-06",
+      startTime: "11:00",
+      capacity: 2,
+      bookUserIds: [ana._id],
+    });
+    const eventId = (await getRow(t, hashDateId))!.eventId!;
+    await markEmailsSent(t);
+    await t.run(async (ctx) => {
+      const email = { to: "someone@arbor.test", subject: "Older", eventId, payload: {}, createdAt: NOW };
+      for (let index = 0; index < 500; index += 1) {
+        await ctx.db.insert("emailNotifications", {
+          ...email,
+          template: "crew_scheduled",
+          status: "sent",
+          idempotencyKey: `older-${index}`,
+        });
+      }
+      await ctx.db.insert("emailNotifications", {
+        ...email,
+        template: "schedule_reminder",
+        status: "queued",
+        idempotencyKey: "reminder",
+      });
+    });
+
+    await opsApi.mutation(api.hashingSchedule.removeDate, { hashDateId });
+
+    const left = await t.run(async (ctx) => ctx.db.query("emailNotifications").collect());
+    const notices = left.filter((row) => row.template === "crew_unscheduled");
+    expect(notices).toMatchObject([{ status: "queued", to: ana.email.toLowerCase() }]);
+    expect(notices[0]?.eventId).toBeUndefined();
+    expect(left.filter((row) => row.idempotencyKey === "reminder")).toEqual([]);
+
+    const bell = await t.run(async (ctx) =>
+      ctx.db
+        .query("notifications")
+        .withIndex("by_dedupeKey", (q) => q.eq("dedupeKey", notices[0]!.debounceKey!))
+        .collect(),
+    );
+    expect(bell).toHaveLength(1);
+    expect(bell[0]?.eventId).toBeUndefined();
+  });
+
   test("deleting a hash event takes its sidecar, answers, checks and claims with it", async () => {
     const context = await setup();
     const { t, anaApi, ana, on, eventOf, arbor } = context;

@@ -595,8 +595,9 @@ re-times every booking.
 Closing depends on the origin. On a date Hashing made, turning it off cancels the
 event and switching it on revives the same one, and a lapse cancels it. Removing
 an added date deletes the event outright, so no cancelled husk reaches Insights,
-search or pickers; its queued `crew_unscheduled` notices drop their `eventId`
-first, because the delete cascade wipes the event's emails. An add-on's event is
+search or pickers. Its queued `crew_unscheduled` notices and their bell rows drop
+their `eventId` first, because the delete cascade wipes the event's emails and
+leaves the bell pointing at nothing. An add-on's event is
 never cancelled. Off, Remove, the switch and a lapse all end its bookings and set
 `hashingEnabled` false, and it carries on as a plain event. Off and Remove delete
 the date too. A lapse keeps it for History, with `eventId` still set, and
