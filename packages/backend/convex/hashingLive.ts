@@ -14,8 +14,10 @@ import {
   loadDateBookings,
   loadHashDate,
   loadSettings,
+  requireHashEventId,
   requireHashingViewer,
 } from "./lib/hashingData";
+import { changeHashCrew, completeHashEvent } from "./lib/hashingEvents";
 import {
   hashBookingStatusValue,
   hashCheckStatusValue,
@@ -62,12 +64,11 @@ async function checklistFor(ctx: Ctx, row: Doc<"hashDates">) {
 /** Booked on it (and showing up confirms a pending booking), or ops. */
 async function requireOnHash(ctx: MutationCtx, row: Doc<"hashDates">) {
   const viewer = await requireHashingViewer(ctx);
-  const booking = await ctx.db
-    .query("hashBookings")
-    .withIndex("by_hashDateId_and_userId", (q) => q.eq("hashDateId", row._id).eq("userId", viewer.userId))
-    .unique();
+  const booking = (await loadDateBookings(ctx, row)).find((candidate) => candidate.userId === viewer.userId);
   if (!booking && !viewer.canManage) appError("HASH_NOT_ON_HASH", "You're not booked on this hash.");
-  if (booking?.status === "needs_confirmation") await ctx.db.patch(booking._id, { status: "booked" });
+  if (booking?.status === "needs_confirmation") {
+    for (const shiftId of booking.shiftIds) await ctx.db.patch(shiftId, { needsConfirmation: undefined });
+  }
   return { ...viewer, booking };
 }
 
@@ -112,6 +113,7 @@ export const get = query({
         endsAt: v.number(),
         status: hashDateStatusValue,
       }),
+      eventId: v.optional(v.id("events")),
       location: v.optional(v.string()),
       viewerId: v.string(),
       canStart: v.boolean(),
@@ -145,14 +147,15 @@ export const get = query({
     const row = await ctx.db.get(args.hashDateId);
     if (!row) return null;
 
-    const [areas, checks, claims, bookings, settings] = await Promise.all([
+    const [areas, checks, claims, bookings, event, settings] = await Promise.all([
       checklistFor(ctx, row),
       loadChecks(ctx, row._id),
       ctx.db
         .query("hashAreaClaims")
         .withIndex("by_hashDateId_and_areaId_and_userId", (q) => q.eq("hashDateId", row._id))
         .take(AREA_CLAIM_TAKE),
-      loadDateBookings(ctx, row._id),
+      loadDateBookings(ctx, row),
+      row.eventId ? ctx.db.get(row.eventId) : null,
       loadSettings(ctx),
     ]);
 
@@ -200,7 +203,8 @@ export const get = query({
         endsAt: row.endsAt,
         status: row.status,
       },
-      location: settings?.location,
+      eventId: row.eventId,
+      location: event?.venueName ?? settings?.location,
       viewerId: viewer.userId,
       canStart: row.status === "scheduled" && (viewer.canManage || (isBooked && row.dateKey === args.today)),
       canWork: viewer.canManage || isBooked,
@@ -246,7 +250,12 @@ export const start = mutation({
     if (flattenChecklist(checklist, row.areaIds).length === 0) {
       appError("HASH_EMPTY_CHECKLIST", "None of this hash's checklist areas exist any more.");
     }
-    await ctx.db.patch(row._id, { status: "in_progress", startedAt: Date.now(), checklistVersionId: checklist._id });
+    await ctx.db.patch(row._id, {
+      status: "in_progress",
+      eventId: requireHashEventId(row),
+      startedAt: Date.now(),
+      checklistVersionId: checklist._id,
+    });
     return null;
   },
 });
@@ -389,21 +398,40 @@ export const setAreaClaim = mutation({
   },
 });
 
-/** Everyone with a confirmed booking gets credit: their quarter state reads this status. */
+/**
+ * Whoever was there keeps their shift, so they get credit and pay. Everyone else
+ * loses it and needs a hash again. Being on the list settles a pending booking.
+ */
 export const finish = mutation({
-  args: { hashDateId: v.id("hashDates") },
+  args: { hashDateId: v.id("hashDates"), attendeeUserIds: v.array(v.string()) },
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await loadHashDate(ctx, args.hashDateId);
     if (row.status === "finished") return null;
     await requireOnHash(ctx, row);
     requireRunning(row);
+    const eventId = requireHashEventId(row);
+    const attendees = new Set(args.attendeeUserIds);
+    const bookings = await loadDateBookings(ctx, row);
+    const stranger = args.attendeeUserIds.find((userId) => !bookings.some((booking) => booking.userId === userId));
+    if (stranger) appError("HASH_NOT_BOOKED", "Only people booked on this hash can be marked as there.");
+
+    await changeHashCrew(ctx, eventId, async () => {
+      for (const booking of bookings) {
+        for (const shiftId of booking.shiftIds) {
+          if (attendees.has(booking.userId)) await ctx.db.patch(shiftId, { needsConfirmation: undefined });
+          else await ctx.db.delete(shiftId);
+        }
+      }
+    });
     const [areas, checks] = await Promise.all([checklistFor(ctx, row), loadChecks(ctx, row._id)]);
     await ctx.db.patch(row._id, {
       status: "finished",
+      eventId,
       finishedAt: Date.now(),
       finalCounts: tally(areas, checks),
     });
+    await completeHashEvent(ctx, eventId);
     return null;
   },
 });
@@ -456,7 +484,7 @@ export const getHistory = query({
       ),
     );
 
-    const bookingLists = await Promise.all(finished.map((row) => loadDateBookings(ctx, row._id)));
+    const bookingLists = await Promise.all(finished.map((row) => loadDateBookings(ctx, row)));
     const credited = bookingLists.map((list) => list.filter((booking) => booking.status === "booked"));
     const userByKey = await findAuthUsersByIds(ctx, [
       ...credited.flat().map((booking) => booking.userId),

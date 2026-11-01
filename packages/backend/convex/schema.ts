@@ -24,11 +24,10 @@ import {
 import {
   checklistTreeFields,
   hashAnswerValue,
-  hashBookingStatusValue,
   hashCheckStatusValue,
-  hashDateOriginValue,
-  hashDateStatusValue,
+  hashDateFields,
   hashFlagReasonValue,
+  hashLiveDateStatusValue,
   hashStandingValue,
 } from "./lib/hashingValues";
 
@@ -1147,6 +1146,11 @@ export default defineSchema({
     ),
     /** Free-form crew notes shown on the Open Mic runner and public sign-up. */
     openMicNotes: v.optional(v.string()),
+    /**
+     * This event is a hash (`lib/hashEvent.ts`). Its `hashDates` row holds the
+     * hash-only state, and only Hashing writes its times and status.
+     */
+    hashingEnabled: v.optional(v.boolean()),
 
     /** Snake choices behind the generated Wing show file. Unset = one snake. */
     patchPlan: v.optional(patchPlanValue),
@@ -1170,6 +1174,7 @@ export default defineSchema({
     .index("by_seriesId_and_occurrenceIndex", ["seriesId", "occurrenceIndex"])
     .index("by_sourceEventRequestId", ["sourceEventRequestId"])
     .index("by_openMicEnabled_and_startAt", ["openMicEnabled", "startAt"])
+    .index("by_hashingEnabled_and_startAt", ["hashingEnabled", "startAt"])
     .index("by_venueId", ["venueId"])
     .index("by_hostGroupId", ["hostGroupId"])
     .index("by_dayOfLeadUserId", ["dayOfLeadUserId"])
@@ -1487,6 +1492,8 @@ export default defineSchema({
     hours: v.number(),
     /** When true, shift times stay custom and are not force-synced from the linked block. */
     timesOverridden: v.optional(v.boolean()),
+    /** A hash moved under this booking, and the person hasn't said they can still make it. */
+    needsConfirmation: v.optional(v.boolean()),
     estimatedHourlyRateUsd: v.optional(v.number()),
     postedToExpense: v.boolean(),
     notes: v.optional(v.string()),
@@ -2699,42 +2706,33 @@ export default defineSchema({
     updatedBy: v.string(),
   }),
 
-  /** One row per hash. Internal crew work: never an `events` row. */
-  hashDates: defineTable({
-    quarterId: v.string(),
-    dateKey: v.string(),
-    startsAt: v.number(),
-    endsAt: v.number(),
-    capacity: v.number(),
-    origin: hashDateOriginValue,
-    movedFromDateKey: v.optional(v.string()),
-    status: hashDateStatusValue,
-    /** Limits an added hash to some checklist areas. */
-    areaIds: v.optional(v.array(v.string())),
-    /** Pinned when the hash starts, so a later publish never changes it. */
-    checklistVersionId: v.optional(v.id("hashChecklistVersions")),
-    startedAt: v.optional(v.number()),
-    finishedAt: v.optional(v.number()),
-    /** Snapshot at finish, so History doesn't read every check of every hash. */
-    finalCounts: v.optional(
-      v.object({ checked: v.number(), flagged: v.number(), total: v.number() }),
+  /**
+   * The Hashing add-on's sidecar: one row per hash, holding what an event has no
+   * field for. Every live date has its event. Only an `off` date may have none,
+   * so an off week costs nothing until someone switches it on.
+   */
+  hashDates: defineTable(
+    v.union(
+      v.object({
+        ...hashDateFields,
+        status: v.literal("off"),
+        eventId: v.optional(v.id("events")),
+      }),
+      v.object({
+        ...hashDateFields,
+        status: hashLiveDateStatusValue,
+        eventId: v.id("events"),
+      }),
     ),
-  })
+  )
     .index("by_quarterId_and_dateKey", ["quarterId", "dateKey"])
-    .index("by_status_and_dateKey", ["status", "dateKey"]),
+    .index("by_status_and_dateKey", ["status", "dateKey"])
+    .index("by_eventId", ["eventId"]),
 
   hashAvailability: defineTable({
     hashDateId: v.id("hashDates"),
     userId: v.string(),
     answer: hashAnswerValue,
-  })
-    .index("by_hashDateId_and_userId", ["hashDateId", "userId"])
-    .index("by_userId_and_hashDateId", ["userId", "hashDateId"]),
-
-  hashBookings: defineTable({
-    hashDateId: v.id("hashDates"),
-    userId: v.string(),
-    status: hashBookingStatusValue,
   })
     .index("by_hashDateId_and_userId", ["hashDateId", "userId"])
     .index("by_userId_and_hashDateId", ["userId", "hashDateId"]),

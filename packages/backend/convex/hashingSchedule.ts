@@ -8,13 +8,15 @@ import {
 } from "@arbor/format";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { getUserAdminProfile, getUserId, requireAdminOrOperations } from "./lib/auth";
 import { appError } from "./lib/errors";
 import {
   fillFromAvailability,
   followingHashingQuarter,
   hashingQuarterById,
+  hashingQuarterContaining,
   hashingQuarterFor,
   HASHING_DEFAULTS,
   holdsQuarterSpot,
@@ -29,6 +31,7 @@ import {
   latestChecklist,
   loadDateAvailability,
   loadDateBookings,
+  loadDateForEvent,
   loadHashDate,
   loadQuarterDates,
   loadQuarterPicture,
@@ -36,15 +39,31 @@ import {
   loadSettings,
   loadStanding,
   loadUserBookings,
-  notifyHash,
   requireFuture,
+  requireHashEventId,
 } from "./lib/hashingData";
+import {
+  bookHashShifts,
+  cancelHashEvent,
+  clearHashShifts,
+  ensureHashSection,
+  HASH_ROLE,
+  insertHashEvent,
+  moveHashEvent,
+  reopenHashEvent,
+} from "./lib/hashingEvents";
+import { normalizeEventStatus } from "./lib/eventStatus";
+import { normalizeEventVisibility } from "./lib/eventVisibility";
 import { hashDateOriginValue, hashDateStatusValue, hashBookingStatusValue } from "./lib/hashingValues";
 import { quarterRefValue, settingsValue } from "./hashing";
 
 const LOCATION_MAX = 80;
 const REASON_MAX = 500;
 const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const MIN_HASH_MINUTES = 15;
+const MAX_HASH_MINUTES = 480;
+/** About two dozen hashes a year, so one night's backlog never fills a batch. */
+const LAPSE_BATCH = 25;
 
 function validateSettings(args: {
   weekday: number;
@@ -57,8 +76,15 @@ function validateSettings(args: {
     appError("HASH_INVALID_WEEKDAY", `Weekday must be 0–6, got ${args.weekday}.`);
   }
   if (!HH_MM.test(args.startTime)) appError("HASH_INVALID_TIME", `Start must be HH:mm, got ${args.startTime}.`);
-  if (!Number.isInteger(args.durationMinutes) || args.durationMinutes < 15 || args.durationMinutes > 480) {
-    appError("HASH_INVALID_LENGTH", `Length must be 15–480 minutes, got ${args.durationMinutes}.`);
+  if (
+    !Number.isInteger(args.durationMinutes) ||
+    args.durationMinutes < MIN_HASH_MINUTES ||
+    args.durationMinutes > MAX_HASH_MINUTES
+  ) {
+    appError(
+      "HASH_INVALID_LENGTH",
+      `Length must be ${MIN_HASH_MINUTES}–${MAX_HASH_MINUTES} minutes, got ${args.durationMinutes}.`,
+    );
   }
   validateCapacity(args.spotsPerHash);
   const location = args.location.trim();
@@ -72,6 +98,12 @@ function validateCapacity(capacity: number) {
   if (!Number.isInteger(capacity) || capacity < 1 || capacity > 50) {
     appError("HASH_INVALID_CAPACITY", `People must be 1–50, got ${capacity}.`);
   }
+}
+
+async function detachDate(ctx: MutationCtx, row: Doc<"hashDates">) {
+  await clearAvailability(ctx, row._id);
+  await ctx.db.delete(row._id);
+  if (row.eventId) await ctx.db.patch(row.eventId, { hashingEnabled: false, updatedAt: Date.now() });
 }
 
 function requireQuarter(quarterId: string) {
@@ -100,26 +132,16 @@ async function clearAvailability(ctx: MutationCtx, hashDateId: Id<"hashDates">) 
 }
 
 /** Everyone booked has to re-confirm, and their old answers no longer apply. */
-async function markDateMoved(ctx: MutationCtx, row: Doc<"hashDates">, location: string | undefined) {
+async function moveBookedDate(ctx: MutationCtx, row: Doc<"hashDates">, next: { startsAt: number; endsAt: number }) {
   await clearAvailability(ctx, row._id);
-  for (const booking of await loadDateBookings(ctx, row._id)) {
-    await ctx.db.patch(booking._id, { status: "needs_confirmation" });
-    await notifyHash(ctx, { userId: booking.userId, notice: "moved", row, location });
-  }
+  await moveHashEvent(ctx, row, next, { reconfirm: true });
 }
 
-/** Bookings end, and those people go back to needing a hash. */
-async function releaseBookings(ctx: MutationCtx, row: Doc<"hashDates">, location: string | undefined) {
-  for (const booking of await loadDateBookings(ctx, row._id)) {
-    await ctx.db.delete(booking._id);
-    await notifyHash(ctx, { userId: booking.userId, notice: "unbooked", row, location });
-  }
-}
-
-async function deleteDate(ctx: MutationCtx, row: Doc<"hashDates">, location: string | undefined) {
-  await releaseBookings(ctx, row, location);
-  await clearAvailability(ctx, row._id);
-  await ctx.db.delete(row._id);
+/** Bookings end, those people go back to needing a hash, and the event stops running. */
+async function closeHashEvent(ctx: MutationCtx, row: Doc<"hashDates">) {
+  if (!row.eventId) return;
+  await clearHashShifts(ctx, row.eventId);
+  await cancelHashEvent(ctx, row.eventId);
 }
 
 /**
@@ -131,6 +153,7 @@ async function applySetup(
   settings: Pick<Doc<"hashingSettings">, "weekday" | "startTime" | "durationMinutes" | "spotsPerHash" | "location">,
   quarter: AcademicQuarter,
   now: number,
+  options?: { previousLocation?: string },
 ) {
   const today = pacificDateKey(now);
   const todayIsOver = hashTimes(today, settings.startTime, settings.durationMinutes).startsAt <= now;
@@ -152,6 +175,13 @@ async function applySetup(
     toKey: quarter.finalsEndDate,
   });
 
+  const previousLocation = options?.previousLocation;
+  if (previousLocation !== undefined && previousLocation !== settings.location) {
+    for (const row of regular) {
+      if (row.eventId && isShiftable(row)) await ctx.db.patch(row.eventId, { venueName: settings.location });
+    }
+  }
+
   const staying = new Set<string>(plan.stay);
   const shiftTo = new Map(plan.shift.map(({ id, dateKey }) => [id, dateKey]));
   for (const row of regular) {
@@ -160,6 +190,9 @@ async function applySetup(
       const endsAt = row.startsAt + settings.durationMinutes * 60_000;
       if (row.capacity !== settings.spotsPerHash || row.endsAt !== endsAt) {
         await ctx.db.patch(row._id, { capacity: settings.spotsPerHash, endsAt });
+        if (row.endsAt !== endsAt) {
+          await moveHashEvent(ctx, row, { startsAt: row.startsAt, endsAt }, { reconfirm: false });
+        }
       }
       continue;
     }
@@ -167,19 +200,24 @@ async function applySetup(
     const times = hashTimes(dateKey, settings.startTime, settings.durationMinutes);
     const moved = times.startsAt !== row.startsAt;
     if (!moved && times.endsAt === row.endsAt && row.capacity === settings.spotsPerHash) continue;
-    const patch = { ...times, dateKey, capacity: settings.spotsPerHash };
-    await ctx.db.patch(row._id, patch);
-    if (moved) await markDateMoved(ctx, { ...row, ...patch }, settings.location);
+    await ctx.db.patch(row._id, { ...times, dateKey, capacity: settings.spotsPerHash });
+    if (moved) await moveBookedDate(ctx, row, times);
+    else await moveHashEvent(ctx, row, times, { reconfirm: false });
   }
   for (const { dateKey, off } of plan.create) {
-    await ctx.db.insert("hashDates", {
+    const times = hashTimes(dateKey, settings.startTime, settings.durationMinutes);
+    const fields = {
       quarterId: quarter.id,
       dateKey,
-      ...hashTimes(dateKey, settings.startTime, settings.durationMinutes),
+      ...times,
       capacity: settings.spotsPerHash,
-      origin: "regular",
-      status: off ? "off" : "scheduled",
-    });
+      origin: "regular" as const,
+    };
+    if (off) await ctx.db.insert("hashDates", { ...fields, status: "off" });
+    else {
+      const eventId = await insertHashEvent(ctx, times, settings.location);
+      await ctx.db.insert("hashDates", { ...fields, status: "scheduled", eventId });
+    }
   }
 }
 
@@ -194,6 +232,7 @@ const setupRowValue = v.object({
   status: hashDateStatusValue,
   movedFromDateKey: v.optional(v.string()),
   areaIds: v.optional(v.array(v.string())),
+  eventId: v.optional(v.id("events")),
   weekLabel: v.optional(v.string()),
   dayNote: v.optional(v.string()),
 });
@@ -213,11 +252,12 @@ async function setupRows(ctx: QueryCtx, quarterId: string, today: string) {
         startsAt: row.startsAt,
         endsAt: row.endsAt,
         capacity: row.capacity,
-        filled: (await loadDateBookings(ctx, row._id)).length,
+        filled: (await loadDateBookings(ctx, row)).length,
         origin: row.origin,
         status: row.status,
         movedFromDateKey: row.movedFromDateKey,
         areaIds: row.areaIds,
+        eventId: row.eventId,
         weekLabel: quarterWeek(row.dateKey)?.label,
         dayNote: note?.kind === "holiday" ? note.label : undefined,
       };
@@ -274,11 +314,12 @@ export const saveSetup = mutation({
     if (existing) await ctx.db.patch(existing._id, { ...settings, updatedAt: now, updatedBy: userId });
     else await ctx.db.insert("hashingSettings", { ...settings, updatedAt: now, updatedBy: userId });
 
+    const options = { previousLocation: existing?.location };
     const quarter = hashingQuarterFor(pacificDateKey(now));
-    if (quarter) await applySetup(ctx, settings, quarter, now);
+    if (quarter) await applySetup(ctx, settings, quarter, now, options);
     const following = quarter ? followingHashingQuarter(quarter) : null;
     if (following && (await loadQuarterDates(ctx, following.id)).length > 0) {
-      await applySetup(ctx, settings, following, now);
+      await applySetup(ctx, settings, following, now, options);
     }
     return null;
   },
@@ -313,28 +354,35 @@ export const moveDate = mutation({
     if (times.startsAt <= now) appError("HASH_IN_PAST", "Move it to a time that hasn't passed.");
     if (times.startsAt === row.startsAt) return null;
 
-    const patch = {
+    const moved = {
       ...times,
       dateKey: args.dateKey,
       // Moved dates are live even in an off week: moving one is a deliberate choice.
       status: "scheduled" as const,
       movedFromDateKey: row.movedFromDateKey ?? row.dateKey,
     };
-    await ctx.db.patch(row._id, patch);
-    const settings = await loadSettings(ctx);
-    await markDateMoved(ctx, { ...row, ...patch }, settings?.location);
+    if (!row.eventId) {
+      const eventId = await insertHashEvent(ctx, times, (await loadSettings(ctx))?.location);
+      await ctx.db.patch(row._id, { ...moved, eventId });
+      await clearAvailability(ctx, row._id);
+      return null;
+    }
+    await ctx.db.patch(row._id, moved);
+    await moveBookedDate(ctx, row, times);
+    if (row.status === "off") await reopenHashEvent(ctx, row.eventId);
     return null;
   },
 });
 
-async function bookUser(ctx: MutationCtx, row: Doc<"hashDates">, userId: string, location: string | undefined) {
-  await ctx.db.insert("hashBookings", { hashDateId: row._id, userId, status: "booked" });
-  const answer = await ctx.db
-    .query("hashAvailability")
-    .withIndex("by_hashDateId_and_userId", (q) => q.eq("hashDateId", row._id).eq("userId", userId))
-    .unique();
-  if (answer?.answer === "cant") await ctx.db.delete(answer._id);
-  await notifyHash(ctx, { userId, notice: "booked", row, location });
+async function bookUsers(ctx: MutationCtx, row: Doc<"hashDates">, userIds: string[]) {
+  await bookHashShifts(ctx, row, userIds);
+  for (const userId of userIds) {
+    const answer = await ctx.db
+      .query("hashAvailability")
+      .withIndex("by_hashDateId_and_userId", (q) => q.eq("hashDateId", row._id).eq("userId", userId))
+      .unique();
+    if (answer?.answer === "cant") await ctx.db.delete(answer._id);
+  }
 }
 
 /** Crew only, one open spot per quarter, and the date has room. */
@@ -344,15 +392,14 @@ async function requireBookable(ctx: MutationCtx, row: Doc<"hashDates">, userId: 
   if (!isHashCrew(await getUserAdminProfile(ctx, userId))) {
     appError("HASHING_CREW_ONLY", "Only active crew can be booked on a hash.");
   }
-  const bookings = await loadDateBookings(ctx, row._id);
+  const bookings = await loadDateBookings(ctx, row);
   if (bookings.length >= row.capacity) {
     appError("HASH_FULL", `${hashDateLabel(row)} is full (${bookings.length} of ${row.capacity}).`);
   }
-  const mine = await loadUserBookings(ctx, userId);
-  for (const booking of mine) {
-    if (booking.hashDateId === row._id) appError("HASH_ALREADY_BOOKED", "They're already booked on this date.");
-    const other = await ctx.db.get(booking.hashDateId);
-    if (other?.quarterId === row.quarterId && holdsQuarterSpot(booking, other, pacificDateKey(Date.now()))) {
+  const mine = await loadUserBookings(ctx, userId, await loadQuarterDates(ctx, row.quarterId));
+  for (const { booking, row: other } of mine) {
+    if (other._id === row._id) appError("HASH_ALREADY_BOOKED", "They're already booked on this date.");
+    if (holdsQuarterSpot(booking, other, pacificDateKey(Date.now()))) {
       appError("HASH_ALREADY_BOOKED", `They're already on ${hashDateLabel(other)}. Unbook that first.`);
     }
   }
@@ -399,17 +446,19 @@ export const addDate = mutation({
       origin: "added",
       status: "scheduled",
       areaIds: args.areaIds?.length ? args.areaIds : undefined,
+      eventId: await insertHashEvent(ctx, times, settings.location),
     });
     const row = await loadHashDate(ctx, hashDateId);
-    for (const userId of bookUserIds) {
-      await requireBookable(ctx, row, userId);
-      await bookUser(ctx, row, userId, settings.location);
-    }
+    for (const userId of bookUserIds) await requireBookable(ctx, row, userId);
+    await bookUsers(ctx, row, bookUserIds);
     return hashDateId;
   },
 });
 
-/** Off or on again. Turning a date off ends its bookings; answers stay for if it comes back. */
+/**
+ * Off or on again. Turning a date off ends its bookings and cancels its event,
+ * which stays linked so switching back on revives it. Answers stay too.
+ */
 export const setDateOff = mutation({
   args: { hashDateId: v.id("hashDates"), off: v.boolean() },
   returns: v.null(),
@@ -417,10 +466,20 @@ export const setDateOff = mutation({
     await requireManager(ctx);
     const row = await loadHashDate(ctx, args.hashDateId);
     requireFuture(row, Date.now());
-    const status = args.off ? ("off" as const) : ("scheduled" as const);
-    if (row.status === status) return null;
-    await ctx.db.patch(row._id, { status });
-    if (args.off) await releaseBookings(ctx, row, (await loadSettings(ctx))?.location);
+    if (args.off) {
+      if (row.status === "off") return null;
+      await ctx.db.patch(row._id, { status: "off" });
+      await closeHashEvent(ctx, row);
+      return null;
+    }
+    if (row.status !== "off") return null;
+    if (row.eventId) {
+      await ctx.db.patch(row._id, { status: "scheduled", eventId: row.eventId });
+      await reopenHashEvent(ctx, row.eventId);
+      return null;
+    }
+    const eventId = await insertHashEvent(ctx, row, (await loadSettings(ctx))?.location);
+    await ctx.db.patch(row._id, { status: "scheduled", eventId });
     return null;
   },
 });
@@ -433,7 +492,104 @@ export const removeDate = mutation({
     const row = await loadHashDate(ctx, args.hashDateId);
     if (row.origin !== "added") appError("HASH_NOT_ADDED", "Only added dates can be removed. Turn this one off.");
     requireFuture(row, Date.now());
-    await deleteDate(ctx, row, (await loadSettings(ctx))?.location);
+    await closeHashEvent(ctx, row);
+    await detachDate(ctx, row);
+    return null;
+  },
+});
+
+/**
+ * The add-on switch on an event. On makes the event a hash in `added` form;
+ * off stops it being one, and the event carries on as a plain internal event.
+ */
+export const setEventHashing = mutation({
+  args: { eventId: v.id("events"), enabled: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireManager(ctx);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) appError("EVENT_NOT_FOUND", "Event not found.");
+    const row = await loadDateForEvent(ctx, event._id);
+    if (args.enabled) {
+      if (!row) await addHashingToEvent(ctx, event);
+      return null;
+    }
+    if (!row) return null;
+    if (row.origin === "regular") {
+      appError("HASH_NOT_ADDED", "This is a regular hash. Turn the date off in Hashing.");
+    }
+    if (row.status === "in_progress" || row.status === "finished") {
+      appError("HASH_ALREADY_STARTED", "This hash has already started, so hashing can't be turned off.");
+    }
+    await clearHashShifts(ctx, event._id, (shift) => shift.role !== HASH_ROLE);
+    await detachDate(ctx, row);
+    return null;
+  },
+});
+
+async function addHashingToEvent(ctx: MutationCtx, event: Doc<"events">) {
+  if (normalizeEventVisibility(event.visibility) !== "internal") {
+    appError("HASH_EVENT_NOT_INTERNAL", "Hashing only runs on internal events. Set this event to Internal first.");
+  }
+  if (normalizeEventStatus(event.status) === "cancelled") {
+    appError("HASH_EVENT_CANCELLED", "This event is cancelled.");
+  }
+  if (event.seriesId) appError("HASH_EVENT_IN_SERIES", "A day in a series or booking can't be a hash.");
+  const links = await ctx.db
+    .query("eventInvoiceLinks")
+    .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+    .take(1);
+  if (event.invoiceId || links.length > 0) {
+    appError("HASH_EVENT_HAS_INVOICE", "A hash can't have an invoice. Unlink it first.");
+  }
+  const now = Date.now();
+  if (event.startAt <= now) appError("HASH_IN_PAST", "This event has already started.");
+  const minutes = Math.round((event.endAt - event.startAt) / 60_000);
+  if (minutes < MIN_HASH_MINUTES || minutes > MAX_HASH_MINUTES) {
+    appError("HASH_INVALID_LENGTH", `A hash runs ${MIN_HASH_MINUTES}–${MAX_HASH_MINUTES} minutes, this event runs ${minutes}.`);
+  }
+  const dateKey = pacificDateKey(event.startAt);
+  const quarter = hashingQuarterContaining(dateKey);
+  if (!quarter) {
+    appError("HASH_OUTSIDE_QUARTER", "Hashes run from the first day of classes through finals.");
+  }
+  const settings = await loadSettings(ctx);
+  if (!settings) appError("HASH_NO_SETUP", "Save the Hashing setup first.");
+  const dates = await loadQuarterDates(ctx, quarter.id);
+  if (dates.length >= QUARTER_DATE_LIMIT) {
+    appError("HASH_TOO_MANY_DATES", `${quarter.label} is full: max ${QUARTER_DATE_LIMIT} dates, got ${dates.length}.`);
+  }
+  const times = { startsAt: event.startAt, endsAt: event.endAt };
+  await ctx.db.insert("hashDates", {
+    quarterId: quarter.id,
+    dateKey,
+    ...times,
+    capacity: settings.spotsPerHash,
+    origin: "added",
+    status: "scheduled",
+    eventId: event._id,
+  });
+  await ctx.db.patch(event._id, { hashingEnabled: true, updatedAt: now });
+  await ensureHashSection(ctx, event._id, times);
+}
+
+/** Past dates nobody started: no shift pays, the event closes, and crew owe a hash again. */
+export const closeLapsedHashes = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const today = pacificDateKey(Date.now());
+    const lapsed = await ctx.db
+      .query("hashDates")
+      .withIndex("by_status_and_dateKey", (q) => q.eq("status", "scheduled").lt("dateKey", today))
+      .take(LAPSE_BATCH);
+    for (const row of lapsed) {
+      await ctx.db.patch(row._id, { status: "lapsed", eventId: requireHashEventId(row) });
+      await closeHashEvent(ctx, row);
+    }
+    if (lapsed.length === LAPSE_BATCH) {
+      await ctx.scheduler.runAfter(0, internal.hashingSchedule.closeLapsedHashes, {});
+    }
     return null;
   },
 });
@@ -577,7 +733,7 @@ export const bookPerson = mutation({
     await requireManager(ctx);
     const row = await loadHashDate(ctx, args.hashDateId);
     await requireBookable(ctx, row, args.userId);
-    await bookUser(ctx, row, args.userId, (await loadSettings(ctx))?.location);
+    await bookUsers(ctx, row, [args.userId]);
     return null;
   },
 });
@@ -589,18 +745,9 @@ export const unbookPerson = mutation({
     await requireManager(ctx);
     const row = await loadHashDate(ctx, args.hashDateId);
     requireFuture(row, Date.now());
-    const booking = await ctx.db
-      .query("hashBookings")
-      .withIndex("by_hashDateId_and_userId", (q) => q.eq("hashDateId", row._id).eq("userId", args.userId))
-      .unique();
+    const booking = (await loadDateBookings(ctx, row)).find((candidate) => candidate.userId === args.userId);
     if (!booking) return null;
-    await ctx.db.delete(booking._id);
-    await notifyHash(ctx, {
-      userId: args.userId,
-      notice: "unbooked",
-      row,
-      location: (await loadSettings(ctx))?.location,
-    });
+    await clearHashShifts(ctx, requireHashEventId(row), (shift) => !booking.shiftIds.includes(shift._id));
     return null;
   },
 });
@@ -660,10 +807,12 @@ export const applyFill = mutation({
     if (!quarter) return { booked: 0 };
     const picture = await loadQuarterPicture(ctx, quarter.id, pacificDateKey(now));
     const plan = planFill(picture, now);
-    const rowById = new Map<string, Doc<"hashDates">>(picture.open.map((row) => [row._id, row]));
-    const location = (await loadSettings(ctx))?.location;
-    for (const { userId, dateId } of plan.placements) {
-      await bookUser(ctx, rowById.get(dateId)!, userId, location);
+    for (const row of picture.open) {
+      await bookUsers(
+        ctx,
+        row,
+        plan.placements.filter(({ dateId }) => dateId === row._id).map(({ userId }) => userId),
+      );
     }
     return { booked: plan.placements.length };
   },

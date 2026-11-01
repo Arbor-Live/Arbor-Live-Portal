@@ -33,6 +33,15 @@ export function hashingQuarterById(quarterId: string): AcademicQuarter | null {
   return STANFORD_QUARTERS.find((quarter) => quarter.id === quarterId) ?? null;
 }
 
+/** The quarter a date belongs to, first day of classes through finals. Summer has no hashes. */
+export function hashingQuarterContaining(dateKey: string): AcademicQuarter | null {
+  return (
+    STANFORD_QUARTERS.find(
+      (quarter) => quarter.term !== "summer" && dateKey >= quarter.startDate && dateKey <= quarter.finalsEndDate,
+    ) ?? null
+  );
+}
+
 /** A week `quarterWeek` doesn't number (Thanksgiving, finals, a break) has no hash. */
 export function isOffWeek(dateKey: string) {
   const week = quarterWeek(dateKey);
@@ -90,9 +99,12 @@ export function planRegularDates<Id>(args: {
   return { create, shift, stay };
 }
 
-/** The date passed and nobody started it, so it can't count as a booking any more. */
+/**
+ * The date passed and nobody started it, so it can't count as a booking any
+ * more. The nightly close writes `lapsed`; until it runs, the date alone decides.
+ */
 export function isLapsed(row: { status: HashDateStatus; dateKey: string }, todayKey: string) {
-  return row.status === "scheduled" && row.dateKey < todayKey;
+  return row.status === "lapsed" || (row.status === "scheduled" && row.dateKey < todayKey);
 }
 
 /** Whether a booking still uses up the person's one spot this quarter. */

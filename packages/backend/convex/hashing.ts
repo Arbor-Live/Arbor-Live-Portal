@@ -2,11 +2,13 @@ import { pacificDateKey } from "@arbor/format";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
-import { findAuthUsersByIds } from "./lib/auth";
+import { findAuthUsersByIds, requireAdminOrOperations } from "./lib/auth";
 import { appError } from "./lib/errors";
 import { deriveQuarterState, hashingQuarterById, hashingQuarterFor, isLapsed } from "./lib/hashing";
+import { isHashEvent } from "./lib/hashEvent";
 import {
   loadDateBookings,
+  loadDateForEvent,
   loadHashDate,
   loadQuarterDates,
   loadSettings,
@@ -14,9 +16,17 @@ import {
   loadUserBookings,
   requireFuture,
   requireHashCrew,
+  requireHashEventId,
   requireHashingViewer,
 } from "./lib/hashingData";
-import { hashAnswerValue, hashBookingStatusValue, hashDateOriginValue, hashStandingValue } from "./lib/hashingValues";
+import { clearHashShifts } from "./lib/hashingEvents";
+import {
+  hashAnswerValue,
+  hashBookingStatusValue,
+  hashDateOriginValue,
+  hashDateStatusValue,
+  hashStandingValue,
+} from "./lib/hashingValues";
 import { normalizeEventStatus } from "./lib/eventStatus";
 
 /** Reason and suggested times on "None of these work". */
@@ -72,15 +82,10 @@ export const getOverview = query({
 });
 
 async function loadMyQuarterBookings(ctx: QueryCtx, userId: string, dates: Doc<"hashDates">[], today: string) {
-  const rowById = new Map(dates.filter((row) => !isLapsed(row, today)).map((row) => [row._id, row]));
-  const mine = await loadUserBookings(ctx, userId);
-  return mine.flatMap((booking) => {
-    const row = rowById.get(booking.hashDateId);
-    return row ? [{ booking, row }] : [];
-  });
+  return await loadUserBookings(ctx, userId, dates.filter((row) => !isLapsed(row, today)));
 }
 
-/** Event titles the person is on, per Pacific day, across `dates`. */
+/** Other work the person is on, per Pacific day, across `dates`. A hash isn't a clash with itself. */
 async function loadMyEventDays(ctx: QueryCtx, userId: string, dates: Doc<"hashDates">[]) {
   const titles = new Map<string, string>();
   const first = dates[0];
@@ -101,7 +106,7 @@ async function loadMyEventDays(ctx: QueryCtx, userId: string, dates: Doc<"hashDa
   const eventById = new Map(events.flatMap((event) => (event ? [[event._id, event] as const] : [])));
   for (const shift of onDay) {
     const event = eventById.get(shift.eventId);
-    if (!event || normalizeEventStatus(event.status) === "cancelled") continue;
+    if (!event || isHashEvent(event) || normalizeEventStatus(event.status) === "cancelled") continue;
     titles.set(pacificDateKey(shift.startsAt), event.title);
   }
   return titles;
@@ -164,7 +169,7 @@ export const getMine = query({
       (row) => row.status === "in_progress" || (row.status === "scheduled" && row.dateKey >= today),
     );
     const [bookingLists, answers, eventDays] = await Promise.all([
-      Promise.all(upcoming.map((row) => loadDateBookings(ctx, row._id))),
+      Promise.all(upcoming.map((row) => loadDateBookings(ctx, row))),
       Promise.all(
         upcoming.map((row) =>
           ctx.db
@@ -282,11 +287,10 @@ export const setAvailability = mutation({
     requireFuture(row, Date.now());
     if (row.status === "off") appError("HASH_OFF", "This date is off.");
 
-    const booking = await ctx.db
-      .query("hashBookings")
-      .withIndex("by_hashDateId_and_userId", (q) => q.eq("hashDateId", row._id).eq("userId", userId))
-      .unique();
-    if (booking) appError("HASH_ALREADY_BOOKED", "You're booked on this date. Give up your spot first.");
+    const bookings = await loadDateBookings(ctx, row);
+    if (bookings.some((booking) => booking.userId === userId)) {
+      appError("HASH_ALREADY_BOOKED", "You're booked on this date. Give up your spot first.");
+    }
 
     const existing = await ctx.db
       .query("hashAvailability")
@@ -309,10 +313,7 @@ export const setAvailability = mutation({
 });
 
 async function loadMyBooking(ctx: QueryCtx, row: Doc<"hashDates">, userId: string) {
-  const booking = await ctx.db
-    .query("hashBookings")
-    .withIndex("by_hashDateId_and_userId", (q) => q.eq("hashDateId", row._id).eq("userId", userId))
-    .unique();
+  const booking = (await loadDateBookings(ctx, row)).find((candidate) => candidate.userId === userId);
   if (!booking) appError("HASH_NOT_BOOKED", "You're not booked on this date.");
   return booking;
 }
@@ -325,7 +326,7 @@ export const confirmBooking = mutation({
     const row = await loadHashDate(ctx, args.hashDateId);
     if (row.status === "finished") appError("HASH_ALREADY_FINISHED", "This hash has already finished.");
     const booking = await loadMyBooking(ctx, row, userId);
-    if (booking.status !== "booked") await ctx.db.patch(booking._id, { status: "booked" });
+    for (const shiftId of booking.shiftIds) await ctx.db.patch(shiftId, { needsConfirmation: undefined });
     return null;
   },
 });
@@ -339,7 +340,7 @@ export const giveUpSpot = mutation({
     const row = await loadHashDate(ctx, args.hashDateId);
     requireFuture(row, Date.now());
     const booking = await loadMyBooking(ctx, row, userId);
-    await ctx.db.delete(booking._id);
+    await clearHashShifts(ctx, requireHashEventId(row), (shift) => !booking.shiftIds.includes(shift._id));
 
     const answer = await ctx.db
       .query("hashAvailability")
@@ -373,3 +374,28 @@ export const saveNoDatesWork = mutation({
   },
 });
 
+export const eventAddonValue = v.object({
+  hashDateId: v.id("hashDates"),
+  status: hashDateStatusValue,
+  origin: hashDateOriginValue,
+  filled: v.number(),
+  capacity: v.number(),
+});
+
+/** The event workspace's Hashing card. */
+export const getEventAddon = query({
+  args: { eventId: v.id("events") },
+  returns: v.union(eventAddonValue, v.null()),
+  handler: async (ctx, args) => {
+    await requireAdminOrOperations(ctx);
+    const row = await loadDateForEvent(ctx, args.eventId);
+    if (!row) return null;
+    return {
+      hashDateId: row._id,
+      status: row.status,
+      origin: row.origin,
+      filled: (await loadDateBookings(ctx, row)).length,
+      capacity: row.capacity,
+    };
+  },
+});

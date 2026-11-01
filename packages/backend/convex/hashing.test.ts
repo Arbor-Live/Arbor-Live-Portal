@@ -75,8 +75,24 @@ async function setupWithDates() {
   return { ...context, dates, on };
 }
 
+/** Bookings as they read everywhere: a person's shift on the date's event. */
 function bookingsOf(t: Test) {
-  return t.run(async (ctx) => ctx.db.query("hashBookings").collect());
+  return t.run(async (ctx) => {
+    const shifts = await ctx.db.query("eventCrewShifts").collect();
+    return await Promise.all(
+      shifts.map(async (shift) => {
+        const row = await ctx.db
+          .query("hashDates")
+          .withIndex("by_eventId", (q) => q.eq("eventId", shift.eventId))
+          .unique();
+        return {
+          userId: shift.userId,
+          hashDateId: row?._id,
+          status: shift.needsConfirmation ? "needs_confirmation" : "booked",
+        };
+      }),
+    );
+  });
 }
 
 function answersOf(t: Test) {
@@ -309,7 +325,6 @@ describe("moving, adding, removing", () => {
     await opsApi.mutation(api.hashingSchedule.removeDate, { hashDateId: added });
     expect(await getDate(t, added)).toBeNull();
     expect((await anaApi.query(api.hashing.getMine, { now: NOW }))?.state).toBe("needs_hash");
-    expect((await notificationTitles(t, ana)).some((title) => title.startsWith("Hash removed"))).toBe(true);
   });
 
   test("only added dates can be removed", async () => {
@@ -518,7 +533,7 @@ describe("authorization", () => {
     await expect(
       anaApi.mutation(api.hashingLive.setAreaClaim, { hashDateId, areaId: "red-shelf", claimed: true }),
     ).rejects.toThrow(denied);
-    await expect(anaApi.mutation(api.hashingLive.finish, { hashDateId })).rejects.toThrow(denied);
+    await expect(anaApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [] })).rejects.toThrow(denied);
   });
 
   test("a booked person can only start on the day; ops any time", async () => {
@@ -638,9 +653,9 @@ describe("live hash", () => {
   });
 
   test("finishing credits everyone booked, even with items left", async () => {
-    const { t, anaApi, benApi, hashDateId } = await running();
+    const { t, anaApi, benApi, ana, ben, hashDateId } = await running();
     await anaApi.mutation(api.hashingLive.setCheck, { hashDateId, itemKey: ITEM, done: true });
-    await benApi.mutation(api.hashingLive.finish, { hashDateId });
+    await benApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [ana._id, ben._id] });
     expect(await getDate(t, hashDateId)).toMatchObject({
       status: "finished",
       finalCounts: { total: 140, checked: 1, flagged: 0 },
@@ -658,18 +673,18 @@ describe("live hash", () => {
     await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId, userId: ana._id });
     await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId, userId: ben._id });
     await t.run(async (ctx) => {
-      for (const row of await ctx.db.query("hashBookings").collect()) {
-        await ctx.db.patch(row._id, { status: "needs_confirmation" });
+      for (const row of await ctx.db.query("eventCrewShifts").collect()) {
+        await ctx.db.patch(row._id, { needsConfirmation: true });
       }
     });
     await opsApi.mutation(api.hashingLive.start, { hashDateId });
     await anaApi.mutation(api.hashingLive.setCheck, { hashDateId, itemKey: ITEM, done: true });
-    await opsApi.mutation(api.hashingLive.finish, { hashDateId });
+    await opsApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [ana._id] });
     expect((await anaApi.query(api.hashing.getMine, { now: NOW }))?.state).toBe("done");
     expect((await benApi.query(api.hashing.getMine, { now: NOW }))?.state).toBe("needs_hash");
 
     await expect(benApi.mutation(api.hashing.confirmBooking, { hashDateId })).rejects.toThrow(/already finished/);
-    await benApi.mutation(api.hashingLive.finish, { hashDateId });
+    await benApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [ben._id] });
     expect((await benApi.query(api.hashing.getMine, { now: NOW }))?.state).toBe("needs_hash");
 
     await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId: on("2026-11-10")._id, userId: ben._id });
@@ -704,9 +719,9 @@ describe("live hash", () => {
   });
 
   test("flags stay open in History until resolved", async () => {
-    const { t, opsApi, anaApi, hashDateId } = await running();
+    const { t, opsApi, anaApi, ana, ben, hashDateId } = await running();
     await anaApi.mutation(api.hashingLive.flagItem, { hashDateId, itemKey: ITEM, reason: "missing", note: "Gone" });
-    await opsApi.mutation(api.hashingLive.finish, { hashDateId });
+    await opsApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [ana._id, ben._id] });
 
     const history = await opsApi.query(api.hashingLive.getHistory, {});
     expect(history.finished[0]?.people.sort()).toEqual(["Ana Crew", "Ben Crew"]);

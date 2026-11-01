@@ -111,6 +111,43 @@ export async function deleteInvoiceRecord(ctx: MutationCtx, invoiceId: Id<"invoi
   await ctx.db.delete(invoiceId);
 }
 
+async function deleteHashSidecar(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  drainRows: ReturnType<typeof withCascadeBudget>,
+) {
+  const row = await ctx.db
+    .query("hashDates")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .unique();
+  if (!row) return;
+  await drainRows(
+    () =>
+      ctx.db
+        .query("hashAvailability")
+        .withIndex("by_hashDateId_and_userId", (q) => q.eq("hashDateId", row._id))
+        .take(TAKE),
+    (id) => ctx.db.delete(id),
+  );
+  await drainRows(
+    () =>
+      ctx.db
+        .query("hashChecks")
+        .withIndex("by_hashDateId_and_itemKey", (q) => q.eq("hashDateId", row._id))
+        .take(TAKE),
+    (id) => ctx.db.delete(id),
+  );
+  await drainRows(
+    () =>
+      ctx.db
+        .query("hashAreaClaims")
+        .withIndex("by_hashDateId_and_areaId_and_userId", (q) => q.eq("hashDateId", row._id))
+        .take(TAKE),
+    (id) => ctx.db.delete(id),
+  );
+  await ctx.db.delete(row._id);
+}
+
 export async function deleteEventRecord(
   ctx: MutationCtx,
   eventId: Id<"events">,
@@ -339,6 +376,7 @@ export async function deleteEventRecord(
     (id) => ctx.db.delete(id),
   );
 
+  await deleteHashSidecar(ctx, eventId, drainRows);
   await ctx.db.delete(eventId);
   // The booking's remaining days close ranks (or stop being a group).
   if (invoiceId && !options.skipGroupSync && (await ctx.db.get(invoiceId))) {

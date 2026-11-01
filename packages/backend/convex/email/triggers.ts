@@ -5,9 +5,11 @@ import {
   EVENT_TIMEZONE,
   eventDashboardUrl,
   formatEventDateRange,
+  SITE_URL,
   subjectForTemplate,
 } from "./constants";
 import { cancelPendingDebouncedEmail, enqueueDebouncedEmail, enqueueEmail, hasSentDebouncedEmail } from "./enqueue";
+import { isHashEvent } from "../lib/hashEvent";
 import {
   getEventLeadRecipients,
   getEventStakeholderEmails,
@@ -39,6 +41,7 @@ function buildBasePayload(
     startAt: number;
     endAt: number;
     timezone: string;
+    hashingEnabled?: boolean;
   },
   recipientName?: string,
 ) {
@@ -46,7 +49,8 @@ function buildBasePayload(
     eventTitle: event.title,
     venueName: event.venueName,
     dateRangeLabel: formatEventDateRange(event.startAt, event.endAt, event.timezone),
-    eventUrl: eventDashboardUrl(event._id),
+    // Crew confirm or give up a hash on My hashes; its event page has nothing for them.
+    eventUrl: isHashEvent(event) ? `${SITE_URL}/dashboard/events/hashing` : eventDashboardUrl(event._id),
     recipientName,
   };
 }
@@ -151,6 +155,7 @@ export async function scheduleCrewScheduledEmails(
   previousShifts: CrewShiftLike[],
   nextShifts: CrewShiftLike[],
   inviteSequence: number,
+  options?: { scheduledSubject?: string },
 ) {
   const event = await ctx.db.get(eventId);
   if (!event) return;
@@ -245,7 +250,7 @@ export async function scheduleCrewScheduledEmails(
           template: "crew_scheduled",
           to: to.email,
           recipientUserId: to.userId,
-          subject: subjectForTemplate("crew_scheduled", subjectContext),
+          subject: options?.scheduledSubject ?? subjectForTemplate("crew_scheduled", subjectContext),
           eventId,
           debounceKey: scheduledKey,
           // Include a nonce so re-assigning the same shifts after a change still notifies.

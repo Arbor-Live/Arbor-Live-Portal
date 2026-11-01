@@ -1,7 +1,6 @@
 import { formatDateTime, pacificDateAndTimeToMs } from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { SITE_URL } from "../email/constants";
 import {
   findAuthUsersByIds,
   getUserAdminProfile,
@@ -11,26 +10,25 @@ import {
   requireArborInternalContext,
 } from "./auth";
 import { appError } from "./errors";
+import { isShiftFilled, isTraineeShift } from "./crewShiftKinds";
 import { HASHING_CHECKLIST_SEED } from "./hashingChecklistSeed";
-import { isTemplateEnabledForChannel } from "./emailPreferences";
-import { recordInAppNotification } from "./inAppNotifications";
 import { resolveParticipationFlags } from "./userParticipation";
 import { loadAdminProfilesByStatus } from "./userProfiles";
 import { resolveUserStatus } from "./userStatus";
 import { isStaffMember, resolveProfileMembership } from "./userVerticals";
 import { deriveQuarterState, isLapsed, type HashQuarterState } from "./hashing";
-import type { HashStanding } from "./hashingValues";
+import type { HashBookingStatus, HashStanding } from "./hashingValues";
 
 /** Regular weeks plus added dates. A quarter is about 11 weeks. */
 export const QUARTER_DATE_LIMIT = 60;
 /** Far past any capacity; the live count stays exact up to here. */
-const DATE_BOOKING_TAKE = 100;
+const DATE_SHIFT_TAKE = 100;
 /** One answer per crew member per date; the roster is a few hundred at most. */
 const DATE_AVAILABILITY_TAKE = 1000;
 /** Standings for one quarter: at most one per crew member. */
 const QUARTER_STANDING_TAKE = 1000;
-/** Someone's bookings across every quarter; one or two a quarter. */
-const USER_BOOKING_TAKE = 200;
+/** One person's shifts on any event across a quarter. Past a busy quarter's load. */
+const USER_QUARTER_SHIFT_TAKE = 300;
 
 type Ctx = QueryCtx | MutationCtx;
 type Profile = Doc<"userAdminProfiles">;
@@ -78,11 +76,50 @@ export async function loadQuarterDates(ctx: Ctx, quarterId: string) {
     .take(QUARTER_DATE_LIMIT);
 }
 
-export async function loadDateBookings(ctx: Ctx, hashDateId: Id<"hashDates">) {
+export async function loadDateForEvent(ctx: Ctx, eventId: Id<"events">) {
   return await ctx.db
-    .query("hashBookings")
-    .withIndex("by_hashDateId_and_userId", (q) => q.eq("hashDateId", hashDateId))
-    .take(DATE_BOOKING_TAKE);
+    .query("hashDates")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .unique();
+}
+
+export function requireHashEventId(row: Pick<Doc<"hashDates">, "eventId">) {
+  if (!row.eventId) appError("HASH_NO_EVENT", "This date is off, so it has no event.");
+  return row.eventId;
+}
+
+export type HashBooking = {
+  userId: string;
+  status: HashBookingStatus;
+  shiftIds: Id<"eventCrewShifts">[];
+};
+
+/**
+ * A booking is a person's shift on the hash's event, whatever its role, so a
+ * crew edit on the event page counts too. Two shifts for one person are one
+ * booking. Trainees and open slots aren't bookings.
+ */
+function bookingsFromShifts(shifts: Doc<"eventCrewShifts">[]) {
+  const byUser = new Map<string, HashBooking>();
+  for (const shift of shifts) {
+    if (!isShiftFilled(shift) || isTraineeShift(shift)) continue;
+    const userId = shift.userId!.trim();
+    const booking = byUser.get(userId) ?? { userId, status: "booked" as HashBookingStatus, shiftIds: [] };
+    booking.shiftIds.push(shift._id);
+    if (shift.needsConfirmation) booking.status = "needs_confirmation";
+    byUser.set(userId, booking);
+  }
+  return [...byUser.values()];
+}
+
+export async function loadDateBookings(ctx: Ctx, row: Pick<Doc<"hashDates">, "eventId">) {
+  const { eventId } = row;
+  if (!eventId) return [];
+  const shifts = await ctx.db
+    .query("eventCrewShifts")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(DATE_SHIFT_TAKE);
+  return bookingsFromShifts(shifts);
 }
 
 export async function loadDateAvailability(ctx: Ctx, hashDateId: Id<"hashDates">) {
@@ -92,11 +129,21 @@ export async function loadDateAvailability(ctx: Ctx, hashDateId: Id<"hashDates">
     .take(DATE_AVAILABILITY_TAKE);
 }
 
-export async function loadUserBookings(ctx: Ctx, userId: string) {
-  return await ctx.db
-    .query("hashBookings")
-    .withIndex("by_userId_and_hashDateId", (q) => q.eq("userId", userId))
-    .take(USER_BOOKING_TAKE);
+/** This person's bookings among `dates` (soonest first, one quarter's worth). */
+export async function loadUserBookings(ctx: Ctx, userId: string, dates: Doc<"hashDates">[]) {
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  if (!first || !last) return [];
+  const shifts = await ctx.db
+    .query("eventCrewShifts")
+    .withIndex("by_userId_and_startsAt", (q) =>
+      q.eq("userId", userId).gte("startsAt", first.startsAt).lte("startsAt", last.startsAt),
+    )
+    .take(USER_QUARTER_SHIFT_TAKE);
+  const rowByEvent = new Map(dates.flatMap((row) => (row.eventId ? [[row.eventId, row] as const] : [])));
+  return [...rowByEvent].flatMap(([eventId, row]) =>
+    bookingsFromShifts(shifts.filter((shift) => shift.eventId === eventId)).map((booking) => ({ booking, row })),
+  );
 }
 
 export async function loadStanding(ctx: Ctx, userId: string, quarterId: string) {
@@ -121,34 +168,6 @@ export function hashTimes(dateKey: string, startTime: string, durationMinutes: n
   const startsAt = pacificDateAndTimeToMs(dateKey, startTime);
   if (startsAt === null) appError("HASH_INVALID_TIME", `Not a valid date and time: ${dateKey} ${startTime}.`);
   return { startsAt, endsAt: startsAt + durationMinutes * 60_000 };
-}
-
-export type HashNotice = "booked" | "unbooked" | "moved";
-
-const NOTICES: Record<HashNotice, { template: "crew_scheduled" | "crew_unscheduled"; title: (label: string) => string }> = {
-  booked: { template: "crew_scheduled", title: (label) => `Hash booked: ${label}` },
-  unbooked: { template: "crew_unscheduled", title: (label) => `Hash removed: ${label}` },
-  moved: { template: "crew_scheduled", title: (label) => `Hash moved: ${label}. Can you still make it?` },
-};
-
-/**
- * A hash has no email, so this writes the bell directly. It shares the crew
- * assignment kinds, so their in-app and push opt-outs cover hashes too.
- */
-export async function notifyHash(
-  ctx: MutationCtx,
-  args: { userId: string; notice: HashNotice; row: Doc<"hashDates">; location?: string },
-) {
-  const { template, title } = NOTICES[args.notice];
-  const profile = await getUserAdminProfile(ctx, args.userId);
-  if (!isTemplateEnabledForChannel(profile, template, "inApp")) return;
-  await recordInAppNotification(ctx, {
-    userId: args.userId,
-    template,
-    subject: title(hashDateLabel(args.row)),
-    payload: { eventUrl: `${SITE_URL}/dashboard/events/hashing`, venueName: args.location },
-    idempotencyKey: `hashing:${args.notice}:${args.row._id}:${args.userId}:${Date.now()}`,
-  });
 }
 
 export async function loadSettings(ctx: Ctx) {
@@ -187,12 +206,12 @@ export async function loadQuarterPicture(ctx: Ctx, quarterId: string, todayKey: 
   const crew = profiles.filter(isHashCrew);
   const standingByUser = new Map(standings.map((row) => [row.userId, row.standing]));
   const open = dates.filter((row) => row.status === "scheduled" && row.dateKey >= todayKey);
-  const booked = await Promise.all(dates.map((row) => loadDateBookings(ctx, row._id)));
+  const booked = await Promise.all(dates.map((row) => loadDateBookings(ctx, row)));
   const bookingsByDate = new Map(dates.map((row, index) => [row._id, booked[index] ?? []]));
   const answers = await Promise.all(open.map((row) => loadDateAvailability(ctx, row._id)));
   const answersByDate = new Map(open.map((row, index) => [row._id, answers[index] ?? []]));
 
-  const bookingsByUser = new Map<string, { status: Doc<"hashBookings">["status"]; row: Doc<"hashDates"> }[]>();
+  const bookingsByUser = new Map<string, { status: HashBookingStatus; row: Doc<"hashDates"> }[]>();
   for (const row of dates) {
     for (const booking of bookingsByDate.get(row._id) ?? []) {
       const list = bookingsByUser.get(booking.userId) ?? [];
