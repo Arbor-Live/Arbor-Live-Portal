@@ -1,4 +1,4 @@
-import { formatDateTime, pacificDateAndTimeToMs } from "@arbor/format";
+import { formatDateTime, pacificDateAndTimeToMs, pacificDateKey } from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { SITE_URL } from "../email/constants";
@@ -22,7 +22,7 @@ import { deriveQuarterState, isLapsed, type HashQuarterState } from "./hashing";
 import type { HashStanding } from "./hashingValues";
 
 /** Regular weeks plus added dates. A quarter is about 11 weeks. */
-const QUARTER_DATE_TAKE = 60;
+export const QUARTER_DATE_LIMIT = 60;
 /** Far past any capacity; the live count stays exact up to here. */
 const DATE_BOOKING_TAKE = 100;
 /** One answer per crew member per date; the roster is a few hundred at most. */
@@ -75,7 +75,7 @@ export async function loadQuarterDates(ctx: Ctx, quarterId: string) {
   return await ctx.db
     .query("hashDates")
     .withIndex("by_quarterId_and_dateKey", (q) => q.eq("quarterId", quarterId))
-    .take(QUARTER_DATE_TAKE);
+    .take(QUARTER_DATE_LIMIT);
 }
 
 export async function loadDateBookings(ctx: Ctx, hashDateId: Id<"hashDates">) {
@@ -173,10 +173,10 @@ export async function ensureChecklist(ctx: MutationCtx): Promise<Doc<"hashCheckl
   return seeded;
 }
 
-export type HashPerson = { userId: string; name: string };
 
 /** The roster for one quarter: everyone who owes a hash, and where each one stands. */
-export async function loadQuarterPicture(ctx: Ctx, quarterId: string, todayKey: string) {
+export async function loadQuarterPicture(ctx: Ctx, quarterId: string, now: number) {
+  const todayKey = pacificDateKey(now);
   const [dates, profiles, standings] = await Promise.all([
     loadQuarterDates(ctx, quarterId),
     loadAdminProfilesByStatus(ctx, ["active"]),
@@ -187,7 +187,7 @@ export async function loadQuarterPicture(ctx: Ctx, quarterId: string, todayKey: 
   ]);
   const crew = profiles.filter(isHashCrew);
   const standingByUser = new Map(standings.map((row) => [row.userId, row.standing]));
-  const open = dates.filter((row) => row.status === "scheduled" && row.dateKey >= todayKey);
+  const open = dates.filter((row) => row.status === "scheduled" && row.startsAt > now);
   const booked = await Promise.all(dates.map((row) => loadDateBookings(ctx, row._id)));
   const bookingsByDate = new Map(dates.map((row, index) => [row._id, booked[index] ?? []]));
   const answers = await Promise.all(open.map((row) => loadDateAvailability(ctx, row._id)));

@@ -4,7 +4,7 @@ import type { Doc } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import { findAuthUsersByIds } from "./lib/auth";
 import { appError } from "./lib/errors";
-import { deriveQuarterState, hashingQuarterFor, isLapsed } from "./lib/hashing";
+import { deriveQuarterState, hashingQuarterById, hashingQuarterFor, isLapsed } from "./lib/hashing";
 import {
   loadDateBookings,
   loadHashDate,
@@ -23,7 +23,7 @@ import { normalizeEventStatus } from "./lib/eventStatus";
 const STANDING_TEXT_MAX = 500;
 /** A person's shifts across the rest of a quarter. */
 const SHIFT_TAKE = 200;
-/** Open flags are a tab badge: "99+" is as far as it needs to count. */
+/** Open flags are a tab badge: it stops counting at this many. */
 const OPEN_FLAG_TAKE = 100;
 
 export const quarterRefValue = v.object({ id: v.string(), label: v.string() });
@@ -323,6 +323,7 @@ export const confirmBooking = mutation({
   handler: async (ctx, args) => {
     const { userId } = await requireHashCrew(ctx);
     const row = await loadHashDate(ctx, args.hashDateId);
+    requireFuture(row, Date.now());
     const booking = await loadMyBooking(ctx, row, userId);
     if (booking.status !== "booked") await ctx.db.patch(booking._id, { status: "booked" });
     return null;
@@ -356,6 +357,7 @@ export const saveNoDatesWork = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const { userId } = await requireHashCrew(ctx);
+    if (!hashingQuarterById(args.quarterId)) appError("HASH_UNKNOWN_QUARTER", `Unknown quarter: ${args.quarterId}.`);
     const reason = args.reason.trim();
     const suggestedTimes = args.suggestedTimes.trim();
     if (!reason) appError("HASH_REASON_REQUIRED", "Say why none of these dates work.");

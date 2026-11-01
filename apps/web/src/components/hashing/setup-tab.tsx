@@ -56,7 +56,7 @@ function SlotForm({ setup }: { setup: Setup }) {
 
   async function save() {
     const shifting = current.weekday !== saved.weekday || current.startTime !== saved.startTime;
-    const affected = setup.dates.filter(
+    const affected = [...setup.dates, ...setup.nextDates].filter(
       (row) => row.filled > 0 && row.origin === "regular" && !row.movedFromDateKey && row.status === "scheduled",
     );
     if (setup.saved && shifting && affected.length > 0) {

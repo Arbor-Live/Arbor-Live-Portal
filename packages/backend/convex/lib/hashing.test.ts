@@ -59,7 +59,7 @@ describe("regular dates", () => {
     expect(planRegularDates({ existing, weekday: TUESDAY, fromKey: "2026-11-16", toKey: "2026-11-27" })).toEqual({
       create: [],
       shift: [],
-      drop: [],
+      stay: [],
     });
   });
   it("shifts shiftable dates inside their week and leaves the rest", () => {
@@ -74,7 +74,7 @@ describe("regular dates", () => {
       toKey: "2026-12-04",
     });
     expect(plan.shift).toEqual([{ id: "a", dateKey: "2026-11-19" }]);
-    expect(plan.drop).toEqual([]);
+    expect(plan.stay).toEqual([]);
     expect(plan.create.map((row) => row.dateKey)).toEqual(["2026-11-26"]);
   });
   it("never rebuilds a week whose date moved out of it", () => {
@@ -86,14 +86,14 @@ describe("regular dates", () => {
     });
     expect(plan.create).toEqual([]);
   });
-  it("drops a date when its week has no slot left", () => {
+  it("leaves a date alone when its week has no slot left", () => {
     const plan = planRegularDates({
       existing: [{ id: "thu", dateKey: "2026-11-19", shiftable: true }],
       weekday: TUESDAY,
       fromKey: "2026-11-18",
       toKey: "2026-11-27",
     });
-    expect(plan.drop).toEqual(["thu"]);
+    expect(plan.stay).toEqual(["thu"]);
     expect(plan.create.map((row) => row.dateKey)).toEqual(["2026-11-24"]);
   });
 });

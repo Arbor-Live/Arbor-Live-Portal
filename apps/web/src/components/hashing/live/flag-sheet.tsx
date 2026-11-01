@@ -34,7 +34,7 @@ function FlagForm({
   onClose: () => void;
 }) {
   const flagItem = useMutation(api.hashingLive.flagItem);
-  const setCheck = useMutation(api.hashingLive.setCheck);
+  const removeFlag = useMutation(api.hashingLive.removeFlag);
   const flagged = target.check?.status === "flagged" ? target.check : undefined;
   const [reason, setReason] = useState<FlagReason | "">(flagged?.flagReason ?? "");
   const [note, setNote] = useState(flagged?.note ?? "");
@@ -161,14 +161,14 @@ function FlagForm({
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {flagged && !flagged.resolved ? (
+        {flagged && !flagged.resolved && !flagged.sentToDamage ? (
           <Button
             variant="ghost"
             className="mr-auto h-11"
             disabled={saving}
             data-testid="hash-flag-remove"
             onClick={() =>
-              void run(() => setCheck({ hashDateId, itemKey: target.itemKey, done: false }), "Flag removed.")
+              void run(() => removeFlag({ hashDateId, itemKey: target.itemKey }), "Flag removed.")
             }
           >
             Remove flag

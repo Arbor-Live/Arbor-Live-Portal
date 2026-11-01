@@ -69,28 +69,28 @@ function MatrixCell({ person, date, cell }: { person: Person; date: DateColumn; 
       </Button>
     );
   }
-  if (cell === "can") {
+  if (cell !== "cant") {
     const blocked = full || person.booked;
     return (
       <Button
-        variant="outline"
+        variant={cell === "can" ? "outline" : "ghost"}
         size="sm"
         disabled={saving || blocked}
         className={CELL_BUTTON}
         aria-label={`Book ${label}`}
-        title={full ? "This date is full" : person.booked ? "Already booked" : "Click to book"}
+        title={full ? "This date is full" : person.booked ? "Already booked" : cell === "can" ? "Click to book" : "No answer. Click to book"}
         data-testid="hash-cell-can"
         onClick={() =>
           void run(() => book({ hashDateId: date._id, userId: person.userId }), "Couldn't book them.")
         }
       >
-        Can do
+        {cell === "can" ? "Can do" : "?"}
       </Button>
     );
   }
   return (
-    <span className="block text-center text-muted-foreground" title={cell === "cant" ? "Can't" : "No answer"}>
-      {cell === "cant" ? "–" : "?"}
+    <span className="block text-center text-muted-foreground" title="Can't">
+      –
     </span>
   );
 }

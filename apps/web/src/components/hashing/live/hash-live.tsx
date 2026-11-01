@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
+import { useNow } from "@/lib/use-now";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -351,7 +352,7 @@ function People({ people }: { people: Live["people"] }) {
 }
 
 export function HashLive({ hashDateId }: { hashDateId: Id<"hashDates"> }) {
-  const [now] = useState(() => Date.now());
+  const now = useNow(60_000);
   const live = useQuery(api.hashingLive.get, { hashDateId, now });
   const start = useMutation(api.hashingLive.start);
   const finish = useMutation(api.hashingLive.finish);

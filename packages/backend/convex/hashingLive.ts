@@ -203,7 +203,7 @@ export const get = query({
       },
       location: settings?.location,
       viewerId: viewer.userId,
-      canStart: row.status === "scheduled" && (viewer.canManage || (isBooked && row.dateKey <= today)),
+      canStart: row.status === "scheduled" && (viewer.canManage || (isBooked && row.dateKey === today)),
       canWork: viewer.canManage || isBooked,
       people: bookings.map((booking) => ({
         userId: booking.userId,
@@ -237,13 +237,16 @@ export const start = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await loadHashDate(ctx, args.hashDateId);
+    const viewer = await requireOnHash(ctx, row);
     if (row.status === "in_progress") return null;
     if (row.status !== "scheduled") appError("HASH_NOT_STARTABLE", "This hash can't be started.");
-    const viewer = await requireOnHash(ctx, row);
-    if (!viewer.canManage && row.dateKey > pacificDateKey(Date.now())) {
+    if (!viewer.canManage && row.dateKey !== pacificDateKey(Date.now())) {
       appError("HASH_NOT_TODAY", "You can start this hash on the day.");
     }
     const checklist = await ensureChecklist(ctx);
+    if (flattenChecklist(checklist, row.areaIds).length === 0) {
+      appError("HASH_EMPTY_CHECKLIST", "None of this hash's checklist areas exist any more.");
+    }
     await ctx.db.patch(row._id, { status: "in_progress", startedAt: Date.now(), checklistVersionId: checklist._id });
     return null;
   },
@@ -273,9 +276,30 @@ export const setCheck = mutation({
           byUserId: userId,
         });
       }
-    } else if (existing) {
+    } else if (existing?.status === "done") {
       await ctx.db.delete(existing._id);
     }
+    return null;
+  },
+});
+
+/** A flag that ops resolved or that reached Damage & repair is a record, so it stays. */
+export const removeFlag = mutation({
+  args: { hashDateId: v.id("hashDates"), itemKey: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await loadHashDate(ctx, args.hashDateId);
+    await requireOnHash(ctx, row);
+    requireRunning(row);
+    const existing = await ctx.db
+      .query("hashChecks")
+      .withIndex("by_hashDateId_and_itemKey", (q) => q.eq("hashDateId", row._id).eq("itemKey", args.itemKey))
+      .unique();
+    if (existing?.status !== "flagged") return null;
+    if (existing.resolvedAt !== undefined || existing.damageReportId) {
+      appError("HASH_FLAG_KEPT", "This flag is already with ops, so it can't be removed.");
+    }
+    await ctx.db.delete(existing._id);
     return null;
   },
 });
@@ -329,6 +353,8 @@ export const flagItem = mutation({
       note,
       byUserId: userId,
       damageReportId,
+      resolvedAt: undefined,
+      resolvedBy: undefined,
     };
     if (existing) await ctx.db.patch(existing._id, fields);
     else await ctx.db.insert("hashChecks", { hashDateId: row._id, itemKey: args.itemKey, areaId: item.areaId, ...fields });
@@ -370,8 +396,8 @@ export const finish = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await loadHashDate(ctx, args.hashDateId);
-    if (row.status === "finished") return null;
     await requireOnHash(ctx, row);
+    if (row.status === "finished") return null;
     requireRunning(row);
     const [areas, checks] = await Promise.all([checklistFor(ctx, row), loadChecks(ctx, row._id)]);
     await ctx.db.patch(row._id, {

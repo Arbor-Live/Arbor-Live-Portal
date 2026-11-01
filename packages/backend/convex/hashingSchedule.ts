@@ -13,12 +13,11 @@ import { getUserAdminProfile, getUserId, requireAdminOrOperations } from "./lib/
 import { appError } from "./lib/errors";
 import {
   fillFromAvailability,
-  flattenChecklist,
   followingHashingQuarter,
   hashingQuarterById,
   hashingQuarterFor,
   HASHING_DEFAULTS,
-  isLapsed,
+  holdsQuarterSpot,
   planRegularDates,
 } from "./lib/hashing";
 import { HASHING_CHECKLIST_SEED } from "./lib/hashingChecklistSeed";
@@ -33,6 +32,7 @@ import {
   loadHashDate,
   loadQuarterDates,
   loadQuarterPicture,
+  QUARTER_DATE_LIMIT,
   loadSettings,
   loadStanding,
   loadUserBookings,
@@ -80,12 +80,12 @@ function requireQuarter(quarterId: string) {
   return quarter;
 }
 
-/** A hash belongs to the quarter it's in: first day of classes through the break after finals. */
+/** A hash belongs to the quarter it's in: first day of classes through finals. */
 function requireDateInQuarter(dateKey: string, quarter: AcademicQuarter) {
-  if (dateKey < quarter.startDate || dateKey > quarter.reportingEndDate) {
+  if (dateKey < quarter.startDate || dateKey > quarter.finalsEndDate) {
     appError(
       "HASH_OUTSIDE_QUARTER",
-      `Pick a date in ${quarter.label} (${formatDateKeyRange(quarter.startDate, quarter.reportingEndDate)}).`,
+      `Pick a date in ${quarter.label} (${formatDateKeyRange(quarter.startDate, quarter.finalsEndDate)}).`,
     );
   }
 }
@@ -152,11 +152,10 @@ async function applySetup(
     toKey: quarter.finalsEndDate,
   });
 
-  const dropped = new Set(plan.drop);
+  const staying = new Set<string>(plan.stay);
   const shiftTo = new Map(plan.shift.map(({ id, dateKey }) => [id, dateKey]));
   for (const row of regular) {
-    if (dropped.has(row._id)) await deleteDate(ctx, row, settings.location);
-    if (dropped.has(row._id) || !isShiftable(row)) continue;
+    if (staying.has(row._id) || !isShiftable(row)) continue;
     const dateKey = shiftTo.get(row._id) ?? row.dateKey;
     const times = hashTimes(dateKey, settings.startTime, settings.durationMinutes);
     const moved = times.startsAt !== row.startsAt;
@@ -195,7 +194,9 @@ const setupRowValue = v.object({
 /** Ahead of today, plus anything mid-hash. Past dates live in History. */
 async function setupRows(ctx: QueryCtx, quarterId: string, today: string) {
   const dates = await loadQuarterDates(ctx, quarterId);
-  const ahead = dates.filter((row) => row.dateKey >= today && row.status !== "finished");
+  const ahead = dates.filter(
+    (row) => row.status === "in_progress" || (row.dateKey >= today && row.status !== "finished"),
+  );
   return await Promise.all(
     ahead.map(async (row) => {
       const note = stanfordNoClassDay(row.dateKey);
@@ -268,6 +269,10 @@ export const saveSetup = mutation({
 
     const quarter = hashingQuarterFor(pacificDateKey(now));
     if (quarter) await applySetup(ctx, settings, quarter, now);
+    const following = quarter ? followingHashingQuarter(quarter) : null;
+    if (following && (await loadQuarterDates(ctx, following.id)).length > 0) {
+      await applySetup(ctx, settings, following, now);
+    }
     return null;
   },
 });
@@ -340,7 +345,7 @@ async function requireBookable(ctx: MutationCtx, row: Doc<"hashDates">, userId: 
   for (const booking of mine) {
     if (booking.hashDateId === row._id) appError("HASH_ALREADY_BOOKED", "They're already booked on this date.");
     const other = await ctx.db.get(booking.hashDateId);
-    if (other?.quarterId === row.quarterId && !isLapsed(other, pacificDateKey(Date.now()))) {
+    if (other?.quarterId === row.quarterId && holdsQuarterSpot(booking, other, pacificDateKey(Date.now()))) {
       appError("HASH_ALREADY_BOOKED", `They're already on ${hashDateLabel(other)}. Unbook that first.`);
     }
   }
@@ -366,6 +371,15 @@ export const addDate = mutation({
     if (!settings) appError("HASH_NO_SETUP", "Save the setup first.");
     const times = hashTimes(args.dateKey, args.startTime, settings.durationMinutes);
     if (times.startsAt <= Date.now()) appError("HASH_IN_PAST", "Pick a time that hasn't passed.");
+    const dates = await loadQuarterDates(ctx, quarter.id);
+    if (dates.length >= QUARTER_DATE_LIMIT) {
+      appError("HASH_TOO_MANY_DATES", `${quarter.label} already has ${dates.length} dates.`);
+    }
+    const tree = (await latestChecklist(ctx)) ?? HASHING_CHECKLIST_SEED;
+    const areaIds = new Set(tree.areas.map((area) => area.id));
+    if (args.areaIds?.some((id) => !areaIds.has(id))) {
+      appError("HASH_UNKNOWN_AREA", "One of those checklist areas no longer exists.");
+    }
     const bookUserIds = [...new Set(args.bookUserIds ?? [])];
     if (bookUserIds.length > args.capacity) {
       appError("HASH_FULL", `That's ${bookUserIds.length} people for ${args.capacity} spots.`);
@@ -494,7 +508,7 @@ export const getSchedule = query({
     const quarter = hashingQuarterFor(today);
     if (!quarter) return null;
 
-    const picture = await loadQuarterPicture(ctx, quarter.id, today);
+    const picture = await loadQuarterPicture(ctx, quarter.id, args.now);
     const { open, dates, bookingsByDate, people } = picture;
     const count = (state: (typeof people)[number]["state"]) =>
       people.filter((person) => person.state === state).length;
@@ -614,7 +628,7 @@ export const previewFill = query({
     const today = pacificDateKey(args.now);
     const quarter = hashingQuarterFor(today);
     if (!quarter) return { placements: [], unplaced: [] };
-    const picture = await loadQuarterPicture(ctx, quarter.id, today);
+    const picture = await loadQuarterPicture(ctx, quarter.id, args.now);
     const plan = planFill(picture);
     const nameOf = new Map(picture.people.map((person) => [person.userId, person.name]));
     const rowById = new Map<string, Doc<"hashDates">>(picture.open.map((row) => [row._id, row]));
@@ -636,7 +650,7 @@ export const applyFill = mutation({
     const today = pacificDateKey(now);
     const quarter = hashingQuarterFor(today);
     if (!quarter) return { booked: 0 };
-    const picture = await loadQuarterPicture(ctx, quarter.id, today);
+    const picture = await loadQuarterPicture(ctx, quarter.id, now);
     const plan = planFill(picture);
     const rowById = new Map<string, Doc<"hashDates">>(picture.open.map((row) => [row._id, row]));
     const location = (await loadSettings(ctx))?.location;

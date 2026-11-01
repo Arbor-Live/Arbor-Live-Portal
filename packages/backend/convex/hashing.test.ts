@@ -140,6 +140,16 @@ describe("setup", () => {
     expect(versions.map((row) => row.version)).toEqual([1]);
   });
 
+  test("a booked date keeps its people when the new weekday has passed this week", async () => {
+    const { t, opsApi, ana, on } = await setupWithDates();
+    const hashDateId = on("2026-11-03")._id;
+    await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId, userId: ana._id });
+    vi.setSystemTime(new Date("2026-11-03T17:00:00Z").getTime());
+    await opsApi.mutation(api.hashingSchedule.saveSetup, { ...SETUP, weekday: 1 });
+    expect((await getDate(t, hashDateId))?.dateKey).toBe("2026-11-03");
+    expect(await bookingsOf(t)).toMatchObject([{ hashDateId, status: "booked" }]);
+  });
+
   test("changing the weekday shifts unmoved dates and asks people to re-confirm", async () => {
     const { t, opsApi, anaApi, ana, ben, on } = await setupWithDates();
     const booked = on("2026-11-17");
@@ -206,6 +216,19 @@ describe("setup", () => {
     );
     expect(winter[0]?.dateKey).toBe("2027-01-05");
     expect(winter.at(-1)).toMatchObject({ dateKey: "2027-03-16", status: "off" });
+  });
+
+  test("a next quarter already built follows later setup changes", async () => {
+    const { t, opsApi } = await setupWithDates();
+    await opsApi.mutation(api.hashingSchedule.buildQuarter, { quarterId: "2026-27-winter" });
+    await opsApi.mutation(api.hashingSchedule.saveSetup, { ...SETUP, weekday: 4 });
+    const winter = await t.run(async (ctx) =>
+      ctx.db
+        .query("hashDates")
+        .withIndex("by_quarterId_and_dateKey", (q) => q.eq("quarterId", "2026-27-winter"))
+        .collect(),
+    );
+    expect(winter[0]?.dateKey).toBe("2027-01-07");
   });
 });
 
@@ -489,6 +512,31 @@ describe("authorization", () => {
     await opsApi.mutation(api.hashingLive.start, { hashDateId });
   });
 
+  test("an added date can't name an area that doesn't exist", async () => {
+    const { opsApi } = await setupWithDates();
+    await expect(
+      opsApi.mutation(api.hashingSchedule.addDate, {
+        quarterId: QUARTER,
+        dateKey: "2026-11-05",
+        startTime: "10:00",
+        capacity: 2,
+        areaIds: ["no-such-area"],
+      }),
+    ).rejects.toThrow(/no longer exists/);
+  });
+
+  test("dates can't go past finals", async () => {
+    const { opsApi } = await setupWithDates();
+    await expect(
+      opsApi.mutation(api.hashingSchedule.addDate, {
+        quarterId: QUARTER,
+        dateKey: "2026-12-15",
+        startTime: "10:00",
+        capacity: 2,
+      }),
+    ).rejects.toThrow(/Pick a date/);
+  });
+
   test("ops can tick a hash they aren't booked on", async () => {
     const { t, opsApi, on } = await setupWithDates();
     const hashDateId = on("2026-11-03")._id;
@@ -602,6 +650,12 @@ describe("live hash", () => {
     await opsApi.mutation(api.hashingLive.finish, { hashDateId });
     expect((await anaApi.query(api.hashing.getMine, { now: NOW }))?.state).toBe("done");
     expect((await benApi.query(api.hashing.getMine, { now: NOW }))?.state).toBe("needs_hash");
+
+    await expect(benApi.mutation(api.hashing.confirmBooking, { hashDateId })).rejects.toThrow();
+    expect((await benApi.query(api.hashing.getMine, { now: NOW }))?.state).toBe("needs_hash");
+
+    await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId: on("2026-11-10")._id, userId: ben._id });
+    expect((await benApi.query(api.hashing.getMine, { now: NOW }))?.state).toBe("booked");
   });
 
   test("a publish changes the next hash, never a started one", async () => {
@@ -651,6 +705,26 @@ describe("live hash", () => {
     expect((await checksOf(t, hashDateId))[0]?.resolvedBy).toBeDefined();
   });
 
+  test("flagging a resolved item opens it again, and resolved flags can't be removed", async () => {
+    const { opsApi, anaApi, hashDateId } = await running();
+    await anaApi.mutation(api.hashingLive.flagItem, { hashDateId, itemKey: ITEM, reason: "missing" });
+    const [flag] = (await opsApi.query(api.hashingLive.getHistory, {})).flags;
+    await opsApi.mutation(api.hashingLive.resolveFlag, { checkId: flag!._id });
+    await expect(anaApi.mutation(api.hashingLive.removeFlag, { hashDateId, itemKey: ITEM })).rejects.toThrow(/with ops/);
+
+    await anaApi.mutation(api.hashingLive.flagItem, { hashDateId, itemKey: ITEM, reason: "low" });
+    expect((await opsApi.query(api.hashingLive.getHistory, {})).flags).toHaveLength(1);
+    await anaApi.mutation(api.hashingLive.removeFlag, { hashDateId, itemKey: ITEM });
+    expect((await opsApi.query(api.hashingLive.getHistory, {})).flags).toEqual([]);
+  });
+
+  test("unticking never removes a flag", async () => {
+    const { t, anaApi, hashDateId } = await running();
+    await anaApi.mutation(api.hashingLive.flagItem, { hashDateId, itemKey: ITEM, reason: "missing" });
+    await anaApi.mutation(api.hashingLive.setCheck, { hashDateId, itemKey: ITEM, done: false });
+    expect(await checksOf(t, hashDateId)).toMatchObject([{ status: "flagged" }]);
+  });
+
   test("a damaged flag can file a real damage report, once", async () => {
     const { t, anaApi, hashDateId } = await running();
     const inventoryItemId = await t.run(async (ctx) => {
@@ -676,5 +750,6 @@ describe("live hash", () => {
     expect(reports).toHaveLength(1);
     expect(reports[0]?.notes).toBe("Hashing, Large Packout: Container is clean and usable\nCracked");
     expect((await checksOf(t, hashDateId))[0]?.damageReportId).toBe(reports[0]?._id);
+    await expect(anaApi.mutation(api.hashingLive.removeFlag, { hashDateId, itemKey: ITEM })).rejects.toThrow(/with ops/);
   });
 });

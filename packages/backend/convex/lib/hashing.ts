@@ -64,7 +64,7 @@ function ownedWeek(row: { dateKey: string; movedFromDateKey?: string }) {
  * Reconcile a quarter's regular dates with the chosen weekday. Each week owns
  * one regular date: a shiftable date moves within its week, a week with no
  * date gets one, and a shiftable date whose week has no slot left (the new
- * weekday already passed this week) is dropped.
+ * weekday already passed this week) stays as it is, bookings and all.
  */
 export function planRegularDates<Id>(args: {
   existing: readonly RegularRow<Id>[];
@@ -76,23 +76,33 @@ export function planRegularDates<Id>(args: {
     regularDateKeys(args).map((dateKey) => [mondayOf(dateKey), dateKey] as const),
   );
   const shift: { id: Id; dateKey: string }[] = [];
-  const drop: Id[] = [];
+  const stay: Id[] = [];
   for (const row of args.existing) {
     if (!row.shiftable) continue;
     const target = targetByWeek.get(ownedWeek(row));
-    if (!target) drop.push(row.id);
+    if (!target) stay.push(row.id);
     else if (target !== row.dateKey) shift.push({ id: row.id, dateKey: target });
   }
   const ownedWeeks = new Set(args.existing.map(ownedWeek));
   const create = [...targetByWeek]
     .filter(([week]) => !ownedWeeks.has(week))
     .map(([, dateKey]) => ({ dateKey, off: isOffWeek(dateKey) }));
-  return { create, shift, drop };
+  return { create, shift, stay };
 }
 
 /** The date passed and nobody started it, so it can't count as a booking any more. */
 export function isLapsed(row: { status: HashDateStatus; dateKey: string }, todayKey: string) {
   return row.status === "scheduled" && row.dateKey < todayKey;
+}
+
+/** Whether a booking still uses up the person's one spot this quarter. */
+export function holdsQuarterSpot(
+  booking: { status: HashBookingStatus },
+  row: { status: HashDateStatus; dateKey: string },
+  todayKey: string,
+) {
+  if (isLapsed(row, todayKey)) return false;
+  return !(booking.status === "needs_confirmation" && row.status === "finished");
 }
 
 export type HashQuarterState = "done" | "exempt" | "booked" | "no_dates_work" | "needs_hash";
@@ -243,6 +253,10 @@ export function checklistProblems(tree: ChecklistTree): string[] {
       if (!kitIds.has(placement.kitId)) problems.push(`${area.name} uses a kit that doesn't exist.`);
       placedKits.add(placement.kitId);
       checkLines(placement.extraItems, `${area.name} extra items`);
+      const kitItems = tree.kits.find((kit) => kit.id === placement.kitId)?.items ?? [];
+      if (placement.extraItems.some((extra) => kitItems.some((item) => item.id === extra.id))) {
+        problems.push(`${area.name} extra items repeat an item id from the kit.`);
+      }
     }
   }
   for (const kit of tree.kits) {
