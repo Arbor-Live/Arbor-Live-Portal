@@ -600,8 +600,10 @@ their `eventId` first, because the delete cascade wipes the event's emails and
 leaves the bell pointing at nothing. An add-on's event is
 never cancelled. Off, Remove, the switch and a lapse all end its bookings and set
 `hashingEnabled` false, and it carries on as a plain event. Off and Remove delete
-the date too. A lapse keeps it for History, with `eventId` still set, and
-`getEventAddon` ignores it because the event is no longer a hash.
+the date too. A lapse keeps every date for History, with `eventId` still set.
+`getEventAddon` ignores a lapsed add-on, because its event is no longer a hash. A
+lapsed date Hashing made is still a hash on a cancelled event, so `getEventAddon`
+returns it and the card shows Never ran with a link to History.
 
 **A booking is a shift.** There is no booking table. A person's shift with the
 `Hash` role is their booking. `needsConfirmation` on the shift means the hash

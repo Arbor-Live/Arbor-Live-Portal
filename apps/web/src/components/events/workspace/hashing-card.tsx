@@ -13,7 +13,7 @@ import { api } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { plural } from "@/lib/format";
 import { HASH_STATUS_PILLS } from "@/lib/hashing";
-import { hashPath } from "@/lib/hashing-tabs";
+import { hashingTabPath, hashPath } from "@/lib/hashing-tabs";
 import { notify } from "@/lib/notify";
 
 export function HashingCard() {
@@ -67,17 +67,30 @@ export function HashingCard() {
       {addon && pill ? (
         <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
           <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
-          <span className="tabular-nums">
-            {addon.filled} of {addon.capacity} booked
-          </span>
-          <Link
-            href={hashPath(addon.hashDateId)}
-            className="inline-flex items-center gap-1 text-primary hover:underline"
-            data-testid="event-hashing-runner"
-          >
-            Open hash
-            <ArrowSquareOutIcon className="size-3" />
-          </Link>
+          {addon.status === "lapsed" ? (
+            <Link
+              href={hashingTabPath("history")}
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+              data-testid="event-hashing-history"
+            >
+              Open History
+              <ArrowSquareOutIcon className="size-3" />
+            </Link>
+          ) : (
+            <>
+              <span className="tabular-nums">
+                {addon.filled} of {addon.capacity} booked
+              </span>
+              <Link
+                href={hashPath(addon.hashDateId)}
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+                data-testid="event-hashing-runner"
+              >
+                Open hash
+                <ArrowSquareOutIcon className="size-3" />
+              </Link>
+            </>
+          )}
         </CardContent>
       ) : null}
       {refusal ? (
