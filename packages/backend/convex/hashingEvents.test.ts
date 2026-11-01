@@ -592,11 +592,10 @@ describe("pay and attendance", () => {
     expect(await timecardTitles(benApi, after)).toEqual([]);
   });
 
-  test("finish needs a name on the list, and crew have to be on it themselves", async () => {
+  test("crew finishing need a name on the list, and have to be on it themselves", async () => {
     const context = await setup();
-    const { opsApi, anaApi, ana, ben } = context;
+    const { anaApi, ana, ben } = context;
     const hashDateId = await bookAndRun(context, "2026-11-03", [ana, ben]);
-    await expect(opsApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [] })).rejects.toThrow(/Tick who was there/);
     await expect(anaApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [] })).rejects.toThrow(/Tick who was there/);
     await expect(anaApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [ben._id] })).rejects.toThrow(/tick yourself/);
     await anaApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [ana._id, ben._id] });
@@ -608,6 +607,17 @@ describe("pay and attendance", () => {
     const hashDateId = await bookAndRun(context, "2026-11-03", []);
     await context.opsApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [] });
     expect(await getRow(context.t, hashDateId)).toMatchObject({ status: "finished" });
+  });
+
+  test("ops can close a hash nobody came to, and nobody gets credit or pay", async () => {
+    const context = await setup();
+    const { t, opsApi, anaApi, ana, eventOf } = context;
+    const hashDateId = await bookAndRun(context, "2026-11-03", [ana]);
+    await opsApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [] });
+    expect(await getRow(t, hashDateId)).toMatchObject({ status: "finished" });
+    expect(await shiftsOf(t, eventOf("2026-11-03"))).toEqual([]);
+    expect(await getEvent(t, eventOf("2026-11-03"))).toMatchObject({ status: "completed", crewCostUsd: 0 });
+    expect((await anaApi.query(api.hashing.getMine, { now: NOW }))?.state).toBe("needs_hash");
   });
 
   describe("correcting attendance", () => {

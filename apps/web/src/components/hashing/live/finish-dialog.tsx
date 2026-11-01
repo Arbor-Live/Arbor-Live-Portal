@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { plural } from "@/lib/format";
+import { finishBlockedReason } from "@/lib/hashing-live";
 
 type Person = { userId: string; name: string; status: "booked" | "needs_confirmation" };
 
@@ -54,12 +55,7 @@ function FinishForm({ people, viewerId, canManage, itemsLeft, busy, onFinish }: 
   }
 
   const there = people.map((person) => person.userId).filter((userId) => !absent.has(userId));
-  const blocked =
-    people.length > 0 && there.length === 0
-      ? "Tick who was there."
-      : !canManage && !there.includes(viewerId)
-        ? "Tick yourself to finish. Only someone who was there can."
-        : null;
+  const blocked = finishBlockedReason(there, viewerId, canManage);
 
   return (
     <div className="space-y-4">

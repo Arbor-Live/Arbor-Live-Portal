@@ -1,3 +1,11 @@
+/** Why this viewer can't finish yet. Ops can close a hash with nobody ticked; crew can't. */
+export function finishBlockedReason(there: string[], viewerId: string, canManage: boolean) {
+  if (canManage) return null;
+  if (there.length === 0) return "Tick who was there.";
+  if (!there.includes(viewerId)) return "Tick yourself to finish. Only someone who was there can.";
+  return null;
+}
+
 type TickableRow = { itemKey: string; check?: { status: string } };
 type TickableHash = {
   totals: { checked: number };

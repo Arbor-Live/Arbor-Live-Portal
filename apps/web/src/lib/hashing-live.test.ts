@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyTick } from "./hashing-live";
+import { applyTick, finishBlockedReason } from "./hashing-live";
 
 const live = () => ({
   totals: { total: 3, checked: 1, flagged: 1 },
@@ -12,6 +12,18 @@ const live = () => ({
   ],
 });
 const done = { status: "done" };
+
+describe("finishBlockedReason", () => {
+  it("lets ops finish with nobody ticked", () => {
+    expect(finishBlockedReason([], "ops", true)).toBeNull();
+    expect(finishBlockedReason(["ana"], "ops", true)).toBeNull();
+  });
+  it("holds crew to a named list that includes them", () => {
+    expect(finishBlockedReason([], "ana", false)).toBe("Tick who was there.");
+    expect(finishBlockedReason(["ben"], "ana", false)).toBe("Tick yourself to finish. Only someone who was there can.");
+    expect(finishBlockedReason(["ana", "ben"], "ana", false)).toBeNull();
+  });
+});
 
 describe("applyTick", () => {
   it("ticks an item and bumps both counts", () => {

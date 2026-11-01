@@ -671,10 +671,10 @@ shared kit's item ticks separately per area and people ticking side by side neve
 contend. A flagged item counts as checked, because someone looked at it. Booked
 people or ops can tick; crew can start on the day, ops any time. Working a hash
 confirms a pending booking. Finish lists everyone booked and asks who was there.
-Crew finish on their phones, so an empty list is refused while anyone is booked,
-and a non-manager's list has to include them. Ops can close a hash with nobody
-booked. Only the people listed keep their shift, get credit and get paid, even
-with items unchecked. Everyone else loses the shift and needs a hash again. A
+Crew finish on their phones, so a non-manager's list can't be empty and has to
+include them. Ops have neither rule, because a hash started by mistake or with
+nobody there has to close without false credit. Only the people listed keep their
+shift, get credit and get paid, even with items unchecked. Everyone else loses the shift and needs a hash again. A
 person who never confirmed starts unchecked. Finish sets the event to `completed`,
 the legacy status that reads as Ready, and flags stay open in History until
 resolved. A damaged flag can file a real damage report through `fileDamageReport`.

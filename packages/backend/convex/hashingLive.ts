@@ -405,7 +405,8 @@ export const setAreaClaim = mutation({
  * Whoever was there keeps their shift, so they get credit and pay. Everyone else
  * loses it and needs a hash again. Being on the list settles a pending booking.
  * Crew finish it on their phones in the closet, so one tap can't wipe the list or
- * credit people with nobody there to vouch for them. Ops correct it afterwards.
+ * credit people with nobody there to vouch for them. Ops can close it with an
+ * empty list, because a hash started by mistake has to end without credit.
  */
 export const finish = mutation({
   args: { hashDateId: v.id("hashDates"), attendeeUserIds: v.array(v.string()) },
@@ -420,9 +421,11 @@ export const finish = mutation({
     const bookings = await loadDateBookings(ctx, row);
     const stranger = args.attendeeUserIds.find((userId) => !bookings.some((booking) => booking.userId === userId));
     if (stranger) appError("HASH_NOT_BOOKED", "Only people booked on this hash can be marked as there.");
-    if (attendees.size === 0 && bookings.length > 0) appError("HASH_NO_ATTENDEES", "Tick who was there.");
-    if (!viewer.canManage && !attendees.has(viewer.userId)) {
-      appError("HASH_FINISH_WITHOUT_YOU", "You can only finish a hash you were at, so tick yourself.");
+    if (!viewer.canManage) {
+      if (attendees.size === 0) appError("HASH_NO_ATTENDEES", "Tick who was there.");
+      if (!attendees.has(viewer.userId)) {
+        appError("HASH_FINISH_WITHOUT_YOU", "You can only finish a hash you were at, so tick yourself.");
+      }
     }
 
     await settleHashAttendance(ctx, row, args.attendeeUserIds);
