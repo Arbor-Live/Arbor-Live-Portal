@@ -20,7 +20,7 @@ import {
 } from "./lib/publicEventContacts";
 import { resolveArtistLineDayScope } from "./lib/invoiceArtistDays";
 import { isMultiDayGroup, isRecurringGroup } from "./lib/eventGroupKind";
-import { getActivePaymentProofSubmissionForInvoice } from "./lib/paymentProof";
+import { getActivePaymentProofSubmissionForInvoice, resolvePortalTokenForInvoice } from "./lib/paymentProof";
 import {
   computeInvoiceListLabels,
   computeInvoiceListPaymentStatus,
@@ -2631,7 +2631,7 @@ async function sendQuoteOnRequestPortal(
 
   const updatedInvoice = await ctx.db.get(invoice._id);
   if (!updatedInvoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
-  await recordInvoiceRevision(ctx, invoice._id, await snapshotInvoice(ctx, updatedInvoice), {
+  const { number } = await recordInvoiceRevision(ctx, invoice._id, await snapshotInvoice(ctx, updatedInvoice), {
     kind: "sent",
     at: now,
     note: clientReadyMessage,
@@ -2658,6 +2658,7 @@ async function sendQuoteOnRequestPortal(
       });
     }
   }
+  return number;
 }
 
 export const markReadyForClientReview = mutation({
@@ -2684,10 +2685,10 @@ export const markReadyForClientReview = mutation({
 /**
  * Why staff can't send this quote again with `sendRevisedQuote`, or null when
  * they can: it must not be void or approved (approved quotes go through the
- * editor's re-approval), and a request-portal quote must already be on the
- * portal.
+ * editor's re-approval), a request-portal quote must already be on the
+ * portal, and the client must be reachable by a live link.
  */
-function revisedQuoteBlocker(invoice: Doc<"invoices">) {
+async function revisedQuoteBlocker(ctx: QueryCtx | MutationCtx, invoice: Doc<"invoices">) {
   if (invoice.status === "void") return { code: "INVOICE_VOID", message: "This quote is void." };
   if (invoice.clientApprovalStatus === "approved") {
     return {
@@ -2698,14 +2699,29 @@ function revisedQuoteBlocker(invoice: Doc<"invoices">) {
   if (invoice.sourceEventRequestId && !invoice.clientReviewReadyAt) {
     return { code: "QUOTE_NOT_SENT", message: "Send the quote to the client first." };
   }
+  if (!invoice.sourceEventRequestId && !invoice.clientEmail?.trim()) {
+    return { code: "QUOTE_CLIENT_EMAIL_REQUIRED", message: "Add the client's email so they get the quote." };
+  }
+  const portal = await resolvePortalTokenForInvoice(ctx, invoice);
+  const quoteLinkExpired =
+    portal?.portal === "quote" &&
+    invoice.publicApprovalTokenExpiresAt !== undefined &&
+    invoice.publicApprovalTokenExpiresAt < Date.now();
+  if (!portal || quoteLinkExpired) {
+    return {
+      code: "QUOTE_LINK_EXPIRED",
+      message: invoice.sourceEventRequestId
+        ? "The client's request portal link has expired."
+        : "The quote link has expired. Regenerate it, then send.",
+    };
+  }
   return null;
 }
 
 /**
  * Email a standalone quote's link with a message, as a new version: a reply
  * to the client's open change request (which reopens approval), or a revision
- * compared against the latest version. Refuses before writing anything when
- * the email can't reach the client.
+ * compared against the latest version. Callers check `revisedQuoteBlocker`.
  */
 async function sendQuoteByEmail(
   ctx: MutationCtx,
@@ -2713,16 +2729,7 @@ async function sendQuoteByEmail(
   message: string,
   sender: QuoteSender,
 ) {
-  if (!invoice.clientEmail?.trim()) {
-    appError("QUOTE_CLIENT_EMAIL_REQUIRED", "Add the client's email so they get the quote.");
-  }
   const now = Date.now();
-  if (
-    !invoice.publicApprovalToken ||
-    (invoice.publicApprovalTokenExpiresAt !== undefined && invoice.publicApprovalTokenExpiresAt < now)
-  ) {
-    appError("QUOTE_LINK_EXPIRED", "The quote link has expired. Regenerate it, then send.");
-  }
   const request = await ensureChangeRequestRevision(ctx, invoice);
   const previous = request ?? (await latestInvoiceRevision(ctx, invoice._id));
   if (request) await resetInvoiceApproval(ctx, invoice, now);
@@ -2765,7 +2772,7 @@ export const sendRevisedQuote = mutation({
     return await withReportableErrors("invoices.sendRevisedQuote", async () => {
       const invoice = await ctx.db.get(args.id);
       if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
-      const blocker = revisedQuoteBlocker(invoice);
+      const blocker = await revisedQuoteBlocker(ctx, invoice);
       if (blocker) appError(blocker.code, blocker.message);
       const message = args.message.trim();
       if (!message) {
@@ -2776,9 +2783,7 @@ export const sendRevisedQuote = mutation({
       if (!invoice.sourceEventRequestId) {
         return { number: await sendQuoteByEmail(ctx, invoice, message, sender) };
       }
-      await sendQuoteOnRequestPortal(ctx, invoice, message, sender);
-      const sent = await latestInvoiceRevision(ctx, invoice._id);
-      return { number: sent?.number ?? 0 };
+      return { number: await sendQuoteOnRequestPortal(ctx, invoice, message, sender) };
     });
   },
 });
@@ -2786,7 +2791,8 @@ export const sendRevisedQuote = mutation({
 /**
  * What a revised quote would answer or follow, next to the quote as saved
  * now, so the send sheet can show what changed: the client's open change
- * request, else the latest version. Null when `sendRevisedQuote` would refuse.
+ * request, else the latest version. `blocked` says why `sendRevisedQuote`
+ * would refuse.
  */
 export const revisedQuotePreview = query({
   args: { id: v.id("invoices") },
@@ -2794,13 +2800,16 @@ export const revisedQuotePreview = query({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const invoice = await ctx.db.get(args.id);
-    if (!invoice || revisedQuoteBlocker(invoice)) return null;
+    if (!invoice) return null;
+    const blocker = await revisedQuoteBlocker(ctx, invoice);
+    if (blocker) return { blocked: blocker.message, basis: null, current: null };
     const latest = await latestInvoiceRevision(ctx, invoice._id);
     const current = await snapshotInvoice(ctx, invoice);
     const replying = invoice.clientApprovalStatus === "changes_requested";
     // A request made before requests were versions: the note is all there is.
     const base = replying && latest?.kind !== "changes_requested" ? null : latest;
     return {
+      blocked: null,
       basis: {
         kind: replying ? ("changes_requested" as const) : ("revision" as const),
         note: replying ? (base?.note ?? invoice.clientApprovalNote) : undefined,

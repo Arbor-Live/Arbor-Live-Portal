@@ -137,7 +137,7 @@ async function quoteUpdatedEmails(t: Test) {
   );
   return rows.map((row) => {
     const payload = row.payload as { reason?: string; previousTotalUsd?: number; newTotalUsd: number };
-    return [payload.reason, payload.previousTotalUsd, payload.newTotalUsd];
+    return [row.subject, payload.reason, payload.previousTotalUsd, payload.newTotalUsd];
   });
 }
 
@@ -179,8 +179,8 @@ test("staff send a revised quote without a change request", async () => {
     [2, "sent", "Same quote, new dates.", 400, "Sam Staff"],
   ]);
   expect(await quoteUpdatedEmails(t)).toEqual([
-    ["revised", undefined, 400],
-    ["revised", 400, 400],
+    ["Your quote: ALINV-TESTCR1", "revised", undefined, 400],
+    ["Your quote was updated: ALINV-TESTCR1", "revised", 400, 400],
   ]);
 });
 
@@ -192,18 +192,24 @@ test("a standalone quote needs the client's email to send", async () => {
   await expect(staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Hi" })).rejects.toThrow(
     /client's email/,
   );
+  expect(await staff.query(api.invoices.revisedQuotePreview, { id: invoiceId })).toMatchObject({
+    blocked: "Add the client's email so they get the quote.",
+  });
   expect(await revisionsOf(t, invoiceId)).toEqual([]);
 });
 
 test("a standalone quote needs a live link to send", async () => {
   const t = makeTest();
-  const invoiceId = await seedQuote(t, { publicApprovalTokenExpiresAt: Date.now() - 1000 });
+  const expired = await seedQuote(t, { publicApprovalTokenExpiresAt: Date.now() - 1000 });
+  const missing = await seedQuote(t, { publicApprovalToken: undefined });
   const staff = await arborStaff(t);
 
-  await expect(staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Hi" })).rejects.toThrow(
-    /link has expired/,
-  );
-  expect(await revisionsOf(t, invoiceId)).toEqual([]);
+  for (const invoiceId of [expired, missing]) {
+    await expect(staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Hi" })).rejects.toThrow(
+      /link has expired/,
+    );
+    expect(await revisionsOf(t, invoiceId)).toEqual([]);
+  }
 });
 
 test("a request-portal quote is revised on the portal once it's there", async () => {
@@ -217,7 +223,9 @@ test("a request-portal quote is revised on the portal once it's there", async ()
     await expect(staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Hi" })).rejects.toThrow(
       /Send the quote to the client first/,
     );
-    expect(await staff.query(api.invoices.revisedQuotePreview, { id: invoiceId })).toBeNull();
+    expect(await staff.query(api.invoices.revisedQuotePreview, { id: invoiceId })).toMatchObject({
+      blocked: "Send the quote to the client first.",
+    });
 
     await staff.mutation(api.invoices.markReadyForClientReview, { id: invoiceId, clientMessage: "First send." });
     expect(
@@ -248,7 +256,9 @@ test("an approved quote goes back through re-approval, not a revised send", asyn
   await expect(staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Hi" })).rejects.toThrow(
     /approved this quote/,
   );
-  expect(await staff.query(api.invoices.revisedQuotePreview, { id: invoiceId })).toBeNull();
+  expect(await staff.query(api.invoices.revisedQuotePreview, { id: invoiceId })).toMatchObject({
+    blocked: expect.stringMatching(/approved this quote/),
+  });
 });
 
 test("a request made before requests were versions is recorded late, once", async () => {

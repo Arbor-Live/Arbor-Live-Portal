@@ -734,7 +734,8 @@ Update `YEARS` there when the Registrar publishes new dates.
     must be on the portal). It saves a `sent` version; standalone quotes get
     `quote_updated` with `reason: "revised"`, compared against the latest
     version of any kind (none on the first send, which gets a "Your quote"
-    subject). Standalone sends need a client email and a live quote link.
+    subject). Sends need a live link to the client (and, standalone, a client
+    email); `revisedQuotePreview` returns why as `blocked`.
     Approved quotes are refused and go through the editor's re-approval.
   - `resetApprovalToPending` refuses an open change request, so a request is
     never cleared silently. Requests made before this were backfilled

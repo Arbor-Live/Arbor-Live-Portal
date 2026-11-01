@@ -50,16 +50,20 @@ export function RevisedQuoteSheet({
   sending: boolean;
   onSend: (message: string) => Promise<void>;
 }) {
-  const preview = useQuery(api.invoices.revisedQuotePreview, open ? { id: invoiceId } : "skip");
+  const livePreview = useQuery(api.invoices.revisedQuotePreview, open ? { id: invoiceId } : "skip");
+  // Sending changes what the preview compares against; keep showing what was sent while the sheet closes.
+  const [sentPreview, setSentPreview] = useState<typeof livePreview>(undefined);
+  const preview = sentPreview ?? livePreview;
   const [message, setMessage] = useState("");
-  // Sending a reply reopens approval; keep the reply wording while the sheet closes.
+  // The parent remounts the sheet on each open (its `key`), so this is the state when it opened.
   const [isReply] = useState(isReplyWhenOpened);
   const [error, setError] = useState<string | null>(null);
   const trimmed = message.trim();
 
   const basis = preview?.basis;
-  const changes = basis?.lines && preview ? diffQuoteLines(basis.lines, preview.current.lines) : null;
-  const delta = basis?.totalUsd != null && preview ? preview.current.totalUsd - basis.totalUsd : null;
+  const current = preview?.current;
+  const changes = basis?.lines && current ? diffQuoteLines(basis.lines, current.lines) : null;
+  const delta = basis?.totalUsd != null && current ? current.totalUsd - basis.totalUsd : null;
   const unchanged = changes !== null && changes.length === 0 && (delta === null || Math.abs(delta) < 0.005);
 
   const replyTo = [managerEmail?.trim() || null, ARBOR_CONTACT_EMAIL].filter(
@@ -79,10 +83,12 @@ export function RevisedQuoteSheet({
       return;
     }
     setError(null);
+    setSentPreview(livePreview);
     try {
       await onSend(trimmed);
       onOpenChange(false);
     } catch (err) {
+      setSentPreview(undefined);
       setError(getConvexErrorMessage(err, "Could not send the revised quote."));
     }
   }
@@ -118,6 +124,10 @@ export function RevisedQuoteSheet({
             </p>
             {preview === undefined ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : preview?.blocked ? (
+              <p className="text-sm text-destructive" data-testid="revised-quote-blocked">
+                {preview.blocked}
+              </p>
             ) : changes === null ? (
               <p className="text-sm text-muted-foreground">
                 {isReply
@@ -126,13 +136,13 @@ export function RevisedQuoteSheet({
               </p>
             ) : unchanged ? (
               <p className="text-sm text-status-amber-700 dark:text-status-amber-300" data-testid="revised-quote-unchanged">
-                Nothing yet: you&apos;ll resend the same quote ({formatUsd(preview?.current.totalUsd ?? 0)}). Say why
+                Nothing yet: you&apos;ll resend the same quote ({formatUsd(current?.totalUsd ?? 0)}). Say why
                 in your {isReply ? "reply" : "message"}, or make the changes first.
               </p>
             ) : (
               <>
                 <p className="text-sm tabular-nums">
-                  {formatUsd(basis?.totalUsd ?? 0)} → {formatUsd(preview?.current.totalUsd ?? 0)}
+                  {formatUsd(basis?.totalUsd ?? 0)} → {formatUsd(current?.totalUsd ?? 0)}
                   {delta !== null ? (
                     <span className="text-muted-foreground"> ({formatUsdDelta(delta, formatUsd)})</span>
                   ) : null}
@@ -183,7 +193,7 @@ export function RevisedQuoteSheet({
             type="button"
             data-testid="revised-quote-send"
             onClick={() => void handleSend()}
-            disabled={!trimmed || sending}
+            disabled={!trimmed || sending || Boolean(preview?.blocked)}
           >
             {sending ? "Sending…" : unchanged ? "Resend unchanged" : "Send revised quote"}
           </Button>

@@ -482,7 +482,7 @@ function InvoiceWorkflowStrip({
   const approval = invoice.clientApprovalStatus ?? "pending";
   const canSendRevised =
     invoice.status !== "void" && approval !== "approved" && (!isRequestLinked || onRequestPortal);
-  const offerRevision = approval === "pending" && canSendRevised && (isRequestLinked || Boolean(clientEmail));
+  const offerRevision = approval === "pending" && canSendRevised;
   const openRevisedSheet = () => setReplySheet((current) => ({ open: true, key: current.key + 1 }));
 
   async function sendReply(message: string) {

@@ -42,9 +42,13 @@ export function QuoteUpdatedEmail({
       : `${difference > 0 ? "+" : "−"}${currency(Math.abs(difference))}`;
 
   const answersRequest = reason === "changes_requested";
+  const firstSend = previousTotalUsd === undefined;
 
   return (
-    <EmailLayout preview={`Your quote for ${eventTitle} was updated`} heading="Quote Updated">
+    <EmailLayout
+      preview={firstSend ? `Your quote for ${eventTitle}` : `Your quote for ${eventTitle} was updated`}
+      heading={firstSend ? "Your Quote" : "Quote Updated"}
+    >
       <BodyCopy>{greeting}</BodyCopy>
       {answersRequest ? (
         <BodyCopy>
@@ -53,7 +57,7 @@ export function QuoteUpdatedEmail({
         </BodyCopy>
       ) : reason === "revised" ? (
         <BodyCopy>
-          {previousTotalUsd === undefined ? "Here's" : "We revised"} the quote for {eventTitle}. Please
+          {firstSend ? "Here's" : "We revised"} the quote for {eventTitle}. Please
           review it and approve it, or tell us what should change.
         </BodyCopy>
       ) : (
@@ -77,10 +81,10 @@ export function QuoteUpdatedEmail({
             value={currency(previousTotalUsd)}
           />
         )}
-        <DetailRow label="Updated total" value={currency(newTotalUsd)} emphasis />
+        <DetailRow label={firstSend ? "Total" : "Updated total"} value={currency(newTotalUsd)} emphasis />
         {difference === null ? null : <DetailRow label="Difference" value={differenceLabel} />}
       </DataCard>
-      <CtaButton href={portalUrl} label="Review the updated quote" />
+      <CtaButton href={portalUrl} label={firstSend ? "Review the quote" : "Review the updated quote"} />
       <ContactNote managerName={managerName} managerEmail={managerEmail} />
       <MutedCopy>
         This is still an estimate. Your final invoice comes after the event, once hours are final,
