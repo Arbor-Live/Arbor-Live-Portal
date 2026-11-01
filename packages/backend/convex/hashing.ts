@@ -35,6 +35,10 @@ const STANDING_TEXT_MAX = 500;
 const SHIFT_TAKE = 200;
 /** Open flags are a tab badge: it stops counting at this many. */
 const OPEN_FLAG_TAKE = 100;
+/** A hash this long past its end has been forgotten, not run late. */
+const STALE_AFTER_MS = 86_400_000;
+/** A hash a week, oldest first, so a few quarters of forgetting still fit. */
+const RUNNING_TAKE = 50;
 
 export const quarterRefValue = v.object({ id: v.string(), label: v.string() });
 
@@ -59,7 +63,18 @@ async function countOpenFlags(ctx: QueryCtx) {
   return rows.length;
 }
 
-/** The hashing header: this quarter, the slot, and the History badge. */
+/** Started and never finished. Nothing closes these on its own, so ops have to see them. */
+async function loadStaleHashes(ctx: QueryCtx, now: number) {
+  const running = await ctx.db
+    .query("hashDates")
+    .withIndex("by_status_and_dateKey", (q) => q.eq("status", "in_progress"))
+    .take(RUNNING_TAKE);
+  return running
+    .filter((row) => row.endsAt + STALE_AFTER_MS < now)
+    .map(({ _id, dateKey, startsAt }) => ({ _id, dateKey, startsAt }));
+}
+
+/** The hashing header: this quarter, the slot, the tab badges and any forgotten hash. */
 export const getOverview = query({
   args: { now: v.number() },
   returns: v.object({
@@ -67,6 +82,7 @@ export const getOverview = query({
     settings: v.union(settingsValue, v.null()),
     canManage: v.boolean(),
     openFlags: v.number(),
+    staleHashes: v.array(v.object({ _id: v.id("hashDates"), dateKey: v.string(), startsAt: v.number() })),
   }),
   handler: async (ctx, args) => {
     const viewer = await requireHashingViewer(ctx);
@@ -77,6 +93,7 @@ export const getOverview = query({
       settings: settings ? pickSettings(settings) : null,
       canManage: viewer.canManage,
       openFlags: viewer.canManage ? await countOpenFlags(ctx) : 0,
+      staleHashes: viewer.canManage ? await loadStaleHashes(ctx, args.now) : [],
     };
   },
 });

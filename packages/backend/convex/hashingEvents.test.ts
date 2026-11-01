@@ -830,6 +830,28 @@ describe("pay and attendance", () => {
   });
 });
 
+describe("stale running hashes", () => {
+  test("a hash a day past its end shows on the overview for ops, and nothing finishes it", async () => {
+    const context = await setup();
+    const { t, opsApi, anaApi, ana, on } = context;
+    const hashDateId = await bookAndRun(context, "2026-11-03", [ana]);
+    const row = on("2026-11-03");
+
+    const within = row.endsAt + 24 * HOUR - 1;
+    expect((await opsApi.query(api.hashing.getOverview, { now: within })).staleHashes).toEqual([]);
+
+    const past = row.endsAt + 24 * HOUR + 1;
+    expect((await opsApi.query(api.hashing.getOverview, { now: past })).staleHashes).toEqual([
+      { _id: hashDateId, dateKey: "2026-11-03", startsAt: row.startsAt },
+    ]);
+    expect((await anaApi.query(api.hashing.getOverview, { now: past })).staleHashes).toEqual([]);
+
+    vi.setSystemTime(past);
+    await t.mutation(internal.hashingSchedule.closeLapsedHashes, {});
+    expect((await getRow(t, hashDateId))?.status).toBe("in_progress");
+  });
+});
+
 describe("notifications", () => {
   test("a booking queues the crew_scheduled invite, with a calendar file and a link to My hashes", async () => {
     const { t, opsApi, ana, on } = await setup();
