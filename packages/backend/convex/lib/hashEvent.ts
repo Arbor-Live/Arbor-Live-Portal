@@ -42,17 +42,21 @@ export function requireHashStatusUnchanged(event: Doc<"events">, status: string 
   }
 }
 
-/** Blocks may keep their labels and notes; their times and number belong to Hashing. */
+/** Blocks may change their labels and notes; their type, times and number belong to Hashing. */
 export function requireHashBlocksUnchanged(
   existing: readonly Doc<"eventScheduleBlocks">[],
-  next: readonly { id?: Id<"eventScheduleBlocks">; startsAt: number; endsAt: number }[],
+  next: readonly { id?: Id<"eventScheduleBlocks">; blockType: string; startsAt: number; endsAt: number }[],
 ) {
   const byId = new Map(existing.map((block) => [block._id, block]));
   const same =
     existing.length === next.length &&
     next.every((block) => {
       const current = block.id ? byId.get(block.id) : undefined;
-      return current?.startsAt === block.startsAt && current.endsAt === block.endsAt;
+      return (
+        current?.blockType === block.blockType &&
+        current.startsAt === block.startsAt &&
+        current.endsAt === block.endsAt
+      );
     });
   if (!same) appError("HASH_TIMES_FROM_HASHING", HASH_ONE_WRITER);
 }

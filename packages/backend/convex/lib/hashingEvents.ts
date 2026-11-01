@@ -15,7 +15,7 @@ export const HASH_ROLE = "Hash";
 /** Stored as-is: every reader normalizes it to `ready`, the end of the pipeline. */
 const HASH_FINISHED_EVENT_STATUS = "completed";
 const HASH_OPEN_EVENT_STATUS = "scheduling";
-/** The section crew attach to. Invites read "Hash — Cleaning (Hash)". */
+/** The section's first name. Invites read "Hash — Cleaning (Hash)". Ops can rename it. */
 const HASH_SECTION_LABEL = "Cleaning";
 /** A hash has a section block and crew, and nothing else an event offers. */
 const HASH_EVENT_TYPE = "Services Only";
@@ -42,13 +42,7 @@ async function loadEventBlocks(ctx: MutationCtx, eventId: Id<"events">) {
     .take(EVENT_BLOCK_TAKE);
 }
 
-function isHashSection(block: Doc<"eventScheduleBlocks">) {
-  return block.blockType === "custom" && block.label === HASH_SECTION_LABEL;
-}
-
-export async function ensureHashSection(ctx: MutationCtx, eventId: Id<"events">, times: Times) {
-  const existing = (await loadEventBlocks(ctx, eventId)).find(isHashSection);
-  if (existing) return existing._id;
+export async function insertHashSection(ctx: MutationCtx, eventId: Id<"events">, times: Times) {
   const now = Date.now();
   return await ctx.db.insert("eventScheduleBlocks", {
     eventId,
@@ -82,8 +76,7 @@ export async function insertHashEvent(ctx: MutationCtx, times: Times, location: 
     createdAt: now,
     updatedAt: now,
   });
-  await ensureHashSection(ctx, eventId, times);
-  return eventId;
+  return { eventId, sectionBlockId: await insertHashSection(ctx, eventId, times) };
 }
 
 /**
@@ -118,7 +111,6 @@ export async function bookHashShifts(ctx: MutationCtx, row: Doc<"hashDates">, us
   const times = { startsAt: row.startsAt, endsAt: row.endsAt };
   const rateSettings = await loadInvoiceCrewRateSettings(ctx);
   await changeHashCrew(ctx, eventId, async () => {
-    const scheduleBlockId = await ensureHashSection(ctx, eventId, times);
     const now = Date.now();
     for (const userId of userIds) {
       const rate = await ctx.db
@@ -128,7 +120,7 @@ export async function bookHashShifts(ctx: MutationCtx, row: Doc<"hashDates">, us
       const hourlyRateUsd = resolveUserCompensationHourlyRateUsd(rate, rateSettings);
       await ctx.db.insert("eventCrewShifts", {
         eventId,
-        scheduleBlockId,
+        scheduleBlockId: row.sectionBlockId,
         role: HASH_ROLE,
         userId,
         ...times,
@@ -153,7 +145,7 @@ export async function clearHashShifts(ctx: MutationCtx, eventId: Id<"events">, k
 /** The one place a hash's times reach its event, section and shifts. */
 export async function moveHashEvent(
   ctx: MutationCtx,
-  row: Pick<Doc<"hashDates">, "eventId" | "startsAt">,
+  row: Pick<Doc<"hashDates">, "eventId" | "sectionBlockId" | "startsAt">,
   next: Times,
   options: { reconfirm: boolean },
 ) {
@@ -172,23 +164,17 @@ export async function moveHashEvent(
         spansMultipleDays: pacificDateKey(next.startsAt) !== pacificDateKey(next.endsAt),
         updatedAt: now,
       });
-      const blocks = await loadEventBlocks(ctx, eventId);
-      const section = blocks.find(isHashSection);
-      for (const block of blocks) {
+      for (const block of await loadEventBlocks(ctx, eventId)) {
         await ctx.db.patch(block._id, {
           startsAt: block.startsAt + delta,
-          endsAt: block._id === section?._id ? next.endsAt : block.endsAt + delta,
+          endsAt: block._id === row.sectionBlockId ? next.endsAt : block.endsAt + delta,
           updatedAt: now,
         });
       }
       for (const shift of shifts) {
-        const times = {
-          startsAt: shift.startsAt + delta,
-          endsAt: shift.scheduleBlockId === section?._id ? next.endsAt : shift.endsAt + delta,
-        };
         await ctx.db.patch(shift._id, {
-          ...times,
-          hours: shiftHours(times),
+          ...next,
+          hours: shiftHours(next),
           needsConfirmation: options.reconfirm && shift.userId ? true : shift.needsConfirmation,
           updatedAt: now,
         });

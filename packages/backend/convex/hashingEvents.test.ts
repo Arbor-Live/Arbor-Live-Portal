@@ -355,6 +355,42 @@ describe("one writer", () => {
     ).rejects.toThrow(refused);
   });
 
+  test("a hash's section can't change type, and keeps its job under a new name", async () => {
+    const { t, opsApi, ana, on, eventOf } = await setup();
+    const hashDateId = on("2026-11-17")._id;
+    const eventId = eventOf("2026-11-17");
+    const [block] = await blocksOf(t, eventId);
+    const saved = { id: block!._id, blockType: block!.blockType, label: "Sweep", startsAt: block!.startsAt, endsAt: block!.endsAt };
+    await expect(
+      opsApi.mutation(api.eventSchedule.upsertBlocks, { eventId, blocks: [{ ...saved, blockType: "show" }] }),
+    ).rejects.toThrow(/Change them there/);
+
+    await opsApi.mutation(api.eventSchedule.upsertBlocks, { eventId, blocks: [saved] });
+    await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId, userId: ana._id });
+    expect(await blocksOf(t, eventId)).toHaveLength(1);
+    expect((await shiftsOf(t, eventId))[0]?.scheduleBlockId).toBe(block!._id);
+
+    await opsApi.mutation(api.hashingSchedule.saveSetup, { ...SETUP, durationMinutes: 90 });
+    const row = await getRow(t, hashDateId);
+    expect(row!.endsAt - row!.startsAt).toBe(1.5 * HOUR);
+    expect(await blocksOf(t, eventId)).toMatchObject([{ label: "Sweep", startsAt: row!.startsAt, endsAt: row!.endsAt }]);
+    expect(await shiftsOf(t, eventId)).toMatchObject([{ startsAt: row!.startsAt, endsAt: row!.endsAt, hours: 1.5 }]);
+  });
+
+  test("a move re-times every booking, even one with no section link", async () => {
+    const { t, opsApi, ana, on, eventOf } = await setup();
+    const hashDateId = on("2026-11-17")._id;
+    const eventId = eventOf("2026-11-17");
+    await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId, userId: ana._id });
+    await t.run(async (ctx) => {
+      const [shift] = await ctx.db.query("eventCrewShifts").collect();
+      await ctx.db.patch(shift!._id, { scheduleBlockId: undefined });
+    });
+    await opsApi.mutation(api.hashingSchedule.saveSetup, { ...SETUP, durationMinutes: 90 });
+    const row = await getRow(t, hashDateId);
+    expect(await shiftsOf(t, eventId)).toMatchObject([{ startsAt: row!.startsAt, endsAt: row!.endsAt, hours: 1.5 }]);
+  });
+
   test("a crew edit on the event page counts as a booking, and can't move the shift", async () => {
     const { t, opsApi, anaApi, ana, on, eventOf } = await setup();
     const row = on("2026-11-17");
@@ -525,6 +561,16 @@ describe("pay and attendance", () => {
           createdAt: NOW,
           updatedAt: NOW,
         });
+        const sectionBlockId = await ctx.db.insert("eventScheduleBlocks", {
+          eventId,
+          blockType: "custom",
+          label: "Cleaning",
+          dayIndex: 0,
+          startsAt,
+          endsAt: startsAt + HOUR,
+          createdAt: NOW,
+          updatedAt: NOW,
+        });
         await ctx.db.insert("hashDates", {
           quarterId: QUARTER,
           dateKey: "2026-10-01",
@@ -534,6 +580,7 @@ describe("pay and attendance", () => {
           origin: "added",
           status: "scheduled",
           eventId,
+          sectionBlockId,
         });
       }
     });

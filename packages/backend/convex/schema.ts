@@ -2708,8 +2708,9 @@ export default defineSchema({
 
   /**
    * The Hashing add-on's sidecar: one row per hash, holding what an event has no
-   * field for. Every live date has its event. Only an `off` date may have none,
-   * so an off week costs nothing until someone switches it on.
+   * field for. Every live date has its event and the section block its crew sit
+   * on. Only an `off` date may have neither, so an off week costs nothing until
+   * someone switches it on.
    */
   hashDates: defineTable(
     v.union(
@@ -2717,11 +2718,13 @@ export default defineSchema({
         ...hashDateFields,
         status: v.literal("off"),
         eventId: v.optional(v.id("events")),
+        sectionBlockId: v.optional(v.id("eventScheduleBlocks")),
       }),
       v.object({
         ...hashDateFields,
         status: hashLiveDateStatusValue,
         eventId: v.id("events"),
+        sectionBlockId: v.id("eventScheduleBlocks"),
       }),
     ),
   )

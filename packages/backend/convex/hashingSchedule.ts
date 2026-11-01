@@ -46,9 +46,9 @@ import {
   bookHashShifts,
   cancelHashEvent,
   clearHashShifts,
-  ensureHashSection,
   HASH_ROLE,
   insertHashEvent,
+  insertHashSection,
   moveHashEvent,
   reopenHashEvent,
 } from "./lib/hashingEvents";
@@ -215,8 +215,11 @@ async function applySetup(
     };
     if (off) await ctx.db.insert("hashDates", { ...fields, status: "off" });
     else {
-      const eventId = await insertHashEvent(ctx, times, settings.location);
-      await ctx.db.insert("hashDates", { ...fields, status: "scheduled", eventId });
+      await ctx.db.insert("hashDates", {
+        ...fields,
+        status: "scheduled",
+        ...(await insertHashEvent(ctx, times, settings.location)),
+      });
     }
   }
 }
@@ -362,8 +365,8 @@ export const moveDate = mutation({
       movedFromDateKey: row.movedFromDateKey ?? row.dateKey,
     };
     if (!row.eventId) {
-      const eventId = await insertHashEvent(ctx, times, (await loadSettings(ctx))?.location);
-      await ctx.db.patch(row._id, { ...moved, eventId });
+      const made = await insertHashEvent(ctx, times, (await loadSettings(ctx))?.location);
+      await ctx.db.patch(row._id, { ...moved, ...made });
       await clearAvailability(ctx, row._id);
       return null;
     }
@@ -446,7 +449,7 @@ export const addDate = mutation({
       origin: "added",
       status: "scheduled",
       areaIds: args.areaIds?.length ? args.areaIds : undefined,
-      eventId: await insertHashEvent(ctx, times, settings.location),
+      ...(await insertHashEvent(ctx, times, settings.location)),
     });
     const row = await loadHashDate(ctx, hashDateId);
     for (const userId of bookUserIds) await requireBookable(ctx, row, userId);
@@ -478,8 +481,8 @@ export const setDateOff = mutation({
       await reopenHashEvent(ctx, row.eventId);
       return null;
     }
-    const eventId = await insertHashEvent(ctx, row, (await loadSettings(ctx))?.location);
-    await ctx.db.patch(row._id, { status: "scheduled", eventId });
+    const made = await insertHashEvent(ctx, row, (await loadSettings(ctx))?.location);
+    await ctx.db.patch(row._id, { status: "scheduled", ...made });
     return null;
   },
 });
@@ -569,9 +572,9 @@ async function addHashingToEvent(ctx: MutationCtx, event: Doc<"events">) {
     origin: "added",
     status: "scheduled",
     eventId: event._id,
+    sectionBlockId: await insertHashSection(ctx, event._id, times),
   });
   await ctx.db.patch(event._id, { hashingEnabled: true, updatedAt: now });
-  await ensureHashSection(ctx, event._id, times);
 }
 
 /** Past dates nobody started: no shift pays, the event closes, and crew owe a hash again. */
