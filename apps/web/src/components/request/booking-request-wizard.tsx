@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useConvex } from "convex/react";
+import { WarningIcon } from "@phosphor-icons/react";
 import {
   FormProvider,
   useForm,
@@ -50,10 +51,12 @@ import {
   EVENT_CATEGORY_OPTIONS,
   INDIVIDUAL_SPONSOR_TYPE,
   LIGHTING_TIER_OPTIONS,
+  NON_STANFORD_INDIVIDUAL_SPONSOR_TYPE,
   PRODUCTION_TIER_OPTIONS,
   bookingRequestDefaultValues,
   bookingRequestSchema,
   getActiveSteps,
+  isStanfordEmail,
   requiresOrganizationName,
   sponsorTypeOptionsForContext,
   type BookingRequestFormValues,
@@ -110,6 +113,7 @@ function itemChoices(
   name: BookingRequestStepId,
   contactLookup: ContactLookup | null,
   requestContext: BookingRequestFormValues["requestContext"],
+  requesterEmail: string,
 ): QuestionnaireChoiceDefinition[] | undefined {
   switch (name) {
     case "eventCategory":
@@ -119,7 +123,7 @@ function itemChoices(
     case "lighting":
       return LIGHTING_TIER_OPTIONS.map((value) => ({ value }));
     case "sponsorType":
-      return sponsorTypeOptionsForContext(requestContext).map((value) => ({ value }));
+      return sponsorTypeOptionsForContext(requesterEmail, requestContext).map((value) => ({ value }));
     case "returningUser":
       if (contactLookup?.found !== true) return undefined;
       return [
@@ -139,6 +143,8 @@ export function BookingRequestWizard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAdvancing, setIsAdvancing] = useState(false);
   const [contactLookup, setContactLookup] = useState<ContactLookup | null>(null);
+  // Set on leaving the email step, so typing the email doesn't re-render the whole wizard.
+  const [requesterEmail, setRequesterEmail] = useState("");
   const [trackingInfo, setTrackingInfo] = useState<{ publicToken: string; requestNumber: string } | null>(
     null,
   );
@@ -178,10 +184,10 @@ export function BookingRequestWizard() {
             name === "additionalNotes" ||
             Boolean(step && !step.skippable && name !== "welcome" && name !== "venue"),
           disabled: !step,
-          choices: itemChoices(name, contactLookup, requestContext),
+          choices: itemChoices(name, contactLookup, requestContext, requesterEmail),
         };
       }),
-    [activeSteps, contactLookup, requestContext],
+    [activeSteps, contactLookup, requestContext, requesterEmail],
   );
 
   const currentStep = activeSteps.find((step) => step.id === item) ?? activeSteps[0]!;
@@ -246,6 +252,22 @@ export function BookingRequestWizard() {
     return lookup;
   }, [contactLookup, convex, form]);
 
+  const applySponsorForEmail = useCallback(
+    (email: string) => {
+      setRequesterEmail(email);
+      if (!isStanfordEmail(email)) {
+        form.setValue("sponsorType", NON_STANFORD_INDIVIDUAL_SPONSOR_TYPE, { shouldDirty: true });
+        form.setValue("sponsorTypeOther", "", { shouldDirty: true });
+        form.setValue("organization", "", { shouldDirty: true });
+        form.setValue("invoiceGroupId", "", { shouldDirty: true });
+        form.setValue("requestContext", undefined, { shouldDirty: true });
+      } else if (form.getValues("sponsorType") === NON_STANFORD_INDIVIDUAL_SPONSOR_TYPE) {
+        form.setValue("sponsorType", bookingRequestDefaultValues.sponsorType, { shouldDirty: true });
+      }
+    },
+    [form],
+  );
+
   const handleItemChange = useCallback(
     async (next: string) => {
       setSubmitError(null);
@@ -267,6 +289,7 @@ export function BookingRequestWizard() {
         setIsAdvancing(true);
         try {
           const lookup = await lookupEmail();
+          applySponsorForEmail(form.getValues("email"));
           const nextSteps = getActiveSteps({
             showReturningUser: lookup.found,
             skipContact: lookup.found && contactDetailsComplete(lookup),
@@ -298,7 +321,7 @@ export function BookingRequestWizard() {
 
       setItem(next as BookingRequestStepId);
     },
-    [activeSteps, form, includeLighting, item, lookupEmail, skipSponsor],
+    [activeSteps, applySponsorForEmail, form, includeLighting, item, lookupEmail, skipSponsor],
   );
 
   const navigateToFirstInvalidStep = useCallback(
@@ -500,7 +523,7 @@ function StepFields({
     case "email":
       return (
         <div className="space-y-2">
-          <Label htmlFor="email">Stanford email</Label>
+          <Label htmlFor="email">Email</Label>
           <QuestionnaireInput
             id="email"
             type="email"
@@ -746,7 +769,7 @@ function SponsorTypeChoices() {
   const sponsorType = values.sponsorType;
   const invoiceGroupId = values.invoiceGroupId;
   const sponsorTypeOther = values.sponsorTypeOther;
-  const sponsorOptions = sponsorTypeOptionsForContext(requestContext);
+  const sponsorOptions = sponsorTypeOptionsForContext(values.email ?? "", requestContext);
   const showOrganization = requiresOrganizationName(sponsorType ?? "", invoiceGroupId);
 
   return (
@@ -787,6 +810,15 @@ function SponsorTypeChoices() {
       {showOrganization ? <OrganizationSearchField /> : null}
       {sponsorType === INDIVIDUAL_SPONSOR_TYPE ? (
         <p className="text-xs text-muted-foreground">Personal requests do not need an organization name.</p>
+      ) : null}
+      {sponsorType === NON_STANFORD_INDIVIDUAL_SPONSOR_TYPE ? (
+        <Alert className="border-status-amber-500/40 bg-status-amber-500/10 text-status-amber-700 dark:text-status-amber-300">
+          <WarningIcon aria-hidden />
+          <AlertDescription className="text-status-amber-700 dark:text-status-amber-300">
+            Your event must be approved by Stanford&apos;s Office of Student Engagement (OSE) and
+            can&apos;t violate campus policy.
+          </AlertDescription>
+        </Alert>
       ) : null}
     </div>
   );

@@ -14,6 +14,9 @@ export function invoiceDueDateFromFirstDay(firstDayMs: number) {
 
 type GroupType = "vso" | "house" | "department" | "individual";
 
+/** Keep in sync with the same constant in apps/web/src/lib/validations/booking-request.ts. */
+export const NON_STANFORD_INDIVIDUAL_SPONSOR_TYPE = "Individual (non-Stanford)";
+
 function trimOptional(raw: string | undefined) {
   const out = raw?.trim();
   return out ? out : undefined;

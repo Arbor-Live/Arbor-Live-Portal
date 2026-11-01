@@ -6,7 +6,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { getUserId, requireArborInternalContext, requireAuth, findAuthUsersByIds } from "./lib/auth";
 import { normalizeEventStatus } from "./lib/eventStatus";
-import { createDraftInvoiceFromBookingRequest, mapGroupTypeToSponsor, mapSponsorTypeToGroupType, provisionBillingProfileFromRequest } from "./lib/bookingRequestQuote";
+import { createDraftInvoiceFromBookingRequest, mapGroupTypeToSponsor, mapSponsorTypeToGroupType, NON_STANFORD_INDIVIDUAL_SPONSOR_TYPE, provisionBillingProfileFromRequest } from "./lib/bookingRequestQuote";
 import { searchHostOrganizations } from "./lib/hostOrgIdentity";
 import { resolveHostLink } from "./lib/hostOrgs";
 import {
@@ -205,6 +205,10 @@ function trimOptional(value: string | undefined) {
 
 function isStanfordEmail(email: string) {
   return /^[^\s@]+@(?:stanford\.edu|alumni\.stanford\.edu)$/i.test(email.trim());
+}
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 function makePublicToken() {
@@ -789,8 +793,8 @@ export const submitPublic = mutation({
     const lastName = args.lastName.trim();
     const email = args.email.trim().toLowerCase();
     const phone = args.phone.trim();
-    if (!isStanfordEmail(email)) {
-      appError("REQUEST_STANFORD_EMAIL_REQUIRED", "Please use a valid Stanford email address.");
+    if (!isValidEmail(email)) {
+      appError("REQUEST_EMAIL_INVALID", "Please use a valid email address.");
     }
     if (!firstName || !lastName || !phone) {
       appError("REQUEST_CONTACT_REQUIRED", "Contact information is required.");
@@ -833,6 +837,22 @@ export const submitPublic = mutation({
     }
 
     const organization = trimOptional(args.organization);
+    const isNonStanfordSponsorType =
+      args.sponsorType.trim() === NON_STANFORD_INDIVIDUAL_SPONSOR_TYPE;
+    if (isStanfordEmail(email)) {
+      if (isNonStanfordSponsorType) {
+        appError(
+          "REQUEST_SPONSOR_TYPE_NON_STANFORD_ONLY",
+          "Stanford emails can't use the non-Stanford sponsor type.",
+        );
+      }
+    } else if (!isNonStanfordSponsorType || args.invoiceGroupId || organization) {
+      // The email is unverified, so a group here would let anyone bill a Stanford group.
+      appError(
+        "REQUEST_NON_STANFORD_INDIVIDUAL_ONLY",
+        "Non-Stanford emails can only request as an individual.",
+      );
+    }
     const groupType = mapSponsorTypeToGroupType(args.sponsorType);
     if (groupType !== "individual" && !args.invoiceGroupId && !organization) {
       appError(

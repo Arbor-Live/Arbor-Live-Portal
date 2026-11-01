@@ -15,6 +15,7 @@ describe("booking request wizard subscriptions", () => {
 
   it("scopes sponsor type step to sponsor fields only", () => {
     expect(BOOKING_REQUEST_STEP_WATCH_FIELDS.sponsorType).toEqual([
+      "email",
       "requestContext",
       "sponsorType",
       "invoiceGroupId",
