@@ -50,6 +50,7 @@ import {
   type InviteStatus,
   type OrgOption,
 } from "@/components/users/directory/shared";
+import { NOTION_CHECKLIST_ITEMS, NotionChecklistSection } from "@/components/users/notion-checklist-section";
 import { OrgFilterSelect, useUsersDirectory } from "@/components/users/directory/users-directory-shell";
 import {
   editInviteSchema,
@@ -229,6 +230,10 @@ function InviteRowItem({
 }) {
   const status = inviteStatus(invite.status);
   const pending = status === "pending";
+  const notionChecklist = pending || status === "accepted" ? invite.notionChecklist : null;
+  const notionDone = notionChecklist
+    ? NOTION_CHECKLIST_ITEMS.filter((item) => notionChecklist[item.key]).length
+    : null;
   return (
     <ListRow
       data-testid={`invite-row-${invite.id}`}
@@ -265,6 +270,11 @@ function InviteRowItem({
         <p className="truncate text-xs text-muted-foreground">
           <span data-testid="invite-role">{roleLabel(invite.role)}</span> · Invited by {invite.inviterName}
           {invite.createdAt ? ` · ${formatDate(invite.createdAt)}` : ""}
+          {notionDone !== null && notionDone < NOTION_CHECKLIST_ITEMS.length ? (
+            <span data-testid="invite-notion-progress">
+              {" · "}Notion {notionDone}/{NOTION_CHECKLIST_ITEMS.length}
+            </span>
+          ) : null}
         </p>
       </div>
       <span className="hidden w-44 shrink-0 text-right text-xs whitespace-nowrap text-muted-foreground tabular-nums md:block">
@@ -398,6 +408,10 @@ function InviteSheetBody({ invite, orgOptions }: { invite: InviteRow; orgOptions
           ))}
         </dl>
       </SheetSection>
+
+      {invite.notionChecklist ? (
+        <NotionChecklistSection invitationId={invite.id} checklist={invite.notionChecklist} />
+      ) : null}
 
       <SheetSection title="Role and teams">
         <fieldset disabled={!pending} className="space-y-4">

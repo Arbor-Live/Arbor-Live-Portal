@@ -107,6 +107,26 @@ test.describe("user invite lifecycle", () => {
     expect(edited.status).toBe("pending");
     await expect(inviteRow.getByTestId("invite-role")).toHaveText("Admin", { timeout: 30_000 });
 
+    // Manual Notion checklist (crew invites only): a tick persists across
+    // closing and reopening the panel, and the row shows the remaining count.
+    const notion = sheet.getByTestId("invite-notion-checklist");
+    const inviteToNotion = notion.getByRole("checkbox", { name: "Invite to Notion" });
+    await expect(inviteRow.getByTestId("invite-notion-progress")).toHaveText(/Notion 0\/2/);
+    await inviteToNotion.click();
+    await expect(inviteToNotion).toBeChecked({ timeout: 30_000 });
+    await expect(inviteRow.getByTestId("invite-notion-progress")).toHaveText(/Notion 1\/2/, {
+      timeout: 30_000,
+    });
+    await closeSheet(page, sheet);
+    await inviteRow.getByRole("button").first().click();
+    await expect(sheet).toBeVisible({ timeout: 20_000 });
+    await expect(
+      sheet.getByTestId("invite-notion-checklist").getByRole("checkbox", { name: "Invite to Notion" }),
+    ).toBeChecked();
+    await expect(
+      sheet.getByTestId("invite-notion-checklist").getByRole("checkbox", { name: "Add to Crew group" }),
+    ).not.toBeChecked();
+
     // Resend: another email, and a pushed-out expiry.
     const resendAfter = Date.now();
     await sheet.getByRole("button", { name: "Resend invite" }).click();

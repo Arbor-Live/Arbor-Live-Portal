@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { EventSelect } from "@/components/events/event-select";
 import { ScheduleBlockWindowFields } from "@/components/events/schedule-block-window-fields";
+import { NotionChecklistSection } from "@/components/users/notion-checklist-section";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { api, type Id } from "@/lib/convex-api";
 import { formatDate, formatDateTime } from "@/lib/format";
@@ -64,6 +65,9 @@ export type CrewApplicationRow = {
   outreachUpdatedByName?: string;
   /** Trainees only: when their last training shift ends. */
   trainingEndsAt?: number;
+  /** Set when converted after checklists were linked; older conversions have none. */
+  invitationId?: string;
+  notionChecklist: { inviteToNotion: boolean; addToCrewGroup: boolean } | null;
 };
 
 export type TraineeAssignArgs = {
@@ -654,6 +658,14 @@ export function CrewApplicationSheetBody({
             <ConvertForm application={application} onSubmit={onConvert} />
           )}
         </SheetSection>
+      ) : null}
+
+      {/* Decide is gone once converted; the Notion steps take its place. */}
+      {application.notionChecklist && application.invitationId ? (
+        <NotionChecklistSection
+          invitationId={application.invitationId}
+          checklist={application.notionChecklist}
+        />
       ) : null}
 
       <DetailSheetFooter

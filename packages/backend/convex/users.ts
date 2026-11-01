@@ -32,6 +32,8 @@ import {
   markInvitationAccepted,
   markInvitationCancelled,
   scheduleUserInviteEmail,
+  notionChecklistFlags,
+  syncInviteNotionChecklist,
   updatePendingInviteDetails,
 } from "./email/invitations";
 import {
@@ -290,6 +292,21 @@ async function getAllPendingInvites(ctx: QueryCtx | MutationCtx) {
   if (rows.length > MAX_PENDING_INVITES) {
     throw new Error(
       `pendingUserInvites exceeded ${MAX_PENDING_INVITES} rows; refusing to return a partial list.`,
+    );
+  }
+  return rows;
+}
+
+const MAX_INVITE_NOTION_CHECKLISTS = 5_000;
+
+/** Every checklist row or a loud failure, same contract as `getAllPendingInvites`. */
+async function getAllInviteNotionChecklists(ctx: QueryCtx | MutationCtx) {
+  const rows = await ctx.db
+    .query("inviteNotionChecklists")
+    .take(MAX_INVITE_NOTION_CHECKLISTS + 1);
+  if (rows.length > MAX_INVITE_NOTION_CHECKLISTS) {
+    throw new Error(
+      `inviteNotionChecklists exceeded ${MAX_INVITE_NOTION_CHECKLISTS} rows; refusing to return a partial list.`,
     );
   }
   return rows;
@@ -2031,10 +2048,14 @@ export const listInvitationsAdmin = query({
     const pendingByInvitationId = new Map(
       pendingInvites.map((row) => [row.invitationId, row]),
     );
+    const checklistByInvitationId = new Map(
+      (await getAllInviteNotionChecklists(ctx)).map((row) => [row.invitationId, row]),
+    );
     return invites
       .map((invite) => {
         const inviteId = getRecordId(invite);
         const pending = pendingByInvitationId.get(inviteId);
+        const checklist = checklistByInvitationId.get(inviteId);
         return {
           id: inviteId,
           email: invite.email ?? "",
@@ -2052,6 +2073,7 @@ export const listInvitationsAdmin = query({
           teams: (pending?.teams ?? []) as string[],
           verticals: (pending?.verticals ?? []) as UserVertical[],
           disciplines: (pending?.disciplines ?? []) as UserDiscipline[],
+          notionChecklist: notionChecklistFlags(checklist),
         };
       })
       .filter((invite) => Boolean(invite.id))
@@ -2151,6 +2173,12 @@ export const inviteUserAdmin = mutation({
       if (!invitationId) throw new Error("Failed to create invitation.");
     }
 
+    await syncInviteNotionChecklist(
+      ctx,
+      invitationId,
+      crewInvite.isArbor && crewInvite.inviteKind === "crew",
+    );
+
     const existingUser = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
       model: "user",
       where: [{ field: "email", value: email }],
@@ -2225,6 +2253,30 @@ export const inviteUserAdmin = mutation({
     });
 
     return { invitationId, email, expiresAt };
+    });
+  },
+});
+
+export const setInviteNotionChecklistItem = mutation({
+  args: {
+    invitationId: v.string(),
+    item: v.union(v.literal("inviteToNotion"), v.literal("addToCrewGroup")),
+    done: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    return await withReportableErrors("users.setInviteNotionChecklistItem", async () => {
+      const row = await ctx.db
+        .query("inviteNotionChecklists")
+        .withIndex("by_invitationId", (q) => q.eq("invitationId", args.invitationId))
+        .unique();
+      if (!row) {
+        appError("INVITE_NOTION_CHECKLIST_NOT_FOUND", "This invitation has no Notion checklist.");
+      }
+      // Ticking an already-ticked item keeps its original timestamp.
+      if ((row[args.item] !== undefined) === args.done) return null;
+      await ctx.db.patch(row._id, { [args.item]: args.done ? Date.now() : undefined });
+      return null;
     });
   },
 });

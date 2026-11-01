@@ -1,4 +1,5 @@
 import { components } from "../_generated/api";
+import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { findAuthOrganizationById, findAuthUserById } from "../lib/auth";
 import {
@@ -255,6 +256,38 @@ export async function markInvitationCancelled(ctx: MutationCtx, invitationId: st
     },
   });
   await revokePendingInvite(ctx, invitationId);
+}
+
+/**
+ * Idempotent: re-inviting reuses the invitation row, so crew keep their ticks
+ * and a pending invite switched to advisor loses its checklist. Survives
+ * `markInvitationAccepted`, which deletes the pending row.
+ */
+export async function syncInviteNotionChecklist(
+  ctx: MutationCtx,
+  invitationId: string,
+  isCrewInvite: boolean,
+) {
+  const existing = await ctx.db
+    .query("inviteNotionChecklists")
+    .withIndex("by_invitationId", (q) => q.eq("invitationId", invitationId))
+    .unique();
+  if (isCrewInvite && !existing) {
+    await ctx.db.insert("inviteNotionChecklists", { invitationId });
+  } else if (!isCrewInvite && existing) {
+    await ctx.db.delete(existing._id);
+  }
+}
+
+/** Completed-at timestamps collapsed to the booleans the UI ticks. */
+export function notionChecklistFlags(
+  row: Pick<Doc<"inviteNotionChecklists">, "inviteToNotion" | "addToCrewGroup"> | null | undefined,
+) {
+  if (!row) return null;
+  return {
+    inviteToNotion: row.inviteToNotion !== undefined,
+    addToCrewGroup: row.addToCrewGroup !== undefined,
+  };
 }
 
 export async function markInvitationAccepted(ctx: MutationCtx, invitationId: string) {
