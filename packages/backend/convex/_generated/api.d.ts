@@ -161,6 +161,7 @@ import type * as lib_crewNightValues from "../lib/crewNightValues.js";
 import type * as lib_crewNights from "../lib/crewNights.js";
 import type * as lib_crewShiftKinds from "../lib/crewShiftKinds.js";
 import type * as lib_crewShiftOverlap from "../lib/crewShiftOverlap.js";
+import type * as lib_crewShiftWindow from "../lib/crewShiftWindow.js";
 import type * as lib_crewTeams from "../lib/crewTeams.js";
 import type * as lib_crewTraineeIntro from "../lib/crewTraineeIntro.js";
 import type * as lib_crewTraineeTraining from "../lib/crewTraineeTraining.js";
@@ -473,6 +474,7 @@ declare const fullApi: ApiFromModules<{
   "lib/crewNights": typeof lib_crewNights;
   "lib/crewShiftKinds": typeof lib_crewShiftKinds;
   "lib/crewShiftOverlap": typeof lib_crewShiftOverlap;
+  "lib/crewShiftWindow": typeof lib_crewShiftWindow;
   "lib/crewTeams": typeof lib_crewTeams;
   "lib/crewTraineeIntro": typeof lib_crewTraineeIntro;
   "lib/crewTraineeTraining": typeof lib_crewTraineeTraining;

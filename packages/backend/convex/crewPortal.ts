@@ -9,6 +9,11 @@ import {
   requireArborInternalContext,
   requireAuth,
 } from "./lib/auth";
+import {
+  listUserShiftsNear,
+  ON_SHIFT_PADDING_MS,
+  summarizeOnShiftEvents,
+} from "./lib/crewShiftWindow";
 import { DEFAULT_AVAILABILITY_WEEKS } from "./lib/crewTeams";
 import { listMyPendingNights } from "./lib/crewNightInbox";
 import { profileHasCrewSpecialty } from "./lib/userVerticals";
@@ -31,6 +36,15 @@ const scheduledEventValue = v.object({
   startAt: v.number(),
   endAt: v.number(),
   shiftCount: v.number(),
+});
+
+const activeShiftValue = v.object({
+  eventId: v.id("events"),
+  title: v.string(),
+  venueName: v.optional(v.string()),
+  startsAt: v.number(),
+  endsAt: v.number(),
+  phase: v.union(v.literal("upcoming"), v.literal("now"), v.literal("ended")),
 });
 
 const postEventWorkValue = v.object({
@@ -143,6 +157,32 @@ export const listMyScheduledEvents = query({
       });
     }
     return results.sort((a, b) => a.startAt - b.startAt);
+  },
+});
+
+/** The events the viewer is working around `now`, most pressing first. */
+export const listMyActiveShifts = query({
+  args: { now: v.number() },
+  returns: v.array(activeShiftValue),
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const shifts = await listUserShiftsNear(ctx, getUserId(user), args.now, ON_SHIFT_PADDING_MS);
+
+    const results = [];
+    for (const { eventId, startsAt, endsAt, phase } of summarizeOnShiftEvents(shifts, args.now)) {
+      const event = await ctx.db.get(eventId);
+      if (!event || normalizeEventStatus(event.status) === "cancelled") continue;
+      results.push({
+        eventId,
+        title: event.title,
+        venueName: event.venueName,
+        startsAt,
+        endsAt,
+        phase,
+      });
+    }
+    return results;
   },
 });
 
