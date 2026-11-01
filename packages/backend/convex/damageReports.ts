@@ -1,6 +1,7 @@
 import { v, type ObjectType } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { syncFlagWithDamageReport } from "./lib/hashingFlags";
 import {
   type AuthUser,
   findAuthUsersByIds,
@@ -453,6 +454,11 @@ export const updateStatus = mutation({
     const wasOpen = report.status !== "resolved";
     const isOpen = args.status !== "resolved";
     if (wasOpen === isOpen) return null;
+    await syncFlagWithDamageReport(
+      ctx,
+      report._id,
+      isOpen ? { resolved: false } : { resolved: true, userId: getUserId(user), at: now },
+    );
 
     const item = await ctx.db.get(report.inventoryItemId);
     if (!item) return null;

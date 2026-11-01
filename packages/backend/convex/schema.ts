@@ -2770,7 +2770,8 @@ export default defineSchema({
     damageReportId: v.optional(v.id("damageReports")),
   })
     .index("by_hashDateId_and_itemKey", ["hashDateId", "itemKey"])
-    .index("by_status_and_resolvedAt", ["status", "resolvedAt"]),
+    .index("by_status_and_resolvedAt", ["status", "resolvedAt"])
+    .index("by_damageReportId", ["damageReportId"]),
 
   hashAreaClaims: defineTable({
     hashDateId: v.id("hashDates"),

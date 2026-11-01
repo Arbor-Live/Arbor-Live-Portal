@@ -197,6 +197,7 @@ import type * as lib_globalSearch from "../lib/globalSearch.js";
 import type * as lib_grantedStatement from "../lib/grantedStatement.js";
 import type * as lib_hashing from "../lib/hashing.js";
 import type * as lib_hashingChecklistSeed from "../lib/hashingChecklistSeed.js";
+import type * as lib_hashingFlags from "../lib/hashingFlags.js";
 import type * as lib_hashingData from "../lib/hashingData.js";
 import type * as lib_hashingValues from "../lib/hashingValues.js";
 import type * as lib_hostOrgIdentity from "../lib/hostOrgIdentity.js";
@@ -519,6 +520,7 @@ declare const fullApi: ApiFromModules<{
   "lib/hashing": typeof lib_hashing;
   "lib/hashingChecklistSeed": typeof lib_hashingChecklistSeed;
   "lib/hashingData": typeof lib_hashingData;
+  "lib/hashingFlags": typeof lib_hashingFlags;
   "lib/hashingValues": typeof lib_hashingValues;
   "lib/hostOrgIdentity": typeof lib_hostOrgIdentity;
   "lib/hostOrgs": typeof lib_hostOrgs;

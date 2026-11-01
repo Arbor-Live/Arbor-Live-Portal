@@ -96,6 +96,21 @@ async function getDate(t: Test, id: Id<"hashDates">) {
   return await t.run(async (ctx) => ctx.db.get(id));
 }
 
+function seedInventoryItem(t: Test) {
+  return t.run(async (ctx) => {
+    const typeId = await ctx.db.insert("inventoryTypes", {
+      name: "SM58",
+      category: "sound",
+      model: "SM58",
+      manualUrls: [],
+      capabilities: [],
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    return await ctx.db.insert("inventoryItems", { typeId, assetId: "A1", createdAt: NOW, updatedAt: NOW });
+  });
+}
+
 async function notificationTitles(t: Test, user: TestUser) {
   const rows = await t.run(async (ctx) =>
     ctx.db
@@ -730,18 +745,7 @@ describe("live hash", () => {
 
   test("a damaged flag can file a real damage report, once", async () => {
     const { t, anaApi, hashDateId } = await running();
-    const inventoryItemId = await t.run(async (ctx) => {
-      const typeId = await ctx.db.insert("inventoryTypes", {
-        name: "SM58",
-        category: "sound",
-        model: "SM58",
-        manualUrls: [],
-        capabilities: [],
-        createdAt: NOW,
-        updatedAt: NOW,
-      });
-      return await ctx.db.insert("inventoryItems", { typeId, assetId: "A1", createdAt: NOW, updatedAt: NOW });
-    });
+    const inventoryItemId = await seedInventoryItem(t);
     const damage = { inventoryItemId, operability: "needs_repair" as const, severity: 3 };
     await expect(
       anaApi.mutation(api.hashingLive.flagItem, { hashDateId, itemKey: ITEM, reason: "missing", damage }),
@@ -754,5 +758,29 @@ describe("live hash", () => {
     expect(reports[0]?.notes).toBe("Hashing, Large Packout: Container is clean and usable\nCracked");
     expect((await checksOf(t, hashDateId))[0]?.damageReportId).toBe(reports[0]?._id);
     await expect(anaApi.mutation(api.hashingLive.removeFlag, { hashDateId, itemKey: ITEM })).rejects.toThrow(/with ops/);
+  });
+
+  test("a flag follows its damage report until the report closes", async () => {
+    const { t, opsApi, anaApi, hashDateId } = await running();
+    const inventoryItemId = await seedInventoryItem(t);
+    const damage = { inventoryItemId, operability: "needs_repair" as const, severity: 3 };
+    await anaApi.mutation(api.hashingLive.flagItem, { hashDateId, itemKey: ITEM, reason: "damaged", damage });
+    await anaApi.mutation(api.hashingLive.flagItem, {
+      hashDateId,
+      itemKey: OTHER_ITEM,
+      reason: "damaged",
+      damage: { inventoryItemId, operability: "functional" as const, severity: 1 },
+    });
+    const reports = await t.run(async (ctx) => ctx.db.query("damageReports").collect());
+    const openFlags = async () => (await opsApi.query(api.hashingLive.getHistory, {})).flags.length;
+    expect(await openFlags()).toBe(2);
+
+    await opsApi.mutation(api.damageReports.updateStatus, { reportId: reports[0]!._id, status: "resolved" });
+    expect(await openFlags()).toBe(1);
+    await opsApi.mutation(api.damageReports.updateStatus, { reportId: reports[0]!._id, status: "open" });
+    expect(await openFlags()).toBe(2);
+
+    await opsApi.mutation(api.damageReports.decommission, { reportId: reports[0]!._id });
+    expect(await openFlags()).toBe(0);
   });
 });

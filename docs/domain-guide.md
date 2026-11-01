@@ -591,7 +591,9 @@ become `needs_confirmation`, its availability is cleared, and those people are
 notified. A date that passes without being started stops counting as a booking
 (`isLapsed`), so nobody stays stuck on it, and neither does an unconfirmed
 booking on a finished hash (`holdsQuarterSpot`). A flag that ops resolved or that
-reached Damage & repair can't be removed.
+reached Damage & repair can't be removed. A flag sent to Damage & repair follows
+its report: closing the report or retiring the item resolves the flag, and
+reopening the report opens it again.
 
 **A person's quarter** is derived, never stored, in `deriveQuarterState`: done
 (confirmed on a finished hash), exempt, booked, no_dates_work, needs_hash.
