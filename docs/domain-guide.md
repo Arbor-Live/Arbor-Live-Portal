@@ -570,9 +570,40 @@ Event types (drive which workspace tabs and quick-add blocks appear):
 ## Hashing
 
 Crew spend an hour on a set weekday cleaning the gear closet, and every crew
-member owes one hash per academic quarter. Hashing is internal work, not an
-event: it never touches `events`, the public calendar, invoices or timecards,
-and it is unpaid.
+member owes one hash per academic quarter. Hashes are paid, and each one is a
+real internal event, built as an event add-on like Open Mic.
+
+**The event.** `events.hashingEnabled` marks a hash, and `lib/hashEvent.ts`
+`isHashEvent` is the one test every surface uses. A hash event is internal,
+Services Only, has no invoice and one `Cleaning` section. `hashDates` is the
+sidecar for what an event has no field for: quarter, origin, status, capacity,
+areas, the pinned checklist and the final counts. Only an `off` date may have no
+event, which the schema enforces, so an off week costs nothing until it's
+switched on. Hashing is the one writer of a hash's times and status: the event
+mutations refuse them, along with visibility, invoices and Open Mic. Deleting a
+hash event takes its sidecar, answers, checks and claims with it. Turning a date
+off cancels its event and switching it on revives the same one. Removing an
+added date cancels the event and leaves it a plain internal event.
+
+**A booking is a shift.** There is no booking table. A person's shift on the
+event is their booking, whatever its role, so a crew edit on the event page
+counts. `needsConfirmation` on the shift means the hash moved and they haven't
+answered. Hashing writes shifts through `changeHashCrew`, which runs the crew
+assignment flow: crew cost, invite sequence, emails. A crew edit on a hash that's
+over is refused, because only the finish list settles pay and credit.
+
+**The add-on.** The Hashing card sits beside Open Mic on an internal event's
+Lineup tab, and on the Overview of a hash. Turning it on makes an `added` date
+from an event that is internal, unbilled, not in a series, ahead of now and
+inside a quarter through finals. Turning it off is refused once started and for
+a regular date, removes `Hash` shifts, and leaves the event.
+
+**Where a hash shows.** Timecards, crew hours, crew cost, Upcoming shifts, the
+on-shift card, the weekly digest, staffing conflicts and the internal calendar
+and list all carry it. Public listings, calendar feeds and newsletters stop at
+internal visibility. Nights, the crew board, open positions, trainees, the
+booking calendar, the CoHo card, post-event work, marketing and Insights event
+counts all skip it. Insights keeps its crew cost and hours.
 
 **Who owes one.** Active Arbor staff whose profile has `includeInTimecards` (the
 people held to the crew hours minimum). Summer has no requirement. Booking,
@@ -586,12 +617,11 @@ finals) are created `off`. A regular date owns its week even after it moves, so
 saving again never rebuilds it. Changing the weekday or time shifts only regular,
 unmoved, unstarted dates; moved and added dates stay, and so does a date whose
 week has no slot left, with its bookings. Dates run through finals. A moved
-date's bookings
-become `needs_confirmation`, its availability is cleared, and those people are
-notified. A date that passes without being started stops counting as a booking
-(`isLapsed`), so nobody stays stuck on it, and neither does an unconfirmed
-booking on a finished hash (`holdsQuarterSpot`). A flag that ops resolved or that
-reached Damage & repair can't be removed. A flag sent to Damage & repair follows
+date's shifts need confirmation, its availability is cleared, and those people
+are notified. A date that passes without being started stops counting as a
+booking (`isLapsed`), and the nightly `closeLapsedHashes` removes its shifts,
+cancels its event and marks it `lapsed`, so a hash nobody started pays nobody. A
+flag that ops resolved or that reached Damage & repair can't be removed. A flag sent to Damage & repair follows
 its report: closing the report or retiring the item resolves the flag, and
 reopening the report opens it again.
 
@@ -615,13 +645,20 @@ started; a started hash keeps its pinned `checklistVersionId`.
 shared kit's item ticks separately per area and people ticking side by side never
 contend. A flagged item counts as checked, because someone looked at it. Booked
 people or ops can tick; crew can start on the day, ops any time. Working a hash
-confirms a pending booking. Finishing gives credit to everyone with a confirmed
-booking, even with items unchecked, and flags stay open in History until resolved.
+confirms a pending booking. Finish lists everyone booked and asks who was there.
+Only they keep their shift, get credit and get paid, even with items unchecked.
+Everyone else loses the shift and needs a hash again. A person who never
+confirmed starts unchecked. Finish sets the event to `completed`, the legacy
+status that reads as Ready, and flags stay open in History until resolved. A
+hash started and never finished keeps its shifts until someone finishes it.
 A damaged flag can file a real damage report through `fileDamageReport`.
 
-**Notifications.** Hashes have no email. Booking, unbooking and moves write the
-bell directly under the `crew_scheduled` and `crew_unscheduled` kinds, so those
-kinds' in-app and push opt-outs cover hashes too.
+**Notifications.** Hashes use the crew assignment flow. Booking sends
+`crew_scheduled` with its calendar invite and removing sends `crew_unscheduled`.
+A move re-sends the same invite with a higher sequence, under a subject asking
+if they can still make it, and the bell mirrors it. Links go to My hashes. A
+batch from Fill is one change per date and one email per person. `crew_scheduled`
+is required mail, so only its bell can be muted.
 
 ## Stanford academic calendar and closures
 
