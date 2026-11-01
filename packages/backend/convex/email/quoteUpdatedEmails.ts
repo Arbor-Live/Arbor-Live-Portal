@@ -49,7 +49,10 @@ export async function scheduleQuoteUpdatedEmail(
   await enqueueEmail(ctx, {
     template: "quote_updated",
     to: clientEmail,
-    subject: subjectForTemplate("quote_updated", eventTitle),
+    subject:
+      args.previousTotalUsd === undefined
+        ? `Your quote: ${eventTitle}`
+        : subjectForTemplate("quote_updated", eventTitle),
     eventId: event?._id,
     idempotencyKey: `quote_updated:${args.invoice._id}:${args.revisionNumber}`,
     replyTo: args.invoice.managerEmail ? [args.invoice.managerEmail] : undefined,

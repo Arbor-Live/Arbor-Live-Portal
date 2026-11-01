@@ -2682,12 +2682,76 @@ export const markReadyForClientReview = mutation({
 });
 
 /**
+ * Why staff can't send this quote again with `sendRevisedQuote`, or null when
+ * they can: it must not be void or approved (approved quotes go through the
+ * editor's re-approval), and a request-portal quote must already be on the
+ * portal.
+ */
+function revisedQuoteBlocker(invoice: Doc<"invoices">) {
+  if (invoice.status === "void") return { code: "INVOICE_VOID", message: "This quote is void." };
+  if (invoice.clientApprovalStatus === "approved") {
+    return {
+      code: "QUOTE_APPROVED_USE_REAPPROVAL",
+      message: "The client approved this quote. Change it and save to send it for re-approval.",
+    };
+  }
+  if (invoice.sourceEventRequestId && !invoice.clientReviewReadyAt) {
+    return { code: "QUOTE_NOT_SENT", message: "Send the quote to the client first." };
+  }
+  return null;
+}
+
+/**
+ * Email a standalone quote's link with a message, as a new version: a reply
+ * to the client's open change request (which reopens approval), or a revision
+ * compared against the latest version. Refuses before writing anything when
+ * the email can't reach the client.
+ */
+async function sendQuoteByEmail(
+  ctx: MutationCtx,
+  invoice: Doc<"invoices">,
+  message: string,
+  sender: QuoteSender,
+) {
+  if (!invoice.clientEmail?.trim()) {
+    appError("QUOTE_CLIENT_EMAIL_REQUIRED", "Add the client's email so they get the quote.");
+  }
+  const now = Date.now();
+  if (
+    !invoice.publicApprovalToken ||
+    (invoice.publicApprovalTokenExpiresAt !== undefined && invoice.publicApprovalTokenExpiresAt < now)
+  ) {
+    appError("QUOTE_LINK_EXPIRED", "The quote link has expired. Regenerate it, then send.");
+  }
+  const request = await ensureChangeRequestRevision(ctx, invoice);
+  const previous = request ?? (await latestInvoiceRevision(ctx, invoice._id));
+  if (request) await resetInvoiceApproval(ctx, invoice, now);
+  const snapshot = await snapshotInvoice(ctx, invoice);
+  const { number } = await recordInvoiceRevision(ctx, invoice._id, snapshot, {
+    kind: "sent",
+    at: now,
+    note: message,
+    actorName: sender.name,
+    actorUserId: sender.userId,
+  });
+  await scheduleQuoteUpdatedEmail(ctx, {
+    invoice,
+    reason: request ? "changes_requested" : "revised",
+    previousTotalUsd: previous?.totalUsd,
+    newTotalUsd: snapshot.totalUsd,
+    changeNote: message,
+    requestNote: request?.note,
+    revisionNumber: number,
+  });
+  return number;
+}
+
+/**
  * Send the quote as it now stands to a client who already has it, with a
  * message, as a new version they decide on: a reply to their change request
  * (revised, or unchanged with an explanation), or a revision staff make on
  * their own. Request-portal quotes go back on the portal; others are emailed
- * with their quote link. An approved quote goes back through the editor's
- * re-approval instead.
+ * with their quote link.
  */
 export const sendRevisedQuote = mutation({
   args: {
@@ -2701,62 +2765,28 @@ export const sendRevisedQuote = mutation({
     return await withReportableErrors("invoices.sendRevisedQuote", async () => {
       const invoice = await ctx.db.get(args.id);
       if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
-      if (invoice.status === "void") appError("INVOICE_VOID", "This quote is void.");
-      if (invoice.clientApprovalStatus === "approved") {
-        appError(
-          "QUOTE_APPROVED_USE_REAPPROVAL",
-          "The client approved this quote. Change it and save to send it for re-approval.",
-        );
-      }
-      if (invoice.sourceEventRequestId && !invoice.clientReviewReadyAt) {
-        appError("QUOTE_NOT_SENT", "Send the quote to the client first.");
-      }
+      const blocker = revisedQuoteBlocker(invoice);
+      if (blocker) appError(blocker.code, blocker.message);
       const message = args.message.trim();
       if (!message) {
         appError("QUOTE_REPLY_REQUIRED", "Tell the client what changed, or why it didn't.");
       }
       const sender = { name: viewer.name, userId: viewer._id ?? viewer.id };
 
-      if (invoice.sourceEventRequestId) {
-        await sendQuoteOnRequestPortal(ctx, invoice, message, sender);
-        const sent = await latestInvoiceRevision(ctx, invoice._id);
-        return { number: sent?.number ?? 0 };
+      if (!invoice.sourceEventRequestId) {
+        return { number: await sendQuoteByEmail(ctx, invoice, message, sender) };
       }
-
-      if (!invoice.clientEmail?.trim()) {
-        appError("QUOTE_CLIENT_EMAIL_REQUIRED", "Add the client's email so they get the quote.");
-      }
-      const request = await ensureChangeRequestRevision(ctx, invoice);
-      const previous = request ?? (await latestInvoiceRevision(ctx, invoice._id));
-      const now = Date.now();
-      if (request) await resetInvoiceApproval(ctx, invoice, now);
-      const snapshot = await snapshotInvoice(ctx, invoice);
-      const { number } = await recordInvoiceRevision(ctx, invoice._id, snapshot, {
-        kind: "sent",
-        at: now,
-        note: message,
-        actorName: sender.name,
-        actorUserId: sender.userId,
-      });
-      await scheduleQuoteUpdatedEmail(ctx, {
-        invoice,
-        reason: request ? "changes_requested" : "revised",
-        previousTotalUsd: previous?.totalUsd,
-        newTotalUsd: snapshot.totalUsd,
-        changeNote: message,
-        requestNote: request?.note,
-        revisionNumber: number,
-      });
-      return { number };
+      await sendQuoteOnRequestPortal(ctx, invoice, message, sender);
+      const sent = await latestInvoiceRevision(ctx, invoice._id);
+      return { number: sent?.number ?? 0 };
     });
   },
 });
 
 /**
- * What a revised quote would answer or replace, next to the quote as saved
+ * What a revised quote would answer or follow, next to the quote as saved
  * now, so the send sheet can show what changed: the client's open change
- * request, else the last version they were sent. Null when the quote can't be
- * sent again (void, approved, or a request-portal quote not sent yet).
+ * request, else the latest version. Null when `sendRevisedQuote` would refuse.
  */
 export const revisedQuotePreview = query({
   args: { id: v.id("invoices") },
@@ -2764,27 +2794,22 @@ export const revisedQuotePreview = query({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const invoice = await ctx.db.get(args.id);
-    if (!invoice || invoice.status === "void" || invoice.clientApprovalStatus === "approved") return null;
-    if (invoice.sourceEventRequestId && !invoice.clientReviewReadyAt) return null;
+    if (!invoice || revisedQuoteBlocker(invoice)) return null;
     const latest = await latestInvoiceRevision(ctx, invoice._id);
     const current = await snapshotInvoice(ctx, invoice);
-    const since = latest
-      ? { number: latest.number, totalUsd: latest.totalUsd, lines: latest.lines }
-      : { number: null, totalUsd: null, lines: null };
-    const basis =
-      invoice.clientApprovalStatus === "changes_requested"
-        ? latest?.kind === "changes_requested"
-          ? { kind: "changes_requested" as const, note: latest.note, ...since }
-          : // Asked before requests were versions: the note is all there is.
-            {
-              kind: "changes_requested" as const,
-              note: invoice.clientApprovalNote,
-              number: null,
-              totalUsd: null,
-              lines: null,
-            }
-        : { kind: "revision" as const, note: undefined, ...since };
-    return { basis, current: { totalUsd: current.totalUsd, lines: current.lines } };
+    const replying = invoice.clientApprovalStatus === "changes_requested";
+    // A request made before requests were versions: the note is all there is.
+    const base = replying && latest?.kind !== "changes_requested" ? null : latest;
+    return {
+      basis: {
+        kind: replying ? ("changes_requested" as const) : ("revision" as const),
+        note: replying ? (base?.note ?? invoice.clientApprovalNote) : undefined,
+        number: base?.number ?? null,
+        totalUsd: base?.totalUsd ?? null,
+        lines: base?.lines ?? null,
+      },
+      current: { totalUsd: current.totalUsd, lines: current.lines },
+    };
   },
 });
 

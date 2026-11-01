@@ -30,7 +30,7 @@ export function RevisedQuoteSheet({
   open,
   onOpenChange,
   invoiceId,
-  isReply,
+  isReply: isReplyWhenOpened,
   toEmail,
   managerEmail,
   isRequestLinked,
@@ -52,6 +52,8 @@ export function RevisedQuoteSheet({
 }) {
   const preview = useQuery(api.invoices.revisedQuotePreview, open ? { id: invoiceId } : "skip");
   const [message, setMessage] = useState("");
+  // Sending a reply reopens approval; keep the reply wording while the sheet closes.
+  const [isReply] = useState(isReplyWhenOpened);
   const [error, setError] = useState<string | null>(null);
   const trimmed = message.trim();
 
@@ -95,7 +97,8 @@ export function RevisedQuoteSheet({
             client to approve.{" "}
             {isRequestLinked
               ? "It goes back on their request portal with the quote PDF."
-              : "They get an email with their quote link."}{" "}
+              : "They get an email with their quote link."}
+            {isReply ? " Their request stays in the version history." : null}
           </SheetDescription>
         </SheetHeader>
 

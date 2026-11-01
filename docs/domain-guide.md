@@ -732,9 +732,10 @@ Update `YEARS` there when the Registrar publishes new dates.
   - Staff can also **Send revised quote** with no request open: the same
     mutation on a pending quote the client already has (request-portal quotes
     must be on the portal). It saves a `sent` version; standalone quotes get
-    `quote_updated` with `reason: "revised"`, compared against the last version
-    sent (no comparison when there is none). Approved quotes are refused and go
-    through the editor's re-approval instead.
+    `quote_updated` with `reason: "revised"`, compared against the latest
+    version of any kind (none on the first send, which gets a "Your quote"
+    subject). Standalone sends need a client email and a live quote link.
+    Approved quotes are refused and go through the editor's re-approval.
   - `resetApprovalToPending` refuses an open change request, so a request is
     never cleared silently. Requests made before this were backfilled
     (`backfillOpenChangeRequestRevisions`, `recordedLate`) only while still

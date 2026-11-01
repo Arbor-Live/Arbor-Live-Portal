@@ -1,5 +1,5 @@
 // @vitest-environment edge-runtime
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { ensureChangeRequestRevision } from "./lib/invoiceRevisions";
@@ -193,6 +193,51 @@ test("a standalone quote needs the client's email to send", async () => {
     /client's email/,
   );
   expect(await revisionsOf(t, invoiceId)).toEqual([]);
+});
+
+test("a standalone quote needs a live link to send", async () => {
+  const t = makeTest();
+  const invoiceId = await seedQuote(t, { publicApprovalTokenExpiresAt: Date.now() - 1000 });
+  const staff = await arborStaff(t);
+
+  await expect(staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Hi" })).rejects.toThrow(
+    /link has expired/,
+  );
+  expect(await revisionsOf(t, invoiceId)).toEqual([]);
+});
+
+test("a request-portal quote is revised on the portal once it's there", async () => {
+  vi.stubEnv("E2E_HELPERS", "true");
+  vi.stubEnv("SITE_URL", "http://localhost:3000");
+  try {
+    const t = makeTest();
+    const staff = await arborStaff(t);
+    const { invoiceId } = await t.mutation(api.e2eHelpers.seedRequestLinkedDraftQuote, {});
+
+    await expect(staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Hi" })).rejects.toThrow(
+      /Send the quote to the client first/,
+    );
+    expect(await staff.query(api.invoices.revisedQuotePreview, { id: invoiceId })).toBeNull();
+
+    await staff.mutation(api.invoices.markReadyForClientReview, { id: invoiceId, clientMessage: "First send." });
+    expect(
+      await staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Moved load-in." }),
+    ).toEqual({ number: 2 });
+
+    const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId));
+    expect(invoice).toMatchObject({
+      status: "finalized",
+      clientApprovalStatus: "pending",
+      clientReadyMessage: "Moved load-in.",
+    });
+    const revisions = await revisionsOf(t, invoiceId);
+    expect(revisions.map((r) => [r.number, r.kind, r.note])).toEqual([
+      [1, "sent", "First send."],
+      [2, "sent", "Moved load-in."],
+    ]);
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
 test("an approved quote goes back through re-approval, not a revised send", async () => {
