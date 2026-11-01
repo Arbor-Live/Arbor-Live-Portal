@@ -22,6 +22,7 @@ import { isTraineeShift } from "./lib/crewShiftKinds";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { loadNightRows } from "./lib/crewNightAnswers";
 import { nightKeyForEvent } from "./lib/crewNights";
+import { isHashEvent, requireHashCrewEdit } from "./lib/hashEvent";
 
 function hoursBetween(start: number, end: number) {
   return Number(((end - start) / 3_600_000).toFixed(2));
@@ -133,6 +134,8 @@ export const upsertShifts = mutation({
     await requireArborInternalContext(ctx);
     await requireEventEditAccess(ctx, args.eventId);
     return await withReportableErrors("eventCrew.upsertShifts", async () => {
+    const event = await ctx.db.get(args.eventId);
+    if (event && isHashEvent(event)) await requireHashCrewEdit(ctx, args.eventId, args.shifts);
     for (const shift of args.shifts) {
       if (shift.endsAt <= shift.startsAt) {
         appError("SHIFT_END_BEFORE_START", "Shift end must be after shift start.");
@@ -220,6 +223,8 @@ export const upsertShifts = mutation({
           endsAt: shift.endsAt,
           hours,
           timesOverridden,
+          // A pending move was asked of the person holding the slot, not whoever takes it.
+          needsConfirmation: userId === previous?.userId ? previous?.needsConfirmation : undefined,
           estimatedHourlyRateUsd,
           postedToExpense,
           notes: shift.notes?.trim() || undefined,

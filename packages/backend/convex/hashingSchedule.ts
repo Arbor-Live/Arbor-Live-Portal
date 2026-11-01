@@ -535,6 +535,7 @@ async function addHashingToEvent(ctx: MutationCtx, event: Doc<"events">) {
     appError("HASH_EVENT_CANCELLED", "This event is cancelled.");
   }
   if (event.seriesId) appError("HASH_EVENT_IN_SERIES", "A day in a series or booking can't be a hash.");
+  if (event.openMicEnabled) appError("HASH_NO_OPEN_MIC", "Turn Open Mic off first: a hash can't take public sign-ups.");
   const links = await ctx.db
     .query("eventInvoiceLinks")
     .withIndex("by_eventId", (q) => q.eq("eventId", event._id))

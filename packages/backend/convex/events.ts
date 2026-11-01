@@ -48,6 +48,7 @@ import {
 import { listGroupDays } from "./lib/eventGroupTemplates";
 import { resolveSeriesMetadataForInvoice } from "./lib/invoiceSeries";
 import { assertNoOpenMicOverlap } from "./lib/openMicAddon";
+import { isHashEvent, requireHashEventEdit, requireHashStatusUnchanged } from "./lib/hashEvent";
 import {
   DEFAULT_EVENT_VISIBILITY,
   eventVisibilityValue,
@@ -136,6 +137,8 @@ export const list = query({
     const rows = baseRows
       .map((row) => ({ ...row, status: normalizeEventStatus(row.status) }))
       .filter((row) => {
+        // Nobody links a hash to a damage report, a short link or a trainee.
+        if (isHashEvent(row)) return false;
         if (filterStatus && row.status !== filterStatus) return false;
         if (args.linkedInvoiceOnly && !row.invoiceId) return false;
         if (!q) return true;
@@ -769,6 +772,7 @@ export const update = mutation({
     return await withReportableErrors("events.update", async () => {
     const existing = await ctx.db.get(args.id);
     if (!existing) appError("EVENT_NOT_FOUND", "Event not found.");
+    if (isHashEvent(existing)) requireHashEventEdit(existing, args);
     const startAt = args.startAt ?? existing.startAt;
     const endAt = args.endAt ?? existing.endAt;
     if (endAt <= startAt) appError("EVENT_END_BEFORE_START", "Event end time must be after start time.");
@@ -1126,6 +1130,7 @@ export const setStatus = mutation({
     return await withReportableErrors("events.setStatus", async () => {
     const existing = await ctx.db.get(args.id);
     if (!existing) appError("EVENT_NOT_FOUND", "Event not found.");
+    if (isHashEvent(existing)) requireHashStatusUnchanged(existing, args.status);
     const wasCancelled = normalizeEventStatus(existing.status) === "cancelled";
     const prevStatus = normalizeEventStatus(existing.status);
     const nextStatus = normalizeEventStatus(args.status);
@@ -1219,6 +1224,7 @@ export const duplicate = mutation({
     return await withReportableErrors("events.duplicate", async () => {
     const existing = await ctx.db.get(args.id);
     if (!existing) appError("EVENT_NOT_FOUND", "Event not found.");
+    if (isHashEvent(existing)) appError("HASH_NO_DUPLICATE", "Add another hash from Hashing.");
     const now = Date.now();
     const newId = await ctx.db.insert("events", {
       title: `${existing.title} (Copy)`,

@@ -12,7 +12,7 @@ import {
   analyticsRangeArgs,
   assertValidRange,
   INVOICE_SCAN_LIMIT,
-  loadEventsInRange,
+  loadEventsInRangeWithHashes,
   requireAnalyticsAccess,
 } from "./lib/analyticsQuery";
 import { arborEarnedRevenueUsd, invoicePassThroughUsd } from "./lib/invoiceProfit";
@@ -105,7 +105,7 @@ export const getFinancialSummary = query({
     const [paid, approved, events, payouts] = await Promise.all([
       loadPaidInvoicesInRange(ctx, args.startMs, args.endMs),
       loadApprovedInvoicesInRange(ctx, args.startMs, args.endMs),
-      loadEventsInRange(ctx, args.startMs, args.endMs),
+      loadEventsInRangeWithHashes(ctx, args.startMs, args.endMs),
       loadBandPayoutsInRange(ctx, args.startMs, args.endMs),
     ]);
 

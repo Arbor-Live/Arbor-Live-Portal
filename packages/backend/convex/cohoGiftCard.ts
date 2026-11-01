@@ -22,6 +22,7 @@ import {
   pickBestCohoGiftCard,
 } from "./lib/cohoGiftCards";
 import { listUserShiftsNear } from "./lib/crewShiftWindow";
+import { isHashEvent } from "./lib/hashEvent";
 import { scheduleCohoGiftCardLowBalanceEmails } from "./email/cohoGiftCardEmails";
 
 /** Warn once a card drops below this, unless Ops Center overrides it. */
@@ -325,8 +326,10 @@ export const getMyCohoGiftCard = query({
     const now = Date.now();
 
     const shifts = await listUserShiftsNear(ctx, userId, now, COHO_QR_SHIFT_PADDING_MS);
-    const isWorking = shifts.some((shift) => isWithinCohoQrWindow(shift, now));
-    if (!isWorking) return null;
+    // The card feeds crew through a show. A hash is an hour in the closet.
+    const nearEventIds = new Set(shifts.filter((shift) => isWithinCohoQrWindow(shift, now)).map((shift) => shift.eventId));
+    const nearEvents = await Promise.all([...nearEventIds].map((eventId) => ctx.db.get(eventId)));
+    if (!nearEvents.some((event) => event && !isHashEvent(event))) return null;
 
     const best = pickBestCohoGiftCard(await listCards(ctx));
     return best?.cardNumber ? { cardNumber: best.cardNumber } : null;

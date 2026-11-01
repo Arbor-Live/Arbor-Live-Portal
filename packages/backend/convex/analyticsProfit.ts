@@ -3,7 +3,7 @@ import { query } from "./_generated/server";
 import {
   analyticsRangeArgs,
   assertValidRange,
-  loadEventsInRange,
+  loadEventsInRangeWithHashes,
   requireAnalyticsAccess,
 } from "./lib/analyticsQuery";
 import {
@@ -91,7 +91,7 @@ export const getProfitability = query({
     await requireAnalyticsAccess(ctx);
     assertValidRange(args.startMs, args.endMs);
 
-    const { events, truncated } = await loadEventsInRange(ctx, args.startMs, args.endMs);
+    const { events, truncated } = await loadEventsInRangeWithHashes(ctx, args.startMs, args.endMs);
     const loadInvoice = createInvoiceLoader(ctx);
     const byEventType = new Map<string, Segment>();
     const byVenue = new Map<string, Segment>();

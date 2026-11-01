@@ -10,6 +10,7 @@ import { loadNightRows } from "./lib/crewNightAnswers";
 import { nightKeyForEvent } from "./lib/crewNights";
 import { eligibleCrewProfilesForEvent, getActiveCrewProfiles } from "./lib/crewedEvents";
 import { normalizeEventStatus } from "./lib/eventStatus";
+import { isHashEvent } from "./lib/hashEvent";
 
 const openRequestStatusValue = v.union(
   v.literal("submitted"),
@@ -60,7 +61,9 @@ export const listUpcomingAdminEvents = query({
     await requireArborInternalContext(ctx);
     const limit = Math.min(Math.max(args.limit ?? 6, 1), 10);
     const windowEnd = args.now + DEFAULT_AVAILABILITY_WEEKS * 7 * 24 * 60 * 60 * 1000;
-    const live = (event: Doc<"events">) => normalizeEventStatus(event.status) !== "cancelled";
+    // A hash is booked in Hashing, so it's neither crewing work here nor an event to count.
+    const live = (event: Doc<"events">) =>
+      !isHashEvent(event) && normalizeEventStatus(event.status) !== "cancelled";
     // Every event in the crewing window is classified, so the counts cover the
     // whole window; past it, only the soonest few fill out the list.
     const windowEvents = (

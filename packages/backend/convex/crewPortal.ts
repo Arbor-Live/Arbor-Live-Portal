@@ -1,7 +1,7 @@
 import { pacificDateKey, recentPayPeriods } from "@arbor/format";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import { mutation, query, type QueryCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   findAuthUsersByIds,
   getUserId,
@@ -16,6 +16,8 @@ import {
 } from "./lib/crewShiftWindow";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { normalizeEventStatus } from "./lib/eventStatus";
+import { isHashEvent } from "./lib/hashEvent";
+import { loadDateForEvent } from "./lib/hashingData";
 import { listMyPostEventWork as listMyPostEventWorkForUser } from "./lib/myEventActions";
 import { listShowShifts, userWorkedShowShift } from "./lib/showShift";
 
@@ -26,6 +28,8 @@ const scheduledEventValue = v.object({
   startAt: v.number(),
   endAt: v.number(),
   shiftCount: v.number(),
+  /** Set for a hash: crew go to the runner, not the event page. */
+  hashDateId: v.optional(v.id("hashDates")),
 });
 
 const activeShiftValue = v.object({
@@ -35,6 +39,7 @@ const activeShiftValue = v.object({
   startsAt: v.number(),
   endsAt: v.number(),
   phase: v.union(v.literal("upcoming"), v.literal("now"), v.literal("ended")),
+  hashDateId: v.optional(v.id("hashDates")),
 });
 
 const postEventWorkValue = v.object({
@@ -56,6 +61,10 @@ const payPeriodSummaryValue = v.object({
   dueMs: v.number(),
   daysWorked: v.number(),
 });
+
+async function hashDateIdOf(ctx: QueryCtx, event: Doc<"events">) {
+  return isHashEvent(event) ? (await loadDateForEvent(ctx, event._id))?._id : undefined;
+}
 
 function weeksToMs(weeks: number) {
   return weeks * 7 * 24 * 60 * 60 * 1000;
@@ -112,6 +121,7 @@ export const listMyScheduledEvents = query({
         startAt: summary.earliestStart,
         endAt: summary.latestEnd,
         shiftCount: summary.shiftCount,
+        hashDateId: await hashDateIdOf(ctx, event),
       });
     }
     return results.sort((a, b) => a.startAt - b.startAt);
@@ -138,6 +148,7 @@ export const listMyActiveShifts = query({
         startsAt,
         endsAt,
         phase,
+        hashDateId: await hashDateIdOf(ctx, event),
       });
     }
     return results;
