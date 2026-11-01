@@ -49,7 +49,7 @@ function shiftTimes({ startsAt, endsAt }: ActiveShift) {
  * until the server answers, so the last answer is held to keep the card from
  * blinking off every minute.
  */
-function useActiveShifts() {
+export function useActiveShifts() {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), MINUTE_MS);
@@ -58,13 +58,13 @@ function useActiveShifts() {
   const minute = Math.floor(now / MINUTE_MS) * MINUTE_MS;
   const latest = useQuery(api.crewPortal.listMyActiveShifts, { now: minute });
 
-  const [shifts, setShifts] = useState<ActiveShift[]>([]);
+  const [shifts, setShifts] = useState<ActiveShift[]>();
   if (latest !== undefined && latest !== shifts) setShifts(latest);
   return latest ?? shifts;
 }
 
 export function OnShiftCard() {
-  const [shift, ...others] = useActiveShifts();
+  const [shift, ...others] = useActiveShifts() ?? [];
   if (!shift) return null;
 
   const phase = PHASES[shift.phase];

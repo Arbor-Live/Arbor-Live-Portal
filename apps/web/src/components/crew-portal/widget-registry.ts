@@ -1,6 +1,3 @@
-import { PendingAvailabilityWidget } from "@/components/crew-portal/widgets/pending-availability-widget";
-import { ScheduledEventsWidget } from "@/components/crew-portal/widgets/scheduled-events-widget";
-import { PostEventWorkWidget } from "@/components/crew-portal/widgets/post-event-work-widget";
 import { PayPeriodSummaryWidget } from "@/components/crew-portal/widgets/pay-period-summary-widget";
 import { BorrowRequestsWidget } from "@/components/crew-portal/widgets/borrow-requests-widget";
 import { CohoGiftCardWidget } from "@/components/crew-portal/widgets/coho-gift-card-widget";
@@ -18,21 +15,6 @@ export type CrewWidget = DashboardWidgetDefinition & {
 };
 
 export const DEFAULT_CREW_WIDGETS: CrewWidget[] = [
-  {
-    id: "pending-availability",
-    title: "Availability",
-    component: PendingAvailabilityWidget,
-  },
-  {
-    id: "scheduled-events",
-    title: "Upcoming shifts",
-    component: ScheduledEventsWidget,
-  },
-  {
-    id: "post-event-work",
-    title: "Post-event work",
-    component: PostEventWorkWidget,
-  },
   {
     id: "pay-period-summary",
     title: "Pay periods",

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useQuery } from "convex/react";
 import { CalendarDotsIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
@@ -9,8 +8,7 @@ import { RowCell, RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 import { formatDateTime } from "@/lib/format";
 
-export function ScheduledEventsWidget() {
-  const [now] = useState(() => Date.now());
+export function ScheduledEventsWidget({ now }: { now: number }) {
   const events = useQuery(api.crewPortal.listMyScheduledEvents, { now, weeksAhead: 8 });
 
   return (

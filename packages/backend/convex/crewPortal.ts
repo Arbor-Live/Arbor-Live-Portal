@@ -14,20 +14,10 @@ import {
   ON_SHIFT_PADDING_MS,
   summarizeOnShiftEvents,
 } from "./lib/crewShiftWindow";
-import { DEFAULT_AVAILABILITY_WEEKS } from "./lib/crewTeams";
-import { listMyPendingNights } from "./lib/crewNightInbox";
-import { profileHasCrewSpecialty } from "./lib/userVerticals";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
-import { resolveUserStatus } from "./lib/userStatus";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { listMyPostEventWork as listMyPostEventWorkForUser } from "./lib/myEventActions";
 import { listShowShifts, userWorkedShowShift } from "./lib/showShift";
-
-const pendingNightValue = v.object({
-  nightKey: v.string(),
-  startAt: v.number(),
-  events: v.array(v.object({ _id: v.id("events"), title: v.string() })),
-});
 
 const scheduledEventValue = v.object({
   eventId: v.id("events"),
@@ -77,31 +67,6 @@ async function getCurrentUserProfile(ctx: QueryCtx, userId: string) {
     .withIndex("by_userId", (q) => q.eq("userId", userId))
     .unique();
 }
-
-export const listMyPendingAvailability = query({
-  args: {
-    now: v.number(),
-    weeksAhead: v.optional(v.number()),
-  },
-  returns: v.array(pendingNightValue),
-  handler: async (ctx, args) => {
-    const user = await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
-    const userId = getUserId(user);
-    const profile = await getCurrentUserProfile(ctx, userId);
-    if (resolveUserStatus(profile) !== "active") return [];
-    if (!profileHasCrewSpecialty(profile ?? {})) return [];
-    const weeksAhead = args.weeksAhead ?? DEFAULT_AVAILABILITY_WEEKS;
-    const windowEnd = args.now + weeksToMs(weeksAhead);
-    // Availability is answered per night, so this lists unanswered nights.
-    const pending = await listMyPendingNights(ctx, userId, profile, args.now, windowEnd);
-    return pending.map((night) => ({
-      nightKey: night.nightKey,
-      startAt: Math.min(...night.events.map((event) => event.startAt)),
-      events: night.events.map((event) => ({ _id: event._id, title: event.title })),
-    }));
-  },
-});
 
 export const listMyScheduledEvents = query({
   args: {
