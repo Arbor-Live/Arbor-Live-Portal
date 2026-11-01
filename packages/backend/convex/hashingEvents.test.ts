@@ -620,6 +620,21 @@ describe("pay and attendance", () => {
     expect((await anaApi.query(api.hashing.getMine, { now: NOW }))?.state).toBe("needs_hash");
   });
 
+  test("finish on a finished hash wants a signed-in viewer, and confirms nothing", async () => {
+    const context = await setup();
+    const { t, opsApi, anaApi, ana, eventOf } = context;
+    const hashDateId = await bookAndRun(context, "2026-11-03", [ana]);
+    await opsApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [ana._id] });
+    await expect(t.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [] })).rejects.toThrow(/signed in/);
+
+    const [shift] = await shiftsOf(t, eventOf("2026-11-03"));
+    await t.run(async (ctx) => {
+      await ctx.db.patch(shift!._id, { needsConfirmation: true });
+    });
+    await anaApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [] });
+    expect((await shiftsOf(t, eventOf("2026-11-03")))[0]?.needsConfirmation).toBe(true);
+  });
+
   describe("correcting attendance", () => {
     const AFTER = new Date("2026-11-05T12:00:00Z").getTime();
 

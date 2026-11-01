@@ -11,6 +11,7 @@ import { flattenChecklist, type ChecklistAreaView } from "./lib/hashing";
 import { HASHING_CHECKLIST_SEED } from "./lib/hashingChecklistSeed";
 import {
   ensureChecklist,
+  type HashBooking,
   hashDateLabel,
   isHashCrew,
   latestChecklist,
@@ -65,11 +66,18 @@ async function checklistFor(ctx: Ctx, row: Doc<"hashDates">) {
   return flattenChecklist(tree, row.areaIds);
 }
 
+type HashingViewer = Awaited<ReturnType<typeof requireHashingViewer>>;
+
+function requireBookedOrManager(viewer: HashingViewer, bookings: HashBooking[]) {
+  const booking = bookings.find((candidate) => candidate.userId === viewer.userId);
+  if (!booking && !viewer.canManage) appError("HASH_NOT_ON_HASH", "You're not booked on this hash.");
+  return booking;
+}
+
 /** Booked on it (and showing up confirms a pending booking), or ops. */
 async function requireOnHash(ctx: MutationCtx, row: Doc<"hashDates">) {
   const viewer = await requireHashingViewer(ctx);
-  const booking = (await loadDateBookings(ctx, row)).find((candidate) => candidate.userId === viewer.userId);
-  if (!booking && !viewer.canManage) appError("HASH_NOT_ON_HASH", "You're not booked on this hash.");
+  const booking = requireBookedOrManager(viewer, await loadDateBookings(ctx, row));
   if (booking?.status === "needs_confirmation") {
     for (const shiftId of booking.shiftIds) await ctx.db.patch(shiftId, { needsConfirmation: undefined });
   }
@@ -412,13 +420,14 @@ export const finish = mutation({
   args: { hashDateId: v.id("hashDates"), attendeeUserIds: v.array(v.string()) },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const viewer = await requireHashingViewer(ctx);
     const row = await loadHashDate(ctx, args.hashDateId);
     if (row.status === "finished") return null;
-    const viewer = await requireOnHash(ctx, row);
+    const bookings = await loadDateBookings(ctx, row);
+    requireBookedOrManager(viewer, bookings);
     requireRunning(row);
     const eventId = requireHashEventId(row);
     const attendees = new Set(args.attendeeUserIds);
-    const bookings = await loadDateBookings(ctx, row);
     const stranger = args.attendeeUserIds.find((userId) => !bookings.some((booking) => booking.userId === userId));
     if (stranger) appError("HASH_NOT_BOOKED", "Only people booked on this hash can be marked as there.");
     if (!viewer.canManage) {
