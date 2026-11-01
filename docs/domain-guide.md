@@ -567,6 +567,56 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   moving the act's soundcheck/set times emails each member one calendar invite
   per window (`band_scheduled`).
 
+## Hashing
+
+Crew spend an hour on a set weekday cleaning the gear closet, and every crew
+member owes one hash per academic quarter. Hashing is internal work, not an
+event: it never touches `events`, the public calendar, invoices or timecards,
+and it is unpaid.
+
+**Who owes one.** Active Arbor staff whose profile has `includeInTimecards` (the
+people held to the crew hours minimum). Summer has no requirement. Booking,
+setup and the checklist use `requireAdminOrOperations`. Crew answer availability
+but never book themselves.
+
+**Quarters and dates.** `hashingQuarterFor` picks the quarter in session, else
+the next working one. Saving Setup builds `hashDates` from today through finals,
+one regular date per week, and weeks `quarterWeek` doesn't number (Thanksgiving,
+finals) are created `off`. A regular date owns its week even after it moves, so
+saving again never rebuilds it. Changing the weekday or time shifts only regular,
+unmoved, unstarted dates; moved and added dates stay. A moved date's bookings
+become `needs_confirmation`, its availability is cleared, and those people are
+notified. A date that passes without being started stops counting as a booking
+(`isLapsed`), so nobody stays stuck on it.
+
+**A person's quarter** is derived, never stored, in `deriveQuarterState`: done
+(confirmed on a finished hash), exempt, booked, no_dates_work, needs_hash.
+`hashQuarterStanding` holds "None of these work" and exemptions per quarter, so
+they reset on their own. People can write `no_dates_work` only; exemptions come
+from staff. Answering "Can do" clears `no_dates_work`.
+
+**Filling.** `fillFromAvailability` places the people with the fewest "can"
+answers first, each on their earliest open date, one spot per person, and never
+touches existing bookings.
+
+**Checklist.** `hashChecklistVersions` are immutable. A kit used by more than
+one area is shared: its items stay in step, and each area adds its own extra
+items. The seed in `lib/hashingChecklistSeed.ts` becomes version 1 lazily, the
+first time ops saves Setup or a hash starts. Publishing applies to the next hash
+started; a started hash keeps its pinned `checklistVersionId`.
+
+**Live hash.** One `hashChecks` row per tick, keyed `areaId:kitId:itemId`, so a
+shared kit's item ticks separately per area and people ticking side by side never
+contend. A flagged item counts as checked, because someone looked at it. Booked
+people or ops can tick; crew can start on the day, ops any time. Working a hash
+confirms a pending booking. Finishing gives credit to everyone with a confirmed
+booking, even with items unchecked, and flags stay open in History until resolved.
+A damaged flag can file a real damage report through `fileDamageReport`.
+
+**Notifications.** Hashes have no email. Booking, unbooking and moves write the
+bell directly under the `crew_scheduled` and `crew_unscheduled` kinds, so those
+kinds' in-app and push opt-outs cover hashes too.
+
 ## Stanford academic calendar and closures
 
 `packages/format/src/academicCalendar.ts` (`@arbor/format`) holds Stanford's
