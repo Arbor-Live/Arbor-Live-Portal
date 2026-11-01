@@ -2710,7 +2710,7 @@ export const seedAssignCrewToAllBlocks = mutation({
 });
 
 /** Test-only: an event with one crew shift placed relative to the current time. */
-export const seedOnShiftEvent = mutation({
+export const seedOnShiftEvent = internalMutation({
   args: {
     userId: v.string(),
     title: v.string(),
@@ -2758,7 +2758,7 @@ export const seedOnShiftEvent = mutation({
 });
 
 /** Test-only: removes a `seedOnShiftEvent` fixture so it stops showing on crew home. */
-export const clearOnShiftEvent = mutation({
+export const clearOnShiftEvent = internalMutation({
   args: { eventId: v.id("events") },
   returns: v.null(),
   handler: async (ctx, args) => {

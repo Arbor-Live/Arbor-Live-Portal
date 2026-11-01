@@ -56,21 +56,21 @@ export function summarizeOnShiftEvents(
   shifts: readonly (ShiftRange & { eventId: Id<"events">; callTime?: number })[],
   now: number,
 ) {
-  const ranges = new Map<Id<"events">, ShiftRange>();
+  const events = new Map<Id<"events">, ShiftRange & { phase: OnShiftPhase }>();
   for (const { eventId, callTime, startsAt: shiftStart, endsAt } of shifts) {
     // Crew called in early are on shift from the call, not the listed start.
     const startsAt = Math.min(callTime ?? shiftStart, shiftStart);
-    if (!onShiftPhase({ startsAt, endsAt }, now)) continue;
-    const range = ranges.get(eventId);
-    ranges.set(eventId, {
-      startsAt: Math.min(startsAt, range?.startsAt ?? startsAt),
-      endsAt: Math.max(endsAt, range?.endsAt ?? endsAt),
+    const phase = onShiftPhase({ startsAt, endsAt }, now);
+    if (!phase) continue;
+    const event = events.get(eventId);
+    events.set(eventId, {
+      startsAt: Math.min(startsAt, event?.startsAt ?? startsAt),
+      endsAt: Math.max(endsAt, event?.endsAt ?? endsAt),
+      // From the shifts, not the merged range, so a break between shifts isn't "now".
+      phase: event && PHASE_ORDER[event.phase] < PHASE_ORDER[phase] ? event.phase : phase,
     });
   }
-  return [...ranges]
-    .flatMap(([eventId, range]) => {
-      const phase = onShiftPhase(range, now);
-      return phase ? [{ eventId, ...range, phase }] : [];
-    })
+  return [...events]
+    .map(([eventId, event]) => ({ eventId, ...event }))
     .sort((a, b) => PHASE_ORDER[a.phase] - PHASE_ORDER[b.phase] || a.startsAt - b.startsAt);
 }

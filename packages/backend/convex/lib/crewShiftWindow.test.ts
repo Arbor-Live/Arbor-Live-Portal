@@ -56,6 +56,18 @@ describe("summarizeOnShiftEvents", () => {
     ).toEqual([{ eventId: a, startsAt: 8 * HOUR, endsAt: 14 * HOUR, phase: "now" }]);
   });
 
+  test("treats a break between an event's shifts as upcoming, not now", () => {
+    expect(
+      summarizeOnShiftEvents(
+        [
+          { eventId: a, startsAt: 8 * HOUR, endsAt: 9.5 * HOUR },
+          { eventId: a, startsAt: 10.5 * HOUR, endsAt: 12 * HOUR },
+        ],
+        10 * HOUR,
+      ),
+    ).toEqual([{ eventId: a, startsAt: 8 * HOUR, endsAt: 12 * HOUR, phase: "upcoming" }]);
+  });
+
   test("sorts shifts in progress first, then upcoming, then ended", () => {
     const now = 10 * HOUR;
     expect(
