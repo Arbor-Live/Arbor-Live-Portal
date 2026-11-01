@@ -132,6 +132,7 @@ the URL looks like cloud.
 | Event series editors ("this occurrence" scope) | Covered | `events/event-series-edit-scope.spec.ts` (Batch 11 — pins the applyScope reset guard; navigates the group page's Run of Show template tab and uses the shared scope toggle) |
 | Event groups: multi-day booking (header pill, group page, position template on every day, idempotent re-apply, "Apply this day's setup", cancel from a day, "All days" edit spreads only the edited fields, add a day) | Covered | `events/event-group-multi-day.spec.ts` (#341) |
 | Crew scheduling board | Covered | `crew/crew-scheduling-board.spec.ts` (Batch 5) |
+| Current shift card on crew home | Covered | `crew/crew-on-shift-card.spec.ts` — seeded via `seedOnShiftEvent`; card shows and links through to the event |
 | Open Mic public + runner | None | Deferred on product priority, not on difficulty — 575 lines and three routes, the largest untested module left. See the batch candidates |
 | FullCalendar drag/resize | Deferred | Flaky; keep unit/manual |
 
@@ -217,6 +218,7 @@ the URL looks like cloud.
 | `booking/booking-convert-approve.spec.ts` | Track approve |
 | `events/event-edit-dry-hire.spec.ts` | Edit + dry hire schedule |
 | `crew/crew-availability-assign.spec.ts` | Availability + assign |
+| `crew/crew-on-shift-card.spec.ts` | Current shift card on crew home |
 | `crew/crew-application.spec.ts` | Crew apply + admin list |
 | `inventory/rental-fulfillment.spec.ts` | Delivery + return |
 | `inventory/damage-triage.spec.ts` | Damage triage (via the report detail sheet) |

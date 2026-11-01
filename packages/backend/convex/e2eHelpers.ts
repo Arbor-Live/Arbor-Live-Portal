@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { customAlphabet } from "nanoid";
 import { hashPassword } from "better-auth/crypto";
 import { api, components, internal } from "./_generated/api";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import {
   loadInvoiceCrewRateSettings,
@@ -2706,6 +2706,70 @@ export const seedAssignCrewToAllBlocks = mutation({
       shiftIds.push(shiftId);
     }
     return { shiftIds, blockCount: blocks.length };
+  },
+});
+
+/** Test-only: an event with one crew shift placed relative to the current time. */
+export const seedOnShiftEvent = internalMutation({
+  args: {
+    userId: v.string(),
+    title: v.string(),
+    venueName: v.optional(v.string()),
+    startOffsetMinutes: v.number(),
+    endOffsetMinutes: v.number(),
+    status: v.optional(eventStatusValue),
+  },
+  returns: v.object({ eventId: v.id("events") }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const startsAt = now + args.startOffsetMinutes * 60_000;
+    const endsAt = now + args.endOffsetMinutes * 60_000;
+    const eventId = await ctx.db.insert("events", {
+      title: args.title,
+      venueName: args.venueName,
+      status: args.status ?? "ready",
+      visibility: "internal",
+      startAt: startsAt,
+      endAt: endsAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: false,
+      eventType: "Crewed Event",
+      teamsInterested: ["Sound"],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("eventCrewShifts", {
+      eventId,
+      role: "FOH",
+      userId: args.userId,
+      startsAt,
+      endsAt,
+      hours: (endsAt - startsAt) / 3_600_000,
+      postedToExpense: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { eventId };
+  },
+});
+
+/** Test-only: removes a `seedOnShiftEvent` fixture so it stops showing on crew home. */
+export const clearOnShiftEvent = internalMutation({
+  args: { eventId: v.id("events") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const shifts = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(50);
+    for (const shift of shifts) await ctx.db.delete(shift._id);
+    await ctx.db.delete(args.eventId);
+    return null;
   },
 });
 
