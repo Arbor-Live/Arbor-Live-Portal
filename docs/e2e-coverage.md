@@ -81,7 +81,7 @@ the URL looks like cloud.
 
 | Surface | Status | Spec / notes |
 |---------|--------|--------------|
-| Public `/request` wizard submit | Covered | `booking/booking-submit.spec.ts` (Batch 3) |
+| Public `/request` wizard submit | Covered | `booking/booking-submit.spec.ts` (Batch 3), including a non-Stanford email requesting as an individual |
 | Staff convert → quote + tentative event | Covered | `booking/booking-convert.spec.ts` |
 | Client track approve (`/request/track/[token]`) | Covered | `booking/booking-convert-approve.spec.ts` — also the quote's crew card: grouped by day and Run of Show section, headcount × hours per section, per-person rate on expand, and the crew total matching the billed subtotal (`seedBookingReadyForTrackApprove` `crew: "multi_day"`) |
 | Request inbox / status filters | Covered | `booking/request-inbox.spec.ts` (Batch 13) — default open view lists submitted + action_required + pending_client and hides completed; "Declined" and "All statuses" filters |

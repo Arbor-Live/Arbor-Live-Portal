@@ -8,13 +8,17 @@ export function isStanfordEmail(email: string) {
 }
 
 export const INDIVIDUAL_SPONSOR_TYPE = "Individual Stanford Affiliate" as const;
+export const NON_STANFORD_INDIVIDUAL_SPONSOR_TYPE = "Individual (non-Stanford)" as const;
 
 export function requiresOrganizationName(
   sponsorType: string,
   invoiceGroupId?: string,
 ) {
   if (invoiceGroupId?.trim()) return false;
-  return sponsorType !== INDIVIDUAL_SPONSOR_TYPE;
+  return (
+    sponsorType !== INDIVIDUAL_SPONSOR_TYPE &&
+    sponsorType !== NON_STANFORD_INDIVIDUAL_SPONSOR_TYPE
+  );
 }
 
 export const SPONSOR_TYPE_OPTIONS = [
@@ -25,6 +29,13 @@ export const SPONSOR_TYPE_OPTIONS = [
   "Individual Stanford Affiliate",
   "Other",
 ] as const;
+
+const BOOKING_SPONSOR_TYPES = [
+  ...SPONSOR_TYPE_OPTIONS,
+  NON_STANFORD_INDIVIDUAL_SPONSOR_TYPE,
+] as const;
+
+type BookingSponsorType = (typeof BOOKING_SPONSOR_TYPES)[number];
 
 export const EVENT_CATEGORY_OPTIONS = [
   "Live Bands",
@@ -65,8 +76,10 @@ export const REQUEST_CONTEXT_OPTIONS = [
 ] as const;
 
 export function sponsorTypeOptionsForContext(
+  email: string,
   requestContext?: (typeof REQUEST_CONTEXT_OPTIONS)[number],
-) {
+): readonly BookingSponsorType[] {
+  if (!isStanfordEmail(email)) return [NON_STANFORD_INDIVIDUAL_SPONSOR_TYPE];
   if (requestContext === "personal") {
     return SPONSOR_TYPE_OPTIONS.filter((option) => option !== INDIVIDUAL_SPONSOR_TYPE);
   }
@@ -127,15 +140,14 @@ export const bookingRequestSchema = z
     email: z
       .string()
       .trim()
-      .email("Enter a valid email address")
-      .refine(isStanfordEmail, "Use your @stanford.edu email address"),
+      .email("Enter a valid email address"),
     firstName: z.string().trim().min(1, "First name is required"),
     lastName: z.string().trim().min(1, "Last name is required"),
     phone: z.string().trim().min(1, "Phone is required"),
     organization: z.string().trim().optional(),
     requestContext: z.enum(REQUEST_CONTEXT_OPTIONS).optional(),
     invoiceGroupId: z.string().trim().optional(),
-    sponsorType: z.enum(SPONSOR_TYPE_OPTIONS, {
+    sponsorType: z.enum(BOOKING_SPONSOR_TYPES, {
       message: "Select a sponsor type",
     }),
     sponsorTypeOther: z.string().trim().optional(),
@@ -164,6 +176,26 @@ export const bookingRequestSchema = z
     additionalNotes: z.string().trim().optional(),
   })
   .superRefine((data, ctx) => {
+    const isIndividualOutsideStanford = data.sponsorType === NON_STANFORD_INDIVIDUAL_SPONSOR_TYPE;
+    if (isStanfordEmail(data.email)) {
+      if (isIndividualOutsideStanford) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "This option is only for non-Stanford emails",
+          path: ["sponsorType"],
+        });
+      }
+    } else if (
+      !isIndividualOutsideStanford ||
+      data.invoiceGroupId?.trim() ||
+      data.organization?.trim()
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Non-Stanford emails can only request as an individual",
+        path: ["sponsorType"],
+      });
+    }
     if (requiresOrganizationName(data.sponsorType, data.invoiceGroupId) && !data.organization?.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -319,9 +351,9 @@ const BASE_STEPS: BookingRequestStepConfig[] = [
   },
   {
     id: "email",
-    headline: "What's your Stanford email?",
+    headline: "What's your email?",
     subheader:
-      "We'll use this to look up your contact info and send updates about your request.",
+      "Use your Stanford email if you have one. Other addresses can only request as an individual.",
     fields: ["email"],
   },
   {

@@ -601,8 +601,10 @@ Update `YEARS` there when the Registrar publishes new dates.
 
 ## Booking requests → events → quotes
 
-1. Anyone with a Stanford email submits the public booking wizard
-   (`/public/request`, `eventRequests.submitPublic`). Requests get an
+1. Anyone with a valid email submits the public booking wizard
+   (`/public/request`, `eventRequests.submitPublic`). Non-Stanford addresses
+   can only request as `Individual (non-Stanford)`, with no group or
+   organization, which `submitPublic` enforces. Requests get an
    `ALREQ-`-numbered record and a public tracking token (`req_` + double
    UUID). Billing records (`invoiceGroups`, `invoiceContacts`) are provisioned
    server-side by email — anonymous callers can never pick contact records.

@@ -5,7 +5,7 @@ async function openEmailStep(page: Page) {
   await page.goto("/request");
   await expect(page.getByText("Welcome!").first()).toBeVisible({ timeout: 20_000 });
   await page.getByRole("button", { name: "Next", exact: true }).click();
-  await expect(page.getByLabel("Stanford email")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByLabel("Email")).toBeVisible({ timeout: 20_000 });
 }
 
 async function assertEmailStepIsLightweight(page: Page) {
@@ -21,17 +21,17 @@ test.describe("booking wizard typing performance", () => {
     await openEmailStep(page);
     await assertEmailStepIsLightweight(page);
 
-    await page.getByLabel("Stanford email").pressSequentially("you@stanford.edu", { delay: 5 });
+    await page.getByLabel("Email").pressSequentially("you@stanford.edu", { delay: 5 });
 
     await assertEmailStepIsLightweight(page);
-    await expect(page.getByLabel("Stanford email")).toHaveValue("you@stanford.edu");
+    await expect(page.getByLabel("Email")).toHaveValue("you@stanford.edu");
   });
 
   test("email keystrokes stay within a long-task budget", async ({ page }) => {
     await openEmailStep(page);
 
     const longTaskMs = await measureLongTaskMsDuring(page, async () => {
-      await page.getByLabel("Stanford email").pressSequentially("you@stanford.edu", { delay: 5 });
+      await page.getByLabel("Email").pressSequentially("you@stanford.edu", { delay: 5 });
     });
 
     // Before the perf fix this was ~90–210 ms of long tasks per character (16 chars → seconds).
