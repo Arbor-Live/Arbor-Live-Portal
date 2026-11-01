@@ -170,7 +170,7 @@ const nextConfig: NextConfig = {
   },
   env: {
     // Sentry reports only from Vercel builds, so local runs and E2E stay out of production issues.
-    NEXT_PUBLIC_SENTRY_ENABLED: process.env.VERCEL_ENV ? "true" : "",
+    NEXT_PUBLIC_SENTRY_ENVIRONMENT: process.env.VERCEL_ENV ?? "",
     ...(convexCloudUrl ? { NEXT_PUBLIC_CONVEX_URL: convexCloudUrl } : {}),
     ...(convexSiteUrl ? { NEXT_PUBLIC_CONVEX_SITE_URL: convexSiteUrl } : {}),
   },

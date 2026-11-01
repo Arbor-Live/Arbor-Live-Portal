@@ -133,13 +133,16 @@ export function useUseAuthFromBetterAuth(
             if (pendingTokenRef.current) {
               return pendingTokenRef.current;
             }
-            // Convex forces a refresh only for a session it already holds.
+            // Retry only to keep a token this tab already held. Convex also forces
+            // a refetch after a failed first fetch, with the socket held; a
+            // signed-out visitor has nothing to recover there.
+            const retry = cachedTokenRef.current !== null;
             pendingTokenRef.current = fetchConvexToken(
               () =>
                 authClient.convex.token({
                   fetchOptions: { throw: false, timeout: TOKEN_REQUEST_TIMEOUT_MS },
                 }),
-              { retry: forceRefreshToken },
+              { retry },
             )
               .then((token) => {
                 storeToken(token);
