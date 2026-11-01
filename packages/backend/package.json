@@ -38,9 +38,9 @@
   "devDependencies": {
     "@better-auth/cli": "^1.4.21",
     "@edge-runtime/vm": "^5.0.0",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@types/web-push": "^3.6.4",
-    "convex-test": "^0.0.61",
+    "convex-test": "^0.0.66",
     "typescript": "^7.0.2"
   }
 }
