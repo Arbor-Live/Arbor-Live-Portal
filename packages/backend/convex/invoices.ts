@@ -2682,11 +2682,12 @@ export const markReadyForClientReview = mutation({
 });
 
 /**
- * Answer the client's change request: send the quote as it now stands (revised,
- * or unchanged with an explanation) with a reply, and open it for their
- * decision again. Request-portal quotes go back on the portal; others are
- * emailed with their quote link. The request stays in the version history,
- * followed by this reply.
+ * Send the quote as it now stands to a client who already has it, with a
+ * message, as a new version they decide on: a reply to their change request
+ * (revised, or unchanged with an explanation), or a revision staff make on
+ * their own. Request-portal quotes go back on the portal; others are emailed
+ * with their quote link. An approved quote goes back through the editor's
+ * re-approval instead.
  */
 export const sendRevisedQuote = mutation({
   args: {
@@ -2701,8 +2702,14 @@ export const sendRevisedQuote = mutation({
       const invoice = await ctx.db.get(args.id);
       if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
       if (invoice.status === "void") appError("INVOICE_VOID", "This quote is void.");
-      if (invoice.clientApprovalStatus !== "changes_requested") {
-        appError("QUOTE_NO_CHANGE_REQUEST", "The client hasn't asked for changes to this quote.");
+      if (invoice.clientApprovalStatus === "approved") {
+        appError(
+          "QUOTE_APPROVED_USE_REAPPROVAL",
+          "The client approved this quote. Change it and save to send it for re-approval.",
+        );
+      }
+      if (invoice.sourceEventRequestId && !invoice.clientReviewReadyAt) {
+        appError("QUOTE_NOT_SENT", "Send the quote to the client first.");
       }
       const message = args.message.trim();
       if (!message) {
@@ -2716,9 +2723,13 @@ export const sendRevisedQuote = mutation({
         return { number: sent?.number ?? 0 };
       }
 
+      if (!invoice.clientEmail?.trim()) {
+        appError("QUOTE_CLIENT_EMAIL_REQUIRED", "Add the client's email so they get the quote.");
+      }
       const request = await ensureChangeRequestRevision(ctx, invoice);
+      const previous = request ?? (await latestInvoiceRevision(ctx, invoice._id));
       const now = Date.now();
-      await resetInvoiceApproval(ctx, invoice, now);
+      if (request) await resetInvoiceApproval(ctx, invoice, now);
       const snapshot = await snapshotInvoice(ctx, invoice);
       const { number } = await recordInvoiceRevision(ctx, invoice._id, snapshot, {
         kind: "sent",
@@ -2729,8 +2740,8 @@ export const sendRevisedQuote = mutation({
       });
       await scheduleQuoteUpdatedEmail(ctx, {
         invoice,
-        reason: "changes_requested",
-        previousTotalUsd: request?.totalUsd ?? invoice.totalUsd,
+        reason: request ? "changes_requested" : "revised",
+        previousTotalUsd: previous?.totalUsd,
         newTotalUsd: snapshot.totalUsd,
         changeNote: message,
         requestNote: request?.note,
@@ -2742,9 +2753,10 @@ export const sendRevisedQuote = mutation({
 });
 
 /**
- * The client's open change request next to the quote as saved now, so the
- * reply sheet can show what changed since they asked. Null when there's no
- * open request.
+ * What a revised quote would answer or replace, next to the quote as saved
+ * now, so the send sheet can show what changed: the client's open change
+ * request, else the last version they were sent. Null when the quote can't be
+ * sent again (void, approved, or a request-portal quote not sent yet).
  */
 export const revisedQuotePreview = query({
   args: { id: v.id("invoices") },
@@ -2752,15 +2764,27 @@ export const revisedQuotePreview = query({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const invoice = await ctx.db.get(args.id);
-    if (!invoice || invoice.clientApprovalStatus !== "changes_requested") return null;
+    if (!invoice || invoice.status === "void" || invoice.clientApprovalStatus === "approved") return null;
+    if (invoice.sourceEventRequestId && !invoice.clientReviewReadyAt) return null;
     const latest = await latestInvoiceRevision(ctx, invoice._id);
     const current = await snapshotInvoice(ctx, invoice);
-    const request =
-      latest?.kind === "changes_requested"
-        ? { number: latest.number, note: latest.note, totalUsd: latest.totalUsd, lines: latest.lines }
-        : // Asked before requests were versions: the note is all there is.
-          { number: null, note: invoice.clientApprovalNote, totalUsd: null, lines: null };
-    return { request, current: { totalUsd: current.totalUsd, lines: current.lines } };
+    const since = latest
+      ? { number: latest.number, totalUsd: latest.totalUsd, lines: latest.lines }
+      : { number: null, totalUsd: null, lines: null };
+    const basis =
+      invoice.clientApprovalStatus === "changes_requested"
+        ? latest?.kind === "changes_requested"
+          ? { kind: "changes_requested" as const, note: latest.note, ...since }
+          : // Asked before requests were versions: the note is all there is.
+            {
+              kind: "changes_requested" as const,
+              note: invoice.clientApprovalNote,
+              number: null,
+              totalUsd: null,
+              lines: null,
+            }
+        : { kind: "revision" as const, note: undefined, ...since };
+    return { basis, current: { totalUsd: current.totalUsd, lines: current.lines } };
   },
 });
 

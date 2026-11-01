@@ -88,7 +88,12 @@ test("a change request stays in the history after staff reply to it", async () =
   );
 
   const preview = await staff.query(api.invoices.revisedQuotePreview, { id: invoiceId });
-  expect(preview?.request).toMatchObject({ number: 1, note: "Drop the photographer", totalUsd: 500 });
+  expect(preview?.basis).toMatchObject({
+    kind: "changes_requested",
+    number: 1,
+    note: "Drop the photographer",
+    totalUsd: 500,
+  });
 
   // Staff drop the line, then reply.
   await t.run(async (ctx) => {
@@ -126,18 +131,79 @@ test("a change request stays in the history after staff reply to it", async () =
   ]);
 });
 
-test("replying needs a message and an open request", async () => {
+async function quoteUpdatedEmails(t: Test) {
+  const rows = await t.run(async (ctx) =>
+    (await ctx.db.query("emailNotifications").collect()).filter((row) => row.template === "quote_updated"),
+  );
+  return rows.map((row) => {
+    const payload = row.payload as { reason?: string; previousTotalUsd?: number; newTotalUsd: number };
+    return [payload.reason, payload.previousTotalUsd, payload.newTotalUsd];
+  });
+}
+
+test("staff send a revised quote without a change request", async () => {
   const t = makeTest();
   const invoiceId = await seedQuote(t);
   const staff = await arborStaff(t);
 
-  await expect(staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Hi" })).rejects.toThrow(
-    /hasn't asked for changes/,
-  );
-  await t.mutation(api.invoices.requestChangesByToken, { token: TOKEN, note: "Cheaper please" });
   await expect(staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "  " })).rejects.toThrow(
     /what changed/,
   );
+  expect(await staff.query(api.invoices.revisedQuotePreview, { id: invoiceId })).toMatchObject({
+    basis: { kind: "revision", number: null, totalUsd: null },
+    current: { totalUsd: 500 },
+  });
+
+  await t.run(async (ctx) => {
+    const line = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", invoiceId))
+      .first();
+    await ctx.db.patch(line!._id, { rateUsd: 400, amountUsd: 400 });
+  });
+  expect(
+    await staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Photographer at $400." }),
+  ).toEqual({ number: 1 });
+  expect(await staff.query(api.invoices.revisedQuotePreview, { id: invoiceId })).toMatchObject({
+    basis: { kind: "revision", number: 1, totalUsd: 400 },
+  });
+  expect(
+    await staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Same quote, new dates." }),
+  ).toEqual({ number: 2 });
+
+  const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId));
+  expect(invoice?.clientApprovalStatus).toBe("pending");
+  const revisions = await revisionsOf(t, invoiceId);
+  expect(revisions.map((r) => [r.number, r.kind, r.note, r.totalUsd, r.actorName])).toEqual([
+    [1, "sent", "Photographer at $400.", 400, "Sam Staff"],
+    [2, "sent", "Same quote, new dates.", 400, "Sam Staff"],
+  ]);
+  expect(await quoteUpdatedEmails(t)).toEqual([
+    ["revised", undefined, 400],
+    ["revised", 400, 400],
+  ]);
+});
+
+test("a standalone quote needs the client's email to send", async () => {
+  const t = makeTest();
+  const invoiceId = await seedQuote(t, { clientEmail: undefined });
+  const staff = await arborStaff(t);
+
+  await expect(staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Hi" })).rejects.toThrow(
+    /client's email/,
+  );
+  expect(await revisionsOf(t, invoiceId)).toEqual([]);
+});
+
+test("an approved quote goes back through re-approval, not a revised send", async () => {
+  const t = makeTest();
+  const invoiceId = await seedQuote(t, { clientApprovalStatus: "approved", approvedAt: Date.now() });
+  const staff = await arborStaff(t);
+
+  await expect(staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Hi" })).rejects.toThrow(
+    /approved this quote/,
+  );
+  expect(await staff.query(api.invoices.revisedQuotePreview, { id: invoiceId })).toBeNull();
 });
 
 test("a request made before requests were versions is recorded late, once", async () => {
