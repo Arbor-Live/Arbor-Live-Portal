@@ -628,7 +628,9 @@ on-shift card, the weekly digest, staffing conflicts and the internal calendar
 and list all carry it. Public listings, calendar feeds and newsletters stop at
 internal visibility. Nights, the crew board, open positions, trainees, the
 booking calendar, the CoHo card, post-event work, marketing and Insights event
-counts all skip it. Insights keeps its crew cost and hours.
+counts all skip it. Insights keeps its crew cost and hours: the cost is in event
+expenses, and its own line under the margins, since a hash is never billed and so
+isn't an unbooked event.
 
 **Who owes one.** Active Arbor staff whose profile has `includeInTimecards` (the
 people held to the crew hours minimum). Summer has no requirement. Booking,

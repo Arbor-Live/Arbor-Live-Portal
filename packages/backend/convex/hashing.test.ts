@@ -411,15 +411,31 @@ describe("availability and booking", () => {
     expect((await anaApi.query(api.hashing.getMyPrompt, { now: NOW }))?.toAnswer).toBe(scheduled.length - 1);
   });
 
-  test("a hash's cost counts as unbooked cost, but the hash isn't an unbooked event", async () => {
+  test("a hash's cost is its own Insights line and a real expense, not an unbooked event's cost", async () => {
     const { t, opsApi, on } = await setupWithDates();
-    const eventId = on("2026-11-03").eventId!;
-    await t.run(async (ctx) => ctx.db.patch(eventId, { crewCostUsd: 40 }));
-    const profit = await opsApi.query(api.analyticsProfit.getProfitability, {
-      startMs: NOW,
-      endMs: NOW + 7 * 24 * 60 * 60 * 1000,
+    const row = on("2026-11-03");
+    await t.run(async (ctx) => {
+      await ctx.db.patch(row.eventId!, { crewCostUsd: 40 });
+      await ctx.db.insert("events", {
+        title: "Unquoted show",
+        status: "ready",
+        visibility: "internal",
+        startAt: row.startsAt,
+        endAt: row.endsAt,
+        timezone: "America/Los_Angeles",
+        spansMultipleDays: false,
+        setupOnly: false,
+        strikeOnly: false,
+        requiresShowWindow: false,
+        crewCostUsd: 15,
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
     });
-    expect(profit).toMatchObject({ unbookedCostUsd: 40, unbookedEvents: 0 });
+    const range = { startMs: NOW, endMs: NOW + 7 * 24 * 60 * 60 * 1000 };
+    const profit = await opsApi.query(api.analyticsProfit.getProfitability, range);
+    expect(profit).toMatchObject({ unbookedEvents: 1, unbookedCostUsd: 15, hashCostUsd: 40 });
+    expect((await opsApi.query(api.analytics.getFinancialSummary, range)).expensesUsd).toBe(55);
   });
 
   test("the home prompt appears only for someone with something to do", async () => {
