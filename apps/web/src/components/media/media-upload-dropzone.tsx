@@ -22,6 +22,8 @@ type MediaUploadDropzoneProps = {
   targetId: string;
   disabled?: boolean;
   onUploaded?: () => void;
+  /** "failed" means at least one file in the batch didn't make it. */
+  onBatchChange?: (state: "uploading" | "done" | "failed") => void;
   className?: string;
   /**
    * Public portal (unauthenticated) targets. Routes config lookups and asset
@@ -93,6 +95,7 @@ export function MediaUploadDropzone({
   targetId,
   disabled,
   onUploaded,
+  onBatchChange,
   className,
   publicAccess,
 }: MediaUploadDropzoneProps) {
@@ -137,6 +140,7 @@ export function MediaUploadDropzone({
       setBusy(true);
       setSummary(null);
       setFatalError(null);
+      onBatchChange?.("uploading");
 
       let successCount = 0;
 
@@ -233,11 +237,13 @@ export function MediaUploadDropzone({
         );
       } finally {
         setBusy(false);
+        onBatchChange?.(successCount === list.length ? "done" : "failed");
       }
     },
     [
       convex,
       disabled,
+      onBatchChange,
       onUploaded,
       publicAccess,
       recordMediaUploadByToken,
