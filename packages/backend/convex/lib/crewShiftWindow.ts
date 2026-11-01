@@ -49,15 +49,17 @@ export function onShiftPhase({ startsAt, endsAt }: ShiftRange, now: number): OnS
 
 /**
  * One row per event for the shifts inside the padded window, spanning the
- * earliest start to the latest end, with shifts in progress first, then what is
+ * earliest call or start to the latest end, with shifts in progress first, then what is
  * coming up, then what just ended, soonest first within each.
  */
 export function summarizeOnShiftEvents(
-  shifts: readonly (ShiftRange & { eventId: Id<"events"> })[],
+  shifts: readonly (ShiftRange & { eventId: Id<"events">; callTime?: number })[],
   now: number,
 ) {
   const ranges = new Map<Id<"events">, ShiftRange>();
-  for (const { eventId, startsAt, endsAt } of shifts) {
+  for (const { eventId, callTime, startsAt: shiftStart, endsAt } of shifts) {
+    // Crew called in early are on shift from the call, not the listed start.
+    const startsAt = Math.min(callTime ?? shiftStart, shiftStart);
     if (!onShiftPhase({ startsAt, endsAt }, now)) continue;
     const range = ranges.get(eventId);
     ranges.set(eventId, {

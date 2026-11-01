@@ -41,6 +41,21 @@ describe("summarizeOnShiftEvents", () => {
     ).toEqual([{ eventId: a, startsAt: 9 * HOUR, endsAt: 12 * HOUR, phase: "now" }]);
   });
 
+  test("counts an early call time as the start of the shift", () => {
+    expect(
+      summarizeOnShiftEvents(
+        [{ eventId: a, callTime: 8 * HOUR, startsAt: 11 * HOUR, endsAt: 14 * HOUR }],
+        7.5 * HOUR,
+      ),
+    ).toEqual([{ eventId: a, startsAt: 8 * HOUR, endsAt: 14 * HOUR, phase: "upcoming" }]);
+    expect(
+      summarizeOnShiftEvents(
+        [{ eventId: a, callTime: 8 * HOUR, startsAt: 11 * HOUR, endsAt: 14 * HOUR }],
+        9 * HOUR,
+      ),
+    ).toEqual([{ eventId: a, startsAt: 8 * HOUR, endsAt: 14 * HOUR, phase: "now" }]);
+  });
+
   test("sorts shifts in progress first, then upcoming, then ended", () => {
     const now = 10 * HOUR;
     expect(
