@@ -614,13 +614,19 @@ A crew edit on the event page is a booking too, and every hash keeps its Run of
 Show tab for it, even a Services Only one. `requireHashCrewEdit` holds anyone
 new to the booking rules (active crew, room on the date, one spot per quarter),
 refuses open slots and trainees, and saves every shift with the `Hash` role on the
-hash's section. The staffing board's hash mode hides what that would refuse or
-overwrite: the open-slot stepper, the role, custom times, availability and
-trainees. A running hash takes a walk-in the same way, so finish can tick them,
-but only from ops, and past capacity because they are already there. The event
-page merges a hash's server shifts into its draft by person
-(`mergeServerHashShifts`), because a schedule save deletes any shift the draft
-lacks, and a page left open must not unbook someone Hashing booked meanwhile. On a
+hash's section. The staffing board's hash mode adds and removes people only: it
+locks the person and role on a row, Add person opens the picker, and it hides the
+open-slot stepper, custom times, availability and trainees. The Run of Show's hash
+mode keeps names editable and hides Quick Add, Build, Add, delete and times. A
+running hash takes a walk-in the same way, so finish can tick them, past capacity
+because they are already there, but any change to a running hash's crew, a removal
+too, takes ops. The event page merges a hash's server blocks and shifts into its
+draft (`mergeServerHashSchedule`), people by person, because a schedule save
+deletes any shift the draft lacks and refuses a block whose times differ, and a
+page left open must not undo what Hashing did meanwhile. Only a label or notes
+edited on the page stay, and rows not saved yet follow the section. Hashing
+switching on or off rewrites the schedule in one write, so the page reloads its
+schedule then, and unsaved schedule edits go with it. On a
 hash that's over or a date that's off, a save with the same crew writes nothing at
 all and any change is refused, so saving a label there still works. Pay and credit
 change only through the finish list and `correctAttendance`.
@@ -703,8 +709,12 @@ lose them with the normal notice. It records who was there, so no booking rule
 applies: someone who has since left crew, holds another hash this quarter, or
 takes the date past capacity can still be credited and paid. A new person only
 needs a real profile, which refuses a junk id.
+`listCrewTimecardOverview` lists only active and inactive staff with
+`includeInTimecards`, so the dialog marks anyone else: their shift and pay are
+real, but the overview has no row for them.
 The lapse keeps who was booked in `hashDates.bookedWhenLapsed`, which starts them
-ticked in Mark as done even if they have since left crew. Marking a lapsed hash as
+ticked in Mark as done even if they have since left crew. It's read only while the
+date is lapsed. Marking a lapsed hash as
 done revives its event and clears that list. A lapsed add-on's event becomes a
 hash again only if it is still bare and hasn't moved.
 
