@@ -104,7 +104,8 @@ function sameCrew(existing: readonly Doc<"eventCrewShifts">[], next: readonly Ha
  * the shifts to save come back as bookings: the `Hash` role on the hash's section.
  * Once a hash is over its pay and credit are settled, so a save carrying the same
  * crew returns null, for the caller to write nothing, and any change is refused.
- * A running hash takes a walk-in from ops, past its spots, because they're here.
+ * A running hash's crew changes only from ops: a walk-in, past its spots because
+ * they're here, or a removal, which unbooks someone mid-hash.
  */
 export async function requireHashCrewEdit<Shift extends HashCrewShift>(
   ctx: MutationCtx,
@@ -137,14 +138,13 @@ export async function requireHashCrewEdit<Shift extends HashCrewShift>(
 
   const onHash = new Set(existing.map((shift) => shift.userId));
   const newcomers = userIds.filter((userId) => userId !== undefined && !onHash.has(userId));
-  if (newcomers.length > 0) {
-    if (row.status === "in_progress") {
-      if (!(await requireHashingViewer(ctx)).canManage) {
-        appError("HASH_WALK_IN_OPS", "Only ops can add someone to a running hash.");
-      }
-    } else if (userIds.length > row.capacity) {
-      appError("HASH_FULL", `${hashDateLabel(row)} holds ${row.capacity}, and this crew has ${userIds.length}.`);
+  const leaving = existing.some((shift) => !userIds.includes(shift.userId));
+  if (row.status === "in_progress") {
+    if ((newcomers.length > 0 || leaving) && !(await requireHashingViewer(ctx)).canManage) {
+      appError("HASH_RUNNING_CREW_OPS", "Only ops can change a running hash's crew.");
     }
+  } else if (newcomers.length > 0 && userIds.length > row.capacity) {
+    appError("HASH_FULL", `${hashDateLabel(row)} holds ${row.capacity}, and this crew has ${userIds.length}.`);
   }
   for (const userId of newcomers) {
     if (userId) await requireBookingRules(ctx, row, userId, null);

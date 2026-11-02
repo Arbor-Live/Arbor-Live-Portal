@@ -590,7 +590,29 @@ describe("one writer", () => {
     });
     await expect(
       anaApi.mutation(api.eventCrew.upsertShifts, { eventId: edit.eventId, shifts: [edit.slot(ana._id), edit.slot(ben._id)] }),
-    ).rejects.toThrow(/Only ops can add someone/);
+    ).rejects.toThrow(/Only ops can change a running hash's crew/);
+  });
+
+  test("a removal takes ops too: an event lead can't take someone off a running hash", async () => {
+    const context = await setup();
+    const { t, opsApi, ana, ben, anaApi } = context;
+    await bookAndRun(context, "2026-11-03", [ana, ben]);
+    const edit = crewEdit(context, "2026-11-03");
+    await t.run(async (ctx) => {
+      await ctx.db.patch(edit.eventId, { dayOfLeadUserId: ana._id });
+    });
+    const [first, second] = await shiftsOf(t, edit.eventId);
+    const kept = { id: first!._id, ...edit.slot(first!.userId) };
+    const other = { id: second!._id, ...edit.slot(second!.userId) };
+
+    await expect(anaApi.mutation(api.eventCrew.upsertShifts, { eventId: edit.eventId, shifts: [kept] })).rejects.toThrow(
+      /Only ops can change a running hash's crew/,
+    );
+    await anaApi.mutation(api.eventCrew.upsertShifts, { eventId: edit.eventId, shifts: [kept, other] });
+    expect(await shiftsOf(t, edit.eventId)).toHaveLength(2);
+
+    await opsApi.mutation(api.eventCrew.upsertShifts, { eventId: edit.eventId, shifts: [kept] });
+    expect(await shiftsOf(t, edit.eventId)).toMatchObject([{ userId: first!.userId }]);
   });
 
   test("an off date has its own refusal, and saves nothing when its crew hasn't changed", async () => {
