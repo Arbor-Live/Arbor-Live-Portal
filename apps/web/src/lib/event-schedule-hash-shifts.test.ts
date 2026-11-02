@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Id } from "@/lib/convex-api";
-import { mergeServerHashShifts, type EventShiftDraft } from "./event-schedule-draft";
+import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
+import {
+  mergeServerHashSchedule,
+  mergeServerHashShifts,
+  type EventShiftDraft,
+} from "./event-schedule-draft";
 
 function shift(partial: Partial<EventShiftDraft>): EventShiftDraft {
   return {
@@ -64,5 +69,81 @@ describe("mergeServerHashShifts", () => {
     const merged = mergeServerHashShifts(state, state, [ana, server]);
     expect(merged?.state.shifts).toEqual([ana, server]);
     expect(merged?.baseline.shifts).toEqual([ana, server]);
+  });
+});
+
+describe("mergeServerHashSchedule", () => {
+  const blockId = "b1" as Id<"eventScheduleBlocks">;
+  const section: TimelineBlockDraft = {
+    id: blockId,
+    clientId: blockId,
+    blockType: "custom",
+    label: "Cleaning",
+    dayIndex: 0,
+    startsAt: "2026-11-03T16:00",
+    endsAt: "2026-11-03T17:00",
+    notes: "",
+  };
+  const movedTimes = { startsAt: "2026-11-05T18:00", endsAt: "2026-11-05T19:00" };
+  const movedSection = { ...section, ...movedTimes };
+  const booked = { ...ana, scheduleBlockId: blockId, scheduleBlockRef: blockId };
+  const movedBooked = { ...booked, ...movedTimes };
+
+  it("returns null when the server matches the draft", () => {
+    const state = { blocks: [section], shifts: [booked] };
+    expect(mergeServerHashSchedule(state, state, [section], [booked])).toBeNull();
+  });
+
+  it("moves the block with the hash, so its next save isn't refused", () => {
+    const state = { blocks: [section], shifts: [booked] };
+    const merged = mergeServerHashSchedule(state, state, [movedSection], [movedBooked]);
+    expect(merged?.state.blocks).toEqual([movedSection]);
+    expect(merged?.baseline.blocks).toEqual([movedSection]);
+  });
+
+  it("doesn't mistake a moved booking for custom times", () => {
+    const state = { blocks: [section], shifts: [booked] };
+    const merged = mergeServerHashSchedule(state, state, [movedSection], [movedBooked]);
+    expect(merged?.state.shifts).toEqual([movedBooked]);
+    expect(merged?.state.shifts[0]?.timesOverridden).toBeFalsy();
+    expect(merged?.baseline.shifts).toEqual([movedBooked]);
+  });
+
+  it("keeps a local label and notes edit through a move", () => {
+    const baseline = { blocks: [section], shifts: [booked] };
+    const edited = { ...section, label: "Gear closet", notes: "Bring gloves" };
+    const merged = mergeServerHashSchedule(
+      { blocks: [edited], shifts: [booked] },
+      baseline,
+      [movedSection],
+      [movedBooked],
+    );
+    expect(merged?.state.blocks).toEqual([{ ...edited, ...movedTimes }]);
+    expect(merged?.baseline.blocks).toEqual([movedSection]);
+  });
+
+  it("takes a rename made elsewhere when this page hasn't touched the label", () => {
+    const state = { blocks: [section], shifts: [booked] };
+    const renamed = { ...section, label: "Closet" };
+    const merged = mergeServerHashSchedule(state, state, [renamed], [booked]);
+    expect(merged?.state.blocks).toEqual([renamed]);
+  });
+
+  it("gives an unsaved row the section's times after a move", () => {
+    const added = shift({ userId: "ben", scheduleBlockId: blockId, scheduleBlockRef: blockId });
+    const merged = mergeServerHashSchedule(
+      { blocks: [section], shifts: [booked, added] },
+      { blocks: [section], shifts: [booked] },
+      [movedSection],
+      [movedBooked],
+    );
+    expect(merged?.state.shifts).toEqual([movedBooked, { ...added, ...movedTimes }]);
+    expect(merged?.baseline.shifts).toEqual([movedBooked]);
+  });
+
+  it("settles after one pass", () => {
+    const state = { blocks: [section], shifts: [booked] };
+    const merged = mergeServerHashSchedule(state, state, [movedSection], [movedBooked]);
+    expect(mergeServerHashSchedule(merged!.state, merged!.baseline, [movedSection], [movedBooked])).toBeNull();
   });
 });

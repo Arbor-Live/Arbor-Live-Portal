@@ -355,7 +355,7 @@ export function keepActBlocks(
   return sortScheduleBlocksByTime([...next, ...previous.filter((block) => block.actOwned)]);
 }
 
-function actBlockKey(block: TimelineBlockDraft) {
+function blockKey(block: TimelineBlockDraft) {
   return [block.id, block.blockType, block.label, block.startsAt, block.endsAt, block.notes].join("|");
 }
 
@@ -397,9 +397,9 @@ export function mergeServerActBlocks<T extends ShiftBlockLink & EventShiftDraft>
       removed.add(id);
       nextBase = replace(nextBase, id, null);
       nextState = replace(nextState, id, null);
-    } else if (s && b && actBlockKey(s) !== actBlockKey(b)) {
+    } else if (s && b && blockKey(s) !== blockKey(b)) {
       nextBase = replace(nextBase, id, s);
-      if (l && actBlockKey(l) === actBlockKey(b)) nextState = replace(nextState, id, s);
+      if (l && blockKey(l) === blockKey(b)) nextState = replace(nextState, id, s);
     }
   }
   if (nextState === state.blocks && nextBase === baseline.blocks) return null;
@@ -517,6 +517,61 @@ export function mergeServerHashShifts<T extends ShiftBlockLink & EventShiftDraft
   return mergeServerShifts(state, baseline, serverShifts, (shift) => shift.userId?.trim() || undefined);
 }
 
+function sameBlocks(a: TimelineBlockDraft[], b: TimelineBlockDraft[]) {
+  return a.map(blockKey).sort().join("\n") === b.map(blockKey).sort().join("\n");
+}
+
+/**
+ * Hashing writes a hash's blocks, shifts and times straight to the server. Blocks
+ * come from the server first, so a moved booking still matches its section and
+ * doesn't read as custom times; only a label or notes edited here stay. Rows not
+ * saved yet follow the section, because a hash refuses any other times.
+ */
+export function mergeServerHashSchedule<T extends ShiftBlockLink & EventShiftDraft>(
+  state: ScheduleState<T>,
+  baseline: ScheduleState<T>,
+  serverBlocks: TimelineBlockDraft[],
+  serverShifts: T[],
+) {
+  const byId = (blocks: TimelineBlockDraft[]) => new Map(blocks.map((block) => [block.id, block]));
+  const local = byId(state.blocks);
+  const saved = byId(baseline.blocks);
+  const merged = serverBlocks.map((server) => {
+    const l = local.get(server.id);
+    const b = saved.get(server.id);
+    if (!l || !b) return server;
+    return {
+      ...server,
+      label: l.label === b.label ? server.label : l.label,
+      notes: l.notes === b.notes ? server.notes : l.notes,
+    };
+  });
+  const blocks = sameBlocks(state.blocks, merged) ? state.blocks : sortScheduleBlocksByTime(merged);
+  const baseBlocks = sameBlocks(baseline.blocks, serverBlocks)
+    ? baseline.blocks
+    : sortScheduleBlocksByTime(serverBlocks);
+
+  const shifts = mergeServerHashShifts(
+    { blocks, shifts: state.shifts },
+    { blocks: baseBlocks, shifts: baseline.shifts },
+    applyShiftTimesOverrideFlags(serverShifts, blocks),
+  );
+  const nextShifts = syncShiftsToBlockTimes(shifts?.state.shifts ?? state.shifts, blocks);
+  const nextBaseShifts = shifts?.baseline.shifts ?? baseline.shifts;
+  if (
+    blocks === state.blocks &&
+    baseBlocks === baseline.blocks &&
+    nextShifts === state.shifts &&
+    nextBaseShifts === baseline.shifts
+  ) {
+    return null;
+  }
+  return {
+    state: { blocks, shifts: nextShifts },
+    baseline: { blocks: baseBlocks, shifts: nextBaseShifts },
+  };
+}
+
 /**
  * Act soundcheck/set blocks are written by the lineup, not this editor. Pull the
  * server's current set into a schedule draft without touching staff edits: add,
@@ -529,10 +584,7 @@ export function rebaseActBlocks<T extends ShiftBlockLink & EventShiftDraft>(
   serverActBlocks: TimelineBlockDraft[],
 ): { blocks: TimelineBlockDraft[]; shifts: T[] } | null {
   const localAct = state.blocks.filter((block) => block.actOwned);
-  const same =
-    localAct.map(actBlockKey).sort().join("\n") ===
-    serverActBlocks.map(actBlockKey).sort().join("\n");
-  if (same) return null;
+  if (sameBlocks(localAct, serverActBlocks)) return null;
 
   const serverById = new Map(serverActBlocks.map((block) => [block.id, block]));
   const shifts = state.shifts.map((shift) => {
