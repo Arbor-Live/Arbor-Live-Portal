@@ -1,19 +1,33 @@
 import type { Night } from "@/components/availability/night-card";
 import type { PostEventWorkRow } from "@/components/events/post-event-work-card";
+import type { Id } from "@/lib/convex-api";
 import { needsAnswer } from "@/lib/crew-nights";
 import { formatDateTime, formatTime, PORTAL_TIMEZONE } from "@/lib/format";
 
+export type HashPrompt = {
+  toConfirm: { hashDateId: Id<"hashDates">; dateKey: string; startsAt: number; endsAt: number }[];
+  toAnswer: number;
+};
+
 /** One card is one decision, so an event's review and photos are separate cards. */
 export type CrewTodo =
+  | { kind: "hash_confirm"; key: string; hash: HashPrompt["toConfirm"][number] }
+  | { kind: "hash_answer"; key: string; count: number }
   | { kind: "availability"; key: string; night: Night }
   | { kind: "review"; key: string; row: PostEventWorkRow }
   | { kind: "photos"; key: string; row: PostEventWorkRow };
 
 /**
- * Soonest night first, then post-event work most recently ended first. A
- * deferred key goes to the back, in the order deferred; it never leaves.
+ * A moved hash first, since its date is already set. Then soonest night, hash
+ * dates to answer, and post-event work most recently ended first. A deferred
+ * key goes to the back, in the order deferred; it never leaves.
  */
-export function buildCrewTodos(nights: Night[], rows: PostEventWorkRow[], deferredKeys: string[]): CrewTodo[] {
+export function buildCrewTodos(
+  nights: Night[],
+  rows: PostEventWorkRow[],
+  deferredKeys: string[],
+  hash: HashPrompt | null = null,
+): CrewTodo[] {
   const availability = nights
     .filter(needsAnswer)
     .sort((a, b) => a.nightKey.localeCompare(b.nightKey))
@@ -26,7 +40,12 @@ export function buildCrewTodos(nights: Night[], rows: PostEventWorkRow[], deferr
       ...(row.mediaResolved ? [] : [{ kind: "photos" as const, key: `photos:${row.eventId}`, row }]),
     ]);
 
-  const todos = [...availability, ...postEvent];
+  const hashConfirm = (hash?.toConfirm ?? []).map(
+    (row): CrewTodo => ({ kind: "hash_confirm", key: `hash:${row.hashDateId}`, hash: row }),
+  );
+  const hashAnswer: CrewTodo[] = hash?.toAnswer ? [{ kind: "hash_answer", key: "hash:answer", count: hash.toAnswer }] : [];
+
+  const todos = [...hashConfirm, ...availability, ...hashAnswer, ...postEvent];
   const deferred = deferredKeys.flatMap((key) => todos.filter((todo) => todo.key === key));
   return [...todos.filter((todo) => !deferredKeys.includes(todo.key)), ...deferred];
 }

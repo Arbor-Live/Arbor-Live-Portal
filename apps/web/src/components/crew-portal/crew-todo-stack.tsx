@@ -1,14 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation } from "convex/react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { CalendarCheckIcon, CaretRightIcon, CheckIcon, ClipboardTextIcon, type Icon } from "@phosphor-icons/react";
+import { BroomIcon, CalendarCheckIcon, CaretRightIcon, CheckIcon, ClipboardTextIcon, type Icon } from "@phosphor-icons/react";
 import { NightFacts, type Night } from "@/components/availability/night-card";
 import { NightPartForm } from "@/components/availability/night-part-form";
 import type { PostEventWorkRow } from "@/components/events/post-event-work-card";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
 import { PostMortemForm } from "@/components/post-mortem/post-mortem-form";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,7 +30,9 @@ import {
   type NightChoice,
 } from "@/lib/crew-nights";
 import { buildCrewTodos, endedLabel, type CrewTodo } from "@/lib/crew-todo";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, plural } from "@/lib/format";
+import { hashDayLabel, hashTimeRange } from "@/lib/hashing";
+import { HASHING_BASE_PATH } from "@/lib/hashing-tabs";
 import { optimisticResolveMyEventMedia } from "@/lib/crew-portal-optimistic";
 import { cn } from "@/lib/utils";
 
@@ -85,6 +89,14 @@ function TodoCard({
 }
 
 const ANSWER_BUTTON = "h-10 w-full sm:w-auto";
+
+const TODO_ICONS: Record<CrewTodo["kind"], Icon> = {
+  hash_confirm: BroomIcon,
+  hash_answer: BroomIcon,
+  availability: CalendarCheckIcon,
+  review: ClipboardTextIcon,
+  photos: ClipboardTextIcon,
+};
 
 function AvailabilityCard({ night, saving, commit }: { night: Night; saving: boolean; commit: Commit }) {
   const answerNight = useMutation(api.crewNights.answerNight);
@@ -170,6 +182,59 @@ function AvailabilityCard({ night, saving, commit }: { night: Night; saving: boo
   );
 }
 
+function HashConfirmCard({
+  hash,
+  saving,
+  commit,
+}: {
+  hash: Extract<CrewTodo, { kind: "hash_confirm" }>["hash"];
+  saving: boolean;
+  commit: Commit;
+}) {
+  const confirmBooking = useMutation(api.hashing.confirmBooking);
+  const giveUpSpot = useMutation(api.hashing.giveUpSpot);
+  const { confirm } = useAppDialog();
+  const { hashDateId } = hash;
+
+  async function giveUp() {
+    const ok = await confirm({
+      title: `Can't make ${hashDayLabel(hash.dateKey)}?`,
+      description: "The spot opens up, and you'll need another hash this quarter.",
+      destructive: true,
+      confirmLabel: "Can't make it",
+    });
+    if (ok) commit(() => giveUpSpot({ hashDateId }), "Couldn't give up your spot.");
+  }
+
+  return (
+    <>
+      <p className="font-medium tabular-nums">
+        {hashDayLabel(hash.dateKey)} · {hashTimeRange(hash.startsAt, hash.endsAt)}
+      </p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+        <Button
+          type="button"
+          className={ANSWER_BUTTON}
+          disabled={saving}
+          data-testid="crew-todo-hash-confirm"
+          onClick={() => commit(() => confirmBooking({ hashDateId }), "Couldn't confirm that.")}
+        >
+          I can make it
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={ANSWER_BUTTON}
+          disabled={saving}
+          onClick={() => void giveUp()}
+        >
+          Can&apos;t make it
+        </Button>
+      </div>
+    </>
+  );
+}
+
 function ReviewCard({ row }: { row: PostEventWorkRow }) {
   const submit = useMutation(api.postMortemFeedback.submitForEvent);
   return (
@@ -247,6 +312,9 @@ function PhotosCard({
 
 function eyebrowOf(todo: CrewTodo, now: number) {
   switch (todo.kind) {
+    case "hash_confirm":
+    case "hash_answer":
+      return "Hashing";
     case "availability":
       // Drops the year from "Fri, Nov 6, 2026".
       return `Availability · ${nightDateLabel(todo.night.nightKey).split(", ").slice(0, 2).join(", ")}`;
@@ -259,6 +327,10 @@ function eyebrowOf(todo: CrewTodo, now: number) {
 
 function titleOf(todo: CrewTodo) {
   switch (todo.kind) {
+    case "hash_confirm":
+      return "Your hash moved. Can you still make it?";
+    case "hash_answer":
+      return `${plural(todo.count, "hash date")} to answer`;
     case "availability":
       return "Can you work this night?";
     case "review":
@@ -307,6 +379,7 @@ export function CrewTodoStack({ now, collapsed }: { now: number; collapsed: bool
   const nights = useHeldQuery(api.crewNights.listMine, { now, weeksAhead: DEFAULT_AVAILABILITY_WEEKS });
   const rows = useHeldQuery(api.crewPortal.listMyPostEventWork, { now });
   const upcoming = useHeldQuery(api.crewPortal.listMyScheduledEvents, { now, weeksAhead: 8 });
+  const hashPrompt = useHeldQuery(api.hashing.getMyPrompt, { now });
   const reduceMotion = useReducedMotion();
 
   const [deferred, setDeferred] = useState<string[]>([]);
@@ -319,8 +392,8 @@ export function CrewTodoStack({ now, collapsed }: { now: number; collapsed: bool
   const [seen, setSeen] = useState<string[]>([]);
 
   const todos = useMemo(
-    () => (nights && rows ? buildCrewTodos(nights, rows, deferred) : null),
-    [nights, rows, deferred],
+    () => (nights && rows && hashPrompt !== undefined ? buildCrewTodos(nights, rows, deferred, hashPrompt) : null),
+    [nights, rows, deferred, hashPrompt],
   );
 
   const cards = useMemo(() => {
@@ -402,14 +475,20 @@ export function CrewTodoStack({ now, collapsed }: { now: number; collapsed: bool
     };
     return (
       <TodoCard
-        icon={todo.kind === "availability" ? CalendarCheckIcon : ClipboardTextIcon}
+        icon={TODO_ICONS[todo.kind]}
         eyebrow={eyebrowOf(todo, now)}
         title={titleOf(todo)}
         onLater={() => later(todo.key)}
         laterDisabled={cards!.length < 2 || heldUploading || saving.includes(todo.key)}
         error={errors[todo.key]}
       >
-        {todo.kind === "availability" ? (
+        {todo.kind === "hash_confirm" ? (
+          <HashConfirmCard hash={todo.hash} saving={saving.includes(todo.key)} commit={commitTodo} />
+        ) : todo.kind === "hash_answer" ? (
+          <Button asChild className={ANSWER_BUTTON}>
+            <Link href={HASHING_BASE_PATH}>Answer dates</Link>
+          </Button>
+        ) : todo.kind === "availability" ? (
           <AvailabilityCard night={todo.night} saving={saving.includes(todo.key)} commit={commitTodo} />
         ) : todo.kind === "review" ? (
           <ReviewCard row={todo.row} />

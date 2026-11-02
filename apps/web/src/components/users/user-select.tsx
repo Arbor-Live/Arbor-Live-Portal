@@ -81,6 +81,9 @@ export function UserSelect({
   clearable = false,
   contentClassName = "min-w-[min(100%,24rem)]",
   showCartTag = false,
+  disabled = false,
+  defaultOpen = false,
+  onOpenChange,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -93,6 +96,9 @@ export function UserSelect({
   contentClassName?: string;
   /** Tag cart-eligible people (crew staffing). */
   showCartTag?: boolean;
+  disabled?: boolean;
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   return (
     <SearchableSelect
@@ -103,6 +109,9 @@ export function UserSelect({
       emptyLabel={emptyLabel}
       clearable={clearable}
       contentClassName={contentClassName}
+      disabled={disabled}
+      defaultOpen={defaultOpen}
+      onOpenChange={onOpenChange}
       renderOption={(option) => (
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           <span className="shrink-0">

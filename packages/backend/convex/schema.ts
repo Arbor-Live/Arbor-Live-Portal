@@ -21,6 +21,15 @@ import {
   retirementReasonValue,
   retirementValue,
 } from "./lib/inventoryLifecycle";
+import {
+  checklistTreeFields,
+  hashAnswerValue,
+  hashCheckStatusValue,
+  hashDateFields,
+  hashFlagReasonValue,
+  hashLiveDateStatusValue,
+  hashStandingValue,
+} from "./lib/hashingValues";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -1137,6 +1146,11 @@ export default defineSchema({
     ),
     /** Free-form crew notes shown on the Open Mic runner and public sign-up. */
     openMicNotes: v.optional(v.string()),
+    /**
+     * This event is a hash (`lib/hashEvent.ts`). Its `hashDates` row holds the
+     * hash-only state, and only Hashing writes its times and status.
+     */
+    hashingEnabled: v.optional(v.boolean()),
 
     /** Snake choices behind the generated Wing show file. Unset = one snake. */
     patchPlan: v.optional(patchPlanValue),
@@ -1477,6 +1491,8 @@ export default defineSchema({
     hours: v.number(),
     /** When true, shift times stay custom and are not force-synced from the linked block. */
     timesOverridden: v.optional(v.boolean()),
+    /** A hash moved under this booking, and the person hasn't said they can still make it. */
+    needsConfirmation: v.optional(v.boolean()),
     estimatedHourlyRateUsd: v.optional(v.number()),
     postedToExpense: v.boolean(),
     notes: v.optional(v.string()),
@@ -2675,4 +2691,91 @@ export default defineSchema({
     .index("by_dingId", ["dingId"])
     .index("by_createdAt", ["createdAt"])
     .index("by_kind_and_createdAt", ["kind", "createdAt"]),
+
+  /** Singleton: the weekly hash slot. Dates copy it when they are built. */
+  hashingSettings: defineTable({
+    /** 0 = Sunday … 6 = Saturday. */
+    weekday: v.number(),
+    /** Pacific `HH:mm`. */
+    startTime: v.string(),
+    durationMinutes: v.number(),
+    spotsPerHash: v.number(),
+    location: v.string(),
+    updatedAt: v.number(),
+    updatedBy: v.string(),
+  }),
+
+  /**
+   * The Hashing add-on's sidecar: one row per hash, holding what an event has no
+   * field for. Every live date has its event and the section block its crew sit
+   * on. Only an `off` date may have neither, so an off week costs nothing until
+   * someone switches it on.
+   */
+  hashDates: defineTable(
+    v.union(
+      v.object({
+        ...hashDateFields,
+        status: v.literal("off"),
+        eventId: v.optional(v.id("events")),
+        sectionBlockId: v.optional(v.id("eventScheduleBlocks")),
+      }),
+      v.object({
+        ...hashDateFields,
+        status: hashLiveDateStatusValue,
+        eventId: v.id("events"),
+        sectionBlockId: v.id("eventScheduleBlocks"),
+      }),
+    ),
+  )
+    .index("by_quarterId_and_dateKey", ["quarterId", "dateKey"])
+    .index("by_status_and_dateKey", ["status", "dateKey"])
+    .index("by_eventId", ["eventId"]),
+
+  hashAvailability: defineTable({
+    hashDateId: v.id("hashDates"),
+    userId: v.string(),
+    answer: hashAnswerValue,
+  })
+    .index("by_hashDateId_and_userId", ["hashDateId", "userId"])
+    .index("by_userId_and_hashDateId", ["userId", "hashDateId"]),
+
+  /** Per person per quarter, so it resets on its own when the quarter changes. */
+  hashQuarterStanding: defineTable({
+    userId: v.string(),
+    quarterId: v.string(),
+    standing: hashStandingValue,
+  }).index("by_quarterId_and_userId", ["quarterId", "userId"]),
+
+  /** Immutable published checklists; the highest version is current. */
+  hashChecklistVersions: defineTable({
+    version: v.number(),
+    ...checklistTreeFields,
+    publishedAt: v.number(),
+    /** Absent on the seeded first version. */
+    publishedBy: v.optional(v.string()),
+  }).index("by_version", ["version"]),
+
+  /** One row per tick, so people ticking side by side never contend. */
+  hashChecks: defineTable({
+    hashDateId: v.id("hashDates"),
+    /** `areaId:kitId:itemId`: a shared kit's item ticks separately per area. */
+    itemKey: v.string(),
+    areaId: v.string(),
+    status: hashCheckStatusValue,
+    flagReason: v.optional(hashFlagReasonValue),
+    note: v.optional(v.string()),
+    byUserId: v.string(),
+    resolvedAt: v.optional(v.number()),
+    resolvedBy: v.optional(v.string()),
+    damageReportId: v.optional(v.id("damageReports")),
+  })
+    .index("by_hashDateId_and_itemKey", ["hashDateId", "itemKey"])
+    .index("by_status_and_resolvedAt", ["status", "resolvedAt"])
+    .index("by_damageReportId", ["damageReportId"]),
+
+  hashAreaClaims: defineTable({
+    hashDateId: v.id("hashDates"),
+    areaId: v.string(),
+    userId: v.string(),
+  }).index("by_hashDateId_and_areaId_and_userId", ["hashDateId", "areaId", "userId"]),
 });

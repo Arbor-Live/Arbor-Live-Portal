@@ -3,7 +3,7 @@ import { query } from "./_generated/server";
 import {
   analyticsRangeArgs,
   assertValidRange,
-  loadEventsInRange,
+  loadEventsInRangeWithHashes,
   requireAnalyticsAccess,
 } from "./lib/analyticsQuery";
 import {
@@ -14,6 +14,7 @@ import {
   roundUsd,
 } from "./lib/analyticsBookings";
 import { normalizeEventStatus } from "./lib/eventStatus";
+import { isHashEvent } from "./lib/hashEvent";
 
 const SEGMENT_LIMIT = 8;
 const LOWEST_MARGIN_LIMIT = 6;
@@ -57,7 +58,8 @@ function topSegments(map: Map<string, Segment>) {
  * Margin on events starting in range: each event's share of its booked
  * invoices (net of artist and external-rental pass-through) minus its costs.
  * Crew cost is the scheduled-shift estimate on the event, so labor margin is
- * a planning number, not payroll.
+ * a planning number, not payroll. A hash is paid but never billed, so its cost
+ * is reported apart from these margins.
  */
 export const getProfitability = query({
   args: analyticsRangeArgs,
@@ -72,6 +74,7 @@ export const getProfitability = query({
     crewMarginRate: v.union(v.number(), v.null()),
     unbookedEvents: v.number(),
     unbookedCostUsd: v.number(),
+    hashCostUsd: v.number(),
     byEventType: v.array(segmentValidator),
     byVenue: v.array(segmentValidator),
     lowestMargin: v.array(
@@ -91,7 +94,7 @@ export const getProfitability = query({
     await requireAnalyticsAccess(ctx);
     assertValidRange(args.startMs, args.endMs);
 
-    const { events, truncated } = await loadEventsInRange(ctx, args.startMs, args.endMs);
+    const { events, truncated } = await loadEventsInRangeWithHashes(ctx, args.startMs, args.endMs);
     const loadInvoice = createInvoiceLoader(ctx);
     const byEventType = new Map<string, Segment>();
     const byVenue = new Map<string, Segment>();
@@ -110,9 +113,14 @@ export const getProfitability = query({
     let crewCostUsd = 0;
     let unbookedEvents = 0;
     let unbookedCostUsd = 0;
+    let hashCostUsd = 0;
 
     for (const event of events) {
       if (normalizeEventStatus(event.status) === "cancelled") continue;
+      if (isHashEvent(event)) {
+        hashCostUsd += eventCostUsd(event);
+        continue;
+      }
       const booking = await loadEventBooking(ctx, loadInvoice, event);
       if (!booking.booked) {
         const costs = eventCostUsd(event);
@@ -172,6 +180,7 @@ export const getProfitability = query({
       crewMarginRate: marginRate(crewBilledUsd, crewBilledUsd - crewCostUsd),
       unbookedEvents,
       unbookedCostUsd: roundUsd(unbookedCostUsd),
+      hashCostUsd: roundUsd(hashCostUsd),
       byEventType: topSegments(byEventType),
       byVenue: topSegments(byVenue),
       lowestMargin,

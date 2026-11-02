@@ -5,6 +5,7 @@ import { useState, type ComponentProps } from "react";
 import { useDraftText } from "@/components/forms/draft-text-input";
 import {
   ArrowCounterClockwiseIcon,
+  BroomIcon,
   BuildingsIcon,
   CalendarBlankIcon,
   CalendarDotsIcon,
@@ -40,6 +41,7 @@ import {
 import { formatEventVisibilityLabel, type EventVisibility } from "@/lib/event-visibility";
 import { localDateTimeInputToMs } from "@/lib/crew-availability";
 import { formatDateTimeRange } from "@/lib/format";
+import { HASHING_BASE_PATH } from "@/lib/hashing-tabs";
 import type { Id } from "@/lib/convex-api";
 import { EVENT_TYPE_ICONS } from "@/components/events/workspace/event-draft";
 import { useEventWorkspace } from "@/components/events/workspace/event-workspace-provider";
@@ -107,7 +109,9 @@ export function EventWorkspaceHeader() {
   // A series applies its setup from its template tabs, not from one occurrence.
   const canApplySetup = hasSiblingDays && seriesMeta?.kind !== "recurring";
   const hasUnsavedEdits = workspace.dirty.size > 0;
-  const showMenu = canApplySetup || Boolean(seriesMeta) || isAdmin;
+  // Hashing owns a hash's status, so only a hash it already cancelled can be deleted here.
+  const canDelete = isAdmin && (!workspace.isHash || draft.status === "cancelled");
+  const showMenu = canApplySetup || Boolean(seriesMeta) || canDelete;
 
   return (
     <PageHeader
@@ -143,7 +147,7 @@ export function EventWorkspaceHeader() {
                 ) : null}
               </>
             ) : null}
-            {isAdmin ? (
+            {canDelete ? (
               <>
                 {canApplySetup || seriesMeta ? <DropdownMenuSeparator /> : null}
                 <DropdownMenuItem variant="destructive" onSelect={() => void workspace.deleteEvent()}>
@@ -161,8 +165,18 @@ export function EventWorkspaceHeader() {
             value={draft.status}
             options={STATUS_OPTIONS}
             onChange={(status) => updateDraft({ status })}
-            disabled={readOnly}
+            disabled={readOnly || workspace.isHash}
           />
+          {workspace.isHash ? (
+            <Link
+              href={HASHING_BASE_PATH}
+              className="inline-flex h-7 items-center gap-1.5 border px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+              data-testid="event-hash-pill"
+            >
+              <BroomIcon className="size-3.5" aria-hidden />
+              Hash
+            </Link>
+          ) : null}
           {lifecycle && lifecycle.label !== "Cancelled" ? (
             <StatusPill tone={lifecycle.tone} dot={false} className="font-medium">
               {lifecycle.label}
@@ -227,6 +241,8 @@ export function EventWorkspaceHeader() {
             <MetaItem icon={MapPinIcon} onClick={() => setVenueOpen(true)}>
               {event.venueName ?? "Venue"}
             </MetaItem>
+          ) : event?.venueName ? (
+            <MetaItem icon={MapPinIcon}>{event.venueName}</MetaItem>
           ) : (
             <MetaItem icon={MapPinIcon}>
               <span className="text-muted-foreground">No venue</span>

@@ -2,6 +2,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { resolveInheritedVenueFields } from "./venues";
 import { resolveUserContact } from "./userContact";
+import { isHashEvent } from "./hashEvent";
 import { appError } from "./errors";
 
 export const CREW_STORAGE_CLOSET_MAPS_URL = "https://maps.app.goo.gl/8d2dQF96sLV2QrBk7";
@@ -267,6 +268,7 @@ export async function assertTraineeIntroReady(
   if (!event) {
     appError("EVENT_NOT_FOUND", "Event not found.");
   }
+  if (isHashEvent(event)) appError("HASH_NO_TRAINEES", "A hash doesn't take trainees.");
 
   const eventTitle = event.title?.trim();
 

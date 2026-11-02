@@ -9,6 +9,7 @@ import {
   resolveProfileMembership,
 } from "./userVerticals";
 import { normalizeEventStatus } from "./eventStatus";
+import { isHashEvent } from "./hashEvent";
 
 export function isCrewedEventInRange(
   event: Doc<"events">,
@@ -16,7 +17,7 @@ export function isCrewedEventInRange(
   rangeEnd: number,
 ) {
   const status = normalizeEventStatus(event.status);
-  if (status === "cancelled") return false;
+  if (status === "cancelled" || isHashEvent(event)) return false;
   if (!isCrewedEventType(event.eventType)) return false;
   return event.startAt <= rangeEnd && event.endAt >= rangeStart;
 }

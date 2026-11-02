@@ -13,6 +13,7 @@ type DashboardEvent = {
   title: string;
   status: string;
   eventType?: string;
+  hashingEnabled?: boolean;
   venueName?: string;
   assignedCrewCount?: number;
   startAt: number;
@@ -61,6 +62,7 @@ export function EventsUpcomingView({ events }: { events: DashboardEvent[] }) {
             />
             <div className="flex flex-wrap items-center gap-2">
               <EventStateBadges status={row.status} startAt={row.startAt} endAt={row.endAt} />
+              {row.hashingEnabled ? <RowFlag tone="neutral">Hash</RowFlag> : null}
               <RowFlag tone="neutral">Crew {row.assignedCrewCount ?? 0}</RowFlag>
               {row.pullListSummary && row.pullListSummary.totalLines > 0 ? (
                 <RowFlag tone="neutral">
@@ -70,7 +72,7 @@ export function EventsUpcomingView({ events }: { events: DashboardEvent[] }) {
               {row.scheduleSummary?.setupAt ? (
                 <RowFlag tone="neutral">Call {formatDateTime(row.scheduleSummary.setupAt)}</RowFlag>
               ) : null}
-              {row.scheduleSummary?.showAt ? (
+              {row.scheduleSummary?.showAt && !row.hashingEnabled ? (
                 <RowFlag tone="neutral">Show {formatDateTime(row.scheduleSummary.showAt)}</RowFlag>
               ) : null}
             </div>

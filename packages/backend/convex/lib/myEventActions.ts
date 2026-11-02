@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { normalizeEventStatus } from "./eventStatus";
+import { isHashEvent } from "./hashEvent";
 import { listUserShowShifts } from "./showShift";
 
 /** Bound on media-status rows scanned for one user (mirrors crewPortal). */
@@ -38,7 +39,7 @@ async function listMyEndedEventDocs(
   const events: Doc<"events">[] = [];
   for (const eventId of eventIds) {
     const event = await ctx.db.get(eventId);
-    if (!event) continue;
+    if (!event || isHashEvent(event)) continue;
     if (event.endAt > now) continue;
     if (normalizeEventStatus(event.status) === "cancelled") continue;
     events.push(event);

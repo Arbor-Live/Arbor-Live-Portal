@@ -1,6 +1,7 @@
 import { v, type Infer } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { syncFlagWithDamageReport } from "./hashingFlags";
 
 /**
  * Where a unit is in its life. Absent on a row means `active`. `in_repair`
@@ -170,6 +171,7 @@ export async function retireItemRecord(
   for (const report of reports) {
     if (report.status === "resolved") continue;
     await ctx.db.patch(report._id, { status: "resolved", updatedAt: now, resolvedAt: now });
+    await syncFlagWithDamageReport(ctx, report._id, { resolved: true, userId: actorUserId, at: now });
   }
   await recordItemHistory(ctx, {
     inventoryItemId: item._id,

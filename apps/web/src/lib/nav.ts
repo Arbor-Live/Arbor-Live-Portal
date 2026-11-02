@@ -88,6 +88,7 @@ const eventsSubItems: NavSubItem[] = [
   { title: "Open mic", url: "/dashboard/events/open-mic" },
   { title: "Crew scheduling", url: "/dashboard/events/crew-scheduling", opsOnly: true },
   { title: "My availability", url: "/dashboard/events/my-availability" },
+  { title: "Hashing", url: "/dashboard/events/hashing" },
   { title: "My post-event work", url: "/dashboard/events/post-event" },
   { title: "My timecards", url: "/dashboard/timecards/mine" },
   { title: "Create event", url: "/dashboard/events/new", opsOnly: true },

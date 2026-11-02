@@ -7,6 +7,7 @@ import { DashboardWidget, WidgetRows } from "@/components/dashboard/dashboard-wi
 import { RowCell, RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 import { formatDateTime } from "@/lib/format";
+import { shiftPath } from "@/lib/hashing-tabs";
 
 export function ScheduledEventsWidget({ now }: { now: number }) {
   const events = useHeldQuery(api.crewPortal.listMyScheduledEvents, { now, weeksAhead: 8 });
@@ -15,7 +16,7 @@ export function ScheduledEventsWidget({ now }: { now: number }) {
     <DashboardWidget icon={CalendarDotsIcon} title="Upcoming shifts" testId="home-upcoming-shifts">
       <WidgetRows loading={events === undefined} empty={events?.length === 0 ? "No upcoming assigned shifts." : null}>
         {events?.slice(0, 5).map((event) => (
-          <ListRow key={event.eventId} href={`/dashboard/events/${event.eventId}`}>
+          <ListRow key={event.eventId} href={shiftPath(event)}>
             <RowText eyebrow={formatDateTime(event.startAt)} title={event.title} detail={event.venueName} />
             <RowCell className="w-16" muted>
               {event.shiftCount} shift{event.shiftCount === 1 ? "" : "s"}

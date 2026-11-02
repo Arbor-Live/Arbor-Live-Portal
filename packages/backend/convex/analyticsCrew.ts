@@ -15,6 +15,7 @@ import {
   CREWED_EVENT_SCAN_LIMIT,
   isShiftFilled,
   loadEventsInRange,
+  loadEventsInRangeWithHashes,
   requireAnalyticsAccess,
   SHIFTS_PER_EVENT_LIMIT,
 } from "./lib/analyticsQuery";
@@ -36,6 +37,7 @@ import { resolveUserStatus } from "./lib/userStatus";
 import { loadAllAdminProfiles } from "./lib/userProfiles";
 import { isCrewedEventType } from "./lib/crewTeams";
 import { normalizeEventStatus } from "./lib/eventStatus";
+import { isHashEvent } from "./lib/hashEvent";
 
 function getIsoWeekKey(dayKey: string) {
   const [year, month, day] = dayKey.split("-").map(Number);
@@ -68,6 +70,24 @@ async function loadCrewedEventsInRange(
   return {
     events: crewed.slice(0, CREWED_EVENT_SCAN_LIMIT),
     truncated: scanTruncated || crewed.length > CREWED_EVENT_SCAN_LIMIT,
+  };
+}
+
+/** Crewed events plus hashes: hash time is paid crew time, though nobody staffs a hash from here. */
+async function loadCrewTimeEventsInRange(
+  ctx: Parameters<typeof requireAnalyticsAccess>[0],
+  startMs: number,
+  endMs: number,
+) {
+  const { events: rows, truncated: scanTruncated } = await loadEventsInRangeWithHashes(ctx, startMs, endMs);
+  const worked = rows.filter(
+    (event) =>
+      normalizeEventStatus(event.status) !== "cancelled" &&
+      (isCrewedEventType(event.eventType) || isHashEvent(event)),
+  );
+  return {
+    events: worked.slice(0, CREWED_EVENT_SCAN_LIMIT),
+    truncated: scanTruncated || worked.length > CREWED_EVENT_SCAN_LIMIT,
   };
 }
 
@@ -173,7 +193,7 @@ export const getCrewHoursAndOt = query({
     await requireAnalyticsAccess(ctx);
     assertValidRange(args.startMs, args.endMs);
 
-    const { events, truncated } = await loadCrewedEventsInRange(ctx, args.startMs, args.endMs);
+    const { events, truncated } = await loadCrewTimeEventsInRange(ctx, args.startMs, args.endMs);
     const hoursByWeek = new Map<string, number>();
     const hoursByUserDay = new Map<string, Map<string, number>>();
     const hoursByUserWeek = new Map<string, Map<string, number>>();
