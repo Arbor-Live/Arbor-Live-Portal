@@ -960,6 +960,38 @@ describe("pay and attendance", () => {
       expect(after.rosterIds).toEqual([]);
     });
 
+    test("the lapse roster only counts while the date is lapsed", async () => {
+      const { t, opsApi, ana, ben, on } = await setup();
+      const hashDateId = on("2026-11-03")._id;
+      await opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId, userId: ana._id });
+      await opsApi.mutation(api.hashingLive.start, { hashDateId });
+      await opsApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [ana._id] });
+      await t.run(async (ctx) => {
+        await ctx.db.patch(hashDateId, { bookedWhenLapsed: [ben._id] });
+      });
+      expect((await opsApi.query(api.hashingLive.getAttendance, { hashDateId })).rosterIds).toEqual([]);
+    });
+
+    test("a date leaving lapsed by a move or the off switch drops its roster", async () => {
+      const { t, opsApi, ana, on } = await setup();
+      const lapse = async (dateKey: string) => {
+        const hashDateId = on(dateKey)._id;
+        await t.run(async (ctx) => {
+          await ctx.db.patch(hashDateId, { status: "lapsed", bookedWhenLapsed: [ana._id] });
+        });
+        return hashDateId;
+      };
+      const moved = await lapse("2026-11-10");
+      await opsApi.mutation(api.hashingSchedule.moveDate, { hashDateId: moved, dateKey: "2026-11-12", startTime: "16:00" });
+      expect(await getRow(t, moved)).toMatchObject({ status: "scheduled" });
+      expect((await getRow(t, moved))?.bookedWhenLapsed).toBeUndefined();
+
+      const off = await lapse("2026-11-17");
+      await opsApi.mutation(api.hashingSchedule.setDateOff, { hashDateId: off, off: true });
+      expect(await getRow(t, off)).toMatchObject({ status: "off" });
+      expect((await getRow(t, off))?.bookedWhenLapsed).toBeUndefined();
+    });
+
     test("History lists lapsed hashes beside finished ones", async () => {
       const { t, opsApi, on } = await setup();
       vi.setSystemTime(AFTER);

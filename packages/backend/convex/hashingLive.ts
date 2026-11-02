@@ -503,7 +503,7 @@ export const getAttendance = query({
     const row = await loadHashDate(ctx, args.hashDateId);
     const [bookings, profiles] = await Promise.all([loadDateBookings(ctx, row), loadAdminProfilesByStatus(ctx, ["active"])]);
     const attendeeIds = bookings.map((booking) => booking.userId);
-    const rosterIds = row.bookedWhenLapsed ?? [];
+    const rosterIds = row.status === "lapsed" ? (row.bookedWhenLapsed ?? []) : [];
     const userIds = [
       ...new Set([...attendeeIds, ...rosterIds, ...profiles.filter(isHashCrew).map((profile) => profile.userId)]),
     ];

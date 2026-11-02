@@ -372,6 +372,7 @@ export const moveDate = mutation({
       // Moved dates are live even in an off week: moving one is a deliberate choice.
       status: "scheduled" as const,
       movedFromDateKey: row.movedFromDateKey ?? row.dateKey,
+      bookedWhenLapsed: undefined,
     };
     if (!row.eventId) {
       const made = await insertHashEvent(ctx, times, (await loadSettings(ctx))?.location);
@@ -471,7 +472,7 @@ export const setDateOff = mutation({
         await removeAddon(ctx, row);
         return null;
       }
-      await ctx.db.patch(row._id, { status: "off" });
+      await ctx.db.patch(row._id, { status: "off", bookedWhenLapsed: undefined });
       await closeHashEvent(ctx, row);
       return null;
     }
