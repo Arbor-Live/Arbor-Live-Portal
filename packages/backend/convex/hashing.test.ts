@@ -30,7 +30,12 @@ afterEach(() => {
 async function member(
   t: Test,
   arbor: { organizationId: string },
-  opts: { verticals?: ("Crew" | "Operations")[]; includeInTimecards?: boolean; name?: string } = {},
+  opts: {
+    verticals?: ("Crew" | "Operations" | "Trivia" | "Marketing")[];
+    disciplines?: "Photography"[];
+    includeInTimecards?: boolean;
+    name?: string;
+  } = {},
 ) {
   const user = await createUser(t, opts.name ? { name: opts.name } : {});
   await addMembership(t, user._id, arbor.organizationId, "member", true);
@@ -40,7 +45,7 @@ async function member(
       userId: user._id,
       status: "active",
       verticals: opts.verticals ?? ["Crew"],
-      disciplines: ["Sound"],
+      disciplines: opts.disciplines ?? ["Sound"],
       includeInTimecards: opts.includeInTimecards,
       createdAt: NOW,
       updatedAt: NOW,
@@ -530,6 +535,34 @@ describe("standing", () => {
     await expect(
       opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId: on("2026-11-17")._id, userId: advisor._id }),
     ).rejects.toThrow(/Only active crew/);
+  });
+});
+
+describe("who owes a hash", () => {
+  test("only the Crew vertical shows on the schedule and on a hash's picker", async () => {
+    const { t, arbor, ana, ben, opsApi } = await setupWithDates();
+    const both = await member(t, arbor, { verticals: ["Crew", "Marketing"], name: "Both Crew" });
+    await member(t, arbor, { verticals: ["Trivia"], disciplines: [], name: "Tess Trivia" });
+    await member(t, arbor, { verticals: ["Marketing"], disciplines: ["Photography"], name: "Mae Marketing" });
+    await member(t, arbor, { verticals: ["Operations"], disciplines: [], name: "Otto Ops" });
+
+    const schedule = await opsApi.query(api.hashingSchedule.getSchedule, { now: NOW });
+    expect(schedule?.people.map((person) => person.name).sort()).toEqual(["Ana Crew", "Ben Crew", "Both Crew"]);
+    expect((await opsApi.query(api.hashing.listCrewIds, {})).sort()).toEqual([ana._id, ben._id, both._id].sort());
+  });
+
+  test("Trivia and Marketing can't be booked, and owe nothing", async () => {
+    const { t, arbor, opsApi, on } = await setupWithDates();
+    const trivia = await member(t, arbor, { verticals: ["Trivia"], disciplines: [] });
+    const marketing = await member(t, arbor, { verticals: ["Marketing"], disciplines: ["Photography"] });
+    const hashDateId = on("2026-11-17")._id;
+    for (const person of [trivia, marketing]) {
+      await expect(opsApi.mutation(api.hashingSchedule.bookPerson, { hashDateId, userId: person._id })).rejects.toThrow(
+        /Only active crew/,
+      );
+      const mine = await asUser(t, person).query(api.hashing.getMine, { now: NOW });
+      expect(mine?.isCrew).toBe(false);
+    }
   });
 });
 

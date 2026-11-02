@@ -4,7 +4,6 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { fileDamageReport, operabilityValue } from "./damageReports";
 import { findAuthUsersByIds, getUserAdminProfile, getUserId, requireAdminOrOperations } from "./lib/auth";
-import { loadAdminProfilesByStatus } from "./lib/userProfiles";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { appError } from "./lib/errors";
 import { flattenChecklist, type ChecklistAreaView } from "./lib/hashing";
@@ -13,7 +12,7 @@ import {
   ensureChecklist,
   type HashBooking,
   hashDateLabel,
-  isHashCrew,
+  loadHashCrew,
   isOnTimecardOverview,
   latestChecklist,
   loadDateBookings,
@@ -502,10 +501,10 @@ export const getAttendance = query({
   handler: async (ctx, args) => {
     await requireAdminOrOperations(ctx);
     const row = await loadHashDate(ctx, args.hashDateId);
-    const [bookings, profiles] = await Promise.all([loadDateBookings(ctx, row), loadAdminProfilesByStatus(ctx, ["active"])]);
+    const [bookings, hashCrew] = await Promise.all([loadDateBookings(ctx, row), loadHashCrew(ctx)]);
     const attendeeIds = bookings.map((booking) => booking.userId);
     const rosterIds = row.status === "lapsed" ? (row.bookedWhenLapsed ?? []) : [];
-    const crewIds = new Set(profiles.filter(isHashCrew).map((profile) => profile.userId));
+    const crewIds = new Set(hashCrew.map((profile) => profile.userId));
     const userIds = [...new Set([...attendeeIds, ...rosterIds, ...crewIds])];
     const userByKey = await findAuthUsersByIds(ctx, userIds);
     const crew = await Promise.all(

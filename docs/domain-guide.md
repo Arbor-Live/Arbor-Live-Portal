@@ -649,8 +649,10 @@ counts all skip it. Insights keeps its crew cost and hours: the cost is in event
 expenses, and its own line under the margins, since a hash is never billed and so
 isn't an unbooked event.
 
-**Who owes one.** Active Arbor staff whose profile has `includeInTimecards` (the
-people held to the crew hours minimum). Summer has no requirement. Booking,
+**Who owes one.** Active people on the Crew vertical whose profile has
+`includeInTimecards`. Trivia, Marketing and Operations don't owe one unless
+they're on Crew too, and a Marketing photographer isn't crew. Everyone else stays
+off Hashing's lists and can't be booked. Summer has no requirement. Booking,
 setup and the checklist use `requireAdminOrOperations`. Crew answer availability
 but never book themselves.
 
