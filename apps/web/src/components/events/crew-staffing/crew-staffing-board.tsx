@@ -879,8 +879,8 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
             <div className="flex justify-end border-t pt-2">
               <Button
                 type="button"
-                size="sm"
                 variant="outline"
+                className="w-full sm:w-auto"
                 data-testid="crew-add-person"
                 onClick={() => setAddingPerson(true)}
               >
@@ -1020,8 +1020,8 @@ function ShiftRow<S extends ShiftDraftForAssign>({
 
   return (
     <div className="space-y-1" data-testid="crew-shift-row">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <div className="min-w-0 flex-1 basis-24">
+      <div className={cn("flex min-w-0 items-center gap-2", !isHash && "flex-wrap")}>
+        <div className={cn("min-w-0 flex-1 basis-24", isHash && "max-w-16 sm:max-w-none")}>
           <DraftTextInput
             placeholder="Role"
             aria-label="Role"
