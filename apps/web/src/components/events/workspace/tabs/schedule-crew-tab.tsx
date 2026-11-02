@@ -110,6 +110,7 @@ export function ScheduleCrewTab() {
             acts={runOfShow.acts}
             actName={runOfShow.actName}
             swaps={runOfShow.swaps}
+            hashMode={isHash}
             crewFor={(block) => {
               const staffing = countStaffing(shifts.filter((shift) => shiftBelongsToBlock(shift, block)));
               return { total: staffing.slots, filled: staffing.filled };
