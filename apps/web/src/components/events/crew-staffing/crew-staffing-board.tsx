@@ -126,7 +126,7 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
   canAssignTrainees?: boolean;
   /** Cart event (`events.needsCart`): setup and strike each need someone cart eligible. */
   needsCart?: boolean;
-  /** A hash books people: no open slots, roles or custom times, which the server refuses or overwrites. */
+  /** A hash books people: add and remove only, no open slots, roles, custom times or swaps. */
   isHash?: boolean;
 }) {
   const [assignTraineeOpen, setAssignTraineeOpen] = useState(false);
@@ -697,6 +697,9 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
   onRemove: (index: number) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
+  // A hash refuses an open slot, so the picker's row stays out of the draft until
+  // someone is picked: dismissing it leaves nothing behind to fail a save.
+  const [addingPerson, setAddingPerson] = useState(false);
   const window = sectionWindow(block);
   const label = block.label || `Section ${blockIndex + 1}`;
   const filled = rows.filter(({ shift }) => !isOpenSlot(shift)).length;
@@ -742,6 +745,12 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
 
   function assign(person: { userId: string; name: string }) {
     setShifts((prev) => assignPersonToSection(prev, block, person, getBlockRef));
+  }
+
+  function assignPicked(userId: string) {
+    if (!userId) return;
+    const option = userSelectOptions.find((entry) => entry.value === userId);
+    assign({ userId, name: option?.label ?? userId });
   }
 
   function setHeadcount(next: number) {
@@ -835,11 +844,28 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
               onRemove={() => onRemove(index)}
             />
           ))
-        ) : (
+        ) : addingPerson ? null : (
           <p className="text-xs text-muted-foreground">
             {isHash ? "Nobody is booked." : "No crew on this section. Use + to say how many people it needs."}
           </p>
         )}
+
+        {addingPerson ? (
+          <div data-testid="crew-add-person-row">
+            <UserSelect
+              value=""
+              defaultOpen
+              onChange={assignPicked}
+              onOpenChange={(open) => {
+                if (!open) setAddingPerson(false);
+              }}
+              options={addOptions}
+              showCartTag
+              emptyLabel="Add person"
+              contentClassName="w-80 max-w-[calc(100vw-2rem)]"
+            />
+          </div>
+        ) : null}
 
         {trainees.length > 0 ? (
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -848,7 +874,22 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
           </p>
         ) : null}
 
-        {!readOnly ? (
+        {readOnly ? null : isHash ? (
+          addingPerson ? null : (
+            <div className="flex justify-end border-t pt-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                data-testid="crew-add-person"
+                onClick={() => setAddingPerson(true)}
+              >
+                <PlusIcon />
+                Add person
+              </Button>
+            </div>
+          )
+        ) : (
           <div className="flex flex-wrap items-center gap-1.5 border-t pt-2">
             {askAvailability ? (
               <>
@@ -880,11 +921,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
             <div className="ml-auto min-w-56">
               <UserSelect
                 value=""
-                onChange={(userId) => {
-                  if (!userId) return;
-                  const option = userSelectOptions.find((entry) => entry.value === userId);
-                  assign({ userId, name: option?.label ?? userId });
-                }}
+                onChange={assignPicked}
                 options={addOptions}
                 showCartTag
                 emptyLabel="Add someone…"
@@ -892,7 +929,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
               />
             </div>
           </div>
-        ) : null}
+        )}
       </div>
     </section>
   );
@@ -931,6 +968,7 @@ function ShiftRow<S extends ShiftDraftForAssign>({
   const [editingTime, setEditingTime] = useState(false);
   const showTimePicker = !isHash && (!block || editingTime);
   const userId = shift.userId?.trim();
+  const personLocked = isHash && Boolean(userId);
   // The person's own shift time is what matters (it may be custom), still tied
   // to the section so section-level answers apply.
   const blockId = block?.id;
@@ -1004,8 +1042,10 @@ function ShiftRow<S extends ShiftDraftForAssign>({
               })
             }
             options={options}
-            emptyLabel="Open slot — pick crew"
+            // Someone since off the picker's list still shows as booked.
+            emptyLabel={personLocked ? shift.personName || "Crew" : "Open slot — pick crew"}
             clearable={!isHash}
+            disabled={personLocked}
             showCartTag
           />
         </div>
