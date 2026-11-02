@@ -992,6 +992,31 @@ describe("pay and attendance", () => {
       expect((await getRow(t, off))?.bookedWhenLapsed).toBeUndefined();
     });
 
+    test("the dialog marks someone credited who won't show on the timecard overview", async () => {
+      const context = await setup();
+      const { t, opsApi, ana, ben } = context;
+      const hashDateId = await bookAndRun(context, "2026-11-03", [ana, ben]);
+      await opsApi.mutation(api.hashingLive.finish, { hashDateId, attendeeUserIds: [ana._id, ben._id] });
+      const offOverview = async () =>
+        (await opsApi.query(api.hashingLive.getAttendance, { hashDateId })).crew.filter((person) => person.offTimecardOverview);
+      expect(await offOverview()).toEqual([]);
+
+      const setBen = (patch: { status?: "inactive" | "alumni"; includeInTimecards?: boolean }) =>
+        t.run(async (ctx) => {
+          const profile = await ctx.db
+            .query("userAdminProfiles")
+            .withIndex("by_userId", (q) => q.eq("userId", ben._id))
+            .unique();
+          await ctx.db.patch(profile!._id, patch);
+        });
+      await setBen({ status: "inactive" });
+      expect(await offOverview()).toEqual([]);
+      await setBen({ status: "alumni" });
+      expect(await offOverview()).toMatchObject([{ userId: ben._id }]);
+      await setBen({ status: "inactive", includeInTimecards: false });
+      expect(await offOverview()).toMatchObject([{ userId: ben._id }]);
+    });
+
     test("History lists lapsed hashes beside finished ones", async () => {
       const { t, opsApi, on } = await setup();
       vi.setSystemTime(AFTER);

@@ -14,6 +14,7 @@ import {
   type HashBooking,
   hashDateLabel,
   isHashCrew,
+  isOnTimecardOverview,
   latestChecklist,
   loadDateBookings,
   loadHashDate,
@@ -496,7 +497,7 @@ export const getAttendance = query({
   returns: v.object({
     attendeeIds: v.array(v.string()),
     rosterIds: v.array(v.string()),
-    crew: v.array(v.object({ userId: v.string(), name: v.string() })),
+    crew: v.array(v.object({ userId: v.string(), name: v.string(), offTimecardOverview: v.boolean() })),
   }),
   handler: async (ctx, args) => {
     await requireAdminOrOperations(ctx);
@@ -504,20 +505,20 @@ export const getAttendance = query({
     const [bookings, profiles] = await Promise.all([loadDateBookings(ctx, row), loadAdminProfilesByStatus(ctx, ["active"])]);
     const attendeeIds = bookings.map((booking) => booking.userId);
     const rosterIds = row.status === "lapsed" ? (row.bookedWhenLapsed ?? []) : [];
-    const userIds = [
-      ...new Set([...attendeeIds, ...rosterIds, ...profiles.filter(isHashCrew).map((profile) => profile.userId)]),
-    ];
+    const crewIds = new Set(profiles.filter(isHashCrew).map((profile) => profile.userId));
+    const userIds = [...new Set([...attendeeIds, ...rosterIds, ...crewIds])];
     const userByKey = await findAuthUsersByIds(ctx, userIds);
-    return {
-      attendeeIds,
-      rosterIds,
-      crew: userIds
-        .map((userId) => {
-          const user = userByKey.get(userId);
-          return { userId, name: user?.name || user?.email || "Crew" };
-        })
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    };
+    const crew = await Promise.all(
+      userIds.map(async (userId) => {
+        const user = userByKey.get(userId);
+        return {
+          userId,
+          name: user?.name || user?.email || "Crew",
+          offTimecardOverview: !crewIds.has(userId) && !isOnTimecardOverview(await getUserAdminProfile(ctx, userId)),
+        };
+      }),
+    );
+    return { attendeeIds, rosterIds, crew: crew.sort((a, b) => a.name.localeCompare(b.name)) };
   },
 });
 

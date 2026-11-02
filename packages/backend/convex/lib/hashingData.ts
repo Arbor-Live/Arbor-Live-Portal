@@ -41,6 +41,13 @@ export function isHashCrew(profile: Profile | null | undefined): profile is Prof
   return isStaffMember(resolveProfileMembership(profile));
 }
 
+/** The people `listCrewTimecardOverview` lists. Inactive crew stay on it, unlike `isHashCrew`. */
+export function isOnTimecardOverview(profile: Profile | null | undefined) {
+  if (!profile || resolveUserStatus(profile) === "alumni") return false;
+  if (!resolveParticipationFlags(profile).includeInTimecards) return false;
+  return isStaffMember(resolveProfileMembership(profile));
+}
+
 /** Any Arbor member, and whether they owe a hash and can run the schedule. */
 export async function requireHashingViewer(ctx: Ctx) {
   const user = await requireAuth(ctx);

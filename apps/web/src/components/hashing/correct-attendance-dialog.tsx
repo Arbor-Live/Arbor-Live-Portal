@@ -17,7 +17,7 @@ import { notify } from "@/lib/notify";
 
 export type AttendanceTarget = { hashDateId: Id<"hashDates">; startsAt: number; lapsed: boolean };
 
-type Person = { userId: string; name: string };
+type Person = { userId: string; name: string; offTimecardOverview: boolean };
 
 /** Who was there, after the fact. Pay and credit follow this list. */
 export function CorrectAttendanceDialog({ target, onClose }: { target: AttendanceTarget | null; onClose: () => void }) {
@@ -118,6 +118,14 @@ function AttendanceForm({
               <Label htmlFor={id} className="min-h-10 min-w-0 flex-1 items-center font-normal wrap-anywhere">
                 {person.name}
               </Label>
+              {person.offTimecardOverview ? (
+                <span
+                  className="shrink-0 rounded bg-status-amber-500/15 px-1.5 py-0.5 text-3xs font-medium uppercase tracking-wide text-status-amber-800 dark:text-status-amber-300"
+                  data-testid="hash-correct-off-overview"
+                >
+                  Not on timecard overview
+                </span>
+              ) : null}
             </li>
           );
         })}
