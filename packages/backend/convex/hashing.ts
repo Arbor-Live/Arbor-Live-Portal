@@ -9,6 +9,7 @@ import { isHashEvent } from "./lib/hashEvent";
 import {
   loadDateBookings,
   loadDateForEvent,
+  loadHashCrew,
   loadHashDate,
   loadQuarterDates,
   loadSettings,
@@ -405,6 +406,16 @@ export const eventAddonValue = v.object({
 });
 
 /** The event workspace's Hashing card. */
+/** Who a hash's staffing board may offer. */
+export const listCrewIds = query({
+  args: {},
+  returns: v.array(v.string()),
+  handler: async (ctx) => {
+    await requireHashingViewer(ctx);
+    return (await loadHashCrew(ctx)).map((profile) => profile.userId);
+  },
+});
+
 export const getEventAddon = query({
   args: { eventId: v.id("events") },
   returns: v.union(eventAddonValue, v.null()),

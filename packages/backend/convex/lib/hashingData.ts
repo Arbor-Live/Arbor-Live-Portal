@@ -15,7 +15,7 @@ import { HASHING_CHECKLIST_SEED } from "./hashingChecklistSeed";
 import { resolveParticipationFlags } from "./userParticipation";
 import { loadAdminProfilesByStatus } from "./userProfiles";
 import { resolveUserStatus } from "./userStatus";
-import { isStaffMember, resolveProfileMembership } from "./userVerticals";
+import { hasVertical, isStaffMember, resolveProfileMembership } from "./userVerticals";
 import { deriveQuarterState, holdsQuarterSpot, isLapsed, type HashQuarterState } from "./hashing";
 import { HASH_ROLE, type HashBookingStatus, type HashStanding } from "./hashingValues";
 
@@ -33,12 +33,12 @@ const USER_QUARTER_SHIFT_TAKE = 300;
 type Ctx = QueryCtx | MutationCtx;
 type Profile = Doc<"userAdminProfiles">;
 
-/** Owes a hash: the same people held to the crew hours minimum. */
+/** Owes a hash: active people on the Crew vertical, whatever else they're on. */
 export function isHashCrew(profile: Profile | null | undefined): profile is Profile {
   if (!profile) return false;
   if (resolveUserStatus(profile) !== "active") return false;
   if (!resolveParticipationFlags(profile).includeInTimecards) return false;
-  return isStaffMember(resolveProfileMembership(profile));
+  return hasVertical(resolveProfileMembership(profile).verticals, "Crew");
 }
 
 /** The people `listCrewTimecardOverview` lists. Inactive crew stay on it, unlike `isHashCrew`. */
@@ -68,6 +68,10 @@ export async function requireHashCrew(ctx: Ctx) {
   const viewer = await requireHashingViewer(ctx);
   if (!viewer.isCrew) appError("HASHING_CREW_ONLY", "Hashing is limited to active crew.");
   return viewer;
+}
+
+export async function loadHashCrew(ctx: Ctx) {
+  return (await loadAdminProfilesByStatus(ctx, ["active"])).filter(isHashCrew);
 }
 
 export async function loadHashDate(ctx: Ctx, hashDateId: Id<"hashDates">) {
@@ -223,15 +227,14 @@ export async function ensureChecklist(ctx: MutationCtx): Promise<Doc<"hashCheckl
 
 /** The roster for one quarter: everyone who owes a hash, and where each one stands. */
 export async function loadQuarterPicture(ctx: Ctx, quarterId: string, todayKey: string) {
-  const [dates, profiles, standings] = await Promise.all([
+  const [dates, crew, standings] = await Promise.all([
     loadQuarterDates(ctx, quarterId),
-    loadAdminProfilesByStatus(ctx, ["active"]),
+    loadHashCrew(ctx),
     ctx.db
       .query("hashQuarterStanding")
       .withIndex("by_quarterId_and_userId", (q) => q.eq("quarterId", quarterId))
       .take(QUARTER_STANDING_TAKE),
   ]);
-  const crew = profiles.filter(isHashCrew);
   const standingByUser = new Map(standings.map((row) => [row.userId, row.standing]));
   const open = dates.filter((row) => row.status === "scheduled" && row.dateKey >= todayKey);
   const booked = await Promise.all(dates.map((row) => loadDateBookings(ctx, row)));
