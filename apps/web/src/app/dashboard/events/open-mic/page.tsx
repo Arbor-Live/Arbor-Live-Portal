@@ -1,6 +1,9 @@
+import { ArrowSquareOutIcon, MicrophoneStageIcon } from "@phosphor-icons/react/dist/ssr";
+import Link from "next/link";
 import { OpenMicEventsInbox } from "@/components/events/open-mic-nights-inbox";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -13,7 +16,15 @@ export default function OpenMicPage() {
       <PageHeader
         back={{ href: "/dashboard/events", label: "Events" }}
         title="Open Mic"
-        description="Run first-come, first-served sign-ups for Open Mic. Enable the Open Mic add-on on an event, then open the runner to call performers up one at a time."
+        actions={
+          <Button asChild size="sm" variant="outline">
+            <Link href="/open-mic" target="_blank" rel="noopener noreferrer">
+              <MicrophoneStageIcon />
+              Sign-up form
+              <ArrowSquareOutIcon className="size-3" />
+            </Link>
+          </Button>
+        }
       />
       <ArborOnlyGuard>
         <OpenMicEventsInbox />

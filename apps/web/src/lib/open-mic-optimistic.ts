@@ -1,11 +1,10 @@
 import type { OptimisticLocalStore } from "convex/browser";
 import type { FunctionReturnType } from "convex/server";
 import { api, type Id } from "@/lib/convex-api";
+import type { OpenMicStatus } from "@/lib/open-mic-status";
 
 type RunnerState = NonNullable<FunctionReturnType<typeof api.openMic.getRunnerState>>;
 type RunnerSignup = RunnerState["signups"][number];
-type OpenMicStatus = RunnerState["event"]["status"];
-type Leaderboard = FunctionReturnType<typeof api.openMic.getLeaderboard>;
 type EventSummary = FunctionReturnType<typeof api.openMic.listEvents>[number];
 
 function patchRunnerState(
@@ -35,33 +34,6 @@ function queuedSorted(signups: RunnerSignup[]) {
   return signups
     .filter((signup) => signup.status === "queued")
     .sort((a, b) => a.position - b.position);
-}
-
-function bumpLeaderboard(localStore: OptimisticLocalStore, signup: RunnerSignup, performedAt: number) {
-  const current = localStore.getQuery(api.openMic.getLeaderboard, {});
-  if (current === undefined) return;
-
-  const next: Leaderboard = [...current];
-  const index = next.findIndex((entry) => entry.email === signup.email);
-  if (index >= 0) {
-    const existing = next[index]!;
-    next[index] = {
-      ...existing,
-      name: signup.name,
-      count: existing.count + 1,
-      lastPerformedAt: performedAt,
-    };
-  } else {
-    next.push({
-      email: signup.email,
-      name: signup.name,
-      count: 1,
-      lastPerformedAt: performedAt,
-    });
-  }
-
-  next.sort((a, b) => b.count - a.count || b.lastPerformedAt - a.lastPerformedAt);
-  localStore.setQuery(api.openMic.getLeaderboard, {}, next.slice(0, 50));
 }
 
 function promoteFirstQueued(
@@ -107,10 +79,6 @@ export function optimisticAdvanceCurrent(
     ...current,
     signups,
   });
-
-  if (onStage) {
-    bumpLeaderboard(localStore, onStage, now);
-  }
 }
 
 export function optimisticMarkNotHere(
@@ -198,18 +166,26 @@ export function optimisticSetOpenMicStatus(
   args: { eventId: Id<"events">; status: OpenMicStatus },
 ) {
   const list = localStore.getQuery(api.openMic.listEvents, {});
-  if (list === undefined) return;
-
-  const next: EventSummary[] = list.map((event) =>
-    event._id === args.eventId ? { ...event, status: args.status } : event,
-  );
-  localStore.setQuery(api.openMic.listEvents, {}, next);
-
-  const runner = localStore.getQuery(api.openMic.getRunnerState, { eventId: args.eventId });
-  if (runner) {
-    localStore.setQuery(api.openMic.getRunnerState, { eventId: args.eventId }, {
-      ...runner,
-      event: { ...runner.event, status: args.status },
+  if (list) {
+    const next: EventSummary[] = list.map((event) => {
+      if (event._id !== args.eventId) return event;
+      if (args.status === "completed" && event.currentName) {
+        return { ...event, status: args.status, currentName: undefined, performedCount: event.performedCount + 1 };
+      }
+      return { ...event, status: args.status };
     });
+    localStore.setQuery(api.openMic.listEvents, {}, next);
   }
+
+  const now = Date.now();
+  patchRunnerState(localStore, args.eventId, (runner) => ({
+    ...runner,
+    event: { ...runner.event, status: args.status },
+    signups:
+      args.status === "completed"
+        ? runner.signups.map((signup) =>
+            signup.status === "current" ? { ...signup, status: "performed", performedAt: now } : signup,
+          )
+        : runner.signups,
+  }));
 }

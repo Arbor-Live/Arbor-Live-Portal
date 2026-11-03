@@ -298,6 +298,7 @@ labels (`TAB_ICONS` in `event-workspace-nav.tsx`, `MOMENT_ICONS` in
 | Artist / act | `MicrophoneStageIcon` (Lineup tab, sets); `GuitarIcon` is the Artists *nav* item only |
 | Soundcheck · doors · changeover | `SpeakerHighIcon` · `DoorOpenIcon` · `ArrowsLeftRightIcon` |
 | Equipment | `PackageIcon` |
+| Background music link (open mic) | `MusicNotesIcon` |
 | External rental (pass-through gear) | `TruckIcon` |
 | Billing / quote / invoice | `ReceiptIcon`; money totals and fees `CurrencyDollarIcon` |
 | Due date | `CalendarCheckIcon` (meta line) |

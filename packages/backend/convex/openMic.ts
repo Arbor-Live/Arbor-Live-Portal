@@ -3,6 +3,7 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireArborInternalContext } from "./lib/auth";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
+import { eventStatusValue } from "./lib/eventStatus";
 import { runnerWindowFor, runnerWindowOpenAt } from "./lib/openMicAddon";
 
 export const OPEN_MIC_EQUIPMENT_OPTIONS = [
@@ -196,14 +197,12 @@ const adminEventSummaryValue = v.object({
   status: openMicStatusValue,
   notes: v.optional(v.string()),
   /** Underlying event lifecycle status, surfaced for the inbox UI. */
-  eventStatus: v.string(),
-  /** Whether the runner is currently inside the [start-1h, end+1h] bookable window. */
-  runnerWindowOpen: v.boolean(),
+  eventStatus: eventStatusValue,
   runnerOpensAt: v.number(),
   runnerClosesAt: v.number(),
   queuedCount: v.number(),
   performedCount: v.number(),
-  hasCurrent: v.boolean(),
+  currentName: v.optional(v.string()),
 });
 
 /** Admin inbox: Arbor Live events with the Open Mic add-on enabled. */
@@ -225,15 +224,13 @@ export const listEvents = query({
       endAt?: number;
       status: "scheduled" | "live" | "completed" | "cancelled";
       notes?: string;
-      eventStatus: string;
-      runnerWindowOpen: boolean;
+      eventStatus: Doc<"events">["status"];
       runnerOpensAt: number;
       runnerClosesAt: number;
       queuedCount: number;
       performedCount: number;
-      hasCurrent: boolean;
+      currentName?: string;
     }> = [];
-    const now = Date.now();
     for (const event of events) {
       const window = runnerWindowFor(event.startAt, event.endAt);
       const queued = await ctx.db
@@ -258,12 +255,11 @@ export const listEvents = query({
         status: event.openMicStatus ?? "scheduled",
         notes: event.openMicNotes,
         eventStatus: event.status,
-        runnerWindowOpen: runnerWindowOpenAt(event.startAt, event.endAt, now),
         runnerOpensAt: window.opensAt,
         runnerClosesAt: window.closesAt,
         queuedCount: queued.length,
         performedCount: performed.length,
-        hasCurrent: current.length > 0,
+        currentName: current[0]?.name,
       });
     }
     return summaries;
@@ -292,10 +288,7 @@ const runnerEventValue = v.object({
   endAt: v.optional(v.number()),
   status: openMicStatusValue,
   notes: v.optional(v.string()),
-  /** Whether the runner (call-up + queue actions) is currently open, based on
-   *  event start/end ± 1h. Derived server-side so the UI doesn't need to
-   *  compute it and the gating also lives on the mutations. */
-  runnerWindowOpen: v.boolean(),
+  eventStatus: eventStatusValue,
   runnerOpensAt: v.number(),
   runnerClosesAt: v.number(),
 });
@@ -313,7 +306,6 @@ export const getRunnerState = query({
     await requireArborInternalContext(ctx);
     const event = await ctx.db.get(args.eventId);
     if (!event || !event.openMicEnabled) return null;
-    const now = Date.now();
     const window = runnerWindowFor(event.startAt, event.endAt);
     const signups = await ctx.db
       .query("openMicSignups")
@@ -328,7 +320,7 @@ export const getRunnerState = query({
         endAt: event.endAt,
         status: event.openMicStatus ?? "scheduled",
         notes: event.openMicNotes,
-        runnerWindowOpen: runnerWindowOpenAt(event.startAt, event.endAt, now),
+        eventStatus: event.status,
         runnerOpensAt: window.opensAt,
         runnerClosesAt: window.closesAt,
       },
@@ -357,38 +349,48 @@ const leaderboardEntryValue = v.object({
   lastPerformedAt: v.number(),
 });
 
+/** Sets read per leaderboard query: about a year of weekly nights; past it the counts are partial and flagged. */
+const LEADERBOARD_SCAN = 2000;
+const LEADERBOARD_ROWS = 10;
+
+/** Open mic regulars: sets performed in `[startMs, endMs)`, most sets first. */
 export const getLeaderboard = query({
-  args: {},
-  returns: v.array(leaderboardEntryValue),
-  handler: async (ctx) => {
+  args: { startMs: v.number(), endMs: v.number() },
+  returns: v.object({
+    rows: v.array(leaderboardEntryValue),
+    /** Distinct performers among the scanned sets: exact unless `truncated`, then a lower bound. */
+    performerCount: v.number(),
+    truncated: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
     const performed = await ctx.db
       .query("openMicSignups")
-      .withIndex("by_status_and_performedAt", (q) => q.eq("status", "performed"))
+      .withIndex("by_status_and_performedAt", (q) =>
+        q.eq("status", "performed").gte("performedAt", args.startMs).lt("performedAt", args.endMs),
+      )
       .order("desc")
-      .take(2000);
+      .take(LEADERBOARD_SCAN + 1);
+    const truncated = performed.length > LEADERBOARD_SCAN;
+    if (truncated) performed.pop();
 
+    // Newest first, so the first set seen for an email is their latest one and names it.
     const byEmail = new Map<string, { email: string; name: string; count: number; lastPerformedAt: number }>();
     for (const signup of performed) {
       const existing = byEmail.get(signup.email);
-      if (existing) {
-        existing.count += 1;
-        if (signup.performedAt && signup.performedAt > existing.lastPerformedAt) {
-          existing.lastPerformedAt = signup.performedAt;
-          existing.name = signup.name;
-        }
-      } else {
+      if (existing) existing.count += 1;
+      else
         byEmail.set(signup.email, {
           email: signup.email,
           name: signup.name,
           count: 1,
-          lastPerformedAt: signup.performedAt ?? signup.updatedAt,
+          lastPerformedAt: signup.performedAt!,
         });
-      }
     }
-    return Array.from(byEmail.values())
+    const rows = Array.from(byEmail.values())
       .sort((a, b) => b.count - a.count || b.lastPerformedAt - a.lastPerformedAt)
-      .slice(0, 50);
+      .slice(0, LEADERBOARD_ROWS);
+    return { rows, performerCount: byEmail.size, truncated };
   },
 });
 
@@ -411,6 +413,11 @@ export const setOpenMicStatus = mutation({
     if (!event.openMicEnabled) {
       throw new Error("Enable the Open Mic add-on on this event first.");
     }
+    // Only going live is refused: a cancelled event's queue and public form keep
+    // following openMicStatus, which stays independent of the event lifecycle.
+    if (args.status === "live" && event.status === "cancelled") {
+      throw new Error("This event is cancelled, so its Open Mic can't go live.");
+    }
     const now = Date.now();
     // Going live starts the runner. Forbid it outside the bookable window so a
     // stray click can't open the queue an hour ahead or bring a closed night
@@ -425,6 +432,16 @@ export const setOpenMicStatus = mutation({
       throw new Error(
         `Runner closed at ${new Date(window.closesAt).toLocaleString()} (1h after event end).`,
       );
+    }
+    // Ending the night counts the set that is on stage, so it isn't stranded as "current".
+    if (args.status === "completed") {
+      const onStage = await ctx.db
+        .query("openMicSignups")
+        .withIndex("by_eventId_and_status", (q) => q.eq("eventId", args.eventId).eq("status", "current"))
+        .take(1);
+      for (const signup of onStage) {
+        await ctx.db.patch(signup._id, { status: "performed", performedAt: now, updatedAt: now });
+      }
     }
     await ctx.db.patch(args.eventId, { openMicStatus: args.status, updatedAt: now });
     return null;
