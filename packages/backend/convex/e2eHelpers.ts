@@ -30,6 +30,10 @@ import { listEventsLinkedToRequest } from "./lib/bookingDayLoad";
 import { inviteAcceptUrl, SITE_URL } from "./email/constants";
 import { enqueueDebouncedEmail, enqueueEmail } from "./email/enqueue";
 import { scheduleUserInviteEmail } from "./email/invitations";
+import {
+  scheduleBookingQuoteReadyEmail,
+  scheduleBookingRequestReceivedEmail,
+} from "./email/bookingRequestEmails";
 import { ensurePostMortemFeedbackRow } from "./postMortemFeedback";
 import {
   allocateBandPaymentConfirmationToken,
@@ -733,6 +737,30 @@ export const enqueueSmokeEmail = mutation({
     });
     if (!notificationId) throw new Error("Failed to queue smoke email.");
     return { notificationId };
+  },
+});
+
+/**
+ * Test-only: run the real client booking-email enqueue paths for a seeded
+ * request ("Request received", then "Your quote is ready") so the booking
+ * thread shows both outbound messages.
+ */
+export const enqueueBookingEmails = mutation({
+  args: { requestId: v.id("eventRequests"), invoiceId: v.id("invoices") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const request = await ctx.db.get(args.requestId);
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!request || !invoice) throw new Error("Request or invoice not found.");
+    await scheduleBookingRequestReceivedEmail(ctx, request);
+    const clientReadyMessage = invoice.clientReadyMessage?.trim() || "Your quote is ready to review.";
+    await ctx.db.patch(invoice._id, { clientReadyMessage });
+    await scheduleBookingQuoteReadyEmail(ctx, {
+      request,
+      invoice: { ...invoice, clientReadyMessage },
+    });
+    return null;
   },
 });
 
