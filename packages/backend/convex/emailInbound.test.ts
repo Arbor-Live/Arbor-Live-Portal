@@ -204,6 +204,15 @@ describe("booking staff notifications", () => {
     expect(rows.map((row) => row.userId)).toEqual([assignee._id]);
   });
 
+  it("still stores the reply when a staff id on the booking is not a user", async () => {
+    const t = makeTest();
+    const assignee = await createUser(t);
+    await seedBooking(t, { manager: "e2e-manager", assignee: assignee._id });
+    expect(await record(t, inbound())).toBe("matched");
+    const rows = await t.run(async (ctx) => ctx.db.query("notifications").collect());
+    expect(rows.map((row) => row.userId)).toEqual([assignee._id]);
+  });
+
   it("does not notify for unmatched mail", async () => {
     const t = makeTest();
     const manager = await createUser(t);

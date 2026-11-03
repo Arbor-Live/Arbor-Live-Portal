@@ -8,7 +8,7 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { bookingRequestsAdminUrl, eventDashboardUrl, invoiceDashboardUrl } from "./email/constants";
-import { findAuthUserById } from "./lib/auth";
+import { findAuthUsersByIds } from "./lib/auth";
 import { parseBookingAddress } from "./lib/emailAddresses";
 import {
   type BookingRef,
@@ -158,8 +158,9 @@ async function notifyBookingStaff(
   if (!url) return;
 
   const sender = message.fromEmail.toLowerCase();
+  const staffById = await findAuthUsersByIds(ctx, [...userIds]);
   for (const userId of userIds) {
-    const staff = await findAuthUserById(ctx, userId);
+    const staff = staffById.get(userId);
     // A manager CC'ing the booking address on their own mail is not news to them.
     if (!staff || staff.email?.toLowerCase() === sender) continue;
     await recordBookingEmailNotification(ctx, {
