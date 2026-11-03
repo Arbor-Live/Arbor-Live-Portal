@@ -154,9 +154,12 @@ export async function setAccessFilter(page: Page, optionName: string) {
   await expect(option).toHaveAttribute("aria-checked", "true");
 }
 
-/** The organization filter shared by the People and Invitations tabs. */
+/**
+ * The Organization chip shared by the People and Invitations filter bars
+ * ("Organization is Arbor Live"); it defaults to Arbor Live once the org list loads.
+ */
 export function orgFilter(page: Page) {
-  return page.getByTestId("org-filter").getByTestId("searchable-select-trigger");
+  return page.getByTestId("filter-chip-organization");
 }
 
 /** Open the header's Add person dialog (invite or create an account). */

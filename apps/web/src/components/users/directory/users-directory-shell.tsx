@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import {
   BuildingsIcon,
@@ -22,12 +22,12 @@ import {
   type UsersDirectoryTabId,
 } from "@/lib/users-directory-tabs";
 import { PageHeader, PageTabs } from "@/components/page-header";
+import type { FilterDefinition, FilterState, FilterValue } from "@/components/filter-bar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { AddPersonDialog } from "@/components/users/directory/add-person-dialog";
 import { CreateOrganizationDialog } from "@/components/users/directory/create-organization-dialog";
-import { ALL_ORGS, findArborLiveOrgId, type OrgOption } from "@/components/users/directory/shared";
+import { findArborLiveOrgId, type OrgOption } from "@/components/users/directory/shared";
 
 const TAB_ICONS: Record<UsersDirectoryTabId, Icon> = {
   people: UsersThreeIcon,
@@ -38,9 +38,9 @@ const TAB_ICONS: Record<UsersDirectoryTabId, Icon> = {
 type UsersDirectoryContextValue = {
   /** Undefined while loading. */
   orgOptions: OrgOption[] | undefined;
-  /** The People / Invitations organization filter: an org id or `ALL_ORGS`. */
-  orgFilter: string;
-  setOrgFilter: (value: string) => void;
+  /** The People / Invitations Organization chip, or `null` for all organizations. */
+  orgFilter: FilterValue | null;
+  setOrgFilter: (value: FilterValue | null) => void;
   /** The org id the filter points at, or `undefined` for all organizations. */
   filterOrgId: string | undefined;
   openAddPerson: () => void;
@@ -66,14 +66,18 @@ export function UsersDirectoryShell({ children }: { children: React.ReactNode })
   const pendingInvites = useQuery(api.users.listInvitationsAdmin, { status: "pending" });
   const backfillDefaults = useMutation(api.users.backfillUserAdminDefaults);
 
-  const [orgFilterChoice, setOrgFilter] = useState<string | null>(null);
+  // `undefined` until the admin touches the chip, so the default can wait for the org list.
+  const [orgFilterChoice, setOrgFilter] = useState<FilterValue | null | undefined>(undefined);
   const [addPersonOpen, setAddPersonOpen] = useState(false);
   const [createOrgOpen, setCreateOrgOpen] = useState(false);
 
   // Default to Arbor Live, the org most people belong to, once the list loads.
-  const defaultOrgId = organizations ? findArborLiveOrgId(organizations) || ALL_ORGS : ALL_ORGS;
-  const orgFilter = orgFilterChoice ?? defaultOrgId;
-  const filterOrgId = orgFilter === ALL_ORGS ? undefined : orgFilter;
+  const defaultOrgId = organizations ? findArborLiveOrgId(organizations) : "";
+  const orgFilter = useMemo<FilterValue | null>(() => {
+    if (orgFilterChoice !== undefined) return orgFilterChoice;
+    return defaultOrgId ? { operator: "is", values: [defaultOrgId] } : null;
+  }, [orgFilterChoice, defaultOrgId]);
+  const filterOrgId = orgFilter?.values[0];
 
   const context = useMemo<UsersDirectoryContextValue>(
     () => ({
@@ -172,25 +176,36 @@ export function UsersDirectoryShell({ children }: { children: React.ReactNode })
   );
 }
 
-/** The shared organization filter, for the People and Invitations filter bars. */
-export function OrgFilterSelect() {
-  const { orgOptions, orgFilter, setOrgFilter } = useUsersDirectory();
-  const options = useMemo(
-    () => [
-      { value: ALL_ORGS, label: "All organizations" },
-      ...(orgOptions ?? []).map((org) => ({ value: org.id, label: org.name })),
-    ],
+const ORG_FILTER_ID = "organization";
+
+/**
+ * The Organization chip for the People and Invitations filter bars. Its value
+ * lives in the shell so both tabs (and Add person's default org) share it;
+ * the tab's other chips stay in `filters`. Single-value because the list
+ * queries take one organization.
+ */
+export function useOrgFilter(filters: FilterState, setFilters: (next: FilterState) => void) {
+  const { orgOptions, orgFilter, setOrgFilter, filterOrgId } = useUsersDirectory();
+  const definition = useMemo<FilterDefinition>(
+    () => ({
+      id: ORG_FILTER_ID,
+      label: "Organization",
+      single: true,
+      options: (orgOptions ?? []).map((org) => ({ value: org.id, label: org.name })),
+    }),
     [orgOptions],
   );
-  return (
-    <div className="w-full sm:w-60" data-testid="org-filter">
-      <SearchableSelect
-        value={orgFilter}
-        onChange={(value) => setOrgFilter(value || ALL_ORGS)}
-        options={options}
-        placeholder="Search organizations…"
-        emptyLabel="Organization"
-      />
-    </div>
+  const value = useMemo<FilterState>(
+    () => (orgFilter ? { [ORG_FILTER_ID]: orgFilter, ...filters } : filters),
+    [orgFilter, filters],
   );
+  const onChange = useCallback(
+    (next: FilterState) => {
+      const { [ORG_FILTER_ID]: org, ...rest } = next;
+      setOrgFilter(org ?? null);
+      setFilters(rest);
+    },
+    [setOrgFilter, setFilters],
+  );
+  return { definition, value, onChange, organizationId: filterOrgId };
 }
