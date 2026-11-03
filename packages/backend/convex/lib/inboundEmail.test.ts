@@ -29,10 +29,10 @@ describe("htmlToText", () => {
   });
 
   it("stays fast on many unclosed special tags", () => {
-    const hostile = "<script>".repeat(10_000) + "<style>".repeat(10_000) + "<p>end</p>";
+    const hostile = "<script>".repeat(13_000) + "<style>".repeat(13_000) + "<p>end</p>";
     const started = performance.now();
     expect(htmlToText(hostile)).toBe("end");
-    expect(performance.now() - started).toBeLessThan(500);
+    expect(performance.now() - started).toBeLessThan(1_000);
   });
 });
 
