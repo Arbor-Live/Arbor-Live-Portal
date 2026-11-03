@@ -50,6 +50,7 @@ export type EmailTemplate =
   | "booking_request_received"
   | "booking_request_admin"
   | "booking_quote_ready"
+  | "booking_reply"
   | "payment_proof_reminder"
   | "payment_proof_submitted"
   | "paying_party_added"
@@ -204,6 +205,8 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `New booking request: ${context}`;
     case "booking_quote_ready":
       return `Your quote is ready: ${context}`;
+    case "booking_reply":
+      return context;
     case "payment_proof_reminder":
       return `Payment proof needed: ${context}`;
     case "payment_proof_submitted":

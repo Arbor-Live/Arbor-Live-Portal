@@ -1,5 +1,6 @@
 import { render } from "@react-email/render";
 import { BookingQuoteReadyEmail } from "../emails/booking-quote-ready";
+import { BookingReplyEmail } from "../emails/booking-reply";
 import { BookingRequestAdminEmail } from "../emails/booking-request-admin";
 import { BookingRequestReceivedEmail } from "../emails/booking-request-received";
 import { BookingRequestDeclinedEmail } from "../emails/booking-request-declined";
@@ -52,6 +53,7 @@ import { WeeklyDigestEmail } from "../emails/weekly-digest";
 import { ThisWeekAtArborEmail } from "../emails/this-week-at-arbor";
 import type {
   BookingQuoteReadyEmailProps,
+  BookingReplyEmailProps,
   BookingRequestAdminEmailProps,
   BookingRequestReceivedEmailProps,
   BookingRequestDeclinedEmailProps,
@@ -149,6 +151,10 @@ export async function renderBookingRequestAdminEmail(props: BookingRequestAdminE
 
 export async function renderBookingQuoteReadyEmail(props: BookingQuoteReadyEmailProps) {
   return render(BookingQuoteReadyEmail(props));
+}
+
+export async function renderBookingReplyEmail(props: BookingReplyEmailProps) {
+  return render(BookingReplyEmail(props));
 }
 
 export async function renderQuoteUpdatedEmail(props: QuoteUpdatedEmailProps) {

@@ -1,5 +1,6 @@
 import {
   renderBookingQuoteReadyEmail,
+  renderBookingReplyEmail,
   renderBookingRequestAdminEmail,
   renderBookingRequestReceivedEmail,
   renderEventCancelledEmail,
@@ -53,6 +54,7 @@ import {
 } from "@arbor/email/render";
 import type {
   BookingQuoteReadyEmailProps,
+  BookingReplyEmailProps,
   BookingRequestAdminEmailProps,
   BookingRequestReceivedEmailProps,
   EventEmailProps,
@@ -132,6 +134,8 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderBookingRequestAdminEmail(payload as BookingRequestAdminEmailProps);
     case "booking_quote_ready":
       return renderBookingQuoteReadyEmail(payload as BookingQuoteReadyEmailProps);
+    case "booking_reply":
+      return renderBookingReplyEmail(payload as BookingReplyEmailProps);
     case "payment_proof_reminder":
       return renderPaymentProofReminderEmail(payload as PaymentProofReminderEmailProps);
     case "payment_proof_submitted":

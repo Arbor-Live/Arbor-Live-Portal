@@ -1,5 +1,6 @@
 import type {
   BookingQuoteReadyEmailProps,
+  BookingReplyEmailProps,
   BookingRequestReceivedEmailProps,
   EventEmailProps,
   PasswordResetEmailProps,
@@ -113,6 +114,13 @@ export const bookingQuoteReadyPreviewProps: BookingQuoteReadyEmailProps = {
   managerEmail: "alex.chen@stanford.edu",
   managerMessage:
     "Thank you for reaching out! Here is the quote I have prepared for you. Please feel free to let me know if you have any questions.",
+};
+
+export const bookingReplyPreviewProps: BookingReplyEmailProps = {
+  body: "Hi Jordan,\n\nYes, we can swap the wireless package for wired mics.\nI will update the quote today.",
+  senderName: "Alex Chen",
+  portalUrl: `${ARBOR_WEBSITE_URL}/request/track/demo-request`,
+  portalLabel: "Open your request tracker",
 };
 
 export const quoteUpdatedPreviewProps: QuoteUpdatedEmailProps = {

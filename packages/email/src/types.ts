@@ -199,6 +199,15 @@ export type BookingQuoteReadyEmailProps = {
   managerMessage: string;
 };
 
+export type BookingReplyEmailProps = {
+  /** The staff member's message, plain text. */
+  body: string;
+  senderName: string;
+  /** Request tracker or public quote link, when the booking has one. */
+  portalUrl?: string;
+  portalLabel?: string;
+};
+
 export type QuoteUpdatedEmailProps = {
   recipientName?: string;
   eventTitle: string;
