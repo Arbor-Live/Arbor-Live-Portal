@@ -203,7 +203,8 @@ const adminEventSummaryValue = v.object({
   runnerClosesAt: v.number(),
   queuedCount: v.number(),
   performedCount: v.number(),
-  hasCurrent: v.boolean(),
+  /** Who is on stage right now, if anyone. */
+  currentName: v.optional(v.string()),
 });
 
 /** Admin inbox: Arbor Live events with the Open Mic add-on enabled. */
@@ -231,7 +232,7 @@ export const listEvents = query({
       runnerClosesAt: number;
       queuedCount: number;
       performedCount: number;
-      hasCurrent: boolean;
+      currentName?: string;
     }> = [];
     const now = Date.now();
     for (const event of events) {
@@ -263,7 +264,7 @@ export const listEvents = query({
         runnerClosesAt: window.closesAt,
         queuedCount: queued.length,
         performedCount: performed.length,
-        hasCurrent: current.length > 0,
+        currentName: current[0]?.name,
       });
     }
     return summaries;

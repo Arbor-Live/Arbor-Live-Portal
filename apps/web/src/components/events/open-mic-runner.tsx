@@ -22,14 +22,13 @@ import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatTime, plural } from "@/lib/format";
 import { notify } from "@/lib/notify";
+import { attempt, useSetOpenMicStatus } from "@/lib/open-mic-actions";
 import {
   optimisticAdvanceCurrent,
   optimisticMarkNotHere,
   optimisticRemoveSignup,
-  optimisticSetOpenMicStatus,
 } from "@/lib/open-mic-optimistic";
 import { deriveRunnerView, type RunnerSignup } from "@/lib/open-mic-runner-view";
 import {
@@ -37,7 +36,6 @@ import {
   OPEN_MIC_MOVES,
   OPEN_MIC_STATUS,
   openMicSignupPath,
-  type OpenMicStatus,
 } from "@/lib/open-mic-status";
 import { cn } from "@/lib/utils";
 
@@ -51,16 +49,6 @@ type RunnerActions = {
   open: (signup: RunnerSignup) => void;
   copySignupLink: () => void;
 };
-
-async function attempt(action: () => Promise<unknown>) {
-  try {
-    await action();
-    return true;
-  } catch (error) {
-    notify.error(getConvexErrorMessage(error));
-    return false;
-  }
-}
 
 function EquipmentFlags({ equipment }: { equipment: string[] }) {
   return equipment.map((item) => (
@@ -232,9 +220,7 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
   const advance = useMutation(api.openMic.advanceCurrent).withOptimisticUpdate(optimisticAdvanceCurrent);
   const markNotHere = useMutation(api.openMic.markNotHere).withOptimisticUpdate(optimisticMarkNotHere);
   const removeSignup = useMutation(api.openMic.removeSignup).withOptimisticUpdate(optimisticRemoveSignup);
-  const setOpenMicStatus = useMutation(api.openMic.setOpenMicStatus).withOptimisticUpdate(
-    optimisticSetOpenMicStatus,
-  );
+  const setStatus = useSetOpenMicStatus();
   // `?signup=<id>` opens that sign-up's side panel.
   const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("signup"));
   const [now] = useState(() => Date.now());
@@ -266,27 +252,6 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
   const moves = OPEN_MIC_MOVES[event.status];
   const canRun = event.runnerWindowOpen && moves.canRun;
   const selected = signups?.find((signup) => signup._id === selectedId && signup.status !== "removed") ?? null;
-
-  async function setStatus(next: OpenMicStatus) {
-    if (next === "completed") {
-      const ok = await confirm({
-        title: `Mark ${event.title} completed?`,
-        description: "Sign-ups close. Everyone who performed stays on record.",
-        confirmLabel: "Mark completed",
-      });
-      if (!ok) return;
-    }
-    if (next === "cancelled") {
-      const ok = await confirm({
-        title: `Cancel ${event.title}?`,
-        description: "Sign-ups close and the runner stops. The queue stays on record.",
-        confirmLabel: "Cancel night",
-        destructive: true,
-      });
-      if (!ok) return;
-    }
-    await attempt(() => setOpenMicStatus({ eventId, status: next }));
-  }
 
   async function copySignupLink() {
     try {
@@ -349,12 +314,12 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
               size="sm"
               disabled={!event.runnerWindowOpen}
               title={event.runnerWindowOpen ? undefined : `The runner opens at ${formatTime(event.runnerOpensAt)}.`}
-              onClick={() => void setStatus("live")}
+              onClick={() => void setStatus(event, "live")}
             >
               Go live
             </Button>
           ) : moves.next === "completed" ? (
-            <Button type="button" size="sm" variant="outline" onClick={() => void setStatus("completed")}>
+            <Button type="button" size="sm" variant="outline" onClick={() => void setStatus(event, "completed")}>
               Mark completed
             </Button>
           ) : null
@@ -369,7 +334,7 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
             {moves.canCancel ? (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onSelect={() => void setStatus("cancelled")}>
+                <DropdownMenuItem variant="destructive" onSelect={() => void setStatus(event, "cancelled")}>
                   Cancel night
                 </DropdownMenuItem>
               </>
