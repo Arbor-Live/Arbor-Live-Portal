@@ -25,6 +25,8 @@ Where variables live:
 | `RESEND_API_KEY` | yes | Outbound email via Resend (`email/send.ts`) — see [resend-email.md](resend-email.md) |
 | `EMAIL_FROM` | yes | Default From address (`email/constants.ts`) |
 | `EMAIL_TEST_MODE` | no | `"true"` routes email sending into test mode (`email/send.ts`) |
+| `RESEND_WEBHOOK_SECRET` | yes (inbound) | `whsec_…` signing secret of the Resend `email.received` webhook; without it `/email-webhook` answers 500 — see [resend-email.md](resend-email.md#inbound-email) |
+| `INBOUND_EMAIL_DOMAIN` | no | Domain of the per-booking addresses; defaults to `arbor.st` |
 | `ORGANIZER_EMAIL` | no | Organizer contact in emails; defaults to `EMAIL_FROM`'s address (`email/constants.ts`) |
 | `PAYMENTS_EMAIL_FROM` | no | From address for band-payment emails; has a default (`email/constants.ts`) |
 | `BAND_PAYMENTS_CC_EMAIL` | no | CC address on band-payment emails; has a default (`email/constants.ts`) |

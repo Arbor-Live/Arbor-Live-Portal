@@ -101,7 +101,50 @@ Band payouts use outbound-only emails:
    notified that Stanford is processing the payout.
 
 Agreement is recorded in-portal (typed legal name + checkbox), not by email
-reply. There is no Resend inbound webhook.
+reply.
+
+## Inbound email
+
+Resend Receiving is on the whole `arbor.st` domain. Its `email.received` webhook
+posts to `https://<deployment>.convex.site/email-webhook`
+([`http/emailWebhook.ts`](../packages/backend/convex/http/emailWebhook.ts)).
+Mail is stored read-only on the booking's request, invoice and event pages;
+sending from the portal is not built yet.
+
+- **Signature.** The handler verifies the Svix signature itself
+  ([`lib/svixSignature.ts`](../packages/backend/convex/lib/svixSignature.ts),
+  WebCrypto, 5-minute tolerance) with `RESEND_WEBHOOK_SECRET` (`whsec_…`, from the
+  Resend webhook page). Bad signature → 401, unset secret → 500, malformed body →
+  400. Event types other than `email.received` are acknowledged and ignored.
+- **Processing.** The webhook only schedules
+  [`emailInbound.processInboundEmail`](../packages/backend/convex/emailInbound.ts)
+  and answers 200. That action fetches `GET /emails/receiving/{id}` with
+  `RESEND_API_KEY`, parses it at the boundary, and calls
+  `emailInbound.recordInboundEmail` with the parsed email. A 429, 5xx or network
+  error is retried after 30s and 5min, then fails loudly in the logs. For local
+  testing, run `recordInboundEmail` with `npx convex run` and no Resend call.
+- **Booking addresses.** Each booking has an address on `INBOUND_EMAIL_DOMAIN`
+  (default `arbor.st`): a request is `alreq-xxxxxxx@` (its `requestNumber`,
+  lowercased), an invoice `alinv-xxxxxxx@` (its `invoiceNumber`) and an event
+  `alevt-<eventId>@`. Matching is case-insensitive. Legacy requests with no
+  number have no address. Managers CC the address on their own threads.
+- **Matching order.** The first booking address in To, CC or the envelope
+  recipients (`received_for`) that names an existing record wins
+  (`matchedBy: "address"`). Otherwise the `In-Reply-To` and `References` ids are
+  looked up on stored messages and the first one with a thread wins
+  (`matchedBy: "header"`). The request, its invoice and its events share one
+  thread (`emailThreads`, resolved by
+  [`lib/emailThreads.ts`](../packages/backend/convex/lib/emailThreads.ts)), so
+  every address of a booking lands in the same conversation.
+- **Unmatched mail.** Anything else on the domain is stored with no thread and
+  shown nowhere yet. It stays in `emailMessages` for a later inbox view.
+- **Stored text.** `bodyText` is the reply with quoted history cut
+  ([`lib/stripQuotedReply.ts`](../packages/backend/convex/lib/stripQuotedReply.ts),
+  20k chars); `fullText` keeps the whole plain text (100k chars). Attachments are
+  stored as names, types and sizes only.
+- **Staff notification.** A matched message sends an in-app notification
+  (`booking_email_received`, with push) to the invoice manager, request assignee
+  and event manager, except a person whose own email sent it. No email is sent.
 
 ## This Week at Arbor (newsletter)
 
