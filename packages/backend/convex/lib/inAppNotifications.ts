@@ -208,6 +208,46 @@ export async function recordInAppNotification(
   return notificationId;
 }
 
+/**
+ * A client's reply landing on a booking thread. Not mirrored from an email, so
+ * the row keys on the Resend email id and a replay is a no-op.
+ */
+export async function recordBookingEmailNotification(
+  ctx: MutationCtx,
+  args: {
+    userId: string;
+    resendEmailId: string;
+    title: string;
+    body: string;
+    url: string;
+    eventId?: Id<"events">;
+  },
+) {
+  const sourceKey = `booking_email:${args.resendEmailId}`;
+  const existing = await ctx.db
+    .query("notifications")
+    .withIndex("by_userId_and_dedupeKey", (q) =>
+      q.eq("userId", args.userId).eq("dedupeKey", sourceKey),
+    )
+    .first();
+  if (existing) return null;
+  const notificationId = await ctx.db.insert("notifications", {
+    userId: args.userId,
+    template: "booking_email_received",
+    status: "delivered",
+    title: args.title,
+    body: args.body ? clip(args.body.replace(/\s+/g, " ").trim()) : undefined,
+    path: toNotificationPath(args.url),
+    eventId: args.eventId,
+    dedupeKey: sourceKey,
+    sourceKey,
+    generation: 1,
+    createdAt: Date.now(),
+  });
+  await schedulePushForNotification(ctx, args.userId, notificationId, "booking_email_received");
+  return notificationId;
+}
+
 /** Publish a pending row and drop the older delivered row it supersedes. */
 export async function deliverPendingNotification(
   ctx: MutationCtx,

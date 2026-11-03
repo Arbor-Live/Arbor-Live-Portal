@@ -6,6 +6,7 @@ import {
   ClipboardTextIcon,
   CurrencyDollarIcon,
   DeviceMobileIcon,
+  EnvelopeSimpleIcon,
   ImagesIcon,
   ListChecksIcon,
   MicrophoneStageIcon,
@@ -52,6 +53,7 @@ const TEMPLATE_ICONS: Record<string, Icon> = {
   equipment_borrow_request_admin: PackageIcon,
   equipment_borrow_request_decided: PackageIcon,
   damage_report_admin: WarningIcon,
+  booking_email_received: EnvelopeSimpleIcon,
   app_install: DeviceMobileIcon,
 };
 

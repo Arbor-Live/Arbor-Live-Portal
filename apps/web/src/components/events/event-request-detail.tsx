@@ -23,6 +23,7 @@ import { BOOKING_DECLINE_REASON_CODES, bookingDeclineReasonLabel } from "@arbor/
 import { api, type Id } from "@/lib/convex-api";
 import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
 import { CommentsSection } from "@/components/comments/comments-section";
+import { BookingMessages } from "@/components/email-threads/booking-messages";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { MetaItem, PageHeader, StatusPill } from "@/components/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -471,6 +472,8 @@ function EventRequestDetail({ request }: { request: EventRequest }) {
               </div>
             </CardContent>
           </Card>
+
+          <BookingMessages record={{ requestId }} />
         </div>
 
         <div className="min-w-0 space-y-4">
