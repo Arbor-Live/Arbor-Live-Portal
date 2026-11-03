@@ -202,7 +202,8 @@ export type BookingQuoteReadyEmailProps = {
 export type BookingReplyEmailProps = {
   /** The staff member's message, plain text. */
   body: string;
-  senderName: string;
+  /** Absent when the sender has no name; the email then signs as Arbor Live alone. */
+  senderName?: string;
   /** Request tracker or public quote link, when the booking has one. */
   portalUrl?: string;
   portalLabel?: string;

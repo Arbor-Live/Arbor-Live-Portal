@@ -9,8 +9,11 @@ export function BookingReplyEmail({ body, senderName, portalUrl, portalLabel }: 
     .filter(Boolean);
 
   return (
-    <EmailLayout preview={paragraphs[0]?.split("\n")[0] ?? `A message from ${senderName}`}>
-      <BodyCopy>{`Message from ${senderName}`}</BodyCopy>
+    <EmailLayout
+      heading={null}
+      preview={paragraphs[0]?.split("\n")[0] ?? `A message from ${senderName ?? "Arbor Live"}`}
+    >
+      {senderName ? <BodyCopy>{`Message from ${senderName}`}</BodyCopy> : null}
       {paragraphs.map((paragraph, index) => (
         <BodyCopy key={index}>
           {paragraph.split("\n").map((line, lineIndex) => (
@@ -22,8 +25,12 @@ export function BookingReplyEmail({ body, senderName, portalUrl, portalLabel }: 
         </BodyCopy>
       ))}
       <BodyCopy>
-        {senderName}
-        <br />
+        {senderName ? (
+          <>
+            {senderName}
+            <br />
+          </>
+        ) : null}
         Arbor Live
       </BodyCopy>
       {portalUrl ? <CtaButton href={portalUrl} label={portalLabel ?? "Open your request"} variant="secondary" /> : null}
