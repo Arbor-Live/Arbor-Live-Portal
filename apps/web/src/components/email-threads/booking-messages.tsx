@@ -27,8 +27,12 @@ export type BookingMessagesRecord =
 /** A reply longer than this collapses behind "Show more". */
 const COLLAPSE_CHARS = 600;
 const COLLAPSE_LINES = 10;
+/** Mirrors `MAX_REPLY_CHARS` in `packages/backend/convex/emailThreads.ts`, which refuses longer replies. */
+const MAX_REPLY_CHARS = 10_000;
 
-type Message = NonNullable<ReturnType<typeof useBookingThread>>["messages"][number];
+type Thread = NonNullable<ReturnType<typeof useBookingThread>>;
+type Message = Thread["messages"][number];
+type FailedReply = Thread["failedReplies"][number];
 
 function useBookingThread(record: BookingMessagesRecord) {
   return useQuery(api.emailThreads.getForRecord, record);
@@ -101,10 +105,58 @@ function MakeChangeRequestButton({ messageId }: { messageId: Message["_id"] }) {
       size="sm"
       disabled={busy}
       onClick={() => void onClick()}
-      data-testid="make-change-request"
+      data-testid={`make-change-request-${messageId}`}
     >
       Make this a change request
     </Button>
+  );
+}
+
+function FailedReplyRow({ reply, canRetry }: { reply: FailedReply; canRetry: boolean }) {
+  const retryReply = useMutation(api.emailThreads.retryReply);
+  const [busy, setBusy] = useState(false);
+
+  async function onRetry() {
+    setBusy(true);
+    try {
+      await retryReply({ notificationId: reply._id });
+      notify.success("Reply queued again.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Could not try the reply again."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <li
+      className="space-y-1.5 border-l-2 border-l-destructive/60 bg-destructive/5 px-3 py-3"
+      data-testid="booking-failed-reply"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <Badge variant="destructive">Not sent</Badge>
+          <span className="truncate text-xs text-muted-foreground">To {reply.to}</span>
+        </div>
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {formatDateTime(reply.createdAt)}
+        </span>
+      </div>
+      <p className="text-sm break-words whitespace-pre-wrap line-clamp-4">{reply.bodyPreview}</p>
+      <p className="text-xs break-words text-destructive">{reply.error}</p>
+      {canRetry ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onClick={() => void onRetry()}
+          data-testid="retry-failed-reply"
+        >
+          Try again
+        </Button>
+      ) : null}
+    </li>
   );
 }
 
@@ -189,6 +241,7 @@ function ReplyComposer(props: {
       });
       setClientRequestId(crypto.randomUUID());
       setBody("");
+      setCc("");
       setAttachQuote(false);
       notify.success("Reply queued.");
     } catch (error) {
@@ -216,6 +269,10 @@ function ReplyComposer(props: {
           id="booking-reply-cc"
           value={cc}
           onChange={(event) => setCc(event.target.value)}
+          onKeyDown={(event) => {
+            // Enter in a single-line field would otherwise send the whole reply.
+            if (event.key === "Enter") event.preventDefault();
+          }}
           placeholder="name@example.com"
           autoComplete="off"
         />
@@ -226,6 +283,7 @@ function ReplyComposer(props: {
           id="booking-reply-body"
           value={body}
           onChange={(event) => setBody(event.target.value)}
+          maxLength={MAX_REPLY_CHARS}
           className="min-h-28"
         />
       </div>
@@ -294,16 +352,27 @@ export function BookingMessages(props: { record: BookingMessagesRecord; readOnly
       <CardContent>
         {data === undefined ? (
           <Skeleton className="h-16 w-full" />
-        ) : data.messages.length === 0 ? (
+        ) : data.messages.length === 0 && data.failedReplies.length === 0 ? (
           <EmptyState>No emails yet.</EmptyState>
         ) : (
           <ul className="divide-y border">
             {data.messages.map((message) => (
-              <MessageRow key={message._id} message={message} readOnly={readOnly} />
+              <MessageRow
+                key={message._id}
+                message={message}
+                readOnly={readOnly || !data.canReply}
+              />
+            ))}
+            {data.failedReplies.map((reply) => (
+              <FailedReplyRow
+                key={reply._id}
+                reply={reply}
+                canRetry={data.canReply && !readOnly}
+              />
             ))}
           </ul>
         )}
-        {data && data.clientEmail && !readOnly ? (
+        {data && data.clientEmail && data.canReply && !readOnly ? (
           <ReplyComposer
             record={props.record}
             clientEmail={data.clientEmail}
