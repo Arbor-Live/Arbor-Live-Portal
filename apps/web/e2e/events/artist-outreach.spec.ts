@@ -30,7 +30,7 @@ test.describe("artist outreach on open positions", () => {
     await expect(event).toBeVisible({ timeout: 30_000 });
     await expect(event.getByTestId("open-positions-outreach")).toHaveText("Nobody asked yet");
 
-    await event.getByRole("button", { name: "Outreach" }).click();
+    await event.getByRole("button", { name: "Outreach", exact: true }).click();
     const sheet = page.getByTestId("outreach-sheet");
     const summary = sheet.getByTestId("outreach-summary");
     await expect(summary).toContainText("Nobody asked yet · 2 open slots", { timeout: 20_000 });
