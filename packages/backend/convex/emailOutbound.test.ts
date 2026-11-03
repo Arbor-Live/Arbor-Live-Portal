@@ -6,6 +6,9 @@ import { scheduleBookingRequestReceivedEmail } from "./email/bookingRequestEmail
 import { seedInvoice, seedRequest } from "./test/bookingSeeds.helpers";
 import { createUser, makeTest, type Test } from "./test/setup.helpers";
 
+/** Renders React Email (and a PDF for quotes); a loaded CI runner needs more than the 5s default. */
+const SEND_TEST_TIMEOUT_MS = 15_000;
+
 const SENT_AT = Date.UTC(2026, 10, 3, 18);
 
 beforeEach(() => {
@@ -278,7 +281,7 @@ describe("sendQueuedEmail with the e2e mock", () => {
     });
     expect(message!.bodyText.startsWith("REQUEST RECEIVED\n\nHi Maya,")).toBe(true);
     expect(await scheduledCaptures(t)).toHaveLength(0);
-  });
+  }, SEND_TEST_TIMEOUT_MS);
 
   it("leaves a non-booking email unrecorded", async () => {
     vi.stubEnv("E2E_EMAIL_MOCK", "true");

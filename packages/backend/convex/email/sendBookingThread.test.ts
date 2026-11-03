@@ -5,6 +5,9 @@ import { scheduleBookingRequestReceivedEmail } from "./bookingRequestEmails";
 import { seedRequest } from "../test/bookingSeeds.helpers";
 import { makeTest } from "../test/setup.helpers";
 
+/** Renders React Email (and a PDF for quotes); a loaded CI runner needs more than the 5s default. */
+const SEND_TEST_TIMEOUT_MS = 15_000;
+
 const sentWithResend = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 
 vi.mock("@convex-dev/resend", () => ({
@@ -96,5 +99,5 @@ describe("sendQueuedEmail for a booking email", () => {
     expect(outbound.map((message) => [message.threadId, message.resendEmailId])).toEqual([
       [threadId, "re_live_123"],
     ]);
-  });
+  }, SEND_TEST_TIMEOUT_MS);
 });
