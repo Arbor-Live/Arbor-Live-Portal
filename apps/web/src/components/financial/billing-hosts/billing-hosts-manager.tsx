@@ -256,7 +256,7 @@ function HostListRow({
       <RowCell className="w-28" hideBelow="lg" muted>
         {host.lastUsedAt ? formatRelativeTime(host.lastUsedAt) : "Never billed"}
       </RowCell>
-      <StatusPill tone={status.tone} className="h-6 w-24 shrink-0 justify-center">
+      <StatusPill tone={status.tone} className="hidden h-6 w-24 shrink-0 justify-center sm:inline-flex">
         {status.label}
       </StatusPill>
     </ListRow>

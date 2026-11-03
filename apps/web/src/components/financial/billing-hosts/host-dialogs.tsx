@@ -23,7 +23,6 @@ import { invoiceGroupSchema, type InvoiceGroupFormValues } from "@/lib/validatio
 import { HostFields, NEW_HOST_DEFAULTS } from "./host-fields";
 import { attempt, plural, type HostRow } from "./host-model";
 
-/** Creates a host, then hands its id back so the page can open it. */
 export function NewHostDialog({
   open,
   onOpenChange,

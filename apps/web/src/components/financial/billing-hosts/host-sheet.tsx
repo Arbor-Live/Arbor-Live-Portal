@@ -56,7 +56,13 @@ export function HostSheet({
   onMerge: (host: HostRow) => void;
 }) {
   return (
-    <DetailSheet open={host !== null} onOpenChange={onOpenChange} testId="host-sheet">
+    <DetailSheet
+      open={host !== null}
+      onOpenChange={onOpenChange}
+      testId="host-sheet"
+      // Focusing the name field on open selects it, and one stray key would rename the host.
+      onOpenAutoFocus={(event) => event.preventDefault()}
+    >
       {host ? (
         <HostSheetBody
           key={host._id}

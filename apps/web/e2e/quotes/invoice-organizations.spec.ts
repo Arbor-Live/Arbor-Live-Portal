@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { acceptAppDialog } from "../helpers/auth";
 import { pollConvex } from "../helpers/convex";
+import { formField } from "../helpers/form";
 import {
   addInvoiceLine,
   invoiceIdFromUrl,
@@ -32,7 +33,7 @@ async function createHost(page: Page, name: string, pricing?: string) {
   await page.getByRole("button", { name: "New host" }).click();
   const dialog = page.getByTestId("new-host-dialog");
   await expect(dialog).toBeVisible({ timeout: 25_000 });
-  await dialog.getByLabel("Name").fill(name);
+  await formField(dialog, "Name").fill(name);
   if (pricing) await pickSelectOption(page, dialog.locator("#new-host-pricing"), pricing);
   await dialog.getByRole("button", { name: "Add host" }).click();
   await expect(dialog).toHaveCount(0, { timeout: 25_000 });
@@ -110,10 +111,10 @@ test.describe("invoice host organizations and contacts", () => {
     await expect(sheet.getByRole("heading", { name: hostName })).toBeVisible({ timeout: 25_000 });
     await sheet.getByRole("button", { name: "Add contact" }).click();
     const contactForm = sheet.getByTestId("host-contact-new-form");
-    await contactForm.getByLabel("First name").fill(contactFirst);
-    await contactForm.getByLabel("Last name").fill(contactLast);
-    await contactForm.getByLabel("Email").fill(contactEmail);
-    await contactForm.getByLabel("Phone").fill("6505550123");
+    await formField(contactForm, "First name").fill(contactFirst);
+    await formField(contactForm, "Last name").fill(contactLast);
+    await formField(contactForm, "Email").fill(contactEmail);
+    await formField(contactForm, "Phone").fill("6505550123");
     await contactForm.getByRole("button", { name: "Add contact" }).click();
 
     const withContact = await pollConvex<GroupState>(
