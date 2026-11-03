@@ -22,7 +22,6 @@ import {
   buildTranscript,
   filterOperationalBullets,
   MAX_SUMMARY_MESSAGES,
-  MAX_TRANSCRIPT_CHARS,
   requestOperationalNotes,
 } from "./lib/bookingSummary";
 
@@ -80,8 +79,7 @@ export const loadSummaryInput = internalQuery({
         direction: message.direction,
         fromName: message.fromName,
         fromEmail: message.fromEmail,
-        // Nothing past the transcript budget is ever sent, so do not ship it either.
-        bodyText: message.bodyText.slice(0, MAX_TRANSCRIPT_CHARS),
+        bodyText: message.bodyText,
       })),
       eventIds,
       approvedAt:
@@ -163,8 +161,8 @@ async function summarizeBooking(ctx: ActionCtx, target: SummaryTarget): Promise<
   }
 
   const { kept, dropped } = filterOperationalBullets(result.bullets);
-  if (dropped.length > 0) {
-    console.log(`[bookingSummary] dropped ${dropped.length} pricing-like bullet(s) from the model reply`);
+  if (dropped > 0) {
+    console.log(`[bookingSummary] dropped ${dropped} pricing-like bullet(s) from the model reply`);
   }
   if (kept.length === 0) return { status: "nothing" };
 
@@ -181,6 +179,11 @@ async function summarizeBooking(ctx: ActionCtx, target: SummaryTarget): Promise<
   return { status: "written", events };
 }
 
+/** Never the error text: a failed write's message can carry the bullets it was given. */
+function errorName(error: unknown) {
+  return error instanceof Error ? error.name : typeof error;
+}
+
 /**
  * Scheduled when a client approves a quote. Never throws: approval already
  * committed, so a failure is logged and the staff button covers it.
@@ -194,7 +197,7 @@ export const summarizeForInvoice = internalAction({
     try {
       outcome = await summarizeBooking(ctx, { invoiceId: args.invoiceId });
     } catch (error) {
-      console.error(`[bookingSummary] invoice ${args.invoiceId}: unexpected error: ${String(error)}`);
+      console.error(`[bookingSummary] invoice ${args.invoiceId}: unexpected ${errorName(error)}`);
       return null;
     }
     if (outcome.status === "failed") {

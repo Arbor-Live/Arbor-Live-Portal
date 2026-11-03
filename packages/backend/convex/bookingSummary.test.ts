@@ -156,7 +156,7 @@ describe("summarizeForInvoice", () => {
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
 
-  it("sends the thread to the pinned model, oldest first", async () => {
+  it("sends the thread to the pinned model as a JSON array, oldest first", async () => {
     const t = makeTest();
     const { invoiceId } = await seedBooking(t);
     await t.action(internal.bookingSummary.summarizeForInvoice, { invoiceId });
@@ -170,15 +170,14 @@ describe("summarizeForInvoice", () => {
     expect(body.messages[0].content).toContain(
       "The note should not include any pricing specific discussion, discounts, etc. It should only be operational notes such as venue location or details like those.",
     );
-    expect(body.messages[1].content).toBe(
-      [
-        "Email thread, oldest first:",
-        "",
-        "--- outbound message from bookings@arbor.st ---\nYour quote is ready.",
-        "",
-        "--- inbound message from Maya Rivera ---\nWe are in the Old Union ballroom. Load-in via the dock after 3pm.",
-      ].join("\n"),
-    );
+    expect(JSON.parse(body.messages[1].content)).toEqual([
+      { direction: "outbound", sender: "bookings@arbor.st", body: "Your quote is ready." },
+      {
+        direction: "inbound",
+        sender: "Maya Rivera",
+        body: "We are in the Old Union ballroom. Load-in via the dock after 3pm.",
+      },
+    ]);
   });
 
   it("replaces its own block on a later run and leaves staff text around it alone", async () => {
@@ -246,13 +245,13 @@ describe("summarizeForInvoice", () => {
     await t.action(internal.bookingSummary.summarizeForInvoice, { invoiceId });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(
-      `[bookingSummary] invoice ${invoiceId}: gateway HTTP 500 boom; retrying in 60s`,
+      `[bookingSummary] invoice ${invoiceId}: gateway HTTP 500; retrying in 60s`,
     );
 
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(error).toHaveBeenCalledWith(
-      `[bookingSummary] invoice ${invoiceId}: gave up after 2 attempt(s): gateway HTTP 500 boom`,
+      `[bookingSummary] invoice ${invoiceId}: gave up after 2 attempt(s): gateway HTTP 500`,
     );
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
@@ -347,7 +346,7 @@ describe("addSummaryToEventNotes (the Email card button)", () => {
     fetchMock.mockImplementation(async () => new Response("bad key", { status: 401 }));
     await expect(
       as.action(api.bookingSummary.addSummaryToEventNotes, { eventId: eventIds[0]! }),
-    ).rejects.toThrow(/AI Gateway refused zai\/glm-5.3-flash \(401\): bad key/);
+    ).rejects.toThrow("The AI Gateway refused zai/glm-5.3-flash (401): no message");
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
 
@@ -375,16 +374,22 @@ describe("addSummaryToEventNotes (the Email card button)", () => {
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
 
-  it("sends the configured model and provider filter through the whole path", async () => {
+  it.each([
+    ["unset", undefined, { gateway: { only: ["baseten"] } }],
+    ["empty", "", { gateway: { only: ["baseten"] } }],
+    ["none", "none", undefined],
+  ])("sends the provider pin through the whole path when the variable is %s", async (_, value, expected) => {
     const t = makeTest();
     const { eventIds } = await seedBooking(t);
     const as = await staff(t);
     vi.stubEnv("BOOKING_SUMMARY_MODEL", "zai/glm-4.7-flash");
-    vi.stubEnv("BOOKING_SUMMARY_PROVIDERS", "");
+    if (value !== undefined) vi.stubEnv("BOOKING_SUMMARY_PROVIDERS", value);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     await as.action(api.bookingSummary.addSummaryToEventNotes, { eventId: eventIds[0]! });
     const body = JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string);
     expect(body.model).toBe("zai/glm-4.7-flash");
-    expect(body).not.toHaveProperty("providerOptions");
+    expect(body.providerOptions).toEqual(expected);
+    expect(warn).toHaveBeenCalledTimes(value === "none" ? 1 : 0);
   });
 
   it("refuses signed-out callers and non-staff", async () => {
