@@ -357,14 +357,17 @@ const leaderboardEntryValue = v.object({
   lastPerformedAt: v.number(),
 });
 
+/** Open mic regulars: sets performed in `[startMs, endMs)`, most sets first. */
 export const getLeaderboard = query({
-  args: {},
+  args: { startMs: v.number(), endMs: v.number() },
   returns: v.array(leaderboardEntryValue),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
     const performed = await ctx.db
       .query("openMicSignups")
-      .withIndex("by_status_and_performedAt", (q) => q.eq("status", "performed"))
+      .withIndex("by_status_and_performedAt", (q) =>
+        q.eq("status", "performed").gte("performedAt", args.startMs).lt("performedAt", args.endMs),
+      )
       .order("desc")
       .take(2000);
 
