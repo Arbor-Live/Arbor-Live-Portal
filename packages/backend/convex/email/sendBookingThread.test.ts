@@ -1,13 +1,22 @@
 // @vitest-environment edge-runtime
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { internal } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import {
   scheduleBookingQuoteReadyEmail,
   scheduleBookingRequestReceivedEmail,
 } from "./bookingRequestEmails";
 import { seedInvoice, seedRequest } from "../test/bookingSeeds.helpers";
-import { makeTest, type Test } from "../test/setup.helpers";
+import {
+  addMembership,
+  asUser,
+  createOrg,
+  createUser,
+  makeTest,
+  setActiveOrg,
+  setVerticals,
+  type Test,
+} from "../test/setup.helpers";
 
 /** Renders React Email (and a PDF for quotes); a loaded CI runner needs more than the 5s default. */
 const SEND_TEST_TIMEOUT_MS = 15_000;
@@ -257,5 +266,76 @@ describe("sendQueuedEmail for the quote PDF", () => {
         "[Resend] rate_limit_exceeded (HTTP 429): Too many requests (gave up after 4 attempts)",
     });
     expect((await scheduledSends(t)).some((s) => s.args.attempt === 4)).toBe(false);
+  }, SEND_TEST_TIMEOUT_MS);
+});
+
+describe("sendQueuedEmail for a staff reply", () => {
+  async function queueReply(attachQuote: boolean, name = "Jamie Park") {
+    const t = makeTest();
+    const { requestId } = await seedBooking(t);
+    const user = await createUser(t, { email: "jamie@arbor.st", name });
+    const arbor = await createOrg(t, { type: "arbor_internal" });
+    await addMembership(t, user._id, arbor.organizationId, "member", true);
+    await setActiveOrg(t, user._id, arbor.organizationId);
+    await setVerticals(t, user._id, ["Operations"]);
+    await asUser(t, user).mutation(api.emailThreads.sendReply, {
+      requestId,
+      body: "Quote attached.\nThanks!",
+      attachQuote,
+      clientRequestId: "attempt-1",
+    });
+    const notification = await queuedNotification(t, "booking_reply");
+    await t.action(internal.email.send.sendQueuedEmail, { notificationId: notification._id });
+    return { t, notification };
+  }
+
+  it("attaches the current quote PDF and records the reply on the thread", async () => {
+    const { t, notification } = await queueReply(true);
+
+    expect(resend.componentSends).toHaveLength(0);
+    expect(resend.sdkSends).toHaveLength(1);
+    const [send] = resend.sdkSends;
+    expect(send!.options).toEqual({ idempotencyKey: `emailNotifications:${notification._id}` });
+    expect(send!.payload).toMatchObject({
+      from: '"Jamie Park at Arbor Live" <bookings@arbor.st>',
+      to: "maya@client.test",
+      subject: "Arbor Live booking: Winter Gala (ALREQ-AAAAAAA)",
+      replyTo: ["alreq-aaaaaaa@arbor.st"],
+      attachments: [expect.objectContaining({ filename: "ALINV-BBBBBBB.pdf" })],
+    });
+    expect(send!.payload.html).toContain("<span>Quote attached.</span><span><br/>Thanks!</span>");
+    const outbound = await t.run(async (ctx) => ctx.db.query("emailMessages").collect());
+    expect(outbound.map((m) => [m.direction, m.fromName, m.attachments])).toEqual([
+      ["outbound", "Jamie Park at Arbor Live", [{ filename: "ALINV-BBBBBBB.pdf" }]],
+    ]);
+    expect(outbound[0]!.bodyText).toContain("Message from Jamie Park");
+    expect(outbound[0]!.bodyText).not.toContain("MESSAGE FROM");
+  }, SEND_TEST_TIMEOUT_MS);
+
+  it("goes through the component without an attachment when the reply does not ask for the quote", async () => {
+    await queueReply(false);
+
+    expect(resend.sdkSends).toHaveLength(0);
+    expect(resend.componentSends).toHaveLength(1);
+    expect(resend.componentSends[0]).toMatchObject({
+      from: '"Jamie Park at Arbor Live" <bookings@arbor.st>',
+      to: "maya@client.test",
+    });
+  }, SEND_TEST_TIMEOUT_MS);
+
+  it("sends from plain Arbor Live when the sender has no name, and records the same name", async () => {
+    const { t } = await queueReply(false, "");
+
+    expect(resend.componentSends).toHaveLength(1);
+    const [send] = resend.componentSends;
+    expect(send!.from).toBe('"Arbor Live" <bookings@arbor.st>');
+    const html = send!.html as string;
+    expect(html).not.toContain("Message from");
+    const [message] = await t.run(async (ctx) => ctx.db.query("emailMessages").collect());
+    expect(message).toMatchObject({ direction: "outbound", fromName: "Arbor Live" });
+    expect(message!.bodyText).not.toContain("Message from");
+    expect(message!.bodyText.startsWith("Quote attached.\nThanks!\n\nArbor Live\n\nOpen your request tracker")).toBe(
+      true,
+    );
   }, SEND_TEST_TIMEOUT_MS);
 });

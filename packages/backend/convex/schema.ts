@@ -1869,7 +1869,8 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_idempotencyKey", ["idempotencyKey"])
     .index("by_eventId", ["eventId"])
-    .index("by_debounceKey_and_status", ["debounceKey", "status"]),
+    .index("by_debounceKey_and_status", ["debounceKey", "status"])
+    .index("by_booking_threadId_and_status", ["booking.threadId", "status"]),
 
   /**
    * In-app notification center. One row per recipient account, mirrored from
@@ -1951,6 +1952,9 @@ export default defineSchema({
     ),
     matchedBy: v.optional(v.union(v.literal("address"), v.literal("header"))),
     receivedAt: v.number(),
+    /** Set when staff turned this client message into the quote change request. */
+    changeRequestedAt: v.optional(v.number()),
+    changeRequestedByUserId: v.optional(v.string()),
   })
     .index("by_threadId_and_receivedAt", ["threadId", "receivedAt"])
     .index("by_resendEmailId", ["resendEmailId"])

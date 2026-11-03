@@ -41,10 +41,17 @@ function getResendSdk() {
   return new ResendSdk(apiKey);
 }
 
-type BookingQuoteReadyPayload = {
-  invoiceId: Id<"invoices">;
-  invoiceNumber: string;
+type QuoteAttachmentPayload = {
+  invoiceId?: Id<"invoices">;
+  invoiceNumber?: string;
+  /** Opt-in for templates other than `booking_quote_ready`, which always carries the quote. */
+  attachQuote?: boolean;
 };
+
+function wantsQuoteAttachment(notification: { template: string; payload: unknown }) {
+  if (notification.template === "booking_quote_ready") return true;
+  return (notification.payload as QuoteAttachmentPayload | null)?.attachQuote === true;
+}
 
 const CALENDAR_INVITE_METHODS: Partial<Record<string, "REQUEST" | "CANCEL">> = {
   crew_scheduled: "REQUEST",
@@ -199,7 +206,7 @@ async function quoteAttachment(
   ctx: ActionCtx,
   notification: { payload: unknown },
 ): Promise<EmailAttachment> {
-  const payload = notification.payload as BookingQuoteReadyPayload;
+  const payload = notification.payload as QuoteAttachmentPayload;
   if (!payload.invoiceId) {
     throw new Error("Quote email payload is missing invoiceId.");
   }
@@ -210,15 +217,15 @@ async function quoteAttachment(
     throw new Error("Invoice not found for quote email attachment.");
   }
   const pdfBuffer = await renderInvoicePdfBuffer(document);
-  return { filename: `${payload.invoiceNumber}.pdf`, content: pdfBuffer.toString("base64") };
+  return { filename: `${payload.invoiceNumber ?? "quote"}.pdf`, content: pdfBuffer.toString("base64") };
 }
 
-/** Quote PDF or calendar invite for the templates that carry one. */
+/** Quote PDF or calendar invite for the emails that carry one. */
 async function buildAttachments(
   ctx: ActionCtx,
   notification: { template: string; to: string; payload: unknown },
 ): Promise<EmailAttachment[]> {
-  if (notification.template === "booking_quote_ready") {
+  if (wantsQuoteAttachment(notification)) {
     return [await quoteAttachment(ctx, notification)];
   }
   const calendarInvite = buildCalendarInvite(notification);
