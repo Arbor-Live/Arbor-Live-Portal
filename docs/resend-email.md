@@ -110,9 +110,9 @@ reply.
 Resend Receiving is on the whole `arbor.st` domain. Its `email.received` webhook
 posts to `https://<deployment>.convex.site/email-webhook`
 ([`http/emailWebhook.ts`](../packages/backend/convex/http/emailWebhook.ts)).
-Mail is stored read-only on the booking's request, invoice and event pages,
-together with the booking emails we send (see [Booking emails](#booking-emails)).
-Sending from the portal is not built yet.
+Mail is stored on the booking's request, invoice and event pages, together with
+the booking emails we send (see [Booking emails](#booking-emails)). Staff answer
+from there (see [Staff replies](#staff-replies)).
 
 - **Signature.** The handler verifies the Svix signature itself
   ([`lib/svixSignature.ts`](../packages/backend/convex/lib/svixSignature.ts),
@@ -220,6 +220,31 @@ notification stores `booking: { threadId, from }`.
   clock is fixed at the start, so every batch uses the same reminder keys, and
   invoices already reminded are carried along so one on two events gets one
   email.
+
+### Staff replies
+
+The Email card on a booking has a reply box. `emailThreads.sendReply` (staff
+only, like `getForRecord`) queues a `booking_reply` email:
+
+- **To** is the request's email, else the invoice's `clientEmail`. Optional CC
+  (bare addresses, max 10); duplicates and the client are dropped.
+- **From** is the booking sender named after the signed-in staff member
+  (`resolveBookingEmail` `senderName`), never taken from arguments. Subject,
+  thread, Reply-To and recording are the ones every booking email uses, so the
+  reply shows on the thread once it goes out.
+- **Body** is the message (max 10k chars) as paragraphs, the sender's name and a
+  link to the request tracker or public quote. `attachQuote` adds the current
+  quote PDF (`payload.invoiceId` plus `payload.attachQuote`; `booking_quote_ready`
+  always carries it).
+- **Idempotency.** `booking_reply:<threadId>:<clientRequestId>`; the composer
+  mints one id per attempt, so a double click queues one email.
+
+`emailThreads.makeChangeRequest` turns a client's emailed message into the formal
+quote change request through `requestInvoiceQuoteChanges`, with the message text
+as the note, and stamps `changeRequestedAt` on the message. It requires an
+inbound message from the booking's client while the invoice is not void, was sent
+for review and is still pending. `getForRecord` returns `canMakeChangeRequest` per
+message with the same rules.
 
 ## This Week at Arbor (newsletter)
 
