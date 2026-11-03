@@ -290,10 +290,13 @@ a scheduling error is logged and never fails the approval.
   `POST https://ai-gateway.vercel.sh/v1/chat/completions`, model
   `zai/glm-5.3-flash`, pinned to Baseten with
   `providerOptions: { gateway: { only: ["baseten"] } }` (US-hosted, zero data
-  retention, no training). The constants live in
+  retention, no training). `BOOKING_SUMMARY_MODEL` and the comma-separated
+  `BOOKING_SUMMARY_PROVIDERS` override both; an empty providers value sends no
+  `only` filter ([environment-variables.md](environment-variables.md)). They are
+  read in one place,
   [`lib/bookingSummary.ts`](../packages/backend/convex/lib/bookingSummary.ts).
   It needs `AI_GATEWAY_API_KEY` on the deployment, and a Vercel account with
-  paid credits: a free-tier key gets HTTP 403 for this model.
+  paid credits: a free-tier key gets HTTP 403 for the default model.
 - **Content rule.** The product owner's rule is in the system prompt verbatim
   ("The note should not include any pricing specific discussion, discounts,
   etc. It should only be operational notes such as venue location or details
@@ -311,12 +314,16 @@ a scheduling error is logged and never fails the approval.
   nothing is written or removed
   ([`@arbor/format`](../packages/format/src/emailSummaryBlock.ts)). An event
   linked after approval is not chased; staff use **Add summary to notes** on the
-  event page's Email card (`bookingSummary.addSummaryToEventNotes`, event editors
-  only, awaited, "as of" the day instead of the approval date when the quote is
+  event page's Email card (`bookingSummary.addSummaryToEventNotes`: Arbor
+  internal users who can edit the event, which is not the Operations check that
+  gates replying, because it writes event notes and emails no one; awaited, "as of" the day instead of the approval date when the quote is
   not approved).
 - **Failures.** A missing key, a gateway error or an unusable reply is logged
   (`[bookingSummary] …`) with no partial write. A 429, 5xx or network error is
-  retried once after 60 seconds.
+  retried once after 60 seconds. A 401 or 403 is never retried: it logs
+  `gateway refused model <model> (<status>): <gateway message> — add paid AI
+  Gateway credits or set BOOKING_SUMMARY_MODEL`, and the button shows the model
+  and the gateway message in its toast.
 - **Workspace.** The event workspace saves notes as one string, so it carries a
   newly written block into a notes draft the user has edited
   (`apps/web/src/lib/event-notes-merge.ts`); otherwise the next save would erase

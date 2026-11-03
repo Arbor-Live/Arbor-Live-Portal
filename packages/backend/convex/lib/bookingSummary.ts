@@ -3,13 +3,30 @@ import type { Doc } from "../_generated/dataModel";
 /**
  * Vercel AI Gateway, OpenAI-compatible chat completions
  * (https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions/chat-completions).
- * The model is pinned to one provider (`providerOptions.gateway.only`, a hard
- * filter that never fails over): Baseten is US-hosted, zero-data-retention and
- * does not train on prompts, which matters because the input is client email.
+ * By default the model is pinned to one provider (`providerOptions.gateway.only`,
+ * a hard filter that never fails over): Baseten is US-hosted, zero-data-retention
+ * and does not train on prompts, which matters because the input is client email.
  */
 export const SUMMARY_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions";
-export const SUMMARY_MODEL = "zai/glm-5.3-flash";
-export const SUMMARY_PROVIDER = "baseten";
+export const DEFAULT_SUMMARY_MODEL = "zai/glm-5.3-flash";
+export const DEFAULT_SUMMARY_PROVIDERS = ["baseten"];
+
+/**
+ * `BOOKING_SUMMARY_MODEL` and `BOOKING_SUMMARY_PROVIDERS` (comma-separated)
+ * override the defaults. An unset or blank model keeps the default; a providers
+ * variable that is set but empty means "no pin", which a model Baseten does not
+ * serve needs.
+ */
+export function summaryModelConfig(env: Record<string, string | undefined> = process.env) {
+  const model = env.BOOKING_SUMMARY_MODEL?.trim() || DEFAULT_SUMMARY_MODEL;
+  const providers =
+    env.BOOKING_SUMMARY_PROVIDERS === undefined
+      ? DEFAULT_SUMMARY_PROVIDERS
+      : env.BOOKING_SUMMARY_PROVIDERS.split(",")
+          .map((provider) => provider.trim())
+          .filter(Boolean);
+  return { model, providers };
+}
 
 /** A booking thread is a handful of emails; 60 is a long negotiation. */
 export const MAX_SUMMARY_MESSAGES = 60;
@@ -73,8 +90,9 @@ export function buildTranscript(messages: readonly SummaryMessage[]) {
 }
 
 export function buildGatewayRequest(transcript: string) {
+  const { model, providers } = summaryModelConfig();
   return {
-    model: SUMMARY_MODEL,
+    model,
     messages: [
       { role: "system", content: SUMMARY_SYSTEM_PROMPT },
       { role: "user", content: `Email thread, oldest first:\n\n${transcript}` },
@@ -93,7 +111,7 @@ export function buildGatewayRequest(transcript: string) {
         },
       },
     },
-    providerOptions: { gateway: { only: [SUMMARY_PROVIDER] } },
+    ...(providers.length > 0 ? { providerOptions: { gateway: { only: providers } } } : {}),
   };
 }
 
@@ -158,9 +176,34 @@ export function filterOperationalBullets(bullets: readonly string[]) {
 
 export type GatewayResult =
   | { ok: true; bullets: string[] }
-  | { ok: false; retryable: boolean; reason: string };
+  | {
+      ok: false;
+      retryable: boolean;
+      /** For logs. */
+      reason: string;
+      /** Short enough for a toast; set when the reason is something staff can act on. */
+      userMessage?: string;
+    };
 
-/** One gateway call. A 429, 5xx or network error is retryable; the caller decides when. */
+/** The gateway answers errors as `{ "error": { "message": … } }`; anything else is shown trimmed. */
+function gatewayErrorMessage(body: string) {
+  let message = body;
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: unknown } | string } | null;
+    const error = parsed?.error;
+    const found = typeof error === "string" ? error : error?.message;
+    if (typeof found === "string") message = found;
+  } catch {
+    // Not JSON: keep the raw text.
+  }
+  return message.replace(/\s+/g, " ").trim().slice(0, 200);
+}
+
+/**
+ * One gateway call. A 429, 5xx or network error is retryable; the caller decides
+ * when. A 401 or 403 (bad key, or a plan without this model) never is: it will
+ * fail the same way until someone changes the key, the plan or the model.
+ */
 export async function requestOperationalNotes(
   apiKey: string,
   transcript: string,
@@ -177,7 +220,18 @@ export async function requestOperationalNotes(
     return { ok: false, retryable: true, reason: `network error: ${String(error)}` };
   }
   if (!response.ok) {
-    const detail = (await response.text().catch(() => "")).slice(0, 300);
+    const text = await response.text().catch(() => "");
+    if (response.status === 401 || response.status === 403) {
+      const { model } = summaryModelConfig();
+      const message = gatewayErrorMessage(text) || "no message";
+      return {
+        ok: false,
+        retryable: false,
+        reason: `gateway refused model ${model} (${response.status}): ${message} — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
+        userMessage: `The AI Gateway refused ${model} (${response.status}): ${message}`,
+      };
+    }
+    const detail = text.slice(0, 300);
     return {
       ok: false,
       retryable: response.status === 429 || response.status >= 500,

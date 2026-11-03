@@ -257,6 +257,29 @@ describe("summarizeForInvoice", () => {
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
 
+  it("does not retry a 403 and logs one line naming the model and the gateway message", async () => {
+    const t = makeTest();
+    const { invoiceId, eventIds } = await seedBooking(t);
+    fetchMock.mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({ error: { message: "Free tier users do not have access to this model" } }),
+          { status: 403 },
+        ),
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await t.action(internal.bookingSummary.summarizeForInvoice, { invoiceId });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith(
+      `[bookingSummary] invoice ${invoiceId}: gave up after 1 attempt(s): gateway refused model zai/glm-5.3-flash (403): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
+    );
+    expect(await notesOf(t, eventIds)).toEqual([null]);
+  });
+
   it("does not retry a reply it cannot parse", async () => {
     const t = makeTest();
     const { invoiceId, eventIds } = await seedBooking(t);
@@ -324,8 +347,44 @@ describe("addSummaryToEventNotes (the Email card button)", () => {
     fetchMock.mockImplementation(async () => new Response("bad key", { status: 401 }));
     await expect(
       as.action(api.bookingSummary.addSummaryToEventNotes, { eventId: eventIds[0]! }),
-    ).rejects.toThrow(/gateway HTTP 401 bad key/);
+    ).rejects.toThrow(/AI Gateway refused zai\/glm-5.3-flash \(401\): bad key/);
     expect(await notesOf(t, eventIds)).toEqual([null]);
+  });
+
+  it("tells the caller a 403 is the model being refused, not a busy service", async () => {
+    const t = makeTest();
+    const { eventIds } = await seedBooking(t);
+    const as = await staff(t);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    fetchMock.mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({ error: { message: "Free tier users do not have access to this model" } }),
+          { status: 403 },
+        ),
+    );
+    await expect(
+      as.action(api.bookingSummary.addSummaryToEventNotes, { eventId: eventIds[0]! }),
+    ).rejects.toThrow(
+      "The AI Gateway refused zai/glm-5.3-flash (403): Free tier users do not have access to this model",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith(
+      `[bookingSummary] event ${eventIds[0]}: gateway refused model zai/glm-5.3-flash (403): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
+    );
+    expect(await notesOf(t, eventIds)).toEqual([null]);
+  });
+
+  it("sends the configured model and provider filter through the whole path", async () => {
+    const t = makeTest();
+    const { eventIds } = await seedBooking(t);
+    const as = await staff(t);
+    vi.stubEnv("BOOKING_SUMMARY_MODEL", "zai/glm-4.7-flash");
+    vi.stubEnv("BOOKING_SUMMARY_PROVIDERS", "");
+    await as.action(api.bookingSummary.addSummaryToEventNotes, { eventId: eventIds[0]! });
+    const body = JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string);
+    expect(body.model).toBe("zai/glm-4.7-flash");
+    expect(body).not.toHaveProperty("providerOptions");
   });
 
   it("refuses signed-out callers and non-staff", async () => {

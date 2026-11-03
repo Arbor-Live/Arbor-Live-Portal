@@ -137,7 +137,7 @@ export const requireSummaryAccess = internalQuery({
 type SummaryOutcome =
   | { status: "written"; events: number }
   | { status: "nothing" }
-  | { status: "failed"; retryable: boolean; reason: string };
+  | { status: "failed"; retryable: boolean; reason: string; userMessage?: string };
 
 async function summarizeBooking(ctx: ActionCtx, target: SummaryTarget): Promise<SummaryOutcome> {
   const apiKey = process.env.AI_GATEWAY_API_KEY?.trim();
@@ -153,7 +153,14 @@ async function summarizeBooking(ctx: ActionCtx, target: SummaryTarget): Promise<
   if (input.eventIds.length === 0) return { status: "nothing" };
 
   const result = await requestOperationalNotes(apiKey, buildTranscript(input.messages));
-  if (!result.ok) return { status: "failed", retryable: result.retryable, reason: result.reason };
+  if (!result.ok) {
+    return {
+      status: "failed",
+      retryable: result.retryable,
+      reason: result.reason,
+      userMessage: result.userMessage,
+    };
+  }
 
   const { kept, dropped } = filterOperationalBullets(result.bullets);
   if (dropped.length > 0) {
@@ -222,9 +229,10 @@ export const addSummaryToEventNotes = action({
       console.error(`[bookingSummary] event ${args.eventId}: ${outcome.reason}`);
       appError(
         "BOOKING_SUMMARY_FAILED",
-        outcome.retryable
-          ? "The summary service is busy. Try again in a minute."
-          : `Could not write the summary: ${outcome.reason}`,
+        outcome.userMessage ??
+          (outcome.retryable
+            ? "The summary service is busy. Try again in a minute."
+            : `Could not write the summary: ${outcome.reason}`),
       );
     }
     return { result: outcome.status === "written" ? "added" : "nothing" };

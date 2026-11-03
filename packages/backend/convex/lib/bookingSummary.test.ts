@@ -10,6 +10,7 @@ import {
   OPERATIONAL_ONLY_RULE,
   parseSummaryResponse,
   requestOperationalNotes,
+  summaryModelConfig,
   SUMMARY_SYSTEM_PROMPT,
 } from "./bookingSummary";
 
@@ -163,8 +164,42 @@ describe("parseSummaryResponse", () => {
   });
 });
 
+describe("summary model configuration", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("defaults to zai/glm-5.3-flash pinned to baseten", () => {
+    expect(summaryModelConfig({})).toEqual({ model: "zai/glm-5.3-flash", providers: ["baseten"] });
+    const body = buildGatewayRequest("t");
+    expect(body.model).toBe("zai/glm-5.3-flash");
+    expect(body.providerOptions).toEqual({ gateway: { only: ["baseten"] } });
+  });
+
+  it("takes the model from BOOKING_SUMMARY_MODEL and a blank value keeps the default", () => {
+    vi.stubEnv("BOOKING_SUMMARY_MODEL", "zai/glm-4.7-flash");
+    expect(buildGatewayRequest("t").model).toBe("zai/glm-4.7-flash");
+    expect(summaryModelConfig({ BOOKING_SUMMARY_MODEL: "  " }).model).toBe("zai/glm-5.3-flash");
+  });
+
+  it("takes a comma-separated provider list", () => {
+    vi.stubEnv("BOOKING_SUMMARY_PROVIDERS", "baseten, fireworks");
+    expect(buildGatewayRequest("t").providerOptions).toEqual({
+      gateway: { only: ["baseten", "fireworks"] },
+    });
+  });
+
+  it("sends no provider filter when BOOKING_SUMMARY_PROVIDERS is empty", () => {
+    vi.stubEnv("BOOKING_SUMMARY_PROVIDERS", "");
+    const body = buildGatewayRequest("t");
+    expect(body).not.toHaveProperty("providerOptions");
+    expect(body.model).toBe("zai/glm-5.3-flash");
+  });
+});
+
 describe("requestOperationalNotes", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
 
   it("posts the pinned request with the bearer key", async () => {
     const fetchMock = vi.fn(async () =>
@@ -184,13 +219,41 @@ describe("requestOperationalNotes", () => {
     [500, true],
     [503, true],
     [400, false],
-    [401, false],
   ])("HTTP %i is retryable: %s", async (status, retryable) => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status })));
     expect(await requestOperationalNotes("k", "t")).toEqual({
       ok: false,
       retryable,
       reason: `gateway HTTP ${status} nope`,
+    });
+  });
+
+  it.each([401, 403])("HTTP %i is a refusal that names the model and is never retried", async (status) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ error: { message: "Free tier users do not have access to this model" } }),
+            { status },
+          ),
+      ),
+    );
+    expect(await requestOperationalNotes("k", "t")).toEqual({
+      ok: false,
+      retryable: false,
+      reason: `gateway refused model zai/glm-5.3-flash (${status}): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
+      userMessage: `The AI Gateway refused zai/glm-5.3-flash (${status}): Free tier users do not have access to this model`,
+    });
+  });
+
+  it("names the configured model in a refusal and keeps a non-JSON body", async () => {
+    vi.stubEnv("BOOKING_SUMMARY_MODEL", "zai/glm-4.7-flash");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("bad key", { status: 401 })));
+    expect(await requestOperationalNotes("k", "t")).toMatchObject({
+      ok: false,
+      retryable: false,
+      userMessage: "The AI Gateway refused zai/glm-4.7-flash (401): bad key",
     });
   });
 

@@ -24,6 +24,8 @@ Where variables live:
 | `ARBOR_ENV` | prod only | Set to `production` **only** on the prod Convex deployment; gates production behavior (`lib/trustedOrigins.ts`) |
 | `RESEND_API_KEY` | yes | Outbound email via Resend (`email/send.ts`) — see [resend-email.md](resend-email.md) |
 | `AI_GATEWAY_API_KEY` | no | Vercel AI Gateway key for the approval email summary (`bookingSummary.ts`); without it the summary is skipped with a log line — see [resend-email.md](resend-email.md) |
+| `BOOKING_SUMMARY_MODEL` | no | Gateway model for the approval email summary; default `zai/glm-5.3-flash`. A free-tier key is refused (HTTP 403) for that model, so either add paid AI Gateway credits or set a model the plan allows (`bookingSummary.ts`, `lib/bookingSummary.ts`) |
+| `BOOKING_SUMMARY_PROVIDERS` | no | Comma-separated gateway providers the summary call is pinned to (`providerOptions.gateway.only`); default `baseten`. The Baseten pin keeps client email in US-hosted, zero-data-retention inference. Set it **empty** to send no filter, which a model Baseten does not serve needs; then check where that model runs before using real client email |
 | `EMAIL_FROM` | yes | Default From address (`email/constants.ts`) |
 | `EMAIL_TEST_MODE` | no | `"true"` only sends to Resend test addresses (`delivered@resend.dev`, …): the component refuses others, and attachment sends fail loudly before calling Resend (`email/resendClient.ts`, `email/send.ts`) |
 | `RESEND_WEBHOOK_SECRET` | yes (inbound) | `whsec_…` signing secret of the Resend `email.received` webhook; without it `/email-webhook` answers 500 — see [resend-email.md](resend-email.md#inbound-email) |
