@@ -284,7 +284,8 @@ export function InsightsEventsPanel({ startMs, endMs }: InsightsEventsPanelProps
             )}
             {openMicRegulars && openMicRegulars.performerCount > openMicRegulars.rows.length ? (
               <p className="text-xs text-muted-foreground">
-                Top {openMicRegulars.rows.length} of {openMicRegulars.performerCount} performers.
+                Top {openMicRegulars.rows.length} of {openMicRegulars.truncated ? "at least " : ""}
+                {openMicRegulars.performerCount} performers.
               </p>
             ) : null}
           </InsightCard>

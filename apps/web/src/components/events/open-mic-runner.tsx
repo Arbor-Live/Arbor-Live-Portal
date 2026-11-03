@@ -34,6 +34,7 @@ import {
   formatNightStart,
   OPEN_MIC_MOVES,
   OPEN_MIC_STATUS,
+  canGoLive,
   openMicSignupPath,
   runnerWindowAt,
 } from "@/lib/open-mic-status";
@@ -309,7 +310,7 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
           </>
         }
         actions={
-          moves.next === "live" ? (
+          canGoLive(event) ? (
             <Button
               type="button"
               size="sm"

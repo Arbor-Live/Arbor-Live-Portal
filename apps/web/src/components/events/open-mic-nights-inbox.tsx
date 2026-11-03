@@ -18,6 +18,7 @@ import {
   formatNightStart,
   OPEN_MIC_MOVES,
   OPEN_MIC_STATUS,
+  canGoLive,
   runnerWindowAt,
   type RunnerWindow,
 } from "@/lib/open-mic-status";
@@ -86,7 +87,7 @@ export function OpenMicEventsInbox() {
         data-testid={`open-mic-event-${night._id}`}
         actions={
           <div className="flex items-center gap-1">
-            {moves.next === "live" && runnerWindow === "open" && night.eventStatus !== "cancelled" ? (
+            {canGoLive(night) && runnerWindow === "open" ? (
               <Button type="button" size="sm" onClick={() => void setStatus(night, "live")}>
                 Go live
               </Button>

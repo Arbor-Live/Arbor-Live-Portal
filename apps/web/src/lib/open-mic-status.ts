@@ -36,11 +36,17 @@ export type RunnerWindow = "before" | "open" | "after";
 
 /**
  * Where `now` sits against the runner window (1h before start to 1h after end).
- * Mirrors `runnerWindowOpenAt` in the backend, which gates the mutations.
+ * Follows `runnerWindowOpenAt` in the backend to within one `useNow` step; the
+ * mutations enforce the exact boundary.
  */
 export function runnerWindowAt(night: { runnerOpensAt: number; runnerClosesAt: number }, now: number): RunnerWindow {
   if (now < night.runnerOpensAt) return "before";
   return now <= night.runnerClosesAt ? "open" : "after";
+}
+
+/** Whether Go live is offered at all; the runner window then decides if it's enabled. */
+export function canGoLive(night: { status: OpenMicStatus; eventStatus: string }) {
+  return OPEN_MIC_MOVES[night.status].next === "live" && night.eventStatus !== "cancelled";
 }
 
 /** The public sign-up form, pinned to one night. */

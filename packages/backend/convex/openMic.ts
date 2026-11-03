@@ -287,6 +287,7 @@ const runnerEventValue = v.object({
   endAt: v.optional(v.number()),
   status: openMicStatusValue,
   notes: v.optional(v.string()),
+  eventStatus: v.string(),
   runnerOpensAt: v.number(),
   runnerClosesAt: v.number(),
 });
@@ -318,6 +319,7 @@ export const getRunnerState = query({
         endAt: event.endAt,
         status: event.openMicStatus ?? "scheduled",
         notes: event.openMicNotes,
+        eventStatus: event.status,
         runnerOpensAt: window.opensAt,
         runnerClosesAt: window.closesAt,
       },
@@ -355,7 +357,7 @@ export const getLeaderboard = query({
   args: { startMs: v.number(), endMs: v.number() },
   returns: v.object({
     rows: v.array(leaderboardEntryValue),
-    /** Everyone who performed in the range; `rows` is the top of this. */
+    /** Distinct performers among the scanned sets: exact unless `truncated`, then a lower bound. */
     performerCount: v.number(),
     truncated: v.boolean(),
   }),
@@ -409,6 +411,9 @@ export const setOpenMicStatus = mutation({
     if (!event) throw new Error("Event not found.");
     if (!event.openMicEnabled) {
       throw new Error("Enable the Open Mic add-on on this event first.");
+    }
+    if (args.status === "live" && event.status === "cancelled") {
+      throw new Error("This event is cancelled, so its Open Mic can't go live.");
     }
     const now = Date.now();
     // Going live starts the runner. Forbid it outside the bookable window so a

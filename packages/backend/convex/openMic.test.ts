@@ -104,12 +104,15 @@ test("returns nothing when no set falls in the range", async () => {
   expect(result).toEqual({ rows: [], performerCount: 0, truncated: false });
 });
 
-test("flags a range with more sets than one scan reads", async () => {
+test.each([
+  [2000, false],
+  [2001, true],
+])("with %i sets in range, truncated is %s", async (sets, truncated) => {
   const t = makeTest();
   const crew = await arborCrew(t);
   const eventId = await seedEvent(t);
   await t.run(async (ctx) => {
-    for (let i = 0; i < 2001; i += 1) {
+    for (let i = 0; i < sets; i += 1) {
       await ctx.db.insert("openMicSignups", {
         eventId,
         name: "Ana",
@@ -129,8 +132,20 @@ test("flags a range with more sets than one scan reads", async () => {
 
   const result = await asUser(t, crew).query(api.openMic.getLeaderboard, { startMs: START, endMs: END });
 
-  expect(result.truncated).toBe(true);
+  expect(result.truncated).toBe(truncated);
+  expect(result.performerCount).toBe(1);
   expect(result.rows[0]?.count).toBe(2000);
+});
+
+test("a cancelled event's Open Mic can't go live", async () => {
+  const t = makeTest();
+  const crew = await arborCrew(t);
+  const eventId = await seedEvent(t);
+  await t.run(async (ctx) => ctx.db.patch(eventId, { status: "cancelled" }));
+
+  await expect(
+    asUser(t, crew).mutation(api.openMic.setOpenMicStatus, { eventId, status: "live" }),
+  ).rejects.toThrow("This event is cancelled");
 });
 
 test("marking a night completed counts the set on stage and leaves the queue alone", async () => {
@@ -166,5 +181,11 @@ test("marking a night completed counts the set on stage and leaves the queue alo
   expect(regulars.rows.map(({ email, count }) => ({ email, count }))).toEqual([
     { email: "ana@stanford.edu", count: 1 },
   ]);
+  const { event, statuses } = await t.run(async (ctx) => ({
+    event: await ctx.db.get(eventId),
+    statuses: (await ctx.db.query("openMicSignups").collect()).map((signup) => signup.status).sort(),
+  }));
+  expect(event?.openMicStatus).toBe("completed");
+  expect(statuses).toEqual(["performed", "queued"]);
   expect((await t.run(async (ctx) => ctx.db.get(queuedId)))?.status).toBe("queued");
 });
