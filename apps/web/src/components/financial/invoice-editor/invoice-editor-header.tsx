@@ -425,11 +425,8 @@ export function InvoiceEditorHeader({
         key={sendSheet.key}
         open={sendSheet.open}
         onOpenChange={(open) => setSendSheet((current) => ({ ...current, open }))}
+        invoiceId={activeInvoiceId}
         toEmail={sourceRequest?.email ?? ""}
-        managerEmail={fields.managerEmail || undefined}
-        subjectPreview={`Your quote is ready: ${
-          sourceRequest?.eventName?.trim() || sourceRequest?.requestNumber?.trim() || "your event"
-        }`}
         sending={sendingQuote}
         onSend={sendQuoteToClient}
       />
@@ -646,7 +643,6 @@ function InvoiceWorkflowStrip({
           invoiceId={invoiceId}
           isReply={approval === "changes_requested"}
           toEmail={clientEmail}
-          managerEmail={draft.fields.managerEmail || undefined}
           isRequestLinked={isRequestLinked}
           hasUnsavedEdits={draft.isDraftDirty}
           sending={sendingReply}

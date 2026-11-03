@@ -75,7 +75,6 @@ function MessageRow({ message }: { message: Message }) {
         outbound && "border-l-2 border-l-primary/50 bg-muted/40",
       )}
       data-testid="booking-message"
-      data-direction={message.direction}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -93,6 +92,9 @@ function MessageRow({ message }: { message: Message }) {
           {formatDateTime(message.receivedAt)}
         </span>
       </div>
+      {outbound && message.to?.length ? (
+        <p className="truncate text-xs text-muted-foreground">To {message.to.join(", ")}</p>
+      ) : null}
       <MessageBody text={message.bodyText} />
       {message.attachments.length > 0 ? (
         <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
