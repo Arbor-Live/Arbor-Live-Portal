@@ -753,12 +753,15 @@ export const enqueueBookingEmails = mutation({
     const request = await ctx.db.get(args.requestId);
     const invoice = await ctx.db.get(args.invoiceId);
     if (!request || !invoice) throw new Error("Request or invoice not found.");
+    // Without a public token both enqueues return early, so the helper would half-succeed.
+    if (!request.publicToken) throw new Error("Seeded request needs a publicToken.");
     await scheduleBookingRequestReceivedEmail(ctx, request);
     const clientReadyMessage = invoice.clientReadyMessage?.trim() || "Your quote is ready to review.";
-    await ctx.db.patch(invoice._id, { clientReadyMessage });
+    const clientReviewReadyAt = invoice.clientReviewReadyAt ?? Date.now();
+    await ctx.db.patch(invoice._id, { clientReadyMessage, clientReviewReadyAt });
     await scheduleBookingQuoteReadyEmail(ctx, {
       request,
-      invoice: { ...invoice, clientReadyMessage },
+      invoice: { ...invoice, clientReadyMessage, clientReviewReadyAt },
     });
     return null;
   },
