@@ -5,12 +5,14 @@ import { Resend } from "@convex-dev/resend";
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { components, internal } from "../_generated/api";
-import { internalAction } from "../_generated/server";
+import { type ActionCtx, internalAction } from "../_generated/server";
 import { renderInvoicePdfBuffer } from "@arbor/invoice-document/pdf";
 import { buildScheduleIcs } from "@arbor/email/ics";
 import type { CalendarInvitePayload, ScheduleIcsEventPayload } from "@arbor/email/types";
+import { threadHeaderFields } from "../lib/bookingEmail";
+import { extractDisplayName, extractEmailAddress } from "../lib/emailAddresses";
 import { EMAIL_FROM, ORGANIZER_EMAIL, PAYMENTS_EMAIL_FROM } from "./constants";
-import { renderEmailHtml } from "./templates";
+import { renderEmailHtml, renderEmailText } from "./templates";
 
 export const resendClient = new Resend(components.resend, {
   testMode: process.env.EMAIL_TEST_MODE === "true",
@@ -85,6 +87,12 @@ function formatSendError(error: unknown) {
   return "Unknown email send error";
 }
 
+type EmailAttachment = {
+  filename: string;
+  content: string | Buffer;
+  contentType?: string;
+};
+
 async function sendEmailWithAttachments(
   ctx: Parameters<typeof resendClient.sendEmailManually>[0],
   notification: {
@@ -93,18 +101,20 @@ async function sendEmailWithAttachments(
     replyTo?: string[];
     subject: string;
   },
-  html: string,
-  attachments: Array<{
-    filename: string;
-    content: string | Buffer;
-    contentType?: string;
-  }>,
+  options: {
+    from: string;
+    html: string;
+    attachments: EmailAttachment[];
+    /** Extra headers, such as `In-Reply-To`; the idempotency key is always added. */
+    headers?: Record<string, string>;
+  },
 ) {
   const resendSdk = getResendSdk();
+  const { from, html, attachments } = options;
   return await resendClient.sendEmailManually(
     ctx,
     {
-      from: EMAIL_FROM,
+      from,
       to: notification.to,
       cc: notification.cc,
       replyTo: notification.replyTo,
@@ -112,14 +122,15 @@ async function sendEmailWithAttachments(
     },
     async (emailId) => {
       const result = await resendSdk.emails.send({
-        from: EMAIL_FROM,
+        from,
         to: notification.to,
         cc: notification.cc,
         replyTo: notification.replyTo,
         subject: notification.subject,
         html,
-        attachments,
+        attachments: attachments.length > 0 ? attachments : undefined,
         headers: {
+          ...options.headers,
           "Idempotency-Key": emailId,
         },
       });
@@ -134,6 +145,81 @@ async function sendEmailWithAttachments(
       return result.data.id;
     },
   );
+}
+
+async function quoteAttachment(
+  ctx: ActionCtx,
+  notification: { payload: unknown },
+): Promise<EmailAttachment> {
+  const payload = notification.payload as BookingQuoteReadyPayload;
+  if (!payload.invoiceId) {
+    throw new Error("Quote email payload is missing invoiceId.");
+  }
+  const document = await ctx.runQuery(internal.email.invoiceEmailData.getInvoiceDocument, {
+    invoiceId: payload.invoiceId,
+  });
+  if (!document) {
+    throw new Error("Invoice not found for quote email attachment.");
+  }
+  const pdfBuffer = await renderInvoicePdfBuffer(document);
+  return { filename: `${payload.invoiceNumber}.pdf`, content: pdfBuffer.toString("base64") };
+}
+
+/** Quote PDF or calendar invite for the templates that carry one. */
+async function buildAttachments(
+  ctx: ActionCtx,
+  notification: { template: string; to: string; payload: unknown },
+): Promise<EmailAttachment[]> {
+  if (notification.template === "booking_quote_ready") {
+    return [await quoteAttachment(ctx, notification)];
+  }
+  const calendarInvite = buildCalendarInvite(notification);
+  return calendarInvite ? [calendarInvite] : [];
+}
+
+/**
+ * Store a booking email on its thread. The email already went out, so a failure
+ * here is logged rather than marking the notification failed (a retry would
+ * send it twice).
+ */
+async function recordOutbound(
+  ctx: ActionCtx,
+  notification: {
+    _id: Id<"emailNotifications">;
+    to: string;
+    cc?: string[];
+    subject: string;
+  } & { emailThreadId: Id<"emailThreads">; from: string },
+  sent: {
+    resendEmailId: string;
+    html: string;
+    attachments: EmailAttachment[];
+    messageId?: string;
+    thread: { inReplyTo?: string; references: string[] };
+  },
+) {
+  try {
+    await ctx.runMutation(internal.emailOutbound.recordOutboundEmail, {
+      threadId: notification.emailThreadId,
+      resendEmailId: sent.resendEmailId,
+      messageId: sent.messageId,
+      fromEmail: extractEmailAddress(notification.from) ?? notification.from,
+      fromName: extractDisplayName(notification.from),
+      to: [notification.to],
+      cc: notification.cc ?? [],
+      subject: notification.subject,
+      bodyText: renderEmailText(sent.html),
+      attachments: sent.attachments.map(({ filename, contentType }) => ({ filename, contentType })),
+      inReplyTo: sent.thread.inReplyTo,
+      references: sent.thread.references,
+      sentAt: Date.now(),
+    });
+  } catch (error) {
+    console.error("Failed to record outbound email on its thread", {
+      notificationId: notification._id,
+      error: formatSendError(error),
+    });
+  }
 }
 
 export const sendQueuedEmail = internalAction({
@@ -151,74 +237,51 @@ export const sendQueuedEmail = internalAction({
         throw new Error("Email template rendered empty HTML.");
       }
 
+      const attachments = await buildAttachments(ctx, notification);
+      const { emailThreadId } = notification;
+      const bookingThread =
+        emailThreadId && notification.from
+          ? { ...notification, emailThreadId, from: notification.from }
+          : null;
+      const thread = emailThreadId
+        ? await ctx.runQuery(internal.emailOutbound.getThreadHeaders, { threadId: emailThreadId })
+        : { references: [] };
+
       // E2E mock: exercise render (+ attachments) without spending Resend quota.
       if (isE2eEmailMockEnabled()) {
-        if (notification.template === "booking_quote_ready") {
-          const payload = notification.payload as BookingQuoteReadyPayload;
-          if (!payload.invoiceId) {
-            throw new Error("Quote email payload is missing invoiceId.");
-          }
-          const document = await ctx.runQuery(internal.email.invoiceEmailData.getInvoiceDocument, {
-            invoiceId: payload.invoiceId,
+        const resendEmailId = `e2e-mock:${args.notificationId}`;
+        await ctx.runMutation(internal.email.enqueue.markSent, {
+          notificationId: args.notificationId,
+          resendId: resendEmailId,
+        });
+        if (bookingThread) {
+          await recordOutbound(ctx, bookingThread, {
+            resendEmailId,
+            html,
+            attachments,
+            messageId: `e2e-mock-${args.notificationId}@arbor.st`,
+            thread,
           });
-          if (!document) {
-            throw new Error("Invoice not found for quote email attachment.");
-          }
-          await renderInvoicePdfBuffer(document);
-        } else {
-          buildCalendarInvite(notification);
         }
-
-        await ctx.runMutation(internal.email.enqueue.markSent, {
-          notificationId: args.notificationId,
-          resendId: `e2e-mock:${args.notificationId}`,
-        });
         return null;
       }
 
-      if (notification.template === "booking_quote_ready") {
-        const payload = notification.payload as BookingQuoteReadyPayload;
-        if (!payload.invoiceId) {
-          throw new Error("Quote email payload is missing invoiceId.");
-        }
-
-        const document = await ctx.runQuery(internal.email.invoiceEmailData.getInvoiceDocument, {
-          invoiceId: payload.invoiceId,
-        });
-        if (!document) {
-          throw new Error("Invoice not found for quote email attachment.");
-        }
-
-        const pdfBuffer = await renderInvoicePdfBuffer(document);
-        const fileName = `${payload.invoiceNumber}.pdf`;
-
-        const resendId = await sendEmailWithAttachments(
-          ctx,
-          notification,
+      // Booking emails go through the raw SDK too: it returns the Resend id at once and takes headers.
+      if (bookingThread || attachments.length > 0) {
+        const resendId = await sendEmailWithAttachments(ctx, notification, {
+          from: notification.from ?? EMAIL_FROM,
           html,
-          [
-            {
-              filename: fileName,
-              content: pdfBuffer.toString("base64"),
-            },
-          ],
-        );
+          attachments,
+          headers: threadHeaderFields(thread),
+        });
 
         await ctx.runMutation(internal.email.enqueue.markSent, {
           notificationId: args.notificationId,
           resendId,
         });
-        return null;
-      }
-
-      const calendarInvite = buildCalendarInvite(notification);
-      if (calendarInvite) {
-        const resendId = await sendEmailWithAttachments(ctx, notification, html, [calendarInvite]);
-
-        await ctx.runMutation(internal.email.enqueue.markSent, {
-          notificationId: args.notificationId,
-          resendId,
-        });
+        if (bookingThread) {
+          await recordOutbound(ctx, bookingThread, { resendEmailId: resendId, html, attachments, thread });
+        }
         return null;
       }
 

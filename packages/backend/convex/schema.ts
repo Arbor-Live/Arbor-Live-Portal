@@ -1843,6 +1843,10 @@ export default defineSchema({
     cc: v.optional(v.array(v.string())),
     replyTo: v.optional(v.array(v.string())),
     subject: v.string(),
+    /** Booking thread this email belongs to; set means it sends from `from` with thread headers and is recorded as an outbound message. */
+    emailThreadId: v.optional(v.id("emailThreads")),
+    /** Full From header for booking emails; unset uses the template's default sender. */
+    from: v.optional(v.string()),
     eventId: v.optional(v.id("events")),
     idempotencyKey: v.string(),
     /** Stable key for coalescing rapid schedule/crew updates into one send. */
@@ -1858,6 +1862,7 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_idempotencyKey", ["idempotencyKey"])
     .index("by_eventId", ["eventId"])
+    .index("by_emailThreadId", ["emailThreadId"])
     .index("by_debounceKey_and_status", ["debounceKey", "status"]),
 
   /**

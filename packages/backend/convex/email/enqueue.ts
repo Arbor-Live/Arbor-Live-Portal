@@ -30,6 +30,9 @@ type EnqueueEmailArgs = {
   cc?: string[];
   replyTo?: string[];
   subject: string;
+  /** From `resolveBookingEmail`: sends from `from` on the booking's thread and records the message. */
+  emailThreadId?: Id<"emailThreads">;
+  from?: string;
   eventId?: Id<"events">;
   idempotencyKey: string;
   payload: unknown;
@@ -104,6 +107,8 @@ export async function enqueueEmail(ctx: MutationCtx, args: EnqueueEmailArgs) {
         cc: args.cc?.length ? args.cc : undefined,
         replyTo: args.replyTo?.length ? args.replyTo : undefined,
         subject: args.subject,
+        emailThreadId: args.emailThreadId,
+        from: args.from,
         payload: args.payload,
         readyAt: undefined,
         sendGeneration: undefined,
@@ -123,6 +128,8 @@ export async function enqueueEmail(ctx: MutationCtx, args: EnqueueEmailArgs) {
     cc: args.cc?.length ? args.cc : undefined,
     replyTo: args.replyTo?.length ? args.replyTo : undefined,
     subject: args.subject,
+    emailThreadId: args.emailThreadId,
+    from: args.from,
     eventId: args.eventId,
     idempotencyKey: args.idempotencyKey,
     payload: args.payload,
@@ -143,7 +150,7 @@ export async function enqueueEmail(ctx: MutationCtx, args: EnqueueEmailArgs) {
  */
 export async function enqueueDebouncedEmail(
   ctx: MutationCtx,
-  args: EnqueueEmailArgs & {
+  args: Omit<EnqueueEmailArgs, "emailThreadId" | "from"> & {
     debounceKey: string;
     debounceMs?: number;
   },
@@ -299,6 +306,8 @@ export const getNotification = internalQuery({
       cc: v.optional(v.array(v.string())),
       replyTo: v.optional(v.array(v.string())),
       subject: v.string(),
+      emailThreadId: v.optional(v.id("emailThreads")),
+      from: v.optional(v.string()),
       payload: v.any(),
     }),
     v.null(),
@@ -314,6 +323,8 @@ export const getNotification = internalQuery({
       cc: row.cc,
       replyTo: row.replyTo,
       subject: row.subject,
+      emailThreadId: row.emailThreadId,
+      from: row.from,
       payload: row.payload,
     };
   },
