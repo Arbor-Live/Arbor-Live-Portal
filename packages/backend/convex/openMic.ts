@@ -203,7 +203,6 @@ const adminEventSummaryValue = v.object({
   runnerClosesAt: v.number(),
   queuedCount: v.number(),
   performedCount: v.number(),
-  /** Who is on stage right now, if anyone. */
   currentName: v.optional(v.string()),
 });
 

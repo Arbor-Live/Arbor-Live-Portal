@@ -13,6 +13,7 @@ import { StatusPill } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { formatTime } from "@/lib/format";
 import type { RunnerSignup } from "@/lib/open-mic-runner-view";
+import { formatNightStart } from "@/lib/open-mic-status";
 
 function ordinal(n: number) {
   const lastTwo = n % 100;
@@ -59,7 +60,7 @@ export function SignupSheetBody({
       <DetailSheetHeader
         title={signup.name}
         pill={<SignupPill signup={signup} queueIndex={queueIndex} />}
-        description={`Signed up ${formatTime(signup.submittedAt)}`}
+        description={`Signed up ${formatNightStart(signup.submittedAt)}`}
       />
 
       <SheetSection title="Performance">

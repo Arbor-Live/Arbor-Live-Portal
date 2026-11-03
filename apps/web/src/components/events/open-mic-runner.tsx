@@ -200,7 +200,7 @@ function PerformedTonight({ performed, actions }: { performed: RunnerSignup[]; a
             data-testid={`open-mic-signup-${signup._id}`}
             onOpen={() => actions.open(signup)}
             leading={
-              <span className="w-16 shrink-0 text-sm text-muted-foreground tabular-nums">
+              <span className="w-18 shrink-0 text-sm whitespace-nowrap text-muted-foreground tabular-nums">
                 {signup.performedAt ? formatTime(signup.performedAt) : "—"}
               </span>
             }
