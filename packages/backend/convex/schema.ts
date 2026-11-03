@@ -2067,6 +2067,7 @@ export default defineSchema({
     userId: v.string(),
     token: v.string(),
     rating: v.optional(v.number()),
+    peakTurnout: v.optional(v.number()),
     whatWentWell: v.optional(v.string()),
     whatCouldImprove: v.optional(v.string()),
     submittedAt: v.optional(v.number()),

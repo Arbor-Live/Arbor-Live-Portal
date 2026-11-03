@@ -14,6 +14,7 @@ test.describe("public post-mortem form", () => {
     await expect(page.getByText(/How did .*\?/).first()).toBeVisible({ timeout: 25_000 });
 
     await page.getByRole("button", { name: "4 stars" }).click();
+    await page.getByRole("spinbutton").fill("120");
     await page
       .getByPlaceholder("Crew, gear, communication, the show…")
       .fill("Clear call times and a sharp crew.");

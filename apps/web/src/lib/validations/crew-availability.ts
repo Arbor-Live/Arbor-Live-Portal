@@ -65,6 +65,14 @@ export type EventFeedbackFormValues = z.infer<typeof eventFeedbackSchema>;
 
 export const postMortemFeedbackSchema = z.object({
   rating: z.number().int().min(1, "Please select a rating").max(5),
+  peakTurnout: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z
+      .number({ error: "Please estimate the peak turnout" })
+      .int("Please estimate the peak turnout")
+      .min(0, "Please estimate the peak turnout")
+      .max(100000, "Please estimate the peak turnout"),
+  ),
   whatWentWell: z.string().trim().min(1, "Please share what went well"),
   whatCouldImprove: z.string().trim().min(1, "Please share what could improve"),
 });

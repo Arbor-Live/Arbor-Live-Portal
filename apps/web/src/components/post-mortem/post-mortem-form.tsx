@@ -12,6 +12,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { cn } from "@/lib/utils";
@@ -31,13 +32,13 @@ export function PostMortemForm({
 
   const form = useConvexForm<PostMortemFeedbackFormValues>({
     schema: postMortemFeedbackSchema,
-    defaultValues: { rating: 0, whatWentWell: "", whatCouldImprove: "" },
+    defaultValues: { rating: 0, peakTurnout: undefined, whatWentWell: "", whatCouldImprove: "" },
     mode: "onTouched",
   });
 
   const submit = form.submitMutation(async (values) => {
     await onSubmit(values);
-    form.reset({ rating: 0, whatWentWell: "", whatCouldImprove: "" });
+    form.reset({ rating: 0, peakTurnout: undefined, whatWentWell: "", whatCouldImprove: "" });
   });
 
   const rating = form.watch("rating") ?? 0;
@@ -84,6 +85,14 @@ export function PostMortemForm({
               <FormMessage />
             </FormItem>
           )}
+        />
+        <TextFormField
+          name="peakTurnout"
+          label="Approximate peak turnout"
+          type="number"
+          inputMode="numeric"
+          min={0}
+          className="rounded-md bg-background shadow-xs"
         />
         <TextareaFormField
           name="whatWentWell"

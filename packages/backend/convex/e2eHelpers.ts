@@ -2244,6 +2244,7 @@ export const seedPostMortemForInsights = mutation({
     eventTitle: v.string(),
     leadName: v.string(),
     rating: v.number(),
+    peakTurnout: v.number(),
     whatWentWell: v.string(),
     whatCouldImprove: v.string(),
   }),
@@ -2276,11 +2277,19 @@ export const seedPostMortemForInsights = mutation({
     const row = await ensurePostMortemFeedbackRow(ctx, eventId, userId);
     await ctx.db.patch(row._id, {
       rating: 5,
+      peakTurnout: 140,
       whatWentWell,
       whatCouldImprove,
       submittedAt: now,
     });
-    return { eventTitle, leadName: name, rating: 5, whatWentWell, whatCouldImprove };
+    return {
+      eventTitle,
+      leadName: name,
+      rating: 5,
+      peakTurnout: 140,
+      whatWentWell,
+      whatCouldImprove,
+    };
   },
 });
 

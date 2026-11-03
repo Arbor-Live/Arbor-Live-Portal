@@ -127,6 +127,12 @@ export function InsightsPostMortemPanel({ startMs, endMs }: InsightsPostMortemPa
                   </span>
                 </div>
                 <div className="space-y-2 text-muted-foreground">
+                  {entry.peakTurnout != null ? (
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-medium text-foreground/70">Peak turnout</p>
+                      <p>~{entry.peakTurnout.toLocaleString()}</p>
+                    </div>
+                  ) : null}
                   <div className="space-y-0.5">
                     <p className="text-xs font-medium text-foreground/70">What went well</p>
                     <p className="whitespace-pre-wrap">{entry.whatWentWell}</p>

@@ -12,6 +12,13 @@ const POST_MORTEM_TOKEN_ALPHABET = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const POST_MORTEM_TOKEN_LENGTH = 12;
 const postMortemToken = customAlphabet(POST_MORTEM_TOKEN_ALPHABET, POST_MORTEM_TOKEN_LENGTH);
 
+const postMortemAnswersValidator = v.object({
+  rating: v.number(),
+  peakTurnout: v.number(),
+  whatWentWell: v.string(),
+  whatCouldImprove: v.string(),
+});
+
 export function postMortemUrl(token: string) {
   return `${SITE_URL}/postmortem/${encodeURIComponent(token)}`;
 }
@@ -58,11 +65,19 @@ export async function ensurePostMortemFeedbackRow(
 
 function validatePostMortemInput(args: {
   rating: number;
+  peakTurnout: number;
   whatWentWell: string;
   whatCouldImprove: string;
 }) {
   if (!Number.isInteger(args.rating) || args.rating < 1 || args.rating > 5) {
     throw new Error("Please provide a rating between 1 and 5.");
+  }
+  if (
+    !Number.isInteger(args.peakTurnout) ||
+    args.peakTurnout < 0 ||
+    args.peakTurnout > 100000
+  ) {
+    throw new Error("Please estimate the peak turnout.");
   }
   const whatWentWell = args.whatWentWell.trim();
   const whatCouldImprove = args.whatCouldImprove.trim();
@@ -101,9 +116,7 @@ export const getStatusByToken = query({
 export const submitByToken = mutation({
   args: {
     token: v.string(),
-    rating: v.number(),
-    whatWentWell: v.string(),
-    whatCouldImprove: v.string(),
+    ...postMortemAnswersValidator.fields,
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
@@ -126,6 +139,7 @@ export const submitByToken = mutation({
 
     await ctx.db.patch(row._id, {
       rating: args.rating,
+      peakTurnout: args.peakTurnout,
       whatWentWell,
       whatCouldImprove,
       submittedAt: Date.now(),
@@ -144,6 +158,7 @@ export const getMyPostMortemForEvent = query({
       eventEnded: v.boolean(),
       submitted: v.boolean(),
       rating: v.optional(v.number()),
+      peakTurnout: v.optional(v.number()),
       whatWentWell: v.optional(v.string()),
       whatCouldImprove: v.optional(v.string()),
       submittedAt: v.optional(v.number()),
@@ -167,6 +182,7 @@ export const getMyPostMortemForEvent = query({
       eventEnded: event.endAt < Date.now(),
       submitted: Boolean(row?.submittedAt),
       rating: row?.rating,
+      peakTurnout: row?.peakTurnout,
       whatWentWell: row?.whatWentWell,
       whatCouldImprove: row?.whatCouldImprove,
       submittedAt: row?.submittedAt,
@@ -178,9 +194,7 @@ export const getMyPostMortemForEvent = query({
 export const submitForEvent = mutation({
   args: {
     eventId: v.id("events"),
-    rating: v.number(),
-    whatWentWell: v.string(),
-    whatCouldImprove: v.string(),
+    ...postMortemAnswersValidator.fields,
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
@@ -206,6 +220,7 @@ export const submitForEvent = mutation({
 
     await ctx.db.patch(row._id, {
       rating: args.rating,
+      peakTurnout: args.peakTurnout,
       whatWentWell,
       whatCouldImprove,
       submittedAt: Date.now(),
@@ -215,11 +230,24 @@ export const submitForEvent = mutation({
   },
 });
 
+function medianPeakTurnout(entries: { peakTurnout?: number }[]): number | null {
+  const values = entries
+    .map((entry) => entry.peakTurnout)
+    .filter((value): value is number => value != null)
+    .sort((a, b) => a - b);
+  if (values.length === 0) return null;
+  const middle = Math.floor(values.length / 2);
+  const median =
+    values.length % 2 === 1 ? values[middle]! : (values[middle - 1]! + values[middle]!) / 2;
+  return Math.round(median);
+}
+
 const postMortemSummaryEntryValue = v.object({
   id: v.id("postMortemFeedback"),
   personName: v.optional(v.string()),
   role: v.optional(v.string()),
   rating: v.number(),
+  peakTurnout: v.optional(v.number()),
   whatWentWell: v.string(),
   whatCouldImprove: v.string(),
   submittedAt: v.number(),
@@ -234,6 +262,7 @@ export const getEventPostMortemSummary = query({
   returns: v.object({
     count: v.number(),
     averageRating: v.union(v.number(), v.null()),
+    medianPeakTurnout: v.union(v.number(), v.null()),
     entries: v.array(postMortemSummaryEntryValue),
   }),
   handler: async (ctx, args) => {
@@ -292,6 +321,7 @@ export const getEventPostMortemSummary = query({
           personName: user?.name ?? user?.email ?? undefined,
           role: roleByUser.get(row.userId) ?? leadRole,
           rating: row.rating,
+          peakTurnout: row.peakTurnout,
           whatWentWell: row.whatWentWell,
           whatCouldImprove: row.whatCouldImprove,
           submittedAt: row.submittedAt,
@@ -303,6 +333,7 @@ export const getEventPostMortemSummary = query({
     return {
       count: entries.length,
       averageRating: entries.length > 0 ? sum / entries.length : null,
+      medianPeakTurnout: medianPeakTurnout(entries),
       entries,
     };
   },

@@ -151,6 +151,7 @@ test.describe("insights dashboard", () => {
     const seeded = runConvex("e2eHelpers:seedPostMortemForInsights", {}) as {
       eventTitle: string;
       leadName: string;
+      peakTurnout: number;
       whatWentWell: string;
       whatCouldImprove: string;
     };
@@ -170,5 +171,8 @@ test.describe("insights dashboard", () => {
     await expect(page.getByText(seeded.leadName).first()).toBeVisible();
     await expect(page.getByText(seeded.whatWentWell, { exact: true })).toBeVisible();
     await expect(page.getByText(seeded.whatCouldImprove, { exact: true })).toBeVisible();
+    await expect(
+      page.getByText(`~${seeded.peakTurnout.toLocaleString()}`, { exact: true }).first(),
+    ).toBeVisible();
   });
 });

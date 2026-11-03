@@ -15,10 +15,13 @@ type TextFormFieldProps<T extends FieldValues> = {
   label: string;
   placeholder?: string;
   type?: "text" | "email" | "tel" | "number" | "password";
+  inputMode?: "text" | "numeric" | "decimal" | "email" | "tel" | "url";
+  min?: number;
   autoComplete?: string;
   autoFocus?: boolean;
   disabled?: boolean;
   description?: string;
+  className?: string;
   onValueChange?: (value: string) => void;
 };
 
@@ -27,10 +30,13 @@ export function TextFormField<T extends FieldValues>({
   label,
   placeholder,
   type = "text",
+  inputMode,
+  min,
   autoComplete,
   autoFocus,
   disabled,
   description,
+  className,
   onValueChange,
 }: TextFormFieldProps<T>) {
   return (
@@ -42,10 +48,13 @@ export function TextFormField<T extends FieldValues>({
           <FormControl>
             <Input
               type={type}
+              inputMode={inputMode}
+              min={min}
               placeholder={placeholder}
               autoComplete={autoComplete}
               autoFocus={autoFocus}
               disabled={disabled}
+              className={className}
               {...field}
               value={field.value ?? ""}
               onChange={(e) => {

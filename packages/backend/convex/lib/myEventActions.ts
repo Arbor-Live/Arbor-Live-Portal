@@ -15,6 +15,7 @@ export type PostEventWorkItem = {
   endAt: number;
   feedbackSubmitted: boolean;
   rating?: number;
+  peakTurnout?: number;
   whatWentWell?: string;
   whatCouldImprove?: string;
   mediaResolved: boolean;
@@ -82,6 +83,7 @@ export async function listMyPostEventWork(
       endAt: event.endAt,
       feedbackSubmitted: submitted,
       rating: feedback?.rating,
+      peakTurnout: feedback?.peakTurnout,
       whatWentWell: feedback?.whatWentWell,
       whatCouldImprove: feedback?.whatCouldImprove,
       mediaResolved: mediaResolved.has(event._id),

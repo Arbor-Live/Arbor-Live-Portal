@@ -241,12 +241,7 @@ function ReviewCard({ row }: { row: PostEventWorkRow }) {
     <PostMortemForm
       submitLabel="Submit review"
       onSubmit={async (values) => {
-        await submit({
-          eventId: row.eventId,
-          rating: values.rating,
-          whatWentWell: values.whatWentWell.trim(),
-          whatCouldImprove: values.whatCouldImprove.trim(),
-        });
+        await submit({ eventId: row.eventId, ...values });
       }}
     />
   );

@@ -2,17 +2,17 @@
 
 import { useState } from "react";
 import { useMutation } from "convex/react";
-import { CheckCircleIcon, StarIcon } from "@phosphor-icons/react";
+import { CheckCircleIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PostMortemForm } from "@/components/post-mortem/post-mortem-form";
+import { PostMortemAnswers } from "@/components/post-mortem/post-mortem-answers";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
 import { useMediaAlbum } from "@/hooks/use-media-album";
 import { formatDateTime } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
-import { cn } from "@/lib/utils";
 
 export type PostEventWorkRow = {
   eventId: Id<"events">;
@@ -21,27 +21,11 @@ export type PostEventWorkRow = {
   endAt: number;
   feedbackSubmitted: boolean;
   rating?: number;
+  peakTurnout?: number;
   whatWentWell?: string;
   whatCouldImprove?: string;
   mediaResolved: boolean;
 };
-
-function RatingStars({ rating }: { rating: number }) {
-  return (
-    <span className="flex items-center gap-0.5" aria-label={`${rating} out of 5 stars`}>
-      {[1, 2, 3, 4, 5].map((value) => (
-        <StarIcon
-          key={value}
-          className={cn(
-            "size-4",
-            value <= rating ? "text-status-amber-500" : "text-muted-foreground/30",
-          )}
-          weight={value <= rating ? "fill" : "regular"}
-        />
-      ))}
-    </span>
-  );
-}
 
 /** Review + photos for one ended event, used on the My Post-event work page. */
 export function PostEventWorkCard({ row }: { row: PostEventWorkRow }) {
@@ -72,26 +56,16 @@ export function PostEventWorkCard({ row }: { row: PostEventWorkRow }) {
       </CardHeader>
       <CardContent className="space-y-5">
         {row.feedbackSubmitted ? (
-          <div className="space-y-3 text-sm">
-            <RatingStars rating={row.rating ?? 0} />
-            <div className="space-y-1">
-              <p className="font-medium">What went well</p>
-              <p className="whitespace-pre-wrap text-muted-foreground">{row.whatWentWell}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="font-medium">What could have gone better</p>
-              <p className="whitespace-pre-wrap text-muted-foreground">{row.whatCouldImprove}</p>
-            </div>
-          </div>
+          <PostMortemAnswers
+            rating={row.rating ?? 0}
+            peakTurnout={row.peakTurnout}
+            whatWentWell={row.whatWentWell}
+            whatCouldImprove={row.whatCouldImprove}
+          />
         ) : (
           <PostMortemForm
             onSubmit={async (values) => {
-              await submit({
-                eventId: row.eventId,
-                rating: values.rating,
-                whatWentWell: values.whatWentWell.trim(),
-                whatCouldImprove: values.whatCouldImprove.trim(),
-              });
+              await submit({ eventId: row.eventId, ...values });
             }}
           />
         )}

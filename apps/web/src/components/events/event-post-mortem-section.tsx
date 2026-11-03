@@ -1,28 +1,11 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { StarIcon, ChatCircleTextIcon } from "@phosphor-icons/react";
+import { ChatCircleTextIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PostMortemForm } from "@/components/post-mortem/post-mortem-form";
-import { cn } from "@/lib/utils";
-
-function RatingStars({ rating }: { rating: number }) {
-  return (
-    <span className="flex items-center gap-0.5" aria-label={`${rating} out of 5 stars`}>
-      {[1, 2, 3, 4, 5].map((value) => (
-        <StarIcon
-          key={value}
-          className={cn(
-            "size-4",
-            value <= rating ? "text-status-amber-500" : "text-muted-foreground/30",
-          )}
-          weight={value <= rating ? "fill" : "regular"}
-        />
-      ))}
-    </span>
-  );
-}
+import { PostMortemAnswers, RatingStars } from "@/components/post-mortem/post-mortem-answers";
 
 /**
  * The signed-in crew member's own post-event review, inline on the event page.
@@ -45,15 +28,12 @@ export function EventPostMortemSection({ eventId }: { eventId: Id<"events"> }) {
         </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
-          <RatingStars rating={status.rating ?? 0} />
-          <div className="space-y-1">
-            <p className="font-medium">What went well</p>
-            <p className="whitespace-pre-wrap text-muted-foreground">{status.whatWentWell}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="font-medium">What could have gone better</p>
-            <p className="whitespace-pre-wrap text-muted-foreground">{status.whatCouldImprove}</p>
-          </div>
+          <PostMortemAnswers
+            rating={status.rating ?? 0}
+            peakTurnout={status.peakTurnout}
+            whatWentWell={status.whatWentWell}
+            whatCouldImprove={status.whatCouldImprove}
+          />
         </CardContent>
       </Card>
     );
@@ -70,12 +50,7 @@ export function EventPostMortemSection({ eventId }: { eventId: Id<"events"> }) {
       <CardContent>
         <PostMortemForm
           onSubmit={async (values) => {
-            await submit({
-              eventId,
-              rating: values.rating,
-              whatWentWell: values.whatWentWell.trim(),
-              whatCouldImprove: values.whatCouldImprove.trim(),
-            });
+            await submit({ eventId, ...values });
           }}
         />
       </CardContent>
@@ -105,6 +80,11 @@ export function EventPostMortemSummary({ eventId }: { eventId: Id<"events"> }) {
           <span className="text-muted-foreground">
             {summary.count} response{summary.count === 1 ? "" : "s"}
           </span>
+          {summary.medianPeakTurnout != null ? (
+            <span className="text-muted-foreground">
+              ~{summary.medianPeakTurnout.toLocaleString()} peak
+            </span>
+          ) : null}
         </div>
 
         <ul className="divide-y">
@@ -117,6 +97,12 @@ export function EventPostMortemSummary({ eventId }: { eventId: Id<"events"> }) {
                 ) : null}
                 <RatingStars rating={entry.rating} />
               </div>
+              {entry.peakTurnout != null ? (
+                <div className="space-y-1 text-muted-foreground">
+                  <p className="text-xs font-medium text-foreground/70">Peak turnout</p>
+                  <p>~{entry.peakTurnout.toLocaleString()}</p>
+                </div>
+              ) : null}
               <div className="space-y-1 text-muted-foreground">
                 <p className="text-xs font-medium text-foreground/70">What went well</p>
                 <p className="whitespace-pre-wrap">{entry.whatWentWell}</p>

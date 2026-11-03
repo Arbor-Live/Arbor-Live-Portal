@@ -20,12 +20,7 @@ export function PublicPostMortemSection({ token }: { token: string }) {
   const submit = useMutation(api.postMortemFeedback.submitByToken);
 
   const onSubmit = async (values: PostMortemFeedbackFormValues) => {
-    await submit({
-      token,
-      rating: values.rating,
-      whatWentWell: values.whatWentWell.trim(),
-      whatCouldImprove: values.whatCouldImprove.trim(),
-    });
+    await submit({ token, ...values });
   };
 
   if (status === undefined) {
