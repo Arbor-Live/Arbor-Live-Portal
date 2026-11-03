@@ -1,7 +1,8 @@
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { resolveBookingEmail } from "../lib/bookingEmail";
 import { listEventsLinkedToInvoice } from "../lib/invoiceEvents";
-import { EVENT_TIMEZONE, formatEventDateRange, subjectForTemplate } from "./constants";
+import { EVENT_TIMEZONE, formatEventDateRange } from "./constants";
 import { enqueueEmail } from "./enqueue";
 
 export function shouldNotifyPayingParty(args: {
@@ -45,13 +46,13 @@ export async function schedulePayingPartyAddedEmail(
     ? formatEventDateRange(event.startAt, event.endAt, event.timezone || EVENT_TIMEZONE)
     : `Quote issued ${args.invoice.issueDate}`;
 
+  const idempotencyKey = `paying_party_added:${args.invoice._id}:${to}:${args.idempotencySuffix}`;
   await enqueueEmail(ctx, {
     template: "paying_party_added",
     to,
-    replyTo: managerEmail ? [managerEmail] : undefined,
-    subject: subjectForTemplate("paying_party_added", eventTitle),
+    ...(await resolveBookingEmail(ctx, { ref: { invoiceId: args.invoice._id }, idempotencyKey })),
     eventId: event?._id,
-    idempotencyKey: `paying_party_added:${args.invoice._id}:${to}:${args.idempotencySuffix}`,
+    idempotencyKey,
     payload: {
       recipientName: args.payingPartyName?.trim() || undefined,
       approvedByName: args.approvedByName,

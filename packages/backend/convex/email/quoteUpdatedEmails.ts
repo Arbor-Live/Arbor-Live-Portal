@@ -1,5 +1,6 @@
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { resolveBookingEmail } from "../lib/bookingEmail";
 import { listEventsLinkedToInvoice } from "../lib/invoiceEvents";
 import { resolvePortalTokenForInvoice } from "../lib/paymentProof";
 import {
@@ -7,7 +8,6 @@ import {
   formatEventDateRange,
   publicQuoteUrl,
   requestTrackingUrl,
-  subjectForTemplate,
 } from "./constants";
 import { enqueueEmail } from "./enqueue";
 
@@ -46,16 +46,13 @@ export async function scheduleQuoteUpdatedEmail(
     ? formatEventDateRange(event.startAt, event.endAt, event.timezone || EVENT_TIMEZONE)
     : "—";
 
+  const idempotencyKey = `quote_updated:${args.invoice._id}:${args.revisionNumber}`;
   await enqueueEmail(ctx, {
     template: "quote_updated",
     to: clientEmail,
-    subject:
-      args.previousTotalUsd === undefined
-        ? `Your quote: ${eventTitle}`
-        : subjectForTemplate("quote_updated", eventTitle),
+    ...(await resolveBookingEmail(ctx, { ref: { invoiceId: args.invoice._id }, idempotencyKey })),
     eventId: event?._id,
-    idempotencyKey: `quote_updated:${args.invoice._id}:${args.revisionNumber}`,
-    replyTo: args.invoice.managerEmail ? [args.invoice.managerEmail] : undefined,
+    idempotencyKey,
     payload: {
       recipientName: args.invoice.clientContactName,
       eventTitle,

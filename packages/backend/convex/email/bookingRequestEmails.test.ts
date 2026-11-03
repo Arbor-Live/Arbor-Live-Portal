@@ -2,7 +2,6 @@
 import { expect, test } from "vitest";
 import { createUser, makeTest, type Test } from "../test/setup.helpers";
 import { scheduleBookingRequestReceivedEmail } from "./bookingRequestEmails";
-import { ARBOR_CONTACT_EMAIL } from "./constants";
 
 async function receivedEmailFor(t: Test, assigneeUserId?: string) {
   return await t.run(async (ctx) => {
@@ -46,7 +45,10 @@ test("the received email names the round-robin assignee as the client's manager"
     managerName: "Rory Manager",
     managerEmail: "rory@arbor.test",
   });
-  expect(email.replyTo).toEqual(["rory@arbor.test", ARBOR_CONTACT_EMAIL]);
+  expect(email.from).toBe('"Rory Manager at Arbor Live" <bookings@arbor.st>');
+  expect(email.replyTo).toEqual(["alreq-test@arbor.st"]);
+  expect(email.subject).toBe("Arbor Live booking: Fall Showcase (ALREQ-TEST)");
+  expect(email.emailThreadId).toBeDefined();
 });
 
 test("without an assignee the received email names no manager", async () => {
@@ -56,5 +58,6 @@ test("without an assignee the received email names no manager", async () => {
 
   expect(email.payload.managerName).toBeUndefined();
   expect(email.payload.managerEmail).toBeUndefined();
-  expect(email.replyTo).toBeUndefined();
+  expect(email.from).toBe('"Arbor Live" <bookings@arbor.st>');
+  expect(email.replyTo).toEqual(["alreq-test@arbor.st"]);
 });
