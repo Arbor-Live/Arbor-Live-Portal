@@ -5,9 +5,11 @@ import { useRef, useState } from "react";
 import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
@@ -169,17 +171,17 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
             <span
               className={
                 details.status === "overdue"
-                  ? "rounded-full bg-destructive/10 px-2.5 py-0.5 text-xs font-medium text-destructive"
+                  ? "rounded-md bg-destructive/10 px-2.5 py-0.5 text-xs font-medium text-destructive"
                   : details.status === "payment_received"
-                    ? "rounded-full bg-status-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-status-emerald-700 dark:text-status-emerald-400"
-                    : "rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                    ? "rounded-md bg-status-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-status-emerald-700 dark:text-status-emerald-400"
+                    : "rounded-md bg-muted px-2.5 py-0.5 text-xs font-medium"
               }
             >
               {statusLabel}
             </span>
           ) : null}
           {details.hasReceipt ? (
-            <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">Receipt attached</span>
+            <span className="rounded-md bg-muted px-2.5 py-0.5 text-xs font-medium">Receipt attached</span>
           ) : null}
         </div>
 
@@ -210,7 +212,7 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
         </div>
 
         {details.submission ? (
-          <div className="rounded-md border p-3 space-y-1">
+          <div className="space-y-1 border p-3">
             <p>
               <span className="font-medium">Submitted proof:</span> {details.submission.paymentMethodLabel} ·{" "}
               {details.submission.paymentReference}
@@ -229,9 +231,9 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
         {details.invalidatedSubmissions.length > 0 ? (
           <div className="space-y-2">
             <p className="font-medium">Invalidated proof</p>
-            <ul className="space-y-2 text-muted-foreground">
+            <ul className="divide-y divide-dashed border border-dashed text-muted-foreground">
               {details.invalidatedSubmissions.map((row) => (
-                <li key={row.id} className="rounded-md border border-dashed p-2">
+                <li key={row.id} className="p-2">
                   {row.paymentMethodLabel} · {row.paymentReference}
                   {row.invalidatedAt ? ` · Invalidated ${formatDateTime(row.invalidatedAt)}` : ""}
                   {row.invalidationNote ? (
@@ -303,7 +305,7 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
         />
 
         {showInvalidate && details.submission ? (
-          <div className="space-y-3 rounded-md border p-3">
+          <div className="space-y-3 border p-3">
             <p className="font-medium">Invalidate payment proof</p>
             <p className="text-muted-foreground">
               The client will be able to submit new payment proof from their portal.
@@ -347,35 +349,36 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
         ) : null}
 
         {showManualProof && details.canRecordProof ? (
-          <div className="space-y-3 rounded-md border p-3">
+          <div className="space-y-3 border p-3">
             <p className="font-medium">Record payment proof manually</p>
             <p className="text-muted-foreground">
               Use this when payment details were received outside the public portal.
             </p>
             <div className="space-y-2">
-              <Label htmlFor={`manual-payment-method-${PAYMENT_PROOF_METHOD_OPTIONS[0]?.value}`}>
+              <p id="manual-payment-method-label" className="text-sm font-medium">
                 Payment method
-              </Label>
-              <div className="space-y-2">
+              </p>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                aria-labelledby="manual-payment-method-label"
+                value={paymentMethod}
+                onValueChange={(next) => {
+                  if (!next) return;
+                  setPaymentMethod(next as PaymentProofSubmissionFormValues["paymentMethod"]);
+                  setPaymentReference("");
+                }}
+              >
                 {PAYMENT_PROOF_METHOD_OPTIONS.map((option) => (
-                  <label key={option.value} className="flex cursor-pointer items-start gap-2">
-                    <input
-                      id={`manual-payment-method-${option.value}`}
-                      type="radio"
-                      name="manual-payment-method"
-                      checked={paymentMethod === option.value}
-                      onChange={() => {
-                        setPaymentMethod(option.value);
-                        setPaymentReference("");
-                      }}
-                    />
-                    <span>
-                      <span className="font-medium">{option.label}</span>
-                      <span className="block text-muted-foreground">{option.description}</span>
-                    </span>
-                  </label>
+                  <ToggleGroupItem
+                    key={option.value}
+                    id={`manual-payment-method-${option.value}`}
+                    value={option.value}
+                  >
+                    {option.label}
+                  </ToggleGroupItem>
                 ))}
-              </div>
+              </ToggleGroup>
             </div>
             <div className="space-y-2">
               <Label htmlFor="manual-payment-reference">{paymentProofReferenceLabel(paymentMethod)}</Label>
@@ -385,15 +388,18 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
                 onChange={(event) => setPaymentReference(event.target.value)}
                 placeholder={selectedMethodOption.placeholder}
               />
+              <p className="text-xs text-muted-foreground">{selectedMethodOption.description}</p>
             </div>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="manual-payment-send-emails"
                 checked={sendNotificationEmails}
-                onChange={(event) => setSendNotificationEmails(event.target.checked)}
+                onCheckedChange={(checked) => setSendNotificationEmails(checked === true)}
               />
-              <span>Send payment proof notification emails</span>
-            </label>
+              <Label htmlFor="manual-payment-send-emails" className="font-normal">
+                Send payment proof notification emails
+              </Label>
+            </div>
             <Button
               type="button"
               size="sm"

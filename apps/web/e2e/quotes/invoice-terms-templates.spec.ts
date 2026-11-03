@@ -74,7 +74,7 @@ test.describe("invoice terms templates", () => {
 
     // Edit the markdown in the row.
     const row = page
-      .locator("div.rounded-md.border.p-3.text-sm")
+      .getByRole("listitem")
       .filter({ hasText: `${crudLabel} (v1)` });
     await expect(row).toBeVisible({ timeout: 25_000 });
     await row.locator("textarea").fill("Payment due within 14 days.");
@@ -146,9 +146,8 @@ test.describe("invoice terms templates", () => {
     // active templates. Hover it so the checkbox for our template appears.
     await page.getByText("Terms", { exact: true }).first().hover();
     const termsCheckbox = page
-      .locator("label")
-      .filter({ hasText: `${integrationLabel} (v2)` })
-      .locator("input[type='checkbox']");
+      .getByTestId("invoice-terms-card")
+      .getByRole("checkbox", { name: `${integrationLabel} (v2)` });
     await expect(termsCheckbox).toBeVisible({ timeout: 25_000 });
     await termsCheckbox.check();
 

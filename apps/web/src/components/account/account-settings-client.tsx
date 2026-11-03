@@ -12,6 +12,7 @@ import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { Separator } from "@/components/ui/separator";
@@ -392,7 +393,7 @@ export function AccountSettingsClient() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-md border bg-muted/30 p-3 text-sm">
+          <div className="border bg-muted/30 p-3 text-sm">
             <p className="font-medium">{displayEmail}</p>
             <p className="text-muted-foreground">
               {emailVerified ? "Verified" : "Not verified yet"}
@@ -463,13 +464,11 @@ export function AccountSettingsClient() {
               <TextFormField name="newPassword" label="New password" type="password" />
               <TextFormField name="confirmPassword" label="Confirm new password" type="password" />
               <div className="flex items-center gap-2">
-                <input
+                <Checkbox
                   id="revokeOtherSessions"
-                  type="checkbox"
-                  className="size-4 rounded border"
                   checked={passwordForm.watch("revokeOtherSessions")}
-                  onChange={(event) =>
-                    passwordForm.setValue("revokeOtherSessions", event.target.checked)
+                  onCheckedChange={(checked) =>
+                    passwordForm.setValue("revokeOtherSessions", checked === true)
                   }
                 />
                 <Label htmlFor="revokeOtherSessions">Sign out other devices</Label>
@@ -507,12 +506,9 @@ export function AccountSettingsClient() {
         </CardHeader>
         <CardContent className="space-y-4">
           {passkeys.length ? (
-            <div className="space-y-2">
+            <ul className="divide-y border">
               {passkeys.map((passkey) => (
-                <div
-                  key={passkey.id}
-                  className="flex items-center justify-between gap-3 rounded-md border p-3"
-                >
+                <li key={passkey.id} className="flex items-center justify-between gap-3 p-3">
                   <div>
                     <p className="text-sm font-medium">{passkey.name || "Passkey"}</p>
                     <p className="text-xs text-muted-foreground">
@@ -529,9 +525,9 @@ export function AccountSettingsClient() {
                   >
                     <TrashIcon className="size-4" />
                   </Button>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           ) : (
             <p className="text-sm text-muted-foreground">No passkeys registered yet.</p>
           )}
