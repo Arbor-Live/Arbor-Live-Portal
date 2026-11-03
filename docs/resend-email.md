@@ -275,6 +275,53 @@ result and we store none, so the header can be spoofed. The confirm dialog and
 the staff member's judgment of the message are the safeguard; nothing automatic
 acts on an emailed message.
 
+### Email summary in event notes
+
+When a client approves a quote, the crew gets the logistics from the email
+thread in one place. `approveInvoiceQuote` (the one function every approval path
+ends in) schedules
+[`bookingSummary.summarizeForInvoice`](../packages/backend/convex/bookingSummary.ts);
+a scheduling error is logged and never fails the approval.
+
+- **Input.** The newest 60 messages on the booking thread, inbound and outbound,
+  oldest first, `bodyText` only, with direction and sender name, capped at about
+  30k characters by dropping the oldest. No inbound message means no model call.
+- **Model.** Vercel AI Gateway, OpenAI-compatible
+  `POST https://ai-gateway.vercel.sh/v1/chat/completions`, model
+  `zai/glm-5.3-flash`, pinned to Baseten with
+  `providerOptions: { gateway: { only: ["baseten"] } }` (US-hosted, zero data
+  retention, no training). The constants live in
+  [`lib/bookingSummary.ts`](../packages/backend/convex/lib/bookingSummary.ts).
+  It needs `AI_GATEWAY_API_KEY` on the deployment, and a Vercel account with
+  paid credits: a free-tier key gets HTTP 403 for this model.
+- **Content rule.** The product owner's rule is in the system prompt verbatim
+  ("The note should not include any pricing specific discussion, discounts,
+  etc. It should only be operational notes such as venue location or details
+  like those.") and enforced again after the model answers: a bullet with `$`,
+  `USD`, a number before `%`, or price, cost, quote, total, discount, fee,
+  deposit, invoice, payment, pay, budget, rate or charge is dropped. The filter
+  is deliberately blunt, so "total headcount" goes too.
+- **Output.** `{ "notes": string[] }`, at most 8 bullets under 200 characters,
+  parsed as `unknown`. The bullets also go on `emailThreads.summaryBullets` with
+  `summaryUpdatedAt`.
+- **Notes block.** Every event linked to the invoice gets
+  `Client email summary (quote approved <Mon D, YYYY>)` plus `- ` bullets. The
+  first line is the marker: a later approval replaces the block in place, staff
+  text before and after it is never touched, and no surviving bullets means
+  nothing is written or removed
+  ([`@arbor/format`](../packages/format/src/emailSummaryBlock.ts)). An event
+  linked after approval is not chased; staff use **Add summary to notes** on the
+  event page's Email card (`bookingSummary.addSummaryToEventNotes`, event editors
+  only, awaited, "as of" the day instead of the approval date when the quote is
+  not approved).
+- **Failures.** A missing key, a gateway error or an unusable reply is logged
+  (`[bookingSummary] …`) with no partial write. A 429, 5xx or network error is
+  retried once after 60 seconds.
+- **Workspace.** The event workspace saves notes as one string, so it carries a
+  newly written block into a notes draft the user has edited
+  (`apps/web/src/lib/event-notes-merge.ts`); otherwise the next save would erase
+  it. An unedited notes field adopts the server text as usual.
+
 ## This Week at Arbor (newsletter)
 
 The weekly newsletter is the one Arbor send that goes through Resend

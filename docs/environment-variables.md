@@ -23,6 +23,7 @@ Where variables live:
 | `SITE_URL` | yes | Canonical app origin; trusted-origin checks (`lib/trustedOrigins.ts`) and links in emails |
 | `ARBOR_ENV` | prod only | Set to `production` **only** on the prod Convex deployment; gates production behavior (`lib/trustedOrigins.ts`) |
 | `RESEND_API_KEY` | yes | Outbound email via Resend (`email/send.ts`) — see [resend-email.md](resend-email.md) |
+| `AI_GATEWAY_API_KEY` | no | Vercel AI Gateway key for the approval email summary (`bookingSummary.ts`); without it the summary is skipped with a log line — see [resend-email.md](resend-email.md) |
 | `EMAIL_FROM` | yes | Default From address (`email/constants.ts`) |
 | `EMAIL_TEST_MODE` | no | `"true"` only sends to Resend test addresses (`delivered@resend.dev`, …): the component refuses others, and attachment sends fail loudly before calling Resend (`email/resendClient.ts`, `email/send.ts`) |
 | `RESEND_WEBHOOK_SECRET` | yes (inbound) | `whsec_…` signing secret of the Resend `email.received` webhook; without it `/email-webhook` answers 500 — see [resend-email.md](resend-email.md#inbound-email) |
