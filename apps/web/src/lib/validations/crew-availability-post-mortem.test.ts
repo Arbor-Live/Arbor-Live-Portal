@@ -17,7 +17,7 @@ describe("postMortemFeedbackSchema peakTurnout", () => {
     expect(peakTurnoutError("")).toEqual(["Please estimate the peak turnout"]);
   });
 
-  it.each([100_001, -1, 12.5])("names the accepted range for %s", (value) => {
+  it.each([100_001, -1, 12.5, Number.NaN])("names the accepted range for %s", (value) => {
     expect(peakTurnoutError(value)).toEqual(["Enter a whole number from 0 to 100,000"]);
   });
 });

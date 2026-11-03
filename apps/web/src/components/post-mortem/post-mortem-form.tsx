@@ -12,7 +12,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { TextFormField } from "@/components/forms/text-form-field";
+import { Input } from "@/components/ui/input";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { cn } from "@/lib/utils";
@@ -86,12 +86,27 @@ export function PostMortemForm({
             </FormItem>
           )}
         />
-        <TextFormField
+        <FormField
           name="peakTurnout"
-          label="Approximate peak turnout"
-          type="number"
-          inputMode="numeric"
-          className="rounded-md bg-background shadow-xs"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Approximate peak turnout</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  className="rounded-md bg-background shadow-xs"
+                  {...field}
+                  value={Number.isNaN(field.value) ? "" : (field.value ?? "")}
+                  onChange={(e) => {
+                    const { value, validity } = e.target;
+                    field.onChange(validity.badInput ? Number.NaN : value === "" ? "" : Number(value));
+                  }}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
         <TextareaFormField
           name="whatWentWell"

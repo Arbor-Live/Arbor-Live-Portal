@@ -14,6 +14,10 @@ test.describe("public post-mortem form", () => {
     await expect(page.getByText(/How did .*\?/).first()).toBeVisible({ timeout: 25_000 });
 
     await page.getByRole("button", { name: "4 stars" }).click();
+    await page.getByRole("spinbutton").fill("12.5");
+    await page.getByRole("button", { name: "Submit post-mortem" }).click();
+    await expect(page.getByText("Enter a whole number from 0 to 100,000")).toBeVisible();
+    await expect(page.getByText("Please share what went well")).toBeVisible();
     await page.getByRole("spinbutton").fill("120");
     await page
       .getByPlaceholder("Crew, gear, communication, the show…")

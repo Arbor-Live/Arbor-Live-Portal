@@ -2276,8 +2276,8 @@ export const seedPostMortemForInsights = mutation({
     const whatCouldImprove = `E2E improvement ${now} — patch panels could use better labeling.`;
     const row = await ensurePostMortemFeedbackRow(ctx, eventId, userId);
     await ctx.db.patch(row._id, {
-      rating: 5,
-      peakTurnout: 140,
+      rating: 4,
+      peakTurnout: 1400,
       whatWentWell,
       whatCouldImprove,
       submittedAt: now,
@@ -2285,8 +2285,8 @@ export const seedPostMortemForInsights = mutation({
     return {
       eventTitle,
       leadName: name,
-      rating: 5,
-      peakTurnout: 140,
+      rating: 4,
+      peakTurnout: 1400,
       whatWentWell,
       whatCouldImprove,
     };

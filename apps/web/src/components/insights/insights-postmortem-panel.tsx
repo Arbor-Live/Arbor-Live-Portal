@@ -134,7 +134,7 @@ export function InsightsPostMortemPanel({ startMs, endMs }: InsightsPostMortemPa
                   {entry.peakTurnout != null ? (
                     <div className="space-y-0.5">
                       <p className="text-xs font-medium text-foreground/70">Peak turnout</p>
-                      <p>~{entry.peakTurnout.toLocaleString()}</p>
+                      <p>~{entry.peakTurnout.toLocaleString("en-US")}</p>
                     </div>
                   ) : null}
                   <div className="space-y-0.5">

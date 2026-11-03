@@ -71,7 +71,10 @@ export const postMortemFeedbackSchema = z.object({
   peakTurnout: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z
-      .number({ error: "Please estimate the peak turnout" })
+      .number({
+        error: (issue) =>
+          issue.input === undefined ? "Please estimate the peak turnout" : PEAK_TURNOUT_RANGE_MESSAGE,
+      })
       .int(PEAK_TURNOUT_RANGE_MESSAGE)
       .min(0, PEAK_TURNOUT_RANGE_MESSAGE)
       .max(PEAK_TURNOUT_MAX, PEAK_TURNOUT_RANGE_MESSAGE),
