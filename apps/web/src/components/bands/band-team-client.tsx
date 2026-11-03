@@ -130,7 +130,7 @@ function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (op
                 <FormItem>
                   <FormLabel>Access level</FormLabel>
                   <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl className="w-full">
+                    <FormControl>
                       <SelectTrigger className="w-full shadow-none">
                         <SelectValue />
                       </SelectTrigger>

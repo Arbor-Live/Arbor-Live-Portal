@@ -10,6 +10,7 @@ import {
   type FieldPath,
   type FieldValues,
 } from "react-hook-form";
+import { Slot } from "radix-ui";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
@@ -85,19 +86,23 @@ function FormLabel({ className, ...props }: React.ComponentProps<typeof Label>) 
   );
 }
 
-function FormControl({ ...props }: React.ComponentProps<"div">) {
-  const { error, formItemId, formDescriptionId, formMessageId } = useFormField();
+function FormControl({
+  children,
+  ...props
+}: Omit<React.ComponentProps<typeof Slot.Root>, "children" | "ref"> & {
+  children: React.ReactElement;
+}) {
+  const { error, formItemId, formMessageId } = useFormField();
 
   return (
-    <div
-      data-slot="form-control"
+    <Slot.Root
       id={formItemId}
-      aria-describedby={
-        !error ? formDescriptionId : `${formDescriptionId} ${formMessageId}`
-      }
+      aria-describedby={error ? formMessageId : undefined}
       aria-invalid={!!error}
       {...props}
-    />
+    >
+      {children}
+    </Slot.Root>
   );
 }
 

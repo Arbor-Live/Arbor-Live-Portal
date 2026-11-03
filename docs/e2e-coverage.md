@@ -411,8 +411,8 @@ Conventions for any new batch:
 - Helpers in `packages/backend/convex/e2eHelpers.ts`, gated by `assertE2eHelpersEnabled`
 - Seed with `e2eHelpers`, drive the UI with Playwright, assert via `pollConvex`
 - Scope locators to the row you seeded — the shared deployment accumulates fixtures
-- Find form fields with `e2e/helpers/form.ts` and dropdowns with
-  `e2e/helpers/select.ts`; `getByLabel` does not work anywhere in this app (trap 5)
+- Find form fields with `getByLabel` or `e2e/helpers/form.ts`, and dropdowns
+  with `e2e/helpers/select.ts`
 - Catalog specs share `e2e/helpers/inventory.ts` (typed state readers, row
   locators, `revealRow`, fixture cleanup)
 - Assert public catalog state through `e2eHelpers:getPublicInventoryListing`,
@@ -534,16 +534,13 @@ debugging time in Batch 8, items 5–8 in Batch 9, items 9–13 in Batch 10.
    `e2e/helpers/invoice.ts` absorbs this by loading the canonical URL once and
    waiting for hydration. Client-side navigations also fire no `load` event, so
    `page.waitForURL` can hang for its full timeout; poll `page.url()` instead.
-5. **`getByLabel` reaches nothing in this app, and fails silently.**
-   `FormControl` renders a plain `<div id={formItemId}>` around the input and
-   `FormLabel` points `htmlFor` at that div, so every label is associated with a
-   non-labelable element — `getByLabel("Email")` resolves to zero nodes. Because
-   `actionTimeout` is unset (Playwright's default of 0, i.e. no timeout), the
-   `fill()` then waits out the *entire* test timeout with no error, no
-   screenshot, and no browser traffic: it reads as a hung app, not a bad
-   selector. This burned five minutes per test in Batch 9's first run. Use
-   `formField` / `selectByLabel` / `checkboxByLabel` from `e2e/helpers/form.ts`,
-   which locate by `[data-slot='form-item']` instead.
+5. **A locator that matches nothing used to hang the whole test.** With
+   Playwright's default `actionTimeout` of 0, `fill()` on an empty locator
+   waited out the entire test timeout with no error, which read as a hung app.
+   This burned five minutes per test in Batch 9's first run. The config now caps
+   actions at 45s. `getByLabel` works on `FormField` controls. Custom widgets
+   such as the star ratings wrap a `div`, which a label cannot target, so find
+   those by role.
 6. **Radix `Select` is not `SearchableSelect`.** The shadcn `Select` in
    `@/components/ui/select` portals its listbox but locks page scroll while open,
    so it needs none of the centering/`force` handling above — `pickSelectOption`

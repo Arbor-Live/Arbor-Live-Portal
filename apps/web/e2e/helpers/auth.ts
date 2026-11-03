@@ -27,7 +27,6 @@ export async function signInWithCredentials(
   });
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    // FormLabel is not htmlFor-associated, so prefer roles over getByLabel.
     await page.getByRole("textbox").first().fill(email);
     await page.locator('input[type="password"]').fill(password);
     await page.getByRole("button", { name: "Sign in to dashboard" }).click();

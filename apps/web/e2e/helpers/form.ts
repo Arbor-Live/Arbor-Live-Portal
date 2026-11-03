@@ -8,18 +8,8 @@ import type { Locator, Page } from "@playwright/test";
 type FieldScope = Locator | Page;
 
 /**
- * The `<input>` of a `TextFormField`, found by its visible label.
- *
- * `getByLabel` does not work on these. `FormControl` renders a plain
- * `<div id={formItemId}>` around the input and `FormLabel` points `htmlFor` at
- * that div, so every label in the app is associated with a non-labelable
- * element and `getByLabel` resolves to nothing.
- *
- * That failure used to be invisible: with no `actionTimeout`, `fill()` on an
- * empty locator waited out the entire test timeout with no error and no browser
- * activity, reading as a slow app rather than a bad selector. The config now
- * caps actions at 45s so it fails legibly, but the locator still has to be
- * right — hence this helper.
+ * The `<input>` of a `TextFormField`, found by the text of its form item.
+ * `getByLabel` also works on `FormField` inputs; this helper predates that.
  */
 export function formField(scope: FieldScope, label: string | RegExp) {
   return scope
