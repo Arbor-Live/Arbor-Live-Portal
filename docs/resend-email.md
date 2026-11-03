@@ -1,10 +1,11 @@
 # Resend for transactional email
 
-The portal sends transactional email (schedules, invites, booking quotes, band-payment requests, auth flows) through [Resend](https://resend.com). Outbound delivery uses the official [`@convex-dev/resend`](https://www.convex.dev/components/resend) Convex component (for durable, queued sends) alongside the raw `resend` SDK (for sends that carry PDF/ICS attachments).
+The portal sends transactional email (schedules, invites, booking quotes, band-payment requests, auth flows) through [Resend](https://resend.com). Outbound delivery uses the official [`@convex-dev/resend`](https://www.convex.dev/components/resend) Convex component (for durable, queued sends) alongside the raw `resend` SDK (only for sends that carry PDF/ICS attachments, which the component can't).
 
 ## Outbound sending
 
-- The component is registered in [`convex.config.ts`](../packages/backend/convex/convex.config.ts) and instantiated in [`email/send.ts`](../packages/backend/convex/email/send.ts) as `resendClient`, with `testMode: process.env.EMAIL_TEST_MODE === "true"`.
+- The component is registered in [`convex.config.ts`](../packages/backend/convex/convex.config.ts) and instantiated in [`email/resendClient.ts`](../packages/backend/convex/email/resendClient.ts) as `resendClient`, with `testMode: process.env.EMAIL_TEST_MODE === "true"`. It queues, rate-limits and retries sends. Every send passes `idempotencyKey: "emailNotifications:<id>"`, so a retried action never sends the same notification twice.
+- Attachment sends ([`email/send.ts`](../packages/backend/convex/email/send.ts) `sendWithResendSdk`) use the raw SDK. They pass the same key as the HTTP `Idempotency-Key` (`emails.send(payload, { idempotencyKey })`). With `EMAIL_TEST_MODE`, they fail before sending if any To or CC isn't a Resend test address, the same rule the component applies. A 429, 5xx or network error reschedules the send after 30s, 2min and 10min while the notification stays queued, then marks it failed with the attempt count.
 - Templates are React Email components rendered to HTML in [`email/templates.ts`](../packages/backend/convex/email/templates.ts); sends are enqueued as Convex actions (see `email/enqueue.ts`, `email/triggers.ts`).
 - `From`, reply-to, and CC defaults live in [`email/constants.ts`](../packages/backend/convex/email/constants.ts) and are overridable by env var.
 - Every calendar-invite email carries **exactly one** event: Gmail and Outlook only add the first `VEVENT` of an invite, so separate windows go out as separate emails.
@@ -66,7 +67,7 @@ verified domain, e.g. `noreply@arbor.st`.
 |----------|----------|-------------|
 | `RESEND_API_KEY` | Yes | Resend API key (`re_...`); used by both the component and the raw SDK |
 | `EMAIL_FROM` | Yes | Default From address, e.g. `Arbor Notifications <noreply@arbor.st>` |
-| `EMAIL_TEST_MODE` | No | `"true"` restricts `@convex-dev/resend` to Resend test addresses (`delivered@…`); those sends still count against Resend quota |
+| `EMAIL_TEST_MODE` | No | `"true"` only sends to Resend test addresses (`delivered@resend.dev`, `bounced@…`, `complained@…`, optionally `+label`): the component refuses others and attachment sends fail before calling Resend. Test sends still count against Resend quota |
 | `E2E_HELPERS` | No (local e2e) | Enables Playwright seed helpers; localhost `SITE_URL` required |
 | `E2E_EMAIL_MOCK` | No (local e2e) | With `E2E_HELPERS`, skips Resend entirely after render (no quota). Set by `pnpm test:e2e` |
 | `ORGANIZER_EMAIL` | No | Organizer contact shown in emails; defaults to the address in `EMAIL_FROM` |
@@ -148,15 +149,20 @@ Sending from the portal is not built yet.
   stored as names, types and sizes only.
 - **Staff notification.** A matched message sends an in-app notification
   (`booking_email_received`, with push) to the invoice manager, request assignee
-  and event manager, except a person whose own email sent it. No email is sent.
+  and event manager, except a person whose own email sent it. When none of them
+  is a portal user (nobody owns the booking yet), it goes to the portal admins of
+  the Crew vertical instead, the same people who get `booking_request_admin`
+  (`listAdminUsersForVertical`, gated on `isPortalAdmin`). One notification per
+  person per message. No email is sent.
 
 ## Booking emails
 
 Client-facing emails about one booking go out as one conversation instead of
 separate "Request received", "Your quote is ready" and "Your quote was updated"
-threads. [`lib/bookingEmail.ts`](../packages/backend/convex/lib/bookingEmail.ts)
-`resolveBookingEmail` computes `{ emailThreadId, from, replyTo, subject }`; every
-enqueue site spreads it into `enqueueEmail`.
+threads. An enqueue site passes `booking: { ref }` to `enqueueEmail`, which
+calls [`lib/bookingEmail.ts`](../packages/backend/convex/lib/bookingEmail.ts)
+`resolveBookingEmail` for the thread, sender, Reply-To and subject. The
+notification stores `booking: { threadId, from }`.
 
 - **Templates.** `booking_request_received`, `booking_request_declined`,
   `booking_quote_ready`, `quote_updated`, `payment_proof_reminder`,
@@ -167,30 +173,53 @@ enqueue site spreads it into `enqueueEmail`.
 - **Sender.** `BOOKINGS_EMAIL_FROM` (default `bookings@arbor.st`), with the
   display name `"<Manager name> at Arbor Live"` from the invoice manager, else
   the request's assignee, else `"Arbor Live"`.
-- **Reply-To.** Only the booking's address: the request's if it has a request
-  number, else the invoice's (the same choice as the page header). Existing CCs
-  (the manager and the shared inbox on quote emails) are unchanged, so a manager's
-  Reply All also lands in the portal.
+- **Reply-To.** The booking's own address: the request's, else the invoice's,
+  else the event's, skipping any whose number the inbound parser can't read back
+  (an old number with other characters). `bookings@arbor.st` is the last resort.
+  Existing CCs (the manager and the shared inbox on quote emails) are unchanged,
+  so a manager's Reply All also lands in the portal.
 - **Subject.** One per booking: `Arbor Live booking: <event name> (<ALREQ-… or
-  ALINV-…>)`. The first message uses it as-is; every later one is `Re: ` plus the
-  first email's subject, so renaming the event does not split the conversation.
-  Each template's own heading ("Quote Ready", …) still opens the body.
-- **Headers.** A notification with `emailThreadId` sends through the raw Resend
-  SDK (`sendEmailWithAttachments`), which returns the Resend id at once and takes
-  headers. `emailOutbound.getThreadHeaders` reads the thread's stored messages,
-  inbound and outbound: `In-Reply-To` is the newest message's id and `References`
-  is the last 20 ids in order. The `Idempotency-Key` header stays.
-- **Recording.** After a successful send, `emailOutbound.recordOutboundEmail`
-  stores an outbound `emailMessages` row (booking sender, `to`, `cc`, subject,
-  plain-text body from the rendered HTML capped at 20k chars, attachment names)
-  and bumps the thread. It never notifies staff. A failure to record is logged and
-  does not fail the already-sent email.
-- **Message-ID.** Resend assigns it after the send, so
-  `emailOutbound.captureMessageId` calls `GET /emails/{id}` and stores
-  `message_id` without angle brackets, retrying after 10s, 60s and 5min while it
-  is missing. Until then the row is skipped when building headers.
+  ALINV-…>)`, stored on the thread (`emailThreads.subject`) by the first booking
+  email queued. That email uses it as-is; every later one is `Re: ` plus the
+  stored subject, so renaming the event does not split the conversation. If the
+  client wrote first, the first email is already `Re: `. A failed email that is
+  queued again keeps its subject. Each template's own heading ("Quote Ready", …)
+  still opens the body.
+- **Bell title.** `paying_party_added` also lands in the payer's notification
+  center. Its title stays the sentence ("You've been added as the paying party:
+  …") through `enqueueEmail`'s `inAppTitle`, not the booking subject.
+- **Previews.** The send-quote and revised-quote sheets show the Reply-To and
+  subject from `emailThreads.bookingEmailPreview`, which runs the same logic
+  read-only and creates no thread.
+- **Sending.** Booking emails without attachments go through the component
+  with `In-Reply-To` / `References` headers. The quote PDF (`booking_quote_ready`)
+  uses the raw SDK (see [Outbound sending](#outbound-sending)).
+  `emailOutbound.getThreadHeaders` reads the thread's stored messages, inbound
+  and outbound: `In-Reply-To` is the newest message's id and `References` is the
+  thread's first id plus the newest nine (ten in all, well under the 998-character
+  header line limit).
+- **Recording.** `emailOutbound.markBookingEmailSent` marks the notification sent
+  and stores the outbound `emailMessages` row (booking sender, `to`, `cc`,
+  subject, plain-text body capped at 20k chars, attachment names) in one
+  transaction, and bumps the thread. It never notifies staff. If the thread was
+  deleted it still marks the email sent and returns `thread_missing`, which is
+  logged.
+- **Message-ID.** A component send is recorded under the component's email id.
+  `emailOutbound.captureMessageId` first asks the component for Resend's id
+  (`resendClient.get` → `resendId`) and stores it. Then it calls
+  `GET /emails/{id}` and stores `message_id` without angle brackets. Either can
+  lag the send (the component retries up to 5 times over ~8 min), so a miss
+  retries after 10s, 60s, 5min, 10min and 15min, then logs. A component email
+  that failed or was cancelled stops the capture with an error. Until the id
+  arrives the row is skipped when building headers.
 - **E2E mock.** With `E2E_EMAIL_MOCK` the row is still recorded, with the message
   id `e2e-mock-<notificationId>@arbor.st`, and Resend is not called.
+- **Payment-proof reminders.** `email/paymentProofReminders.runFirst` /
+  `runMonday` handle 50 events per transaction, then schedule `continueRun` with
+  a cursor; the approved invoices with no event are the last batch. The run's
+  clock is fixed at the start, so every batch uses the same reminder keys, and
+  invoices already reminded are carried along so one on two events gets one
+  email.
 
 ## This Week at Arbor (newsletter)
 
