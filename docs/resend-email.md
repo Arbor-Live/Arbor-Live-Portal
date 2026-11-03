@@ -229,12 +229,12 @@ only, like `getForRecord`) queues a `booking_reply` email:
 - **To** is the request's email, else the invoice's `clientEmail`. Optional CC
   (bare addresses, max 10); duplicates and the client are dropped.
 - **From** is the booking sender named after the signed-in staff member
-  (`resolveBookingEmail` `senderName`), never taken from arguments. Subject,
+  (`booking.senderName` on `enqueueEmail`), never taken from arguments. Subject,
   thread, Reply-To and recording are the ones every booking email uses, so the
   reply shows on the thread once it goes out.
 - **Body** is the message (max 10k chars) as paragraphs, the sender's name and a
   link to the request tracker or public quote. `attachQuote` adds the current
-  quote PDF (`payload.invoiceId` plus `payload.attachQuote`; `booking_quote_ready`
+  quote PDF (`payload.invoiceId` plus `payload.attachQuote`, sent through the raw SDK like every attachment; `booking_quote_ready`
   always carries it).
 - **Idempotency.** `booking_reply:<threadId>:<clientRequestId>`; the composer
   mints one id per attempt, so a double click queues one email.
