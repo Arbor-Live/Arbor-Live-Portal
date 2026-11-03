@@ -1918,6 +1918,13 @@ export default defineSchema({
     subject: v.optional(v.string()),
     lastMessageAt: v.number(),
     messageCount: v.number(),
+    /**
+     * Operational notes the model drew from this thread when the quote was
+     * approved (`bookingSummary.ts`), kept so a later reader does not need
+     * another model call. The text itself lives in each event's notes.
+     */
+    summaryBullets: v.optional(v.array(v.string())),
+    summaryUpdatedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_requestId", ["requestId"])
