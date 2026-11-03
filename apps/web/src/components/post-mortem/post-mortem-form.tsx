@@ -45,7 +45,7 @@ export function PostMortemForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(submit)} className="space-y-4">
+      <form noValidate onSubmit={form.handleSubmit(submit)} className="space-y-4">
         <FormField
           name="rating"
           render={({ field }) => (
@@ -91,7 +91,6 @@ export function PostMortemForm({
           label="Approximate peak turnout"
           type="number"
           inputMode="numeric"
-          min={0}
           className="rounded-md bg-background shadow-xs"
         />
         <TextareaFormField

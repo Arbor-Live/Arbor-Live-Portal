@@ -97,3 +97,19 @@ test("rejects a peak turnout over 100,000", async () => {
     }),
   ).rejects.toThrow("Peak turnout must be a whole number from 0 to 100,000.");
 });
+
+test.each([0, 100_000])("accepts a peak turnout of %s", async (peakTurnout) => {
+  const t = makeTest();
+  const { rowId } = await seedForm(t, `pm_boundary_${peakTurnout}`);
+
+  await t.mutation(api.postMortemFeedback.submitByToken, {
+    token: `pm_boundary_${peakTurnout}`,
+    rating: 4,
+    peakTurnout,
+    whatWentWell: "Quick load-in.",
+    whatCouldImprove: "Bring more gaff tape.",
+  });
+
+  const row = await t.run(async (ctx) => ctx.db.get(rowId));
+  expect(row?.peakTurnout).toBe(peakTurnout);
+});

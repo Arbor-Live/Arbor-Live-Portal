@@ -151,6 +151,7 @@ test.describe("insights dashboard", () => {
     const seeded = runConvex("e2eHelpers:seedPostMortemForInsights", {}) as {
       eventTitle: string;
       leadName: string;
+      rating: number;
       peakTurnout: number;
       whatWentWell: string;
       whatCouldImprove: string;
@@ -173,7 +174,9 @@ test.describe("insights dashboard", () => {
     await expect(seededEntry).toBeVisible({ timeout: 30_000 });
     await expect(seededEntry.getByText(seeded.eventTitle)).toBeVisible();
     await expect(seededEntry.getByText(seeded.leadName)).toBeVisible();
+    await expect(seededEntry.locator(`[aria-label="${seeded.rating} out of 5 stars"]`)).toBeVisible();
+    await expect(seededEntry.getByText(seeded.whatWentWell, { exact: true })).toBeVisible();
     await expect(seededEntry.getByText(seeded.whatCouldImprove, { exact: true })).toBeVisible();
-    await expect(seededEntry.getByText(`~${seeded.peakTurnout}`, { exact: true })).toBeVisible();
+    await expect(seededEntry.getByText(`~${seeded.peakTurnout.toLocaleString("en-US")}`, { exact: true })).toBeVisible();
   });
 });

@@ -16,7 +16,6 @@ type TextFormFieldProps<T extends FieldValues> = {
   placeholder?: string;
   type?: "text" | "email" | "tel" | "number" | "password";
   inputMode?: "text" | "numeric" | "decimal" | "email" | "tel" | "url";
-  min?: number;
   autoComplete?: string;
   autoFocus?: boolean;
   disabled?: boolean;
@@ -31,7 +30,6 @@ export function TextFormField<T extends FieldValues>({
   placeholder,
   type = "text",
   inputMode,
-  min,
   autoComplete,
   autoFocus,
   disabled,
@@ -49,7 +47,6 @@ export function TextFormField<T extends FieldValues>({
             <Input
               type={type}
               inputMode={inputMode}
-              min={min}
               placeholder={placeholder}
               autoComplete={autoComplete}
               autoFocus={autoFocus}

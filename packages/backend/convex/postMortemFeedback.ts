@@ -12,6 +12,8 @@ const POST_MORTEM_TOKEN_ALPHABET = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const POST_MORTEM_TOKEN_LENGTH = 12;
 const postMortemToken = customAlphabet(POST_MORTEM_TOKEN_ALPHABET, POST_MORTEM_TOKEN_LENGTH);
 
+const PEAK_TURNOUT_MAX = 100_000;
+
 const postMortemAnswersValidator = v.object({
   rating: v.number(),
   peakTurnout: v.number(),
@@ -75,9 +77,11 @@ function validatePostMortemInput(args: {
   if (
     !Number.isInteger(args.peakTurnout) ||
     args.peakTurnout < 0 ||
-    args.peakTurnout > 100000
+    args.peakTurnout > PEAK_TURNOUT_MAX
   ) {
-    throw new Error("Peak turnout must be a whole number from 0 to 100,000.");
+    throw new Error(
+      `Peak turnout must be a whole number from 0 to ${PEAK_TURNOUT_MAX.toLocaleString("en-US")}.`,
+    );
   }
   const whatWentWell = args.whatWentWell.trim();
   const whatCouldImprove = args.whatCouldImprove.trim();

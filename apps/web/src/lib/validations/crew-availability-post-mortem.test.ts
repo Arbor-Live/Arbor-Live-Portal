@@ -9,15 +9,15 @@ function peakTurnoutError(peakTurnout: unknown) {
 }
 
 describe("postMortemFeedbackSchema peakTurnout", () => {
-  it("accepts a whole number in range", () => {
-    expect(peakTurnoutError(120)).toBeNull();
+  it.each([0, 120, 100_000])("accepts %s", (value) => {
+    expect(peakTurnoutError(value)).toBeNull();
   });
 
   it("asks for an estimate when the field is empty", () => {
     expect(peakTurnoutError("")).toEqual(["Please estimate the peak turnout"]);
   });
 
-  it.each([150_000, -5, 12.5])("names the accepted range for %s", (value) => {
+  it.each([100_001, -1, 12.5])("names the accepted range for %s", (value) => {
     expect(peakTurnoutError(value)).toEqual(["Enter a whole number from 0 to 100,000"]);
   });
 });

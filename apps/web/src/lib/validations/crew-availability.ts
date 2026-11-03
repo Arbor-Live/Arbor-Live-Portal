@@ -63,7 +63,8 @@ export const eventFeedbackSchema = z.object({
 
 export type EventFeedbackFormValues = z.infer<typeof eventFeedbackSchema>;
 
-const PEAK_TURNOUT_RANGE_MESSAGE = "Enter a whole number from 0 to 100,000";
+const PEAK_TURNOUT_MAX = 100_000;
+const PEAK_TURNOUT_RANGE_MESSAGE = `Enter a whole number from 0 to ${PEAK_TURNOUT_MAX.toLocaleString("en-US")}`;
 
 export const postMortemFeedbackSchema = z.object({
   rating: z.number().int().min(1, "Please select a rating").max(5),
@@ -73,7 +74,7 @@ export const postMortemFeedbackSchema = z.object({
       .number({ error: "Please estimate the peak turnout" })
       .int(PEAK_TURNOUT_RANGE_MESSAGE)
       .min(0, PEAK_TURNOUT_RANGE_MESSAGE)
-      .max(100000, PEAK_TURNOUT_RANGE_MESSAGE),
+      .max(PEAK_TURNOUT_MAX, PEAK_TURNOUT_RANGE_MESSAGE),
   ),
   whatWentWell: z.string().trim().min(1, "Please share what went well"),
   whatCouldImprove: z.string().trim().min(1, "Please share what could improve"),
