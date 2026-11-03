@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "motion/react";
 import { landingEventTypes } from "@/lib/landing-content";
 import { Reveal, Stagger, StaggerItem } from "./landing-motion";
 

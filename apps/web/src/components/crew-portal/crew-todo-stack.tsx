@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation } from "convex/react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { BroomIcon, CalendarCheckIcon, CaretRightIcon, CheckIcon, ClipboardTextIcon, type Icon } from "@phosphor-icons/react";
 import { NightFacts, type Night } from "@/components/availability/night-card";
 import { NightPartForm } from "@/components/availability/night-part-form";
