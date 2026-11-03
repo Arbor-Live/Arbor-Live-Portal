@@ -80,13 +80,16 @@ test("counts only sets performed inside [startMs, endMs)", async () => {
   await seedSet(t, eventId, { email: "kim@stanford.edu", name: "Kim", performedAt: START + DAY });
   await seedSet(t, eventId, { email: "kim@stanford.edu", name: "Kim", status: "queued" });
 
-  const rows = await asUser(t, crew).query(api.openMic.getLeaderboard, { startMs: START, endMs: END });
+  const result = await asUser(t, crew).query(api.openMic.getLeaderboard, { startMs: START, endMs: END });
 
-  expect(rows).toEqual([
-    { email: "ana@stanford.edu", name: "Ana", count: 2, lastPerformedAt: START + 5 * DAY },
-    { email: "sam@stanford.edu", name: "Sam", count: 1, lastPerformedAt: END - 1 },
-    { email: "kim@stanford.edu", name: "Kim", count: 1, lastPerformedAt: START + DAY },
-  ]);
+  expect(result).toEqual({
+    rows: [
+      { email: "ana@stanford.edu", name: "Ana", count: 2, lastPerformedAt: START + 5 * DAY },
+      { email: "sam@stanford.edu", name: "Sam", count: 1, lastPerformedAt: END - 1 },
+      { email: "kim@stanford.edu", name: "Kim", count: 1, lastPerformedAt: START + DAY },
+    ],
+    truncated: false,
+  });
 });
 
 test("returns nothing when no set falls in the range", async () => {
@@ -95,7 +98,34 @@ test("returns nothing when no set falls in the range", async () => {
   const eventId = await seedEvent(t);
   await seedSet(t, eventId, { email: "ana@stanford.edu", name: "Ana", performedAt: END + DAY });
 
-  const rows = await asUser(t, crew).query(api.openMic.getLeaderboard, { startMs: START, endMs: END });
+  const result = await asUser(t, crew).query(api.openMic.getLeaderboard, { startMs: START, endMs: END });
 
-  expect(rows).toEqual([]);
+  expect(result).toEqual({ rows: [], truncated: false });
+});
+
+test("marking a night completed counts the set on stage", async () => {
+  const t = makeTest();
+  const crew = await arborCrew(t);
+  const eventId = await seedEvent(t);
+  const signupId = await t.run(async (ctx) =>
+    ctx.db.insert("openMicSignups", {
+      eventId,
+      name: "Ana",
+      email: "ana@stanford.edu",
+      whatTheyreDoing: "Songs",
+      equipment: [],
+      status: "current",
+      skipsCount: 0,
+      position: START,
+      submittedAt: START,
+      createdAt: START,
+      updatedAt: START,
+    }),
+  );
+
+  await asUser(t, crew).mutation(api.openMic.setOpenMicStatus, { eventId, status: "completed" });
+
+  const signup = await t.run(async (ctx) => ctx.db.get(signupId));
+  expect(signup?.status).toBe("performed");
+  expect(typeof signup?.performedAt).toBe("number");
 });

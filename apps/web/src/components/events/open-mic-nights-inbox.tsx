@@ -9,26 +9,32 @@ import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState, ListSummary, RowCell, RowGroup, RowMenu, RowText } from "@/components/list-page";
+import { EmptyState, ListSummary, RowCell, RowFlag, RowGroup, RowMenu, RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 import { StatusPill } from "@/components/page-header";
 import { attempt, useSetOpenMicStatus } from "@/lib/open-mic-actions";
 import { formatTime } from "@/lib/format";
-import { formatNightStart, OPEN_MIC_MOVES, OPEN_MIC_STATUS } from "@/lib/open-mic-status";
+import {
+  formatNightStart,
+  OPEN_MIC_MOVES,
+  OPEN_MIC_STATUS,
+  runnerWindowAt,
+  type RunnerWindow,
+} from "@/lib/open-mic-status";
+import { useNow } from "@/lib/use-now";
 
 type Night = FunctionReturnType<typeof api.openMic.listEvents>[number];
 
 const PAST_PREVIEW = 5;
 
-function nightDetail(night: Night) {
+function nightDetail(night: Night, runnerWindow: RunnerWindow) {
   if (night.status === "live") {
     const parts = [night.currentName ? `${night.currentName} on stage` : null, `${night.queuedCount} queued`];
     return parts.filter(Boolean).join(" · ");
   }
-  if (night.status === "scheduled") {
-    return night.runnerWindowOpen ? "Runner open" : `Runner opens ${formatTime(night.runnerOpensAt)}`;
-  }
-  return undefined;
+  if (night.status !== "scheduled") return undefined;
+  if (runnerWindow === "before") return `Runner opens ${formatTime(night.runnerOpensAt)}`;
+  return runnerWindow === "open" ? "Runner open" : "Never went live";
 }
 
 function nightCount(night: Night) {
@@ -40,7 +46,7 @@ export function OpenMicEventsInbox() {
   const nights = useQuery(api.openMic.listEvents, {});
   const setStatus = useSetOpenMicStatus();
   const updateEvent = useMutation(api.events.update);
-  const [now] = useState(() => Date.now());
+  const now = useNow(30_000);
   const [showAllPast, setShowAllPast] = useState(false);
 
   const groups = useMemo(() => {
@@ -72,7 +78,7 @@ export function OpenMicEventsInbox() {
   function renderRow(night: Night) {
     const status = OPEN_MIC_STATUS[night.status];
     const moves = OPEN_MIC_MOVES[night.status];
-    const goLiveDisabled = !night.runnerWindowOpen;
+    const runnerWindow = runnerWindowAt(night, now);
     return (
       <ListRow
         key={night._id}
@@ -80,7 +86,7 @@ export function OpenMicEventsInbox() {
         data-testid={`open-mic-event-${night._id}`}
         actions={
           <div className="flex items-center gap-1">
-            {moves.next === "live" && night.runnerWindowOpen ? (
+            {moves.next === "live" && runnerWindow === "open" ? (
               <Button type="button" size="sm" onClick={() => void setStatus(night, "live")}>
                 Go live
               </Button>
@@ -92,21 +98,14 @@ export function OpenMicEventsInbox() {
               <DropdownMenuItem asChild>
                 <Link href={`/dashboard/events/${night._id}`}>Open event</Link>
               </DropdownMenuItem>
-              {moves.next || moves.canCancel ? <DropdownMenuSeparator /> : null}
-              {moves.next === "live" ? (
-                <DropdownMenuItem
-                  disabled={goLiveDisabled}
-                  title={goLiveDisabled ? `The runner opens at ${formatTime(night.runnerOpensAt)}.` : undefined}
-                  onSelect={() => void setStatus(night, "live")}
-                >
-                  Go live
-                </DropdownMenuItem>
-              ) : null}
+              {moves.next === "completed" || moves.canCancel ? <DropdownMenuSeparator /> : null}
               {moves.next === "completed" ? (
                 <DropdownMenuItem onSelect={() => void setStatus(night, "completed")}>Mark completed</DropdownMenuItem>
               ) : null}
               {moves.canCancel ? (
-                <DropdownMenuItem onSelect={() => void setStatus(night, "cancelled")}>Cancel night</DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onSelect={() => void setStatus(night, "cancelled")}>
+                  Cancel night
+                </DropdownMenuItem>
               ) : null}
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={() => void turnOff(night)}>
@@ -116,7 +115,8 @@ export function OpenMicEventsInbox() {
           </div>
         }
       >
-        <RowText eyebrow={formatNightStart(night.startAt)} title={night.title} detail={nightDetail(night)} />
+        <RowText eyebrow={formatNightStart(night.startAt)} title={night.title} detail={nightDetail(night, runnerWindow)} />
+        {night.eventStatus === "cancelled" ? <RowFlag tone="rose">Event cancelled</RowFlag> : null}
         <RowCell hideBelow="md" className="w-28" muted>
           {nightCount(night)}
         </RowCell>
@@ -156,7 +156,7 @@ export function OpenMicEventsInbox() {
     <div className="space-y-4" data-testid="open-mic-inbox-list">
       <ListSummary
         testId="open-mic-inbox-summary"
-        order="Live first, then soonest first. Turn Open Mic on from an event's Add-ons."
+        order="Live first, then upcoming soonest first, then past newest first. Turn Open Mic on from an event's Add-ons."
       >
         {summary.join(" · ")}
       </ListSummary>

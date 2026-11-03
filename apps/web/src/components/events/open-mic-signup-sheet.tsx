@@ -113,20 +113,15 @@ export function SignupSheetBody({
         </SheetSection>
       ) : null}
 
-      <DetailSheetFooter
-        start={
-          removable ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="text-destructive"
-              onClick={() => void onRemove(signup)}
-            >
+      {removable ? (
+        <DetailSheetFooter
+          start={
+            <Button type="button" variant="ghost" className="text-destructive" onClick={() => void onRemove(signup)}>
               Remove from queue
             </Button>
-          ) : undefined
-        }
-      />
+          }
+        />
+      ) : null}
     </>
   );
 }

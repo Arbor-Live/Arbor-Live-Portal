@@ -32,6 +32,14 @@ export function formatNightStart(ms: number) {
   return `${day} · ${formatTime(ms)}`;
 }
 
+export type RunnerWindow = "before" | "open" | "after";
+
+/** Where `now` sits against the runner window (1h before start to 1h after end). */
+export function runnerWindowAt(night: { runnerOpensAt: number; runnerClosesAt: number }, now: number): RunnerWindow {
+  if (now < night.runnerOpensAt) return "before";
+  return now <= night.runnerClosesAt ? "open" : "after";
+}
+
 /** The public sign-up form, pinned to one night. */
 export function openMicSignupPath(eventId: string) {
   return `/open-mic?event=${eventId}`;

@@ -83,7 +83,8 @@ export function InsightsEventsPanel({ startMs, endMs }: InsightsEventsPanelProps
           cancellations?.truncated ||
           calendar?.truncated ||
           pipelineDwell?.truncated ||
-          turnout?.truncated
+          turnout?.truncated ||
+          openMicRegulars?.truncated
         }
       />
 
@@ -268,9 +269,9 @@ export function InsightsEventsPanel({ startMs, endMs }: InsightsEventsPanelProps
             loading={openMicRegulars === undefined}
             testId="insights-open-mic-regulars"
           >
-            {openMicRegulars && openMicRegulars.length > 0 ? (
+            {openMicRegulars && openMicRegulars.rows.length > 0 ? (
               <RowList joined>
-                {openMicRegulars.slice(0, 10).map((entry, index) => (
+                {openMicRegulars.rows.map((entry, index) => (
                   <li key={entry.email} className="flex items-center gap-3 px-3 py-2 text-sm">
                     <span className="w-5 shrink-0 text-right text-muted-foreground tabular-nums">{index + 1}</span>
                     <RowText title={entry.name} detail={`Last set ${formatDate(entry.lastPerformedAt)}`} />

@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import {
   ArrowSquareOutIcon,
@@ -36,12 +35,17 @@ import {
   OPEN_MIC_MOVES,
   OPEN_MIC_STATUS,
   openMicSignupPath,
+  runnerWindowAt,
 } from "@/lib/open-mic-status";
 import { cn } from "@/lib/utils";
+import { useSheetParam } from "@/hooks/use-sheet-param";
+import { useNow } from "@/lib/use-now";
 
 const AMBER_TEXT = "text-status-amber-700 dark:text-status-amber-300";
 
 type RunnerActions = {
+  /** The night isn't over (completed or cancelled). */
+  nightOpen: boolean;
   canRun: boolean;
   advance: () => void;
   notHere: (signup: RunnerSignup) => void;
@@ -83,9 +87,6 @@ function NowPerforming({
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               <EquipmentFlags equipment={current.equipment} />
-              {current.skipsCount > 0 ? (
-                <RowFlag>{plural(current.skipsCount, "strike")}</RowFlag>
-              ) : null}
               {current.bgMusicLink ? (
                 <a
                   href={current.bgMusicLink}
@@ -128,7 +129,7 @@ function NowPerforming({
         ) : (
           <>
             <p className="text-sm text-muted-foreground">No one on stage.</p>
-            {next ? (
+            {next && actions.nightOpen ? (
               <Button type="button" disabled={!actions.canRun} onClick={actions.advance}>
                 Call up {next.name}
               </Button>
@@ -215,15 +216,13 @@ function PerformedTonight({ performed, actions }: { performed: RunnerSignup[]; a
 
 export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
   const { confirm } = useAppDialog();
-  const searchParams = useSearchParams();
   const state = useQuery(api.openMic.getRunnerState, { eventId });
   const advance = useMutation(api.openMic.advanceCurrent).withOptimisticUpdate(optimisticAdvanceCurrent);
   const markNotHere = useMutation(api.openMic.markNotHere).withOptimisticUpdate(optimisticMarkNotHere);
   const removeSignup = useMutation(api.openMic.removeSignup).withOptimisticUpdate(optimisticRemoveSignup);
   const setStatus = useSetOpenMicStatus();
-  // `?signup=<id>` opens that sign-up's side panel.
-  const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("signup"));
-  const [now] = useState(() => Date.now());
+  const [selectedId, setSelectedId] = useSheetParam("signup");
+  const now = useNow(30_000);
 
   const signups = state?.signups;
   const view = useMemo(() => deriveRunnerView(signups ?? []), [signups]);
@@ -250,7 +249,8 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
   const { current, queued, performed } = view;
   const status = OPEN_MIC_STATUS[event.status];
   const moves = OPEN_MIC_MOVES[event.status];
-  const canRun = event.runnerWindowOpen && moves.canRun;
+  const runnerWindow = runnerWindowAt(event, now);
+  const canRun = runnerWindow === "open" && moves.canRun;
   const selected = signups?.find((signup) => signup._id === selectedId && signup.status !== "removed") ?? null;
 
   async function copySignupLink() {
@@ -276,6 +276,7 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
   }
 
   const actions: RunnerActions = {
+    nightOpen: moves.canRun,
     canRun,
     advance: () => void attempt(() => advance({ eventId })),
     notHere: (signup) => void attempt(() => markNotHere({ signupId: signup._id })),
@@ -312,8 +313,7 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
             <Button
               type="button"
               size="sm"
-              disabled={!event.runnerWindowOpen}
-              title={event.runnerWindowOpen ? undefined : `The runner opens at ${formatTime(event.runnerOpensAt)}.`}
+              disabled={runnerWindow !== "open"}
               onClick={() => void setStatus(event, "live")}
             >
               Go live
@@ -343,11 +343,11 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
         }
       />
 
-      {!event.runnerWindowOpen ? (
+      {runnerWindow !== "open" ? (
         <Alert className={cn("border-status-amber-500/40 bg-status-amber-500/10", AMBER_TEXT)}>
           <WarningIcon aria-hidden />
           <AlertDescription className={AMBER_TEXT}>
-            {now < event.runnerOpensAt
+            {runnerWindow === "before"
               ? `The runner opens at ${formatTime(event.runnerOpensAt)}, an hour before the start. Until then you can see the queue but not call anyone up.`
               : `The runner closed at ${formatTime(event.runnerClosesAt)}, an hour after the end. You can see the queue but not call anyone up.`}
           </AlertDescription>
@@ -356,7 +356,7 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
 
       <ListSummary
         testId="open-mic-runner-summary"
-        order="In sign-up order. Not here moves someone to the front, then the back, then off the list."
+        order="In sign-up order. Not here sends them to the front of the queue and calls up the next person."
       >
         {summaryParts.length > 0 ? summaryParts.join(" · ") : "No sign-ups yet"}
       </ListSummary>

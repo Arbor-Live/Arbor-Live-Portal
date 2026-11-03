@@ -166,18 +166,22 @@ export function optimisticSetOpenMicStatus(
   args: { eventId: Id<"events">; status: OpenMicStatus },
 ) {
   const list = localStore.getQuery(api.openMic.listEvents, {});
-  if (list === undefined) return;
-
-  const next: EventSummary[] = list.map((event) =>
-    event._id === args.eventId ? { ...event, status: args.status } : event,
-  );
-  localStore.setQuery(api.openMic.listEvents, {}, next);
-
-  const runner = localStore.getQuery(api.openMic.getRunnerState, { eventId: args.eventId });
-  if (runner) {
-    localStore.setQuery(api.openMic.getRunnerState, { eventId: args.eventId }, {
-      ...runner,
-      event: { ...runner.event, status: args.status },
-    });
+  if (list) {
+    const next: EventSummary[] = list.map((event) =>
+      event._id === args.eventId ? { ...event, status: args.status } : event,
+    );
+    localStore.setQuery(api.openMic.listEvents, {}, next);
   }
+
+  const now = Date.now();
+  patchRunnerState(localStore, args.eventId, (runner) => ({
+    ...runner,
+    event: { ...runner.event, status: args.status },
+    signups:
+      args.status === "completed"
+        ? runner.signups.map((signup) =>
+            signup.status === "current" ? { ...signup, status: "performed", performedAt: now } : signup,
+          )
+        : runner.signups,
+  }));
 }
