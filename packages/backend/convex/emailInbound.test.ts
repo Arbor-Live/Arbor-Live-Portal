@@ -97,6 +97,18 @@ describe("recordInboundEmail", () => {
     expect(threads[0]!.messageCount).toBe(2);
   });
 
+  it("matches an older invoice whose number has a mixed-case suffix", async () => {
+    const t = makeTest();
+    const invoiceId = await seedInvoice(t, { invoiceNumber: "ALINV-PwWqpa9" });
+    const outcome = await record(
+      t,
+      inbound({ to: ["alinv-pwwqpa9@arbor.st"], receivedFor: ["alinv-pwwqpa9@arbor.st"] }),
+    );
+    expect(outcome).toBe("matched");
+    const threads = await t.run(async (ctx) => ctx.db.query("emailThreads").collect());
+    expect(threads.map((thread) => thread.invoiceId)).toEqual([invoiceId]);
+  });
+
   it("matches an event address and an envelope-only (BCC) address", async () => {
     const t = makeTest();
     const ids = await seedBooking(t);

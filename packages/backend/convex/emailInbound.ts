@@ -84,6 +84,25 @@ async function retryOrThrow(
   });
 }
 
+/**
+ * New invoice numbers are uppercase, but older ones carry a mixed-case suffix
+ * (`ALINV-PwWqpa9`) that a lowercased email address can't spell back. The
+ * search index ignores case, so it finds those.
+ */
+async function findInvoiceByNumberIgnoringCase(ctx: MutationCtx, number: string) {
+  const exact = await ctx.db
+    .query("invoices")
+    .withIndex("by_invoiceNumber", (q) => q.eq("invoiceNumber", number))
+    .first();
+  if (exact) return exact;
+  const wanted = number.toLowerCase();
+  const candidates = await ctx.db
+    .query("invoices")
+    .withSearchIndex("search_invoiceNumber", (q) => q.search("invoiceNumber", wanted))
+    .take(10);
+  return candidates.find((invoice) => invoice.invoiceNumber.toLowerCase() === wanted) ?? null;
+}
+
 /** The first To/CC/envelope address naming a booking that exists. */
 async function matchByAddress(
   ctx: MutationCtx,
@@ -99,10 +118,7 @@ async function matchByAddress(
         .first();
       if (request) return { requestId: request._id };
     } else if (parsed.kind === "invoice") {
-      const invoice = await ctx.db
-        .query("invoices")
-        .withIndex("by_invoiceNumber", (q) => q.eq("invoiceNumber", parsed.number))
-        .first();
+      const invoice = await findInvoiceByNumberIgnoringCase(ctx, parsed.number);
       if (invoice) return { invoiceId: invoice._id };
     } else {
       const eventId = ctx.db.normalizeId("events", parsed.id);
