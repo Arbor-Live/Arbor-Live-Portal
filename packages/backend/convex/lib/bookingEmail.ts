@@ -26,7 +26,12 @@ const REPLY_PREFIX = /^re:\s*/i;
 const DEFAULT_BOOKINGS_ADDRESS = "bookings@arbor.st";
 
 /** What an enqueue site passes so `enqueueEmail` sends the email on the booking's thread. */
-export type BookingEmailSource = { ref: BookingRef; loaded?: LoadedBookingDocs };
+export type BookingEmailSource = {
+  ref: BookingRef;
+  loaded?: LoadedBookingDocs;
+  /** The signed-in sender, for mail a person writes; otherwise the booking's manager signs. */
+  senderName?: string;
+};
 
 export type BookingEmailEnvelope = {
   booking: { threadId: Id<"emailThreads">; from: string };
@@ -110,6 +115,7 @@ async function computeBookingEnvelope(
   thread: Pick<Doc<"emailThreads">, "subject" | "messageCount"> | null,
   refs: BookingRefs,
   cache: BookingDocCache,
+  senderName?: string,
 ) {
   const [request, invoice, event] = await Promise.all([
     refs.requestId ? cache.get(refs.requestId) : null,
@@ -117,7 +123,7 @@ async function computeBookingEnvelope(
     refs.eventId ? cache.get(refs.eventId) : null,
   ]);
 
-  let managerName = invoice?.managerName?.trim() || undefined;
+  let managerName = senderName?.trim() || invoice?.managerName?.trim() || undefined;
   if (!managerName && request?.assigneeUserId) {
     const assignee = (await findAuthUsersByIds(ctx, [request.assigneeUserId])).get(
       request.assigneeUserId,
@@ -156,7 +162,7 @@ export async function resolveBookingEmail(
 ): Promise<BookingEmailEnvelope> {
   const cache = bookingDocCache(ctx, source.loaded);
   const thread = await getOrCreateThreadForBooking(ctx, source.ref, cache);
-  const envelope = await computeBookingEnvelope(ctx, thread, thread, cache);
+  const envelope = await computeBookingEnvelope(ctx, thread, thread, cache, source.senderName);
   if (!thread.subject) {
     await ctx.db.patch(thread._id, { subject: envelope.baseSubject });
   }

@@ -1,5 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { appError } from "./errors";
 
 /**
  * A booking is the request, its invoice and its events, joined by
@@ -185,4 +186,88 @@ export async function getOrCreateThreadForBooking(
   if (Object.keys(patch).length === 0) return existing;
   await ctx.db.patch(existing._id, patch);
   return { ...existing, ...patch };
+}
+
+/** The one booking record a staff query or mutation names; anything else is a caller bug. */
+export function bookingRefFromArgs(args: {
+  requestId?: Id<"eventRequests">;
+  invoiceId?: Id<"invoices">;
+  eventId?: Id<"events">;
+}): BookingRef {
+  const given = [args.requestId, args.invoiceId, args.eventId].filter(Boolean).length;
+  if (given === 1) {
+    if (args.requestId) return { requestId: args.requestId };
+    if (args.invoiceId) return { invoiceId: args.invoiceId };
+    if (args.eventId) return { eventId: args.eventId };
+  }
+  return appError("EMAIL_THREAD_REF", "Pass exactly one of requestId, invoiceId or eventId.");
+}
+
+/** Any one record the thread tracks reaches the whole booking. */
+export function threadBookingRef(thread: Doc<"emailThreads">): BookingRef | null {
+  if (thread.requestId) return { requestId: thread.requestId };
+  if (thread.invoiceId) return { invoiceId: thread.invoiceId };
+  if (thread.eventId) return { eventId: thread.eventId };
+  return null;
+}
+
+/** The booking's request and invoice, and the addresses that count as the client. */
+export async function loadBookingParties(ctx: QueryCtx | MutationCtx, refs: BookingRefs) {
+  const [request, invoice] = await Promise.all([
+    refs.requestId ? ctx.db.get(refs.requestId) : null,
+    refs.invoiceId ? ctx.db.get(refs.invoiceId) : null,
+  ]);
+  const clientEmails = new Set(
+    [request?.email, invoice?.clientEmail].flatMap((email) =>
+      email?.trim() ? [email.trim().toLowerCase()] : [],
+    ),
+  );
+  return { request, invoice, clientEmails };
+}
+
+/** The address staff reply to: the request's contact, else the invoice's. */
+export function clientReplyAddress(
+  request: Doc<"eventRequests"> | null,
+  invoice: Doc<"invoices"> | null,
+) {
+  return request?.email?.trim() || invoice?.clientEmail?.trim() || null;
+}
+
+/** An invoice whose current quote can go out as a PDF. */
+export function hasAttachableQuote(invoice: Doc<"invoices"> | null): invoice is Doc<"invoices"> {
+  return Boolean(invoice && invoice.status !== "void");
+}
+
+/**
+ * Why a client message cannot become a change request, or null when it can.
+ * One rule set for the button (`getForRecord`) and the action (`makeChangeRequest`).
+ */
+export function changeRequestBlocker(args: {
+  message: Doc<"emailMessages">;
+  invoice: Doc<"invoices"> | null;
+  clientEmails: ReadonlySet<string>;
+}): { code: string; message: string } | null {
+  const { message, invoice, clientEmails } = args;
+  if (message.changeRequestedAt) {
+    return { code: "EMAIL_CHANGE_ALREADY_REQUESTED", message: "This message is already a change request." };
+  }
+  if (message.direction !== "inbound" || !message.threadId) {
+    return { code: "EMAIL_CHANGE_NOT_INBOUND", message: "Only a client's reply can become a change request." };
+  }
+  if (!hasAttachableQuote(invoice)) {
+    return { code: "EMAIL_CHANGE_NO_QUOTE", message: "This booking has no quote to change." };
+  }
+  if (!invoice.clientReviewReadyAt) {
+    return { code: "EMAIL_CHANGE_QUOTE_NOT_READY", message: "The quote has not been sent to the client for review." };
+  }
+  if ((invoice.clientApprovalStatus ?? "pending") !== "pending") {
+    return { code: "EMAIL_CHANGE_QUOTE_DECIDED", message: "The client already decided on this quote." };
+  }
+  if (!clientEmails.has(message.fromEmail.trim().toLowerCase())) {
+    return { code: "EMAIL_CHANGE_NOT_FROM_CLIENT", message: "This message is not from the booking's client." };
+  }
+  if (!message.bodyText.trim()) {
+    return { code: "EMAIL_CHANGE_EMPTY", message: "This message has no text to use as the change note." };
+  }
+  return null;
 }

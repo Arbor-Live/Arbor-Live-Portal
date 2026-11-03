@@ -25,6 +25,14 @@ export function extractEmailAddress(raw: string): string | null {
   return candidate;
 }
 
+const PLAIN_ADDRESS = /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/;
+
+/** A bare `a@b.com` (lowercased), else null. Stricter than `extractEmailAddress`: no names, lists or brackets. */
+export function normalizePlainAddress(raw: string): string | null {
+  const candidate = raw.trim().toLowerCase();
+  return PLAIN_ADDRESS.test(candidate) ? candidate : null;
+}
+
 /** The display name in `Name <a@b.com>` or `"Name" <a@b.com>`, if any. */
 export function extractDisplayName(raw: string): string | undefined {
   const index = raw.indexOf("<");
