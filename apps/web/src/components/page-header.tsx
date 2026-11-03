@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeftIcon, CaretDownIcon, DotsThreeIcon, type Icon } from "@phosphor-icons/react";
+import { ArrowLeftIcon, ArrowSquareOutIcon, CaretDownIcon, DotsThreeIcon, type Icon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -175,15 +175,21 @@ export function PageMeta({ children }: { children: React.ReactNode }) {
   return <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm">{children}</div>;
 }
 
-/** Icon + text in the meta line. Pass `onClick` to make it open something (a Sheet). */
+/**
+ * Icon + text in the meta line. Pass `onClick` to make it open something (a
+ * Sheet), or `href` for a link to another site or the public pages, which opens
+ * in a new tab.
+ */
 export function MetaItem({
   icon: ItemIcon,
   children,
   onClick,
+  href,
 }: {
   icon: Icon;
   children: React.ReactNode;
   onClick?: () => void;
+  href?: string;
 }) {
   const content = (
     <>
@@ -191,6 +197,19 @@ export function MetaItem({
       <span className="truncate">{children}</span>
     </>
   );
+  if (href) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex min-w-0 items-center gap-1.5 hover:underline"
+      >
+        {content}
+        <ArrowSquareOutIcon className="size-3 shrink-0" aria-hidden />
+      </a>
+    );
+  }
   if (onClick) {
     return (
       <button type="button" onClick={onClick} className="inline-flex min-w-0 items-center gap-1.5 hover:underline">

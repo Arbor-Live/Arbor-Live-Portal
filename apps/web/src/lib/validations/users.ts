@@ -85,6 +85,7 @@ export const userAdminRowSchema = z
     requiresOnboarding: z.boolean(),
     includeInTimecards: z.boolean(),
     assignableAsCrew: z.boolean(),
+    cartEligible: z.boolean(),
     emailOptOuts: z.array(z.string()),
     showOnPublicCrewPage: z.boolean(),
     publicCrewDescription: z.string(),

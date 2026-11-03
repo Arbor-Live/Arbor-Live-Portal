@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import {
   CalendarBlankIcon,
+  CarSimpleIcon,
   IdentificationBadgeIcon,
   MapPinIcon,
   NotepadIcon,
@@ -14,7 +16,8 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
-import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { DraftTextarea } from "@/components/forms/draft-text-input";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { VenuePicker } from "@/components/venues/venue-picker";
 import { UserSelect } from "@/components/users/user-select";
@@ -25,6 +28,7 @@ import {
   EventPostMortemSummary,
 } from "@/components/events/event-post-mortem-section";
 import {
+  eventTypeHasLogistics,
   FULFILLMENT_OPTIONS,
   RENTAL_EVENT_TYPES,
   type RentalFulfillmentMode,
@@ -35,7 +39,10 @@ import {
   TeamsInterestedPicker,
 } from "@/components/events/workspace/event-fields";
 import { EventFilesCard } from "@/components/events/workspace/event-files-card";
+import { HashingCard } from "@/components/events/workspace/hashing-card";
 import { useEventWorkspace } from "@/components/events/workspace/event-workspace-provider";
+import { formatDateTimeRange } from "@/lib/format";
+import { HASHING_BASE_PATH } from "@/lib/hashing-tabs";
 
 export function OverviewTab() {
   const {
@@ -47,6 +54,8 @@ export function OverviewTab() {
     canEdit,
     linkedInvoice,
     userSelectOptions,
+    isHash,
+    hasOperationsAccess,
   } = useEventWorkspace();
   const showFulfillment = RENTAL_EVENT_TYPES.includes(draft.eventType);
 
@@ -72,19 +81,36 @@ export function OverviewTab() {
           <CardContent>
             <fieldset disabled={readOnly} className="grid gap-4 md:grid-cols-2">
               <Field label="When" icon={CalendarBlankIcon}>
-                <DateTimeRangePicker
-                  startValue={draft.startAt}
-                  endValue={draft.endAt}
-                  onChange={({ start, end }) => updateDraft({ startAt: start, endAt: end })}
-                  placeholder="Select start and end"
-                />
+                {isHash && eventData ? (
+                  <p className="flex min-h-9 flex-wrap items-center gap-x-3 text-sm" data-testid="event-when-locked">
+                    <span className="tabular-nums">
+                      {formatDateTimeRange(eventData.event.startAt, eventData.event.endAt)}
+                    </span>
+                    <Link href={`${HASHING_BASE_PATH}/setup`} className="text-primary hover:underline">
+                      Set in Hashing
+                    </Link>
+                  </p>
+                ) : (
+                  <DateTimeRangePicker
+                    startValue={draft.startAt}
+                    endValue={draft.endAt}
+                    onChange={({ start, end }) => updateDraft({ startAt: start, endAt: end })}
+                    placeholder="Select start and end"
+                  />
+                )}
               </Field>
               <Field label="Venue" icon={MapPinIcon}>
-                <VenuePicker
-                  value={draft.venueId}
-                  onChange={(venueId) => updateDraft({ venueId })}
-                  allowCreate
-                />
+                {isHash && !eventData?.event.venueId ? (
+                  <p className="flex min-h-9 items-center text-sm" data-testid="event-where-locked">
+                    {eventData?.event.venueName ?? "No venue"}
+                  </p>
+                ) : (
+                  <VenuePicker
+                    value={draft.venueId}
+                    onChange={(venueId) => updateDraft({ venueId })}
+                    allowCreate
+                  />
+                )}
               </Field>
               <Field label="Event Type" icon={ShapesIcon}>
                 <EventTypeSelect
@@ -104,6 +130,26 @@ export function OverviewTab() {
                   />
                 </Field>
               ) : null}
+              {eventTypeHasLogistics(draft.eventType) ? (
+                <Field
+                  label="Cart event"
+                  htmlFor="event-needs-cart"
+                  icon={CarSimpleIcon}
+                  hint="Gear moves by cart: setup and strike each need someone cart eligible."
+                >
+                  <div className="flex h-9 items-center gap-2">
+                    <Switch
+                      id="event-needs-cart"
+                      checked={draft.needsCart}
+                      onCheckedChange={(needsCart) => updateDraft({ needsCart })}
+                      data-testid="event-needs-cart"
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      {draft.needsCart ? "Yes" : "No"}
+                    </span>
+                  </div>
+                </Field>
+              ) : null}
               <Field
                 label="Teams interested"
                 icon={UsersThreeIcon}
@@ -117,11 +163,11 @@ export function OverviewTab() {
                 />
               </Field>
               <Field label="Notes" htmlFor="event-notes" icon={NotepadIcon} className="md:col-span-2">
-                <Textarea
+                <DraftTextarea
                   id="event-notes"
                   className="min-h-24"
                   value={draft.notes}
-                  onChange={(e) => updateDraft({ notes: e.target.value })}
+                  onCommit={(notes) => updateDraft({ notes })}
                   placeholder="Anything the team should know"
                 />
               </Field>
@@ -131,11 +177,12 @@ export function OverviewTab() {
 
         <EventContactsSection eventId={eventId} canEdit={canEdit} />
         <EventFilesCard eventId={eventId} artifacts={eventData?.artifacts ?? []} canEdit={canEdit} />
-        <EventPostMortemSection eventId={eventId} />
-        {canEdit ? <EventPostMortemSummary eventId={eventId} /> : null}
+        {isHash ? null : <EventPostMortemSection eventId={eventId} />}
+        {canEdit && !isHash ? <EventPostMortemSummary eventId={eventId} /> : null}
       </div>
 
       <aside className="min-w-0 space-y-4">
+        {isHash && hasOperationsAccess ? <HashingCard /> : null}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

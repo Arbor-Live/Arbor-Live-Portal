@@ -95,6 +95,14 @@ crons.cron(
   {},
 );
 
+// 3:30 AM Pacific in standard time, so yesterday's date has fully passed.
+crons.cron(
+  "close lapsed hashes",
+  "30 11 * * *",
+  internal.hashingSchedule.closeLapsedHashes,
+  {},
+);
+
 crons.interval(
   "sync ring camera clips",
   { minutes: 5 },

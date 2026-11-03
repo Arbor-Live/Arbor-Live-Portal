@@ -179,6 +179,7 @@ function PosterTile({
 }) {
   if (imageUrl) {
     return (
+      // eslint-disable-next-line @next/next/no-img-element -- event design posters may be external, arbitrary hosts not in next.config remotePatterns
       <img
         src={imageUrl}
         alt=""

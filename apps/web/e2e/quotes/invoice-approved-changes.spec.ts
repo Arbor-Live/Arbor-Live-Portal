@@ -10,8 +10,17 @@ import {
 
 /** Reprice the artist line to $400 and click Save, which opens the decision dialog. */
 async function repriceAndSave(page: Page) {
-  await page.getByTestId("invoice-row-artist-0").getByPlaceholder("Rate").fill("400");
+  const rate = page.getByTestId("invoice-row-artist-0").getByPlaceholder("Rate");
+  await rate.fill("400");
+  // Wait for the edit to register before Save: the save path builds its
+  // payload from form state, so a click that lands ahead of the change sends
+  // the old rate — the server then sees nothing to decide and the dialog
+  // never opens. The approved-edit banner is the editor's own dirty signal.
+  await expect(rate).toHaveValue("400", { timeout: 30_000 });
   await expect(page.getByText("Unsaved changes")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/This quote is approved, and these changes aren.t saved/)).toBeVisible({
+    timeout: 30_000,
+  });
   await saveInvoiceEditor(page);
   const dialog = page.getByTestId("approved-change-dialog");
   await expect(dialog).toBeVisible({ timeout: 25_000 });
@@ -42,7 +51,11 @@ async function crewCheaperAndSave(page: Page) {
   const hours = page.getByTestId("invoice-row-crew-0").getByLabel("Hours");
   await expect(hours).toHaveValue("5", { timeout: 30_000 });
   await hours.fill("4.75");
+  await expect(hours).toHaveValue("4.75", { timeout: 30_000 });
   await expect(page.getByText("Unsaved changes")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/This quote is approved, and these changes aren.t saved/)).toBeVisible({
+    timeout: 30_000,
+  });
   await saveInvoiceEditor(page);
   const dialog = page.getByTestId("approved-change-dialog");
   await expect(dialog).toBeVisible({ timeout: 25_000 });

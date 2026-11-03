@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
@@ -10,6 +10,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AppDialogProvider } from "@/components/ui/app-dialog";
 import { Toaster } from "@/components/ui/sonner";
 import { getToken } from "@/lib/auth-server";
+import { THEME_COLOR_INIT_SNIPPET, THEME_COLORS } from "@/lib/theme-color";
 import "./globals.css";
 
 const inter = Inter({
@@ -45,6 +46,20 @@ export const metadata: Metadata = {
   },
 };
 
+// viewport-fit=cover lets backgrounds run under the notch and home indicator;
+// fixed chrome pads itself back out with env(safe-area-inset-*).
+// interactive-widget makes Android's keyboard shrink the layout like iOS does.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: THEME_COLORS.light },
+    { media: "(prefers-color-scheme: dark)", color: THEME_COLORS.dark },
+  ],
+};
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -63,7 +78,7 @@ export default async function RootLayout({
           id="arbor-theme-init"
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("theme");var d=t==="dark"||(t!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d);}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem("theme");var d=t==="dark"||(t!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d);${THEME_COLOR_INIT_SNIPPET}}catch(e){}})();`,
           }}
         />
         <ThemeProvider>

@@ -1,3 +1,5 @@
+import { allocateCrewHours, crewPersonKeys, crewTierMultiplier } from "@arbor/invoice-document/crew-hours";
+import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { findAuthUsersByIds } from "./auth";
@@ -6,13 +8,19 @@ import {
   resolveUserCompensationHourlyRateUsd,
 } from "./crewCompensation";
 import { staffingSlots } from "./crewShiftKinds";
+import { countableShiftHours, loadOverlappingOtherEventShifts } from "./crewShiftOverlap";
+import { normalizeEventStatus } from "./eventStatus";
+import { dateTimeFormat } from "@arbor/format";
+
+/** Other events re-priced in one mutation when this one's crew changes (they share people's time). */
+const NEIGHBOR_RESYNC_CAP = 20;
 
 function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
 }
 
 function getShiftDayKey(startsAt: number) {
-  return new Intl.DateTimeFormat("en-CA", {
+  return dateTimeFormat("en-CA", {
     timeZone: "America/Los_Angeles",
     year: "numeric",
     month: "2-digit",
@@ -21,6 +29,14 @@ function getShiftDayKey(startsAt: number) {
 }
 
 export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id<"events">) {
+  return (await computeCrewCost(ctx, eventId)).cost;
+}
+
+/**
+ * The event's crew cost, plus the other events whose shifts share a person's
+ * time with this one (their cost depends on this event's shifts too).
+ */
+async function computeCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id<"events">) {
   const event = await ctx.db.get(eventId);
   const otPremium = event?.otPremium === true;
   const settings = await ctx.db
@@ -49,6 +65,16 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
     ),
   );
 
+  // A person on two shifts at once counts the shared time once, on the shift
+  // that starts first, here or on another event (`crewCountableHours`).
+  const otherEventShifts = await loadOverlappingOtherEventShifts(ctx, new Set([eventId]), shifts);
+  const countableByShift = await countableShiftHours(
+    ctx,
+    [...shifts, ...otherEventShifts],
+    new Map([[eventId, !event || normalizeEventStatus(event.status) === "cancelled"]]),
+  );
+  const countableHours = (shift: (typeof shifts)[number]) => countableByShift.get(shift._id) ?? shift.hours;
+
   const scheduleBlocks = await ctx.db
     .query("eventScheduleBlocks")
     .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
@@ -75,9 +101,12 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
         startsAt: number;
         endsAt: number;
         totalHours: number;
+        /** Hours already counted on an earlier-starting shift of the same person. */
+        coveredHours: number;
         regularHours: number;
         overtimeHours: number;
         baseRateUsd: number;
+        regularRateUsd: number;
         overtimeMultiplier: number;
         overtimeRateUsd: number;
         subtotalUsd: number;
@@ -85,8 +114,30 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
       }>;
     }
   >();
-  const userDayAllocatedHours = new Map<string, number>();
-  const overtimeMultiplier = 1.5;
+  // A day is the event: open slots assume the same people stay on all day, and
+  // everyone's first 8 hrs bill at the regular multiple (see `crew-hours.ts`).
+  const regularMultiplier = crewTierMultiplier("regular", otPremium);
+  const overtimeMultiplier = crewTierMultiplier("past_regular", otPremium);
+  const personByShift = crewPersonKeys(
+    shifts.map((shift) => ({
+      id: shift._id,
+      day: "event",
+      sectionRef: shift.scheduleBlockId ?? "unlinked",
+      sectionStartsAt: (shift.scheduleBlockId ? scheduleBlockById.get(shift.scheduleBlockId)?.startsAt : undefined) ?? shift.startsAt,
+      role: shift.role,
+      userId: shift.userId,
+      startsAt: shift.startsAt,
+      hours: shift.hours,
+    })),
+  );
+  const hoursByShift = allocateCrewHours(
+    shifts.map((shift) => ({
+      id: shift._id,
+      personKey: personByShift.get(shift._id) ?? shift._id,
+      startsAt: shift.startsAt,
+      hours: countableHours(shift),
+    })),
+  );
 
   for (const shift of shifts) {
     const dayKey = getShiftDayKey(shift.startsAt);
@@ -114,23 +165,13 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
     const userName = shift.userId
       ? (userById.get(shift.userId)?.name ?? userById.get(shift.userId)?.email ?? shift.userId)
       : shift.personName?.trim() || "Unassigned";
-    const allocationKey = shift.userId ? `${shift.userId}:${dayKey}` : undefined;
-    const alreadyAllocated = allocationKey ? (userDayAllocatedHours.get(allocationKey) ?? 0) : 0;
-    let regularHours = roundCurrency(Math.max(0, Math.min(shift.hours, 8 - alreadyAllocated)));
-    let overtimeHours = roundCurrency(Math.max(0, shift.hours - regularHours));
-    if (otPremium) {
-      regularHours = 0;
-      overtimeHours = roundCurrency(shift.hours);
-    }
-    if (allocationKey) {
-      userDayAllocatedHours.set(allocationKey, roundCurrency(alreadyAllocated + shift.hours));
-    }
+    const { regularHours, pastRegularHours: overtimeHours } = hoursByShift.get(shift._id) ?? {
+      regularHours: countableHours(shift),
+      pastRegularHours: 0,
+    };
+    const regularRateUsd = roundCurrency(rate * regularMultiplier);
     const overtimeRateUsd = roundCurrency(rate * overtimeMultiplier);
-    const subtotalUsd = shift.userId
-      ? otPremium
-        ? roundCurrency(shift.hours * overtimeRateUsd)
-        : roundCurrency(regularHours * rate + overtimeHours * overtimeRateUsd)
-      : roundCurrency(shift.hours * rate);
+    const subtotalUsd = roundCurrency(regularHours * regularRateUsd + overtimeHours * overtimeRateUsd);
 
     blockEntry.regularHours = roundCurrency(blockEntry.regularHours + regularHours);
     blockEntry.overtimeHours = roundCurrency(blockEntry.overtimeHours + overtimeHours);
@@ -142,10 +183,12 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
       role: shift.role,
       startsAt: shift.startsAt,
       endsAt: shift.endsAt,
-      totalHours: shift.hours,
+      totalHours: countableHours(shift),
+      coveredHours: roundCurrency(Math.max(0, shift.hours - countableHours(shift))),
       regularHours,
       overtimeHours,
       baseRateUsd: rate,
+      regularRateUsd,
       overtimeMultiplier,
       overtimeRateUsd,
       subtotalUsd,
@@ -194,12 +237,13 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
   );
   const totalRegularHours = roundCurrency(byScheduleBlock.reduce((sum, row) => sum + row.regularHours, 0));
   const totalOvertimeHours = roundCurrency(byScheduleBlock.reduce((sum, row) => sum + row.overtimeHours, 0));
-  return {
+  const cost = {
     totalCostUsd,
     bufferedTotalCostUsd,
     bufferPercent,
     totalRegularHours,
     totalOvertimeHours,
+    regularMultiplier,
     overtimeMultiplier,
     otPremium,
     byUser,
@@ -207,13 +251,76 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
     missingRateUsers,
     missingRateOpenSlotCount,
   };
+  const neighborEventIds = [...new Set(otherEventShifts.map((shift) => shift.eventId))];
+  return { cost, neighborEventIds };
 }
 
-export async function syncEventCrewCostUsd(ctx: MutationCtx, eventId: Id<"events">, now: number) {
-  const costs = await calculateCrewCost(ctx, eventId);
+/**
+ * Other events whose crew share a person's time with this event's crew. Read
+ * before changing an event's shifts so events that stop overlapping are
+ * re-priced too (`syncEventCrewCostUsd`'s `previousNeighborEventIds`).
+ */
+export async function crewCostNeighborEventIds(ctx: QueryCtx | MutationCtx, eventId: Id<"events">) {
+  const shifts = await ctx.db
+    .query("eventCrewShifts")
+    .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
+    .take(500);
+  const others = await loadOverlappingOtherEventShifts(ctx, new Set([eventId]), shifts);
+  return [...new Set(others.map((shift) => shift.eventId))];
+}
+
+/**
+ * Stores the event's crew cost, then re-prices the other events that share a
+ * person's time with it: which shift keeps the shared hours depends on both.
+ */
+export async function syncEventCrewCostUsd(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  now: number,
+  options?: { previousNeighborEventIds?: Array<Id<"events">> },
+) {
+  const { cost, neighborEventIds } = await computeCrewCost(ctx, eventId);
   await ctx.db.patch(eventId, {
-    crewCostUsd: costs.totalCostUsd,
+    crewCostUsd: cost.totalCostUsd,
     updatedAt: now,
   });
-  return costs;
+  const neighbors = [...new Set([...neighborEventIds, ...(options?.previousNeighborEventIds ?? [])])].filter(
+    (id) => id !== eventId,
+  );
+  await repriceCrewCostEvents(ctx, neighbors, now);
+  return cost;
+}
+
+/**
+ * Re-stores each event's crew cost (no cascade to their own neighbors). Past
+ * the per-mutation cap, the rest continue in a scheduled batch.
+ */
+export async function repriceCrewCostEvents(ctx: MutationCtx, eventIds: Array<Id<"events">>, now: number) {
+  for (const eventId of eventIds.slice(0, NEIGHBOR_RESYNC_CAP)) {
+    const event = await ctx.db.get(eventId);
+    if (!event) continue;
+    const { cost } = await computeCrewCost(ctx, eventId);
+    if (event.crewCostUsd === cost.totalCostUsd) continue;
+    await ctx.db.patch(eventId, { crewCostUsd: cost.totalCostUsd, updatedAt: now });
+  }
+  const rest = eventIds.slice(NEIGHBOR_RESYNC_CAP);
+  if (rest.length > 0) {
+    await ctx.scheduler.runAfter(0, internal.eventCrew.repriceCrewCostBatch, { eventIds: rest });
+  }
+}
+
+/**
+ * A cancelled event's shifts stop covering anyone's time (and count again once
+ * it's back), so the events sharing its crew's time re-price.
+ */
+export async function syncCrewCostAfterStatusChange(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  prevStatus: string | undefined,
+  nextStatus: string | undefined,
+  now: number,
+) {
+  const wasCancelled = normalizeEventStatus(prevStatus) === "cancelled";
+  if (wasCancelled === (normalizeEventStatus(nextStatus) === "cancelled")) return;
+  await syncEventCrewCostUsd(ctx, eventId, now);
 }

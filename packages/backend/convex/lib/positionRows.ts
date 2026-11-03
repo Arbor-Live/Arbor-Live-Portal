@@ -1,6 +1,7 @@
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { releaseSlotFromInvoice } from "./artistLineSync";
+import { syncEventBandsCost } from "./bookingPriceSync";
 import { unclaimSlot } from "./eventBandParticipation";
 import { deleteActBlocks } from "./runOfShow";
 
@@ -42,4 +43,6 @@ export async function removePositionRow(ctx: MutationCtx, needId: Id<"eventArtis
   await releaseSlotFromInvoice(ctx, slot._id);
   await ctx.db.delete(slot._id);
   await deleteActBlocks(ctx, { needId: slot._id });
+  // Its price no longer counts toward the event's artist cost.
+  await syncEventBandsCost(ctx, slot.eventId);
 }

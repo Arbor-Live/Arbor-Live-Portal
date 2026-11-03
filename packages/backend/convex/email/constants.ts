@@ -78,6 +78,7 @@ export type EmailTemplate =
   | "payment_proof_rejected"
   | "damage_report_admin"
   | "coho_gift_card_low_balance"
+  | "golf_cart_event_ready"
   | "artist_need_inquiry"
   | "weekly_digest"
   | "this_week_at_arbor";
@@ -265,6 +266,8 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `New damage report: ${context}`;
     case "coho_gift_card_low_balance":
       return `CoHo gift card is low: ${context}`;
+    case "golf_cart_event_ready":
+      return `Golf cart needed: ${context}`;
     case "artist_need_inquiry":
       return `Artist requested to perform: ${context}`;
     case "weekly_digest":

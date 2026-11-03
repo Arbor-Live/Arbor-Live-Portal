@@ -19,6 +19,7 @@ import {
   type ActRef,
 } from "./lib/runOfShow";
 import { scheduleBlockTypeValue, type ScheduleBlockType } from "./lib/scheduleBlockTypes";
+import { isHashEvent, requireHashBlocksUnchanged } from "./lib/hashEvent";
 
 export const listByEvent = query({
   args: { eventId: v.id("events") },
@@ -82,6 +83,7 @@ export const upsertBlocks = mutation({
         appError("SCHEDULE_BLOCK_NOT_ON_EVENT", "Schedule block does not belong to this event.");
       }
     }
+    if (isHashEvent(event)) requireHashBlocksUnchanged(existing, args.blocks);
     const editsActBlocks = args.editsActBlocks === true;
 
     // Validate new act blocks: the act is on this event, the type is an act

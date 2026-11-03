@@ -96,7 +96,6 @@ test.describe("inventory CSV import", () => {
         itemId: string;
         assetId: string;
         typeName: string;
-        status: string;
         storageLocationPath: string;
       }>(
         "e2eHelpers:getInventoryItemByAssetId",

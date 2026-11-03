@@ -10,6 +10,7 @@ import {
   ChartLineUpIcon,
   CoinsIcon,
   InfoIcon,
+  MicrophoneStageIcon,
   ReceiptIcon,
   RepeatIcon,
   UsersThreeIcon,
@@ -20,6 +21,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RowCell } from "@/components/list-page";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { DraftTextInput } from "@/components/forms/draft-text-input";
 import type { SearchableSelectOption } from "@/components/inventory/searchable-select";
 import { EventLinkedInvoicesField } from "@/components/events/event-linked-invoices-field";
 import { formatDateTime, formatHours, formatUsd } from "@/lib/format";
@@ -31,6 +35,7 @@ import {
   netProfitFromInvoiceUsd,
 } from "@/lib/invoice-profit";
 import { cn } from "@/lib/utils";
+import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
 import type { EventDraft } from "@/components/events/workspace/event-draft";
 import { Field } from "@/components/events/workspace/event-fields";
 import {
@@ -42,25 +47,31 @@ import { useEventWorkspace } from "@/components/events/workspace/event-workspace
 
 function UsdInput({
   value,
-  onChange,
+  onCommit,
   readOnly,
+  "data-testid": testId,
 }: {
   value: string;
-  onChange?: (value: string) => void;
+  onCommit?: (value: string) => void;
   readOnly?: boolean;
+  "data-testid"?: string;
 }) {
+  const inputProps = {
+    inputMode: "decimal" as const,
+    className: "pl-6 tabular-nums",
+    readOnly,
+    "data-testid": testId,
+  };
   return (
     <div className="relative">
       <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
         $
       </span>
-      <Input
-        inputMode="decimal"
-        className="pl-6 tabular-nums"
-        value={value}
-        readOnly={readOnly}
-        onChange={onChange ? (e) => onChange(e.target.value) : undefined}
-      />
+      {onCommit ? (
+        <DraftTextInput {...inputProps} value={value} onCommit={onCommit} />
+      ) : (
+        <Input {...inputProps} value={value} />
+      )}
     </div>
   );
 }
@@ -132,7 +143,12 @@ export function BillingTab() {
     "";
 
   const crewCostTotal = computedCrewCost?.totalCostUsd ?? eventData?.event.crewCostUsd ?? 0;
-  const bandsCostTotal = Number(draft.bandsCostUsd || "0");
+  // A person's first 8 hrs and the rest: regular / OT, or OT / DT on an OT event.
+  const tierNames = computedCrewCost?.otPremium
+    ? { regular: "OT", regularTitle: "OT", overtime: "DT", columns: "OT / DT" }
+    : { regular: "regular", regularTitle: "Regular", overtime: "OT", columns: "Reg / OT" };
+  // Derived from the Lineup (booking prices and payouts); never typed here.
+  const bandsCostTotal = eventData?.event.bandsCostUsd ?? 0;
   const externalRentalsCostTotal = Number(draft.externalRentalsCostUsd || "0");
   const otherCostTotal = Number(draft.otherCostUsd || "0");
   const seriesRecurringTotalUsd =
@@ -187,9 +203,9 @@ export function BillingTab() {
   const hasInvoice = Boolean(draft.invoiceId) || draft.additionalInvoiceIds.length > 0;
   const costLabel = seriesMeta ? "Total series cost (projected)" : "Total event cost";
 
-  function costField(key: keyof Pick<EventDraft, "bandsCostUsd" | "externalRentalsCostUsd" | "otherCostUsd">) {
+  function costField(key: keyof Pick<EventDraft, "externalRentalsCostUsd" | "otherCostUsd">) {
     return (
-      <UsdInput value={draft[key]} onChange={(value) => updateDraft({ [key]: value })} readOnly={readOnly} />
+      <UsdInput value={draft[key]} onCommit={(value) => updateDraft({ [key]: value })} readOnly={readOnly} />
     );
   }
 
@@ -326,7 +342,7 @@ export function BillingTab() {
               icon={UsersThreeIcon}
               hint={
                 computedCrewCost
-                  ? `${formatHours(computedCrewCost.totalRegularHours)} regular · ${formatHours(computedCrewCost.totalOvertimeHours)} OT`
+                  ? `${formatHours(computedCrewCost.totalRegularHours)} ${tierNames.regular} · ${formatHours(computedCrewCost.totalOvertimeHours)} ${tierNames.overtime}`
                   : "Calculating from assigned shifts…"
               }
             >
@@ -334,18 +350,26 @@ export function BillingTab() {
             </Field>
             <Field
               label="Artists"
-              hint={seriesMeta ? "This occurrence only unless you pick a series scope on save." : undefined}
+              icon={MicrophoneStageIcon}
+              hint={
+                <>
+                  From the Lineup: payouts, and booking prices not paid yet.{" "}
+                  <Link href={getEventEditorTabPath(eventId, "artists")} className="underline">
+                    Open the Lineup
+                  </Link>
+                </>
+              }
             >
-              {costField("bandsCostUsd")}
+              <UsdInput value={bandsCostTotal.toFixed(2)} readOnly data-testid="event-artists-cost" />
             </Field>
             <Field label="External rentals">{costField("externalRentalsCostUsd")}</Field>
             <Field label="Other">{costField("otherCostUsd")}</Field>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Crew cost is calculated from assigned users in schedule shifts: each uses their hourly rate, and
-            hours beyond 8/day are billed at 1.5×
-            {computedCrewCost?.otPremium ? " (this event uses whole-event OT premium)." : "."}
+            Crew cost is calculated from schedule shifts: open slots assume the same people stay on all day, and
+            each person&apos;s first 8 hrs bill at their rate, the rest at 1.5×
+            {computedCrewCost?.otPremium ? " (this event is OT: 1.5×, then double time after 8 hrs)." : "."}
             {computedCrewCost?.bufferPercent !== undefined && computedCrewCost.bufferPercent > 0
               ? ` Buffered crew cost (${computedCrewCost.bufferPercent}%): ${formatUsd(
                   computedCrewCost.bufferedTotalCostUsd ?? computedCrewCost.totalCostUsd,
@@ -355,24 +379,27 @@ export function BillingTab() {
 
           {isAdmin ? (
             <div className="grid gap-3 border border-dashed p-3 md:grid-cols-2">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="event-billing-ot-premium"
                   checked={draft.otPremium}
-                  onChange={(e) => updateDraft({ otPremium: e.target.checked })}
+                  onCheckedChange={(otPremium) => updateDraft({ otPremium })}
                 />
-                OT premium (whole event 1.5×)
-              </label>
+                <Label htmlFor="event-billing-ot-premium" className="font-normal">
+                  OT premium (1.5×, double time after 8 hrs)
+                </Label>
+              </div>
               <Field label="Per-event crew buffer %">
-                <Input
+                <DraftTextInput
                   value={draft.crewCostBufferPercent}
-                  onChange={(e) => updateDraft({ crewCostBufferPercent: e.target.value })}
+                  onCommit={(crewCostBufferPercent) => updateDraft({ crewCostBufferPercent })}
                   placeholder="Use global default"
                 />
               </Field>
               <p className="text-xs text-muted-foreground md:col-span-2">
-                OT premium inflates Stanford input hours (1.5× for hours 1–8) and bills all crew hours at 1.5×
-                rate.
+                OT premium inflates Stanford input hours (1.5× for hours 1–8) and bills crew at 1.5× (double time
+                after 8 hrs), on crew cost and on the linked invoice&apos;s crew lines. The invoice&apos;s Details sidebar
+                has the same switch.
               </p>
             </div>
           ) : null}
@@ -412,7 +439,7 @@ export function BillingTab() {
               Crew cost breakdown
             </CardTitle>
             <span className="text-xs text-muted-foreground">
-              OT multiplier {computedCrewCost.overtimeMultiplier.toFixed(2)}×
+              {tierNames.regular} {computedCrewCost.regularMultiplier}× · {tierNames.overtime} {computedCrewCost.overtimeMultiplier}×
             </span>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -430,7 +457,8 @@ export function BillingTab() {
                           {block.blockType ? ` (${block.blockType})` : ""}
                         </span>
                         <span className="block text-xs text-muted-foreground">
-                          Regular {formatHours(block.regularHours)} · OT {formatHours(block.overtimeHours)}
+                          {tierNames.regularTitle} {formatHours(block.regularHours)} · {tierNames.overtime}{" "}
+                          {formatHours(block.overtimeHours)}
                         </span>
                       </span>
                     </span>
@@ -440,8 +468,8 @@ export function BillingTab() {
                     <div className="hidden items-center gap-3 bg-muted/20 px-3 py-2 text-xs font-medium text-muted-foreground md:flex">
                       <span className="min-w-0 flex-1">Crew</span>
                       <span className="w-40 shrink-0">Shift</span>
-                      <span className="w-24 shrink-0 text-right">Hours (Reg / OT)</span>
-                      <span className="w-32 shrink-0 text-right">Rate (Base / OT)</span>
+                      <span className="w-24 shrink-0 text-right">Hours ({tierNames.columns})</span>
+                      <span className="w-32 shrink-0 text-right">Rate ({tierNames.columns})</span>
                       <span className="w-20 shrink-0 text-right">Subtotal</span>
                     </div>
                     <ul className="divide-y">
@@ -456,6 +484,11 @@ export function BillingTab() {
                             {row.missingRate ? (
                               <p className="text-2xs text-status-amber-700">Missing base rate</p>
                             ) : null}
+                            {row.coveredHours > 0 ? (
+                              <p className="text-2xs text-muted-foreground">
+                                {formatHours(row.coveredHours)} already counted on an earlier shift
+                              </p>
+                            ) : null}
                           </div>
                           <span className="w-full text-muted-foreground md:w-40 md:shrink-0">
                             {formatDateTime(row.startsAt)} – {formatDateTime(row.endsAt)}
@@ -464,7 +497,7 @@ export function BillingTab() {
                             {formatHours(row.regularHours)} / {formatHours(row.overtimeHours)}
                           </RowCell>
                           <RowCell className="w-32">
-                            {formatUsd(row.baseRateUsd)} / {formatUsd(row.overtimeRateUsd)}
+                            {formatUsd(row.regularRateUsd)} / {formatUsd(row.overtimeRateUsd)}
                           </RowCell>
                           <RowCell className="w-20">{formatUsd(row.subtotalUsd)}</RowCell>
                         </li>

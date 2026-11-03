@@ -17,6 +17,7 @@ import {
   pacificDateKey,
   pacificDateTimeInputToMs,
   toPacificDateTimeInput,
+  dateTimeFormat,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +36,7 @@ function instantFromNaive(value: string) {
 }
 
 function formatInstantLabel(ms: number, timeOnly = false) {
-  return new Intl.DateTimeFormat("en-US", {
+  return dateTimeFormat("en-US", {
     timeZone: PORTAL_TIMEZONE,
     ...(timeOnly
       ? { hour: "numeric", minute: "2-digit" }
@@ -50,7 +51,7 @@ function formatInstantLabel(ms: number, timeOnly = false) {
 }
 
 function formatDateOnly(ms: number) {
-  return new Intl.DateTimeFormat("en-US", {
+  return dateTimeFormat("en-US", {
     timeZone: PORTAL_TIMEZONE,
     month: "short",
     day: "numeric",

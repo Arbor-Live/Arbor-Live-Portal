@@ -98,6 +98,8 @@ export const bookingRequestReceivedPreviewProps: BookingRequestReceivedEmailProp
   eventName: "Spring Concert 2026",
   eventDateText: "Saturday, Apr 12, 2026",
   trackingUrl: `${ARBOR_WEBSITE_URL}/request/track/demo-request`,
+  managerName: "Alex Chen",
+  managerEmail: "alex.chen@stanford.edu",
 };
 
 export const bookingQuoteReadyPreviewProps: BookingQuoteReadyEmailProps = {

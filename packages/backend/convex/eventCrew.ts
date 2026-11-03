@@ -1,10 +1,15 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import schema from "./schema";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { appError, withReportableErrors } from "./lib/errors";
 import { requireEventEditAccess } from "./lib/eventAccess";
-import { calculateCrewCost, syncEventCrewCostUsd } from "./lib/crewCost";
+import {
+  calculateCrewCost,
+  crewCostNeighborEventIds,
+  repriceCrewCostEvents,
+  syncEventCrewCostUsd,
+} from "./lib/crewCost";
 import {
   loadInvoiceCrewRateSettings,
   resolveOpenSlotHourlyRateUsd,
@@ -15,6 +20,9 @@ import { bumpInviteSequence } from "./email/inviteSequence";
 import { isSectionBlockType } from "./lib/scheduleBlockTypes";
 import { isTraineeShift } from "./lib/crewShiftKinds";
 import { normalizeEventStatus } from "./lib/eventStatus";
+import { loadNightRows } from "./lib/crewNightAnswers";
+import { nightKeyForEvent } from "./lib/crewNights";
+import { isHashEvent, requireHashCrewEdit } from "./lib/hashEvent";
 
 function hoursBetween(start: number, end: number) {
   return Number(((end - start) / 3_600_000).toFixed(2));
@@ -26,6 +34,7 @@ const computedCrewCostValue = v.object({
   bufferPercent: v.number(),
   totalRegularHours: v.number(),
   totalOvertimeHours: v.number(),
+  regularMultiplier: v.number(),
   overtimeMultiplier: v.number(),
   otPremium: v.boolean(),
   byUser: v.array(
@@ -55,10 +64,13 @@ const computedCrewCostValue = v.object({
           role: v.string(),
           startsAt: v.number(),
           endsAt: v.number(),
+          /** Billed hours: the shift's hours less time an earlier shift already counts. */
           totalHours: v.number(),
+          coveredHours: v.number(),
           regularHours: v.number(),
           overtimeHours: v.number(),
           baseRateUsd: v.number(),
+          regularRateUsd: v.number(),
           overtimeMultiplier: v.number(),
           overtimeRateUsd: v.number(),
           subtotalUsd: v.number(),
@@ -122,7 +134,11 @@ export const upsertShifts = mutation({
     await requireArborInternalContext(ctx);
     await requireEventEditAccess(ctx, args.eventId);
     return await withReportableErrors("eventCrew.upsertShifts", async () => {
-    for (const shift of args.shifts) {
+    const event = await ctx.db.get(args.eventId);
+    const shifts =
+      event && isHashEvent(event) ? await requireHashCrewEdit(ctx, args.eventId, args.shifts) : args.shifts;
+    if (!shifts) return null;
+    for (const shift of shifts) {
       if (shift.endsAt <= shift.startsAt) {
         appError("SHIFT_END_BEFORE_START", "Shift end must be after shift start.");
       }
@@ -146,7 +162,7 @@ export const upsertShifts = mutation({
       .take(500);
     const existingIds = new Set(existing.map((row) => row._id));
     const existingById = new Map(existing.map((row) => [row._id, row]));
-    for (const shift of args.shifts) {
+    for (const shift of shifts) {
       if (shift.id && !existingIds.has(shift.id)) {
         appError("SHIFT_NOT_ON_EVENT", "Crew shift does not belong to this event.");
       }
@@ -159,14 +175,16 @@ export const upsertShifts = mutation({
       userId: row.userId,
       crewApplicationId: row.crewApplicationId,
     }));
-    const keepIds = new Set(args.shifts.map((s) => s.id).filter(Boolean));
+    // Events sharing someone's time before the edit get re-priced even if they stop overlapping.
+    const previousNeighborEventIds = await crewCostNeighborEventIds(ctx, args.eventId);
+    const keepIds = new Set(shifts.map((s) => s.id).filter(Boolean));
     for (const row of existing) {
       if (!keepIds.has(row._id)) await ctx.db.delete(row._id);
     }
 
     const now = Date.now();
     const crewRateSettings = await loadInvoiceCrewRateSettings(ctx);
-    for (const shift of args.shifts) {
+    for (const shift of shifts) {
       const hours = hoursBetween(shift.startsAt, shift.endsAt);
       const postedToExpense = shift.postedToExpense && !!shift.expenseReportId;
       const userId = shift.userId?.trim() || undefined;
@@ -207,6 +225,8 @@ export const upsertShifts = mutation({
           endsAt: shift.endsAt,
           hours,
           timesOverridden,
+          // A pending move was asked of the person holding the slot, not whoever takes it.
+          needsConfirmation: userId === previous?.userId ? previous?.needsConfirmation : undefined,
           estimatedHourlyRateUsd,
           postedToExpense,
           notes: shift.notes?.trim() || undefined,
@@ -251,13 +271,13 @@ export const upsertShifts = mutation({
       });
     }
 
-    await syncEventCrewCostUsd(ctx, args.eventId, now);
+    await syncEventCrewCostUsd(ctx, args.eventId, now, { previousNeighborEventIds });
     const inviteSequence = await bumpInviteSequence(ctx, args.eventId);
     await scheduleCrewScheduledEmails(
       ctx,
       args.eventId,
       previousShifts,
-      args.shifts.map((shift) => ({
+      shifts.map((shift) => ({
         scheduleBlockId: shift.scheduleBlockId,
         role: shift.role.trim(),
         startsAt: shift.startsAt,
@@ -376,6 +396,10 @@ export const listCrewConflictsForEvent = query({
         eventTitle: v.string(),
         startsAt: v.number(),
         endsAt: v.number(),
+        /** The other shift itself, so crew lines can count shared time once (`crewCountableHours`). */
+        shiftId: v.id("eventCrewShifts"),
+        shiftCreationTime: v.number(),
+        hours: v.number(),
       }),
     ),
     /** People past the cap the overlap scan never reached. */
@@ -391,13 +415,25 @@ export const listCrewConflictsForEvent = query({
       .query("eventScheduleBlocks")
       .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
       .take(200);
-    const spanStart = Math.min(event.startAt, ...blocks.map((block) => block.startsAt));
-    const spanEnd = Math.max(event.endAt, ...blocks.map((block) => block.endsAt));
-
-    const responses = await ctx.db
-      .query("eventCrewAvailabilityResponses")
+    // Shifts can run outside the event and its sections (custom times); the
+    // span covers them so billing sees every overlap.
+    const ownShifts = await ctx.db
+      .query("eventCrewShifts")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(500);
+    const spanStart = Math.min(
+      event.startAt,
+      ...blocks.map((block) => block.startsAt),
+      ...ownShifts.map((shift) => shift.startsAt),
+    );
+    const spanEnd = Math.max(
+      event.endAt,
+      ...blocks.map((block) => block.endsAt),
+      ...ownShifts.map((shift) => shift.endsAt),
+    );
+
+    // Anyone who answered this event's night is a candidate on the board.
+    const responses = await loadNightRows(ctx, nightKeyForEvent(event));
     // The board's own assignees are checked first; responders fill whatever
     // room is left under the cap, so a long responder list can't push an
     // assignee out and hide their double booking.
@@ -446,9 +482,22 @@ export const listCrewConflictsForEvent = query({
           eventTitle: other.title,
           startsAt: shift.startsAt,
           endsAt: shift.endsAt,
+          shiftId: shift._id,
+          shiftCreationTime: shift._creationTime,
+          hours: shift.hours,
         },
       ];
     });
     return { conflicts, uncheckedUserIds };
+  },
+});
+
+/** Continues re-pricing events that share crew time once one mutation's cap is reached. */
+export const repriceCrewCostBatch = internalMutation({
+  args: { eventIds: v.array(v.id("events")) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await repriceCrewCostEvents(ctx, args.eventIds, Date.now());
+    return null;
   },
 });

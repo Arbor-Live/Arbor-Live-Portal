@@ -93,8 +93,12 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 ### Event Costs (No Generated Expense Reports)
 - Event costs are direct fields on `events`:
   - `crewCostUsd`
-  - `bandsCostUsd` (band payouts / expenses — not revenue)
+  - `bandsCostUsd` (artist cost — derived, read-only: payouts plus unpaid
+    booking prices; `lib/bookingPriceSync.ts`)
   - `externalRentalsCostUsd` (pass-through expense — not revenue)
+- Each act's price lives once on its lineup position (`eventArtistNeeds.price`,
+  `lib/bookingPrice.ts`): the quote's artist line bills it and the payout pays
+  it. Never add a second editable price for artists.
 - Invoice artist and external-rental lines may bill the host for transparency.
   Insights earned revenue and net profit treat them as pass-through
   (`invoicePassThroughUsd` / `arborEarnedRevenueUsd` / `netProfitFromInvoiceUsd`).
@@ -114,6 +118,10 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
   (status, pull list, host, payment reminders). Further links are
   `eventInvoiceLinks` (max 12). Event margin and pipeline booked revenue sum
   them. Extra invoices are per occurrence; a series still shares one primary.
+- Quote back-and-forth lives in `invoiceRevisions` (`sent`, `changes_requested`,
+  `approved`, …). Never clear a client change request without recording it:
+  answer it via `sendRevisedQuote`, which also sends a staff-initiated
+  revision of a pending quote (see `docs/domain-guide.md`).
 
 ## Event groups (series + multi-day bookings)
 - `eventSeries` rows are **event groups**: `kind: "recurring"` (series) or `"multi_day"` (days sharing one primary invoice). Days

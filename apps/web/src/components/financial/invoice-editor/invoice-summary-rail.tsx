@@ -27,6 +27,7 @@ import { INVOICE_DUE_DAYS_AFTER_EVENT } from "@/lib/invoice-due-date";
 import { EQUIPMENT_PRICING_MODE_OPTIONS, INVOICE_GROUP_TYPE_LABELS } from "@/lib/invoice-group-labels";
 import { cn } from "@/lib/utils";
 import { NewClientDialog, NewHostDialog } from "./invoice-host-dialogs";
+import { InvoiceOvertimeControl } from "./invoice-overtime-control";
 import {
   normalizeInvoiceDiscountInput,
   type CrewRateMode,
@@ -34,6 +35,7 @@ import {
   type EquipmentPricingModeValue,
 } from "./invoice-draft-model";
 import type { InvoiceDraft } from "./use-invoice-draft";
+import { DraftTextInput } from "@/components/forms/draft-text-input";
 
 function TotalRow({
   label,
@@ -101,15 +103,18 @@ function InvoiceTotalCard({ draft }: { draft: InvoiceDraft }) {
           <Label htmlFor="invoice-discount-value" className="sr-only">
             Discount
           </Label>
-          <Input
+          <DraftTextInput
             id="invoice-discount-value"
             data-testid="invoice-discount-value"
             className="h-7 text-right tabular-nums"
             inputMode="decimal"
             value={fields.discountValue}
-            onChange={(event) => setField("discountValue", event.target.value)}
-            onBlur={() =>
-              setField("discountValue", normalizeInvoiceDiscountInput(fields.discountValue, fields.discountType))
+            onCommit={(value) => setField("discountValue", value)}
+            onBlur={(event) =>
+              // Normalize what is actually in the box, not the render-closure
+              // value: a blur that lands before the last change commits would
+              // otherwise rewrite the typed number with the stale one.
+              setField("discountValue", normalizeInvoiceDiscountInput(event.target.value, fields.discountType))
             }
           />
         </div>
@@ -261,12 +266,12 @@ function InvoiceClientCard({ draft }: { draft: InvoiceDraft }) {
                 <Label htmlFor={`invoice-${field.key}`} className="text-xs text-muted-foreground">
                   {field.label}
                 </Label>
-                <Input
+                <DraftTextInput
                   id={`invoice-${field.key}`}
                   type={field.type}
                   placeholder={field.label}
                   value={fields[field.key]}
-                  onChange={(event) => setField(field.key, event.target.value)}
+                  onCommit={(value) => setField(field.key, value)}
                 />
               </div>
             ))}
@@ -437,15 +442,16 @@ function InvoiceDetailsCard({ draft }: { draft: InvoiceDraft }) {
             <Label htmlFor="invoice-custom-crew-rate" className="text-xs">
               Custom hourly rate
             </Label>
-            <Input
+            <DraftTextInput
               id="invoice-custom-crew-rate"
               inputMode="decimal"
               placeholder="0"
               value={fields.customCrewRateUsd}
-              onChange={(event) => setField("customCrewRateUsd", event.target.value)}
+              onCommit={(value) => setField("customCrewRateUsd", value)}
             />
           </div>
         ) : null}
+        <InvoiceOvertimeControl draft={draft} />
       </CardContent>
     </Card>
   );

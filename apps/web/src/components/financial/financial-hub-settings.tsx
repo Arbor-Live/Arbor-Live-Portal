@@ -10,9 +10,12 @@ import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { CohoGiftCardSettings } from "@/components/financial/coho-gift-card-settings";
 import { CrewOnboardingSettings } from "@/components/financial/crew-onboarding-settings";
+import { GolfCartSettings } from "@/components/financial/golf-cart-settings";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   feeDefinitionSchema,
@@ -78,10 +81,14 @@ export function FinancialHubSettings() {
           <CardTitle>Fee definitions</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {(fees ?? []).map((fee) => (
-            <FeeRow key={fee._id} fee={fee} />
-          ))}
-          <div className="rounded-md border p-3">
+          {fees && fees.length > 0 ? (
+            <ul className="divide-y border">
+              {fees.map((fee) => (
+                <FeeRow key={fee._id} fee={fee} />
+              ))}
+            </ul>
+          ) : null}
+          <div className="border p-3">
             <p className="mb-2 text-sm font-medium">Add fee</p>
             <Form {...addFeeForm}>
               <form onSubmit={addFeeForm.handleSubmit(onAddFee)} className="grid gap-2">
@@ -107,10 +114,14 @@ export function FinancialHubSettings() {
           <CardTitle>Terms templates</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {(terms ?? []).map((term) => (
-            <TermsRow key={term._id} term={term} />
-          ))}
-          <div className="rounded-md border p-3">
+          {terms && terms.length > 0 ? (
+            <ul className="divide-y border">
+              {terms.map((term) => (
+                <TermsRow key={term._id} term={term} />
+              ))}
+            </ul>
+          ) : null}
+          <div className="border p-3">
             <p className="mb-2 text-sm font-medium">Add terms template</p>
             <Form {...addTermsForm}>
               <form onSubmit={addTermsForm.handleSubmit(onAddTerms)} className="grid gap-2">
@@ -135,15 +146,12 @@ export function FinancialHubSettings() {
             Global default buffer applied to crew cost estimates unless overridden per event.
           </p>
           <div className="space-y-1">
-            <label className="text-sm font-medium" htmlFor="crew-buffer-percent">
-              Crew cost buffer %
-            </label>
-            <input
+            <Label htmlFor="crew-buffer-percent">Crew cost buffer %</Label>
+            <Input
               id="crew-buffer-percent"
               type="number"
               min={0}
               step={0.5}
-              className="flex h-9 w-full rounded-md border bg-background px-3 py-1 text-sm"
               value={crewBufferPercent}
               onChange={(e) => setCrewBufferOverride(e.target.value)}
             />
@@ -171,6 +179,8 @@ export function FinancialHubSettings() {
       <CohoGiftCardSettings />
 
       <CrewOnboardingSettings />
+
+      <GolfCartSettings />
 
       <FormSaveBar
         tier="C"
@@ -244,7 +254,7 @@ function FeeRow({
   );
 
   return (
-    <div className="rounded-md border p-3 text-sm">
+    <li className="p-3 text-sm">
       <p className="font-medium">{fee.label}</p>
       <p className="text-xs text-muted-foreground">{fee.key}</p>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -288,7 +298,7 @@ function FeeRow({
         </Button>
         <RowSaveIndicator status={form.saveStatus} error={form.saveError} />
       </div>
-    </div>
+    </li>
   );
 }
 
@@ -335,7 +345,7 @@ function TermsRow({
   );
 
   return (
-    <div className="rounded-md border p-3 text-sm">
+    <li className="p-3 text-sm">
       <p className="font-medium">
         {term.label} ({term.version})
       </p>
@@ -377,7 +387,7 @@ function TermsRow({
         </Button>
         <RowSaveIndicator status={form.saveStatus} error={form.saveError} />
       </div>
-    </div>
+    </li>
   );
 }
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
-import { ConvexReactClient } from "convex/react";
+import { ConvexProviderWithAuth, ConvexReactClient } from "convex/react";
 import { authClient } from "@/lib/auth-client";
+import { useUseAuthFromBetterAuth } from "@/lib/convex-better-auth";
 
 // Static access so Next.js can inline NEXT_PUBLIC_CONVEX_URL in the client bundle.
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -21,13 +21,13 @@ export function ConvexClientProvider({
   children: React.ReactNode;
   initialToken?: string | null;
 }) {
+  // Not `ConvexBetterAuthProvider`: its auth hook re-authenticates Convex when
+  // the session finishes loading, which can fail every query on the page. See
+  // `nextAuthBinding`.
+  const useAuth = useUseAuthFromBetterAuth(authClient, initialToken);
   return (
-    <ConvexBetterAuthProvider
-      client={convex}
-      authClient={authClient}
-      initialToken={initialToken}
-    >
+    <ConvexProviderWithAuth client={convex} useAuth={useAuth}>
       {children}
-    </ConvexBetterAuthProvider>
+    </ConvexProviderWithAuth>
   );
 }

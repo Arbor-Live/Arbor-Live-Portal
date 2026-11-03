@@ -73,6 +73,15 @@ test.describe("crew onboarding wizard", () => {
     await acknowledge(page, /followed both Instagram accounts/i);
     await next(page);
 
+    // Usual evenings — one answer each for Thursday, Friday and Saturday.
+    await expect(activeStep(page).getByText("Which evenings are you usually free?")).toBeVisible({
+      timeout: 20_000,
+    });
+    for (const day of ["Thursday", "Friday", "Saturday"]) {
+      await activeStep(page).getByRole("radiogroup", { name: day }).getByRole("radio", { name: "Usually free" }).click();
+    }
+    await next(page);
+
     // Federal Work Study — answer No, then acknowledge the standard pay path.
     await expect(
       activeStep(page).getByText("Federal Work Study", { exact: true }),
@@ -131,8 +140,12 @@ test.describe("crew onboarding wizard", () => {
     expect(state.i9Acknowledged).toBe(true);
     expect(state.stanfordPosition).toBe("undergrad");
 
-    // Completed onboarding sends the wizard back to the dashboard.
-    await page.waitForURL(/\/dashboard/, { timeout: 30_000 });
+    // Completed onboarding sends the wizard back to the dashboard. The wizard
+    // gets there via `router.replace` — a client-side navigation that fires no
+    // load event, so `waitForURL` can sit on its load wait for the whole
+    // timeout even though the URL already changed (same trap as the invoice
+    // editor's save navigation). `toHaveURL` polls the URL instead.
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
     await expect(page.getByText(/Finish your crew onboarding/i)).toHaveCount(0);
   });
 });

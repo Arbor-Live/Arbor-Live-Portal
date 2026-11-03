@@ -1,4 +1,5 @@
 import type { StanfordPositionOption } from "@/lib/validations/users";
+import type { UsualEvenings } from "@/lib/crew-nights";
 
 export type StepId =
   | "welcome"
@@ -6,6 +7,7 @@ export type StepId =
   | "passkey"
   | "whatsapp"
   | "instagram"
+  | "evenings"
   | "fws"
   | "training"
   | "gettingPaid"
@@ -28,6 +30,7 @@ export type FormState = {
   stanfordPosition: StanfordPositionOption | "";
   whatsappAcknowledged: boolean;
   instagramAcknowledged: boolean;
+  usualEvenings: UsualEvenings;
   hasFederalWorkStudy: boolean | null;
   fwsAcknowledged: boolean;
   narcanCompleted: boolean;

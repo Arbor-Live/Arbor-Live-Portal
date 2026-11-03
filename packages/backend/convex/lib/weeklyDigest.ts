@@ -2,19 +2,14 @@ import { formatDate, formatDateTimeRange } from "@arbor/format";
 import type { Doc } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { findAuthOrganizationById } from "./auth";
-import { listCrewedEventsInRange } from "./crewedEvents";
-import { DEFAULT_AVAILABILITY_WEEKS, eventMatchesUserTeams } from "./crewTeams";
+import { DEFAULT_AVAILABILITY_WEEKS } from "./crewTeams";
+import { listMyPendingNights } from "./crewNightInbox";
 import { normalizeEventStatus } from "./eventStatus";
 import { bandPaymentStatusLabel } from "./bandPayments";
 import { bandOnboardingIncompleteSteps } from "./bandOnboardingSteps";
 import { resolveBandName } from "./bandIdentity";
 import { resolveParticipationFlags } from "./userParticipation";
-import {
-  getDisciplinesForEventMatching,
-  isStaffMember,
-  profileHasCrewSpecialty,
-  resolveProfileMembership,
-} from "./userVerticals";
+import { isStaffMember, profileHasCrewSpecialty, resolveProfileMembership } from "./userVerticals";
 import { buildUserTimecards } from "./userTimecards";
 import { listMyPostEventWork } from "./myEventActions";
 import {
@@ -75,29 +70,20 @@ async function buildAvailabilitySection(
   now: number,
 ): Promise<WeeklyDigestSection | null> {
   if (!profileHasCrewSpecialty(profile ?? {})) return null;
-  const disciplines = getDisciplinesForEventMatching(
-    resolveProfileMembership(profile ?? {}).disciplines,
-  );
   const windowEnd = now + DIGEST_AVAILABILITY_WEEKS * 7 * 24 * 60 * 60 * 1000;
-  const matchedEvents = (await listCrewedEventsInRange(ctx, now, windowEnd)).filter((event) =>
-    eventMatchesUserTeams(event.teamsInterested, disciplines),
-  );
-  if (matchedEvents.length === 0) return null;
-
-  const myResponses = await ctx.db
-    .query("eventCrewAvailabilityResponses")
-    .withIndex("by_userId", (q) => q.eq("userId", userId))
-    .take(DIGEST_SCAN_CAP);
-  const respondedEventIds = new Set(myResponses.map((response) => response.eventId));
-  const pending = matchedEvents.filter((event) => !respondedEventIds.has(event._id));
+  // Availability is answered per night; one row per unanswered night.
+  const pending = await listMyPendingNights(ctx, userId, profile, now, windowEnd);
   if (pending.length === 0) return null;
 
   return {
-    title: `Availability — ${plural(pending.length, "response")} needed`,
+    title: `Availability — ${plural(pending.length, "night")} to answer`,
     totalCount: pending.length,
     items: pending
       .slice(0, DIGEST_ITEM_CAP)
-      .map((event) => `${event.title} • ${formatDateTimeRange(event.startAt, event.endAt)}`),
+      .map(
+        (night) =>
+          `${formatDate(night.events[0]!.startAt)} • ${night.events.map((event) => event.title).join(", ")}`,
+      ),
   };
 }
 

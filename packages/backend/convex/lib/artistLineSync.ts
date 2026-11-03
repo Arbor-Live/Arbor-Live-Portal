@@ -1,12 +1,12 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import { internal } from "../_generated/api";
 import { resolveBandName } from "./bandIdentity";
+import { scheduleSeedPayoutFromBooking } from "./bookingPriceSync";
 
 /**
- * Mirror a position's fill state onto the invoice line that opened it. The
- * invoice stays the source of truth for billing; this only keeps its line in
- * step, so filling a position fills the line rather than adding another.
+ * Mirror a position's fill state onto the invoice line that opened it, so
+ * filling a position fills the line rather than adding another. The price is
+ * the position's (`eventArtistNeeds.price`), which the line already bills.
  */
 export async function syncInvoiceLineForSlot(
   ctx: MutationCtx,
@@ -33,7 +33,7 @@ export async function syncInvoiceLineForSlot(
     ? await resolveBandName(ctx, participation.organizationId)
     : externalName || slot.label?.trim() || line.label;
 
-  if (participation) await scheduleSeedPayoutFromLine(ctx, needId);
+  if (participation) await scheduleSeedPayoutFromBooking(ctx, needId);
   if (line.organizationId === organizationId && line.label === label) return;
 
   // `patch` ignores `undefined`, so clearing the org needs `replace`.
@@ -41,16 +41,6 @@ export async function syncInvoiceLineForSlot(
   if (organizationId) next.organizationId = organizationId;
   else delete next.organizationId;
   await ctx.db.replace(line._id, next);
-}
-
-/**
- * Give the act filling a priced position its payout from the price, once the
- * booking settles (see `bandPayments.seedFromInvoiceLineInternal`; it's a
- * no-op when the act already has one). Scheduled rather than called so this
- * module stays free of the payouts module's imports.
- */
-export async function scheduleSeedPayoutFromLine(ctx: MutationCtx, needId: Id<"eventArtistNeeds">) {
-  await ctx.scheduler.runAfter(0, internal.bandPayments.seedFromInvoiceLineInternal, { needId });
 }
 
 /**

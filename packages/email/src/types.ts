@@ -113,6 +113,9 @@ export type BookingRequestReceivedEmailProps = {
   eventName: string;
   eventDateText: string;
   trackingUrl: string;
+  /** The round-robin assignee who manages the request, when one is set. */
+  managerName?: string;
+  managerEmail?: string;
 };
 
 export type BookingRequestAdminEmailProps = {
@@ -175,6 +178,13 @@ export type CohoGiftCardLowBalanceEmailProps = {
   dashboardUrl: string;
 };
 
+export type GolfCartEventReadyEmailProps = EventEmailProps & {
+  /** First setup start → last setup end, when the event has setup sections. */
+  setupLabel?: string;
+  /** First strike start → last strike end, when the event has strike sections. */
+  strikeLabel?: string;
+};
+
 export type BookingQuoteReadyEmailProps = {
   recipientName?: string;
   requestNumber: string;
@@ -195,9 +205,18 @@ export type QuoteUpdatedEmailProps = {
   venueName?: string;
   dateRangeLabel: string;
   invoiceNumber: string;
-  previousTotalUsd: number;
+  /** Missing when the client was never sent a version to compare against. */
+  previousTotalUsd?: number;
   newTotalUsd: number;
   changeNote?: string;
+  /**
+   * Why it's back with the client: staff changed the quote they approved,
+   * answered the changes they asked for, or revised it on their own. Older
+   * queued emails omit it.
+   */
+  reason?: "approved" | "changes_requested" | "revised";
+  /** The client's change request this answers. */
+  requestNote?: string;
   portalUrl: string;
   managerName: string;
   managerEmail?: string;

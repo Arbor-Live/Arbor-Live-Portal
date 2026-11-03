@@ -4,25 +4,20 @@ import { query, type QueryCtx } from "./_generated/server";
 import {
   type ActiveOrganizationContext,
   getActiveOrganizationContextOrNull,
+  getCurrentUserOrNull,
   getUserId,
   hasOperationsAccess,
-  requireAdmin,
+  isStaffAdmin,
   requireAuth,
 } from "./lib/auth";
 import { isArtistOrganizationType } from "./lib/organizationType";
 import { isBandPayeeComplete, payeeFieldsFromProfile } from "./lib/bandPayments";
 import { listCrewedEventsInRange } from "./lib/crewedEvents";
 import { loadBackupUserIds } from "./lib/crewBackups";
-import { computeShiftStats } from "./lib/crewShiftKinds";
-import {
-  DEFAULT_AVAILABILITY_WEEKS,
-  eventMatchesUserTeams,
-} from "./lib/crewTeams";
-import {
-  getDisciplinesForEventMatching,
-  profileHasCrewSpecialty,
-  resolveProfileMembership,
-} from "./lib/userVerticals";
+import { computeEventShiftStats } from "./lib/cartCrew";
+import { DEFAULT_AVAILABILITY_WEEKS } from "./lib/crewTeams";
+import { listMyPendingNights, weeksToMs } from "./lib/crewNightInbox";
+import { profileHasCrewSpecialty } from "./lib/userVerticals";
 import { countPendingPostEventWork, listMyPostEventWork } from "./lib/myEventActions";
 import { isTraineeDecisionNeeded, loadTrainingEndsAt } from "./lib/crewTraineeTraining";
 import { resolveUserStatus } from "./lib/userStatus";
@@ -45,6 +40,20 @@ const BADGE_STATUS_TAKE = 50;
  * scheduling routes — counting it fans out events × shifts and dominated
  * Database I/O when subscribed on every dashboard page.
  */
+const EMPTY_NAV_BADGES = {
+  pendingAvailability: 0,
+  unconfirmedCrew: 0,
+  pendingBookingRequests: 0,
+  pendingBandApplications: 0,
+  pendingCrewApplications: 0,
+  pendingDamageReports: 0,
+  pendingBandPaymentActions: 0,
+  quoteChangesRequested: 0,
+  pendingEquipmentBorrowRequests: 0,
+  pendingPostEventWork: 0,
+  artistPayoutActions: 0,
+};
+
 export const getNavBadges = query({
   args: {
     now: v.number(),
@@ -73,7 +82,11 @@ export const getNavBadges = query({
     artistPayoutActions: v.number(),
   }),
   handler: async (ctx, args) => {
-    const user = await requireAuth(ctx);
+    // Badges are decoration on every page: never throw for auth. A missing
+    // session (token not loaded yet, or expired) shows no counts instead of
+    // taking the whole page down through the error boundary.
+    const user = await getCurrentUserOrNull(ctx);
+    if (!user) return EMPTY_NAV_BADGES;
     const orgContext = await getActiveOrganizationContextOrNull(ctx);
     const orgType = orgContext?.organizationType;
 
@@ -83,13 +96,12 @@ export const getNavBadges = query({
     const includeArborInternal =
       Boolean(args.includeArborInternal) && orgType === "arbor_internal";
     const includeBand = Boolean(args.includeBand) && isArtistOrganizationType(orgType);
-    const includeAdmin = Boolean(args.includeAdmin);
+    // Client flags can also be stale after a demotion: drop admin counts
+    // rather than throw.
+    const includeAdmin = Boolean(args.includeAdmin) && (await isStaffAdmin(ctx, user));
     const includeMyEventActions =
       Boolean(args.includeMyEventActions) && orgType === "arbor_internal";
 
-    if (includeAdmin) {
-      await requireAdmin(ctx);
-    }
     const includeOperations =
       includeAdmin ||
       (Boolean(args.includeOperations) &&
@@ -146,11 +158,6 @@ export const getNavBadges = query({
   },
 });
 
-function weeksToMs(weeks: number) {
-  return weeks * 7 * 24 * 60 * 60 * 1000;
-}
-
-
 async function getCurrentUserProfile(ctx: QueryCtx, userId: string) {
   return await ctx.db
     .query("userAdminProfiles")
@@ -158,34 +165,23 @@ async function getCurrentUserProfile(ctx: QueryCtx, userId: string) {
     .unique();
 }
 
+/** Nights with matching crewed events (same window as My Availability) still unanswered. */
 async function countMyPendingAvailability(ctx: QueryCtx, userId: string, now: number) {
   const profile = await getCurrentUserProfile(ctx, userId);
   if (resolveUserStatus(profile) !== "active") return 0;
   if (!profileHasCrewSpecialty(profile ?? {})) return 0;
-  const userDisciplines = getDisciplinesForEventMatching(
-    resolveProfileMembership(profile ?? {}).disciplines,
-  );
   const windowEnd = now + weeksToMs(DEFAULT_AVAILABILITY_WEEKS);
-  const matchedEvents = (await listCrewedEventsInRange(ctx, now, windowEnd)).filter((event) =>
-    eventMatchesUserTeams(event.teamsInterested, userDisciplines),
-  );
-  if (matchedEvents.length === 0) return 0;
-
-  const myResponses = await ctx.db
-    .query("eventCrewAvailabilityResponses")
-    .withIndex("by_userId", (q) => q.eq("userId", userId))
-    .take(500);
-  const respondedEventIds = new Set(myResponses.map((response) => response.eventId));
-  return matchedEvents.filter((event) => !respondedEventIds.has(event._id)).length;
+  return (await listMyPendingNights(ctx, userId, profile, now, windowEnd)).length;
 }
 
-async function eventIsCrewUnconfirmed(ctx: QueryCtx, eventId: Doc<"events">["_id"]) {
+async function eventIsCrewUnconfirmed(ctx: QueryCtx, event: Doc<"events">) {
   const shifts = await ctx.db
     .query("eventCrewShifts")
-    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
     .take(UNCONFIRMED_CREW_SHIFT_CAP);
   // Match previous semantics: zero shifts ⇒ not confirmed.
-  return !computeShiftStats(shifts, await loadBackupUserIds(ctx, eventId)).isCrewConfirmed;
+  return !(await computeEventShiftStats(ctx, event, shifts, await loadBackupUserIds(ctx, event)))
+    .isCrewConfirmed;
 }
 
 async function countUnconfirmedCrew(ctx: QueryCtx, rangeStart: number, rangeEnd: number) {
@@ -197,7 +193,7 @@ async function countUnconfirmedCrew(ctx: QueryCtx, rangeStart: number, rangeEnd:
     UNCONFIRMED_CREW_EVENT_CAP,
   );
   const flags = await Promise.all(
-    upcomingCrewed.map((event) => eventIsCrewUnconfirmed(ctx, event._id)),
+    upcomingCrewed.map((event) => eventIsCrewUnconfirmed(ctx, event)),
   );
   return flags.filter(Boolean).length;
 }

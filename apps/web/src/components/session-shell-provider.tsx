@@ -10,6 +10,8 @@ type SessionShell = ReturnType<typeof useQuery<typeof api.users.getSessionShell>
 
 const SessionShellContext = createContext<{ shell: SessionShell }>({ shell: undefined });
 
+const SPAN_ATTRIBUTE_KEYS = ["arbor_role", "arbor_is_admin", "arbor_org"] as const;
+
 function syncSentryFromShell(shell: SessionShell) {
   // undefined = still loading; leave whatever auth already set.
   if (shell === undefined) return;
@@ -19,6 +21,8 @@ function syncSentryFromShell(shell: SessionShell) {
     Sentry.setTag("arbor_role", "");
     Sentry.setTag("arbor_is_admin", "");
     Sentry.setTag("arbor_org", "");
+    const scope = Sentry.getIsolationScope();
+    for (const key of SPAN_ATTRIBUTE_KEYS) scope.removeAttribute(key);
     return;
   }
 
@@ -29,12 +33,16 @@ function syncSentryFromShell(shell: SessionShell) {
   });
 
   const role = shell.viewer.role ?? (shell.viewer.isAdmin ? "admin" : "member");
+  const org = shell.activeOrganization?.slug ?? shell.activeOrganization?.organizationId ?? "";
   Sentry.setTag("arbor_role", role);
   Sentry.setTag("arbor_is_admin", shell.viewer.isAdmin ? "true" : "false");
-  Sentry.setTag(
-    "arbor_org",
-    shell.activeOrganization?.slug ?? shell.activeOrganization?.organizationId ?? "",
-  );
+  Sentry.setTag("arbor_org", org);
+  // Tags only reach errors; streamed spans carry attributes instead (Sentry v11).
+  Sentry.setAttributes({
+    arbor_role: role,
+    arbor_is_admin: shell.viewer.isAdmin,
+    arbor_org: org,
+  });
 
   Sentry.setContext("arbor", {
     role,

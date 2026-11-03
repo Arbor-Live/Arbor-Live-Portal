@@ -2,11 +2,15 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { computeEventShiftStats } from "./lib/cartCrew";
 import { computeShiftStats } from "./lib/crewShiftKinds";
 import { DEFAULT_AVAILABILITY_WEEKS, isCrewedEventType } from "./lib/crewTeams";
 import { loadBackupUserIds } from "./lib/crewBackups";
+import { loadNightRows } from "./lib/crewNightAnswers";
+import { nightKeyForEvent } from "./lib/crewNights";
 import { eligibleCrewProfilesForEvent, getActiveCrewProfiles } from "./lib/crewedEvents";
 import { normalizeEventStatus } from "./lib/eventStatus";
+import { isHashEvent } from "./lib/hashEvent";
 
 const openRequestStatusValue = v.union(
   v.literal("submitted"),
@@ -57,7 +61,9 @@ export const listUpcomingAdminEvents = query({
     await requireArborInternalContext(ctx);
     const limit = Math.min(Math.max(args.limit ?? 6, 1), 10);
     const windowEnd = args.now + DEFAULT_AVAILABILITY_WEEKS * 7 * 24 * 60 * 60 * 1000;
-    const live = (event: Doc<"events">) => normalizeEventStatus(event.status) !== "cancelled";
+    // A hash is booked in Hashing, so it's neither crewing work here nor an event to count.
+    const live = (event: Doc<"events">) =>
+      !isHashEvent(event) && normalizeEventStatus(event.status) !== "cancelled";
     // Every event in the crewing window is classified, so the counts cover the
     // whole window; past it, only the soonest few fill out the list.
     const windowEvents = (
@@ -85,17 +91,19 @@ export const listUpcomingAdminEvents = query({
           .query("eventCrewShifts")
           .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
           .take(200);
-        // A slot held by a backup ("only if necessary") still needs coverage.
-        const backupUserIds = crewed && inWindow ? await loadBackupUserIds(ctx, event._id) : undefined;
-        const stats = computeShiftStats(shifts, backupUserIds);
+        // A slot held by a backup ("only if necessary") still needs coverage, and
+        // a cart event needs someone cart eligible on setup and strike.
+        const backupUserIds = crewed && inWindow ? await loadBackupUserIds(ctx, event) : undefined;
+        const stats =
+          crewed && inWindow
+            ? await computeEventShiftStats(ctx, event, shifts, backupUserIds)
+            : computeShiftStats(shifts, backupUserIds);
         const needsCrew = crewed && inWindow && !stats.isCrewConfirmed;
         let awaitingReplies = 0;
         if (needsCrew) {
-          const responses = await ctx.db
-            .query("eventCrewAvailabilityResponses")
-            .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-            .take(500);
-          const responded = new Set(responses.map((response) => response.userId));
+          // Availability is answered per night; anyone with this night's answer replied.
+          const nightRows = await loadNightRows(ctx, nightKeyForEvent(event));
+          const responded = new Set(nightRows.map((row) => row.userId));
           awaitingReplies = eligibleCrewProfilesForEvent(event.teamsInterested, crewProfiles).filter(
             (profile) => !responded.has(profile.userId),
           ).length;

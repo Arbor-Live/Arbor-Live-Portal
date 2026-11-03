@@ -79,18 +79,21 @@ function writeStoredLens(deviceId: string | null) {
   }
 }
 
-export type CameraLens = { deviceId: string; label: string };
+/** `short` is a phone lens name ("0.5×", "1×"); otherwise a desktop camera's own name. */
+export type CameraLens = { deviceId: string; label: string; short: boolean };
 
 /** The ultra wide lens: the only one on an iPhone that focuses on a label held close. */
 const CLOSE_UP_LENS_LABEL = "0.5×";
 
 /** Short names for iOS's back cameras ("Back Ultra Wide Camera", …), as in the Camera app. */
-function lensName(label: string, index: number): { label: string; rank: number } {
-  if (/ultra\s*wide/i.test(label)) return { label: CLOSE_UP_LENS_LABEL, rank: 0 };
-  if (/telephoto/i.test(label)) return { label: "Zoom", rank: 4 };
-  if (/triple|dual/i.test(label)) return { label: "Auto", rank: 2 };
-  if (/^back camera$/i.test(label.trim())) return { label: "1×", rank: 1 };
-  return { label: label.trim() || `Camera ${index + 1}`, rank: 3 };
+function lensName(label: string, index: number): { label: string; short: boolean; rank: number } {
+  if (/ultra\s*wide/i.test(label)) return { label: CLOSE_UP_LENS_LABEL, short: true, rank: 0 };
+  if (/telephoto/i.test(label)) return { label: "Zoom", short: true, rank: 4 };
+  if (/triple|dual/i.test(label)) return { label: "Auto", short: true, rank: 2 };
+  if (/^back camera$/i.test(label.trim())) return { label: "1×", short: true, rank: 1 };
+  // Chrome appends the USB id: "FaceTime HD Camera (05ac:8514)".
+  const name = label.replace(/\s*\([0-9a-f]{4}:[0-9a-f]{4}\)\s*$/i, "").trim();
+  return { label: name || `Camera ${index + 1}`, short: false, rank: 3 };
 }
 
 /** The back cameras to offer, best for close scanning first. Labels need camera permission. */
@@ -104,7 +107,7 @@ async function listCameraLenses(): Promise<CameraLens[]> {
   return candidates
     .map((device, index) => ({ deviceId: device.deviceId, ...lensName(device.label, index) }))
     .sort((a, b) => a.rank - b.rank)
-    .map(({ deviceId, label }) => ({ deviceId, label }));
+    .map(({ deviceId, label, short }) => ({ deviceId, label, short }));
 }
 
 /**

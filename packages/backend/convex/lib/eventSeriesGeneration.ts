@@ -537,7 +537,6 @@ export async function materializeOccurrence(
     additionalHostGroupIds: series.additionalHostGroupIds,
     expectedTurnout: series.expectedTurnout,
     budgetUsd: series.budgetUsd,
-    bandsCostUsd: series.occurrenceBandsCostUsd,
     externalRentalsCostUsd: series.occurrenceExternalRentalsCostUsd,
     otherCostUsd: series.occurrenceOtherCostUsd,
     crewCostUsd: series.occurrenceBudgetCrewCostUsd,
@@ -657,7 +656,12 @@ export async function propagateSharedDayFields(
 ): Promise<SeriesOverviewAffectedOccurrence[]> {
   const group = await ctx.db.get(groupId);
   if (!group) throw new Error("Event group not found.");
-  if (fields.length === 0 && overrides.status === undefined && overrides.visibility === undefined) {
+  if (
+    fields.length === 0 &&
+    overrides.status === undefined &&
+    overrides.visibility === undefined &&
+    overrides.needsCart === undefined
+  ) {
     return [];
   }
   await ctx.db.replace(groupId, {
@@ -721,7 +725,6 @@ export function buildEventPatchFromSeriesTemplate(
     additionalHostGroupIds: series.additionalHostGroupIds,
     expectedTurnout: series.expectedTurnout,
     budgetUsd: series.budgetUsd,
-    bandsCostUsd: series.occurrenceBandsCostUsd,
     externalRentalsCostUsd: series.occurrenceExternalRentalsCostUsd,
     otherCostUsd: series.occurrenceOtherCostUsd,
     dayOfLeadUserId: series.dayOfLeadUserId,
@@ -767,6 +770,7 @@ export type SeriesOverviewOverride = {
   status?: EventStatus;
   visibility?: "public" | "internal" | "informational";
   otPremium?: boolean;
+  needsCart?: boolean;
   crewCostBufferPercent?: number;
 };
 

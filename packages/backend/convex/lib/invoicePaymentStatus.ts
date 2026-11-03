@@ -1,4 +1,5 @@
 import type { Doc } from "../_generated/dataModel";
+import { dateTimeFormat } from "@arbor/format";
 import { EVENT_TIMEZONE, reminderDayKey } from "../email/constants";
 import {
   getPaymentProofOpensAt,
@@ -127,7 +128,7 @@ export function paymentMethodLabelForQueue(method: PaymentProofMethod) {
 }
 
 export function isMondayInTimezone(nowMs: number, timezone: string = EVENT_TIMEZONE) {
-  const weekday = new Date(nowMs).toLocaleDateString("en-US", { timeZone: timezone, weekday: "short" });
+  const weekday = dateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).format(new Date(nowMs));
   return weekday === "Mon";
 }
 

@@ -1,4 +1,5 @@
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { appError } from "./errors";
 
 /**
  * @handles for comment mentions. Stored on `userAdminProfiles.username`.
@@ -10,7 +11,8 @@ export function normalizeUsername(raw: string | undefined | null): string | unde
   const trimmed = raw?.trim().toLowerCase() ?? "";
   if (!trimmed) return undefined;
   if (!USERNAME_PATTERN.test(trimmed)) {
-    throw new Error(
+    appError(
+      "USERNAME_INVALID",
       "Username must be 3–30 characters and use only lowercase letters, numbers, and underscores.",
     );
   }
@@ -36,6 +38,6 @@ export async function assertUsernameAvailable(
     .withIndex("by_username", (q) => q.eq("username", username))
     .unique();
   if (taken && taken.userId !== forUserId) {
-    throw new Error("That username is already taken.");
+    appError("USERNAME_TAKEN", "That username is already taken.");
   }
 }

@@ -6,20 +6,28 @@ import { runConvex } from "../helpers/convex";
 test.describe("crew availability respond", () => {
   test.use({ storageState: crewAuthFile });
 
-  test("crew can mark Yes on a matching seeded event", async ({ page }) => {
+  test("crew can say they're free for the night of a matching seeded event", async ({ page }) => {
+    const crew = runConvex("e2eHelpers:ensureCrewUser", {
+      email: e2eEnv.crewEmail,
+      password: e2eEnv.crewPassword,
+      name: e2eEnv.crewName,
+    }) as { userId: string };
+    // Seeded events share a night across runs; start that night unanswered.
+    runConvex("e2eHelpers:resetCrewAvailability", { userId: crew.userId, clearNights: true });
     const seeded = runConvex("e2eHelpers:seedCrewedEventWithSchedule", {
       title: `E2E Availability ${Date.now()}`,
     }) as { eventId: string; title: string };
 
     await page.goto("/dashboard/events/my-availability");
     await expect(page.getByText("My availability").first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText(seeded.title).first()).toBeVisible({ timeout: 25_000 });
+    const main = page.getByRole("main");
+    await expect(main.getByText(seeded.title).first()).toBeVisible({ timeout: 25_000 });
 
-    const card = page.getByTestId("crew-availability-event").filter({ hasText: seeded.title }).first();
-    // One tap answers; the event moves to "Answered".
-    await card.getByRole("radio", { name: "I can work it all" }).click();
+    // One card per night; one tap answers it for every event that night.
+    const night = main.getByTestId("crew-night").filter({ hasText: seeded.title }).first();
+    await night.getByRole("radio", { name: /I'm free|Confirm/ }).click();
     await expect(
-      page.getByTestId("crew-availability-event").filter({ hasText: seeded.title }).getByText("You: Yes"),
+      main.getByTestId("crew-night").filter({ hasText: seeded.title }).getByText("You: Free all night"),
     ).toBeVisible({ timeout: 20_000 });
   });
 });

@@ -172,8 +172,9 @@ export const update = mutation({
     if (!firstName || !lastName) {
       throw new Error("First and last name are required.");
     }
-    const email = args.email?.trim() ?? existing.email;
-    const phone = args.phone?.trim() ?? existing.phone;
+    // A field sent as "" is cleared; one left out keeps its value.
+    const email = args.email === undefined ? existing.email : args.email.trim() || undefined;
+    const phone = args.phone === undefined ? existing.phone : args.phone.trim() || undefined;
     const now = Date.now();
     const personId = await upsertInvoicePerson(ctx, {
       email,
@@ -184,7 +185,8 @@ export const update = mutation({
     });
     await ctx.db.patch(args.id, {
       groupId: args.groupId ?? existing.groupId,
-      personId: personId ?? existing.personId,
+      // The person record is keyed by email, so a contact without one drops the link.
+      personId: email ? (personId ?? existing.personId) : undefined,
       firstName,
       lastName,
       email,

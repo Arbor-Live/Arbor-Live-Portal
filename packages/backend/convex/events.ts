@@ -48,12 +48,14 @@ import {
 import { listGroupDays } from "./lib/eventGroupTemplates";
 import { resolveSeriesMetadataForInvoice } from "./lib/invoiceSeries";
 import { assertNoOpenMicOverlap } from "./lib/openMicAddon";
+import { isHashEvent, requireHashEventEdit, requireHashStatusUnchanged } from "./lib/hashEvent";
 import {
   DEFAULT_EVENT_VISIBILITY,
   eventVisibilityValue,
 } from "./lib/eventVisibility";
 import { EVENT_TIMEZONE } from "./email/constants";
 import { scheduleEventCancelledEmails } from "./email/triggers";
+import { scheduleGolfCartEventReadyEmails } from "./email/golfCartEmails";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 import { resolveVenueLink } from "./lib/venues";
 import {
@@ -67,6 +69,8 @@ import {
 } from "./lib/statusTransitions";
 import { eventTeamValue } from "./lib/eventTeams";
 import { isActBlock } from "./lib/runOfShow";
+import { loadOverlappingOtherEventShifts } from "./lib/crewShiftOverlap";
+import { syncCrewCostAfterStatusChange } from "./lib/crewCost";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -133,6 +137,8 @@ export const list = query({
     const rows = baseRows
       .map((row) => ({ ...row, status: normalizeEventStatus(row.status) }))
       .filter((row) => {
+        // Nobody links a hash to a damage report, a short link or a trainee.
+        if (isHashEvent(row)) return false;
         if (filterStatus && row.status !== filterStatus) return false;
         if (args.linkedInvoiceOnly && !row.invoiceId) return false;
         if (!q) return true;
@@ -516,6 +522,28 @@ export const getByInvoiceId = query({
         ),
       )
     ).flat();
+    // The crew's shifts on other (live) events that overlap these days, so crew
+    // lines count a person's shared time once (`crewCountableHours`).
+    const otherShifts = await loadOverlappingOtherEventShifts(ctx, new Set(eventIds), shifts);
+    const otherEventIds = [...new Set(otherShifts.map((shift) => shift.eventId))];
+    const otherEvents = await Promise.all(otherEventIds.map((id) => ctx.db.get(id)));
+    const liveOtherEventIds = new Set(
+      otherEventIds.filter((_, index) => {
+        const other = otherEvents[index];
+        return other && normalizeEventStatus(other.status) !== "cancelled";
+      }),
+    );
+    const otherEventShifts = otherShifts
+      .filter((shift) => liveOtherEventIds.has(shift.eventId))
+      .map((shift) => ({
+        _id: shift._id,
+        _creationTime: shift._creationTime,
+        eventId: shift.eventId,
+        userId: shift.userId,
+        startsAt: shift.startsAt,
+        endsAt: shift.endsAt,
+        hours: shift.hours,
+      }));
 
     return {
       _id: event._id,
@@ -525,12 +553,14 @@ export const getByInvoiceId = query({
       endAt: linkedEvents[linkedEvents.length - 1]?.endAt ?? event.endAt,
       blocks,
       shifts,
+      otherEventShifts,
       linkedEvents: linkedEvents.map((row) => ({
         _id: row._id,
         title: row.title,
         status: row.status,
         startAt: row.startAt,
         endAt: row.endAt,
+        otPremium: row.otPremium === true,
       })),
       series: await resolveSeriesMetadataForInvoice(ctx, args.invoiceId),
       // Summed across all linked occurrences — used for the net-profit surface
@@ -593,7 +623,6 @@ export const create = mutation({
     eventManagerUserId: v.optional(v.string()),
     operationsLeadUserId: v.optional(v.string()),
     crewCostUsd: v.optional(v.number()),
-    bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
     otherCostUsd: v.optional(v.number()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
@@ -655,7 +684,6 @@ export const create = mutation({
       eventManagerUserId: trimOptional(args.eventManagerUserId),
       operationsLeadUserId: trimOptional(args.operationsLeadUserId),
       crewCostUsd: args.crewCostUsd,
-      bandsCostUsd: args.bandsCostUsd,
       externalRentalsCostUsd: args.externalRentalsCostUsd,
       otherCostUsd: args.otherCostUsd,
       rentalFulfillmentMode: resolveRentalFulfillmentMode(args.eventType, args.rentalFulfillmentMode),
@@ -692,6 +720,7 @@ const PER_DAY_UPDATE_KEYS = new Set<string>([
   "actualTurnout",
   "crewCostUsd",
   "otPremium",
+  "needsCart",
   "crewCostBufferPercent",
   "notes",
   "openMicEnabled",
@@ -725,11 +754,12 @@ export const update = mutation({
     eventManagerUserId: v.optional(v.union(v.string(), v.null())),
     operationsLeadUserId: v.optional(v.union(v.string(), v.null())),
     crewCostUsd: v.optional(v.number()),
-    bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
     otherCostUsd: v.optional(v.number()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     otPremium: v.optional(v.boolean()),
+    /** Cart event: setup and strike each need someone cart eligible. */
+    needsCart: v.optional(v.boolean()),
     crewCostBufferPercent: v.optional(v.number()),
     notes: v.optional(v.string()),
     openMicEnabled: v.optional(v.boolean()),
@@ -742,6 +772,7 @@ export const update = mutation({
     return await withReportableErrors("events.update", async () => {
     const existing = await ctx.db.get(args.id);
     if (!existing) appError("EVENT_NOT_FOUND", "Event not found.");
+    if (isHashEvent(existing)) await requireHashEventEdit(ctx, existing, args);
     const startAt = args.startAt ?? existing.startAt;
     const endAt = args.endAt ?? existing.endAt;
     if (endAt <= startAt) appError("EVENT_END_BEFORE_START", "Event end time must be after start time.");
@@ -836,11 +867,11 @@ export const update = mutation({
       eventManagerUserId: args.eventManagerUserId?.trim() ?? existing.eventManagerUserId,
       operationsLeadUserId: args.operationsLeadUserId?.trim() ?? existing.operationsLeadUserId,
       crewCostUsd: args.crewCostUsd ?? existing.crewCostUsd,
-      bandsCostUsd: args.bandsCostUsd ?? existing.bandsCostUsd,
       externalRentalsCostUsd: args.externalRentalsCostUsd ?? existing.externalRentalsCostUsd,
       otherCostUsd: args.otherCostUsd ?? existing.otherCostUsd,
       rentalFulfillmentMode: nextRentalFulfillmentMode,
       otPremium: args.otPremium ?? existing.otPremium,
+      needsCart: args.needsCart ?? existing.needsCart,
       crewCostBufferPercent: args.crewCostBufferPercent ?? existing.crewCostBufferPercent,
       notes: args.notes?.trim() ?? existing.notes,
       openMicEnabled: nextOpenMicEnabled,
@@ -924,8 +955,6 @@ export const update = mutation({
         additionalHostGroupIds: patch.additionalHostGroupIds,
         expectedTurnout: patch.expectedTurnout,
         budgetUsd: patch.budgetUsd,
-        occurrenceBandsCostUsd:
-          args.bandsCostUsd !== undefined ? args.bandsCostUsd : series.occurrenceBandsCostUsd,
         occurrenceExternalRentalsCostUsd:
           args.externalRentalsCostUsd !== undefined
             ? args.externalRentalsCostUsd
@@ -957,6 +986,7 @@ export const update = mutation({
         visibility: patch.visibility,
       };
       if (patch.otPremium !== undefined) overrides.otPremium = patch.otPremium;
+      if (args.needsCart !== undefined) overrides.needsCart = args.needsCart;
       if (patch.crewCostBufferPercent !== undefined) {
         overrides.crewCostBufferPercent = patch.crewCostBufferPercent;
       }
@@ -1029,6 +1059,7 @@ export const update = mutation({
         const overrides: SeriesOverviewOverride = {};
         if (args.status !== undefined) overrides.status = nextStatus;
         if (args.visibility !== undefined) overrides.visibility = patch.visibility;
+        if (args.needsCart !== undefined) overrides.needsCart = args.needsCart;
         const propagated = await propagateSharedDayFields(
           ctx,
           existing.seriesId,
@@ -1076,6 +1107,10 @@ export const update = mutation({
       if (occStatus === "cancelled" && normalizeEventStatus(occ.prevStatus) !== "cancelled") {
         await scheduleEventCancelledEmails(ctx, occ.id, now);
       }
+      if (occStatus === "ready" && normalizeEventStatus(occ.prevStatus) !== "ready") {
+        await scheduleGolfCartEventReadyEmails(ctx, occ.id, now);
+      }
+      await syncCrewCostAfterStatusChange(ctx, occ.id, occ.prevStatus, occStatus, now);
     }
     });
   },
@@ -1095,6 +1130,7 @@ export const setStatus = mutation({
     return await withReportableErrors("events.setStatus", async () => {
     const existing = await ctx.db.get(args.id);
     if (!existing) appError("EVENT_NOT_FOUND", "Event not found.");
+    if (isHashEvent(existing)) requireHashStatusUnchanged(existing, args.status);
     const wasCancelled = normalizeEventStatus(existing.status) === "cancelled";
     const prevStatus = normalizeEventStatus(existing.status);
     const nextStatus = normalizeEventStatus(args.status);
@@ -1124,6 +1160,10 @@ export const setStatus = mutation({
     if (nextStatus === "cancelled" && !wasCancelled) {
       await scheduleEventCancelledEmails(ctx, args.id, now);
     }
+    if (nextStatus === "ready" && prevStatus !== "ready") {
+      await scheduleGolfCartEventReadyEmails(ctx, args.id, now);
+    }
+    await syncCrewCostAfterStatusChange(ctx, args.id, prevStatus, nextStatus, now);
     // Cancelled days don't count toward a multi-day booking.
     if (prevStatus !== nextStatus && existing.invoiceId) {
       await syncMultiDayGroupForInvoice(ctx, existing.invoiceId, now);
@@ -1184,6 +1224,7 @@ export const duplicate = mutation({
     return await withReportableErrors("events.duplicate", async () => {
     const existing = await ctx.db.get(args.id);
     if (!existing) appError("EVENT_NOT_FOUND", "Event not found.");
+    if (isHashEvent(existing)) appError("HASH_NO_DUPLICATE", "Add another hash from Hashing.");
     const now = Date.now();
     const newId = await ctx.db.insert("events", {
       title: `${existing.title} (Copy)`,
@@ -1211,10 +1252,11 @@ export const duplicate = mutation({
       eventManagerUserId: existing.eventManagerUserId,
       operationsLeadUserId: existing.operationsLeadUserId,
       crewCostUsd: existing.crewCostUsd,
-      bandsCostUsd: existing.bandsCostUsd,
       externalRentalsCostUsd: existing.externalRentalsCostUsd,
       otherCostUsd: existing.otherCostUsd,
       rentalFulfillmentMode: existing.rentalFulfillmentMode,
+      // Same venue, same way of moving gear.
+      needsCart: existing.needsCart,
       notes: existing.notes,
       openMicEnabled: existing.openMicEnabled,
       openMicStatus: existing.openMicEnabled ? "scheduled" : undefined,

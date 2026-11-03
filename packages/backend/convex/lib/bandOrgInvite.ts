@@ -14,6 +14,7 @@ import {
   upsertOrgMembership,
 } from "../users";
 import { getUserId, type AuthUser } from "./auth";
+import { appError } from "./errors";
 import { clearUserBan } from "./userAccess";
 
 function normalizeEmail(email: string) {
@@ -122,8 +123,8 @@ export async function provisionBandOrganization(
 ) {
   const displayName = args.displayName.trim();
   const contactEmail = normalizeEmail(args.contactEmail);
-  if (!displayName) throw new Error("Enter an artist name.");
-  if (!isValidEmail(contactEmail)) throw new Error("Enter a valid email address.");
+  if (!displayName) appError("BAND_ORG_NAME_REQUIRED", "Enter an artist name.");
+  if (!isValidEmail(contactEmail)) appError("BAND_ORG_EMAIL_INVALID", "Enter a valid email address.");
 
   if (args.rejectExistingOrganization) {
     const slug = toSlug(displayName);
@@ -132,7 +133,8 @@ export async function provisionBandOrganization(
       where: [{ field: "slug", value: slug }],
     })) as { id?: string; _id?: string } | null;
     if (existingOrg) {
-      throw new Error(
+      appError(
+        "BAND_ORG_ALREADY_EXISTS",
         'A band with this name already exists. Use "Add band" to assign an existing band.',
       );
     }

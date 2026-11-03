@@ -256,14 +256,15 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
       /** Set once staff settle the estimate into the final invoice (after the event). */
       billingFinalizedAt: invoice.billingFinalizedAt,
     },
-    /** Every version since the first approval, newest first. Amounts only; no staff ids. */
+    /** Every version sent, asked about, or approved, newest first. Amounts only; no staff names or ids. */
     revisions: (await listInvoiceRevisions(ctx, invoice._id)).map((revision) => ({
       number: revision.number,
       kind: revision.kind,
       totalUsd: revision.totalUsd,
       lines: revision.lines,
       note: revision.note,
-      actorName: revision.kind === "approved" ? revision.actorName : undefined,
+      actorName:
+        revision.kind === "approved" || revision.kind === "changes_requested" ? revision.actorName : undefined,
       recordedLate: revision.recordedLate,
       createdAt: revision.createdAt,
     })),
@@ -484,6 +485,13 @@ export async function requestInvoiceQuoteChanges(
     changesRequestedAt: now,
     clientApprovalNote: trimmed,
     updatedAt: now,
+  });
+  // Keep the request with the version it was about, so replying never erases it.
+  await recordInvoiceRevision(ctx, invoice._id, await snapshotInvoice(ctx, invoice), {
+    kind: "changes_requested",
+    at: now,
+    note: trimmed,
+    actorName: invoice.clientContactName,
   });
   await recordInvoiceStatusTransition(ctx, invoice._id, fromStatus, "changes_requested", { at: now });
   await syncLinkedEventStatusFromInvoice(ctx, invoice._id, "changes_requested");

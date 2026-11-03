@@ -10,3 +10,20 @@ export function pickBestCohoGiftCard<
   if (usable.length === 0) return null;
   return usable.reduce((a, b) => ((b.balanceUsd ?? 0) > (a.balanceUsd ?? 0) ? b : a));
 }
+
+/** How long before and after a shift crew can see the QR. */
+export const COHO_QR_SHIFT_PADDING_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * Whether `now` falls within two hours of a shift: from two hours before the
+ * earlier of call time and start, until two hours after it ends.
+ */
+export function isWithinCohoQrWindow(
+  shift: { callTime?: number | undefined; startsAt: number; endsAt: number },
+  now: number,
+): boolean {
+  const opensAt = Math.min(shift.callTime ?? shift.startsAt, shift.startsAt);
+  return (
+    now >= opensAt - COHO_QR_SHIFT_PADDING_MS && now <= shift.endsAt + COHO_QR_SHIFT_PADDING_MS
+  );
+}

@@ -7,7 +7,7 @@ export type WizardTag = {
   serialNumber: string;
   storageLocationId: string;
   containedInAssetId: string;
-  status: string;
+  condition: string;
   notes: string;
   contains: string[];
 };
@@ -19,7 +19,7 @@ export function emptyTag(from?: Pick<WizardTag, "storageLocationId" | "contained
     serialNumber: "",
     storageLocationId: from?.storageLocationId ?? "",
     containedInAssetId: from?.containedInAssetId ?? "",
-    status: "",
+    condition: "",
     notes: "",
     contains: [],
   };

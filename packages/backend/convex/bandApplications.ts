@@ -19,6 +19,7 @@ import { marketingDesignLinkValue, normalizeMarketingLinks } from "./lib/marketi
 import { artistOrganizationTypeValue, isArtistOrganizationType } from "./lib/organizationType";
 import { resolveOrCreateOrganization } from "./users";
 import { appError, withReportableErrors } from "./lib/errors";
+import { uniqueBandMemberNames } from "./lib/bandMembers";
 
 const memberValue = v.object({
   name: v.string(),
@@ -312,12 +313,11 @@ export const approve = mutation({
       .withIndex("by_organizationId", (q) => q.eq("organizationId", resolved.id))
       .unique();
 
-    const bandMemberNames = application.isSolo
-      ? [application.contactName]
-      : [
-          application.contactName,
-          ...application.members.map((member) => member.name),
-        ].filter(Boolean);
+    const bandMemberNames = uniqueBandMemberNames(
+      application.isSolo
+        ? [application.contactName]
+        : [application.contactName, ...application.members.map((member) => member.name)],
+    );
 
     const hasArtistLinks = Boolean(application.artistLinks?.length);
     const profileFields = {

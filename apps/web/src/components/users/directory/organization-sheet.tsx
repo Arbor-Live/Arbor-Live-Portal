@@ -114,6 +114,9 @@ export function useOrganizationActions() {
       try {
         await setActiveOrganization({ organizationId: org.id });
         notify.success(`Viewing as ${org.displayName}.`);
+        // A full reload (not router.push) re-runs the dashboard's server
+        // components under the new active org; a pushed entry keeps Back working.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.href = "/dashboard";
         return true;
       } catch (error) {

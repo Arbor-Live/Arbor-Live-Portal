@@ -59,7 +59,7 @@ export default function AcceptInvitePage() {
   });
 
   return (
-    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6">
+    <div className="mx-auto flex min-h-[80svh] w-full max-w-md items-center px-6">
       <Card className="w-full">
         <CardHeader>
           <div className="mb-2">

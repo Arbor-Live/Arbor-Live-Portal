@@ -1,7 +1,7 @@
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { bookingDeclineReasonLabel } from "@arbor/format";
-import { listAdminEmailsForVertical } from "../lib/auth";
+import { findAuthUsersByIds, listAdminEmailsForVertical } from "../lib/auth";
 import {
   ARBOR_CONTACT_EMAIL,
   bookingRequestsAdminUrl,
@@ -10,7 +10,7 @@ import {
 } from "./constants";
 import { enqueueEmail } from "./enqueue";
 
-function buildQuoteReadyReplyTo(managerEmail: string | undefined): string[] {
+function buildManagerReplyTo(managerEmail: string | undefined): string[] {
   const addresses: string[] = [];
   const normalizedManager = managerEmail?.trim().toLowerCase();
   if (managerEmail?.trim()) {
@@ -20,6 +20,15 @@ function buildQuoteReadyReplyTo(managerEmail: string | undefined): string[] {
     addresses.push(ARBOR_CONTACT_EMAIL);
   }
   return addresses;
+}
+
+/** The request's round-robin assignee, introduced to the client as their manager. */
+async function resolveRequestManager(ctx: MutationCtx, assigneeUserId: string | undefined) {
+  if (!assigneeUserId) return null;
+  const user = (await findAuthUsersByIds(ctx, [assigneeUserId])).get(assigneeUserId);
+  const email = user?.email?.trim() || undefined;
+  const name = user?.name?.trim() || email;
+  return name ? { name, email } : null;
 }
 
 export async function scheduleBookingRequestReceivedEmail(
@@ -36,6 +45,7 @@ export async function scheduleBookingRequestReceivedEmail(
     | "organization"
     | "publicToken"
     | "submittedAt"
+    | "assigneeUserId"
   >,
 ) {
   const requestNumber = request.requestNumber ?? `LEGACY-${request._id}`;
@@ -45,10 +55,12 @@ export async function scheduleBookingRequestReceivedEmail(
   const recipientName = request.firstName.trim() || undefined;
   const eventName = request.eventName?.trim() || "Your event";
   const subject = subjectForTemplate("booking_request_received", eventName);
+  const manager = await resolveRequestManager(ctx, request.assigneeUserId);
 
   await enqueueEmail(ctx, {
     template: "booking_request_received",
     to: request.email,
+    replyTo: manager ? buildManagerReplyTo(manager.email) : undefined,
     subject,
     idempotencyKey: `booking_request_received:${request._id}:${request.submittedAt}`,
     payload: {
@@ -57,6 +69,8 @@ export async function scheduleBookingRequestReceivedEmail(
       eventName,
       eventDateText: request.eventDateText,
       trackingUrl: requestTrackingUrl(publicToken),
+      managerName: manager?.name,
+      managerEmail: manager?.email,
     },
   });
 
@@ -156,7 +170,7 @@ export async function scheduleBookingQuoteReadyEmail(
   const eventName = request.eventName?.trim() || undefined;
   const subjectContext = eventName ?? requestNumber;
   const managerEmail = invoice.managerEmail?.trim();
-  const replyTo = buildQuoteReadyReplyTo(managerEmail);
+  const replyTo = buildManagerReplyTo(managerEmail);
   const cc = Array.from(
     new Set(
       [managerEmail, ARBOR_CONTACT_EMAIL]

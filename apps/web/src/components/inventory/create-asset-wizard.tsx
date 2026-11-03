@@ -353,7 +353,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
           containedInAssetId:
             (normalizeAssetScanInput(tag.containedInAssetId) ?? tag.containedInAssetId.trim()) ||
             undefined,
-          status: tag.status.trim() || undefined,
+          condition: tag.condition.trim() || undefined,
           notes: tag.notes.trim() || undefined,
           contains: tag.contains.length
             ? tag.contains.map(
@@ -524,7 +524,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
                       typeId,
                       storageLocationId: tag.storageLocationId,
                       containedInAssetId: tag.containedInAssetId,
-                      status: tag.status,
+                      condition: tag.condition,
                       notes: tag.notes,
                     }}
                     onChange={(patch) => updateTag(tag.localId, patch)}

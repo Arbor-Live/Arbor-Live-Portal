@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
-import { authClient } from "@/lib/auth-client";
+import { useHydratedSession } from "@/hooks/use-hydrated-session";
 import { cn } from "@/lib/utils";
 
 type SessionNavLinkProps = {
@@ -26,7 +26,7 @@ export function DashboardNavLink({
   label = "Dashboard",
   onNavigate,
 }: DashboardNavLinkProps) {
-  const { data: session } = authClient.useSession();
+  const { session } = useHydratedSession();
   if (!session) return null;
 
   return (
@@ -47,7 +47,7 @@ export function SignInNavLink({
   size = "sm",
   onNavigate,
 }: SessionNavLinkProps) {
-  const { data: session, isPending } = authClient.useSession();
+  const { session, isPending } = useHydratedSession();
   if (isPending || session) return null;
 
   return (
@@ -60,7 +60,7 @@ export function SignInNavLink({
 }
 
 export function DashboardFooterLink({ className }: { className?: string }) {
-  const { data: session } = authClient.useSession();
+  const { session } = useHydratedSession();
   if (!session) return null;
 
   return (

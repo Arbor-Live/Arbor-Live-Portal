@@ -92,8 +92,10 @@ function isRentalEventType(eventType: string) {
   return RENTAL_EVENT_TYPES.has(eventType);
 }
 
+const qtyFormatter = new Intl.NumberFormat("en-US");
+
 function formatQty(value: number) {
-  return new Intl.NumberFormat("en-US").format(value);
+  return qtyFormatter.format(value);
 }
 
 function formatPackageContents(contents: PackageContent[] | undefined, packageQty: number) {

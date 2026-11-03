@@ -1,7 +1,5 @@
 import {
-  addDaysToDateKey,
   pacificDateKey,
-  stanfordNoClassDay,
   pacificEndOfDayMs,
   pacificStartOfDayMs,
   STANFORD_QUARTERS,
@@ -123,56 +121,4 @@ export function academicPeriod(preset: AcademicPeriodPreset, todayKey: string): 
 /** `{ startMs, endMs }` for a period's inclusive Pacific days. */
 export function periodMsRange(period: Pick<AcademicPeriod, "startDate" | "endDate">) {
   return { startMs: dayStartMs(period.startDate), endMs: dayEndMs(period.endDate) };
-}
-
-export type QuarterWeek =
-  | { kind: "week"; quarter: AcademicQuarter; week: number; label: string }
-  | { kind: "finals" | "break"; quarter: AcademicQuarter; label: string };
-
-/** Monday on or before a day key. */
-function mondayOf(dateKey: string) {
-  const [year, month, day] = dateKey.split("-").map(Number);
-  const weekday = new Date(Date.UTC(year!, month! - 1, day!)).getUTCDay();
-  return addDaysToDateKey(dateKey, -((weekday + 6) % 7));
-}
-
-function isWholeBreakWeek(monday: string) {
-  return [0, 1, 2, 3, 4].every((offset) => stanfordNoClassDay(addDaysToDateKey(monday, offset))?.kind === "break");
-}
-
-const weekCache = new Map<string, Map<string, QuarterWeek>>();
-
-/**
- * Weeks of a quarter, keyed by Monday: "Wk 1" is the week of the first day of
- * classes. A week that's all break (Thanksgiving) isn't numbered; a week
- * whose Monday is in finals is "Finals"; after finals the break is named
- * ("Winter break"). So a quarter reads Wk 1–10, then Finals.
- */
-function quarterWeeks(quarter: AcademicQuarter) {
-  let weeks = weekCache.get(quarter.id);
-  if (weeks) return weeks;
-  weeks = new Map();
-  let count = 0;
-  for (let monday = mondayOf(quarter.startDate); monday <= quarter.reportingEndDate; monday = addDaysToDateKey(monday, 7)) {
-    if (monday >= quarter.finalsStartDate && monday <= quarter.finalsEndDate) {
-      weeks.set(monday, { kind: "finals", quarter, label: "Finals" });
-    } else if (monday > quarter.finalsEndDate || isWholeBreakWeek(monday)) {
-      const note = stanfordNoClassDay(monday) ?? stanfordNoClassDay(addDaysToDateKey(monday, 2));
-      weeks.set(monday, { kind: "break", quarter, label: note?.label.replace(/ recess$/, "") ?? "Break" });
-    } else {
-      count += 1;
-      weeks.set(monday, { kind: "week", quarter, week: count, label: `Wk ${count}` });
-    }
-  }
-  weekCache.set(quarter.id, weeks);
-  return weeks;
-}
-
-/** The quarter week a day falls in ("Wk 3", "Finals", "Winter break"), or null outside the calendar. */
-export function quarterWeek(dateKey: string): QuarterWeek | null {
-  const monday = mondayOf(dateKey);
-  // A quarter can start mid-week; its first week's Monday may sit in the previous quarter.
-  const quarter = stanfordQuarterForDate(addDaysToDateKey(monday, 4)) ?? stanfordQuarterForDate(dateKey);
-  if (!quarter) return null;
-  return quarterWeeks(quarter).get(monday) ?? null;
 }

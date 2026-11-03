@@ -124,6 +124,7 @@ function valuesFromUser(user: AdminUser): UserAdminRowFormValues {
     requiresOnboarding: user.requiresOnboarding ?? true,
     includeInTimecards: user.includeInTimecards ?? true,
     assignableAsCrew: user.assignableAsCrew ?? true,
+    cartEligible: user.cartEligible ?? false,
     emailOptOuts: [],
     showOnPublicCrewPage: user.showOnPublicCrewPage ?? false,
     publicCrewDescription: user.publicCrewDescription ?? "",
@@ -211,6 +212,7 @@ function PersonSheetBody({
   const updateUser = useMutation(api.users.updateUserAdmin);
   const addMembership = useMutation(api.users.addUserOrganizationMembershipAdmin);
   const removeMembership = useMutation(api.users.removeUserOrganizationMembershipAdmin);
+  const updateMembershipRole = useMutation(api.users.updateUserOrganizationMembershipRoleAdmin);
   const emailPreferences = useQuery(api.users.getUserEmailPreferences, { userId: user.id });
   const [membershipOrgId, setMembershipOrgId] = useState("");
   const [membershipRole, setMembershipRole] = useState("org_member");
@@ -281,6 +283,7 @@ function PersonSheetBody({
         requiresOnboarding: values.requiresOnboarding,
         includeInTimecards: values.includeInTimecards,
         assignableAsCrew: values.assignableAsCrew,
+        cartEligible: values.cartEligible,
         // Only touch preferences we actually loaded (or the admin changed), so
         // a save can never wipe opt-outs the editor never displayed.
         ...(emailPreferences !== undefined || form.formState.dirtyFields.emailOptOuts
@@ -334,6 +337,18 @@ function PersonSheetBody({
     }
   }
 
+  async function onChangeMembershipRole(organizationId: string, organizationName: string, role: string) {
+    setBusy(true);
+    try {
+      await updateMembershipRole({ userId: user.id, organizationId, role });
+      notify.success(`${user.name} is now ${roleLabel(role)} of ${organizationName}.`);
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onRemoveMembership(organizationId: string) {
     if (form.getValues("defaultOrganizationId") === organizationId) {
       await alert("Change default organization before removing this membership.");
@@ -351,11 +366,16 @@ function PersonSheetBody({
   }
 
   const field = (id: string) => `person-${user.id}-${id}`;
-  const participation = [
+  const participation: {
+    key: "requiresOnboarding" | "includeInTimecards" | "assignableAsCrew" | "cartEligible";
+    label: string;
+    hint?: string;
+  }[] = [
     { key: "requiresOnboarding", label: "Requires onboarding" },
     { key: "includeInTimecards", label: "Include in timecards" },
     { key: "assignableAsCrew", label: "Assignable as crew" },
-  ] as const;
+    { key: "cartEligible", label: "Cart eligible", hint: "Can drive the cart to move gear." },
+  ];
 
   return (
     <>
@@ -464,9 +484,15 @@ function PersonSheetBody({
                     Inactive
                   </span>
                 ) : null}
-                <span className="shrink-0 text-right text-xs text-muted-foreground">
-                  {roleLabel(membership.role)}
-                </span>
+                <MembershipRoleSelect
+                  role={membership.role}
+                  options={getRoleOptionsForOrg(orgOptions, membership.organizationId)}
+                  disabled={busy}
+                  label={`${membership.organizationName} role`}
+                  onChange={(role) =>
+                    void onChangeMembershipRole(membership.organizationId, membership.organizationName, role)
+                  }
+                />
                 <Button
                   type="button"
                   variant="ghost"
@@ -576,11 +602,14 @@ function PersonSheetBody({
           </div>
         </div>
         <div className="space-y-2">
-          {participation.map(({ key, label }) => (
+          {participation.map(({ key, label, hint }) => (
             <div key={key} className="flex items-center justify-between gap-3">
-              <Label htmlFor={field(key)} className="font-normal">
-                {label}
-              </Label>
+              <div className="space-y-0.5">
+                <Label htmlFor={field(key)} className="font-normal">
+                  {label}
+                </Label>
+                {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+              </div>
               <Switch
                 id={field(key)}
                 checked={form.watch(key)}
@@ -755,5 +784,43 @@ function OnboardingChecklist({ onboarding }: { onboarding: CrewOnboardingRow }) 
         </div>
       ))}
     </dl>
+  );
+}
+
+/** Changes a membership's role in place; legacy roles show until a new one is picked. */
+function MembershipRoleSelect({
+  role,
+  options,
+  disabled,
+  label,
+  onChange,
+}: {
+  role: string;
+  options: Array<{ value: string; label: string }>;
+  disabled: boolean;
+  label: string;
+  onChange: (role: string) => void;
+}) {
+  const known = options.some((option) => option.value === role);
+  return (
+    <Select
+      value={role}
+      disabled={disabled}
+      onValueChange={(next) => {
+        if (next !== role) onChange(next);
+      }}
+    >
+      <SelectTrigger aria-label={label} className="h-7 w-32 shrink-0 text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {known ? null : <SelectItem value={role}>{roleLabel(role)}</SelectItem>}
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

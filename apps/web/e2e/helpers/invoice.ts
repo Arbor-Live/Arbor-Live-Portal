@@ -173,5 +173,11 @@ export async function clientApprovedQuote(page: Page, browser: Browser, label: s
   await page.goto(`/dashboard/ops-center/invoices/${invoiceId}`);
   await expect(invoiceEditorHeading(page)).toBeVisible({ timeout: 25_000 });
   await expect(page.getByTestId("invoice-versions-card")).toContainText("Approved", { timeout: 25_000 });
+  // The one-time draft hydrate rewrites every field from the saved invoice;
+  // wait for it to land before handing the page back or a caller's first edit
+  // is silently reverted. The saved artist rate is the hydration marker.
+  await expect(
+    page.getByTestId("invoice-row-artist-0").getByPlaceholder("Rate"),
+  ).toHaveValue("150", { timeout: 25_000 });
   return { invoiceId, publicPath: drafted.publicPath! };
 }

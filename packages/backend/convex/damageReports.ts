@@ -1,7 +1,9 @@
-import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { v, type ObjectType } from "convex/values";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { syncFlagWithDamageReport } from "./lib/hashingFlags";
 import {
+  type AuthUser,
   findAuthUsersByIds,
   getUserId,
   requireAnyVerticalOrAdmin,
@@ -11,6 +13,12 @@ import {
 import { formatStoredR2Asset } from "./lib/inventoryUpload";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 import { scheduleDamageReportAdminEmails } from "./email/damageReportEmails";
+import {
+  adjustOpenDamageCount,
+  lifecycleOf,
+  recordItemHistory,
+  retireItemRecord,
+} from "./lib/inventoryLifecycle";
 
 const scopeValue = v.union(
   v.literal("this_only"),
@@ -19,7 +27,7 @@ const scopeValue = v.union(
   v.literal("some_children"),
 );
 
-const operabilityValue = v.union(v.literal("functional"), v.literal("needs_repair"));
+export const operabilityValue = v.union(v.literal("functional"), v.literal("needs_repair"));
 
 const statusValue = v.union(
   v.literal("open"),
@@ -299,112 +307,131 @@ export const countPending = query({
   },
 });
 
+const createArgs = {
+  inventoryItemId: v.id("inventoryItems"),
+  eventId: v.optional(v.id("events")),
+  eventUnknown: v.boolean(),
+  scope: scopeValue,
+  someItemIds: v.optional(v.array(v.id("inventoryItems"))),
+  operability: operabilityValue,
+  severity: v.number(),
+  notes: v.optional(v.string()),
+  photoR2Key: v.optional(v.string()),
+};
+
+/** File a report for `user`. The caller has already authorized them. */
+export async function fileDamageReport(
+  ctx: MutationCtx,
+  user: AuthUser,
+  args: ObjectType<typeof createArgs>,
+) {
+  if (!Number.isFinite(args.severity) || args.severity < 1 || args.severity > 5) {
+    throw new Error("Severity must be between 1 and 5.");
+  }
+
+  const root = await ctx.db.get(args.inventoryItemId);
+  if (!root) throw new Error("Inventory item not found.");
+  if (lifecycleOf(root) === "retired") {
+    throw new Error(`${root.assetId ?? root.serialNumber ?? "This item"} is retired. Reinstate it before reporting damage.`);
+  }
+
+  let eventId: Id<"events"> | undefined;
+  if (!args.eventUnknown) {
+    if (!args.eventId) throw new Error("Select an event or mark that you don’t know when it happened.");
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+    eventId = event._id;
+  }
+
+  const children = await listChildren(ctx, root._id);
+  if (
+    (args.scope === "all_including_children" ||
+      args.scope === "children_only" ||
+      args.scope === "some_children") &&
+    children.length === 0
+  ) {
+    throw new Error("This item has no contained assets.");
+  }
+
+  const scopedIds = resolveScopedIds({
+    rootId: root._id,
+    scope: args.scope,
+    childIds: children.map((child) => child._id),
+    someItemIds: args.someItemIds,
+  });
+
+  const now = Date.now();
+  const photoKey = args.photoR2Key?.trim() || undefined;
+  const reportIds: Id<"damageReports">[] = [];
+  // One id across every scoped asset so the rows share a single comment thread.
+  const batchId = crypto.randomUUID();
+
+  for (const itemId of scopedIds) {
+    const item = await ctx.db.get(itemId);
+    // Retired units inside a case aren't in service to damage.
+    if (!item || lifecycleOf(item) === "retired") continue;
+    const reportId = await ctx.db.insert("damageReports", {
+      inventoryItemId: item._id,
+      assetId: item.assetId,
+      typeId: item.typeId,
+      eventId,
+      batchId,
+      scope: args.scope,
+      scopedItemIds: scopedIds,
+      operability: args.operability,
+      severity: Math.floor(args.severity),
+      notes: args.notes?.trim() || undefined,
+      photoR2Key: photoKey,
+      status: "open",
+      reportedByUserId: getUserId(user),
+      reportedAt: now,
+      updatedAt: now,
+    });
+    reportIds.push(reportId);
+    await adjustOpenDamageCount(ctx, item._id, 1);
+
+    if (args.operability === "needs_repair" && lifecycleOf(item) === "active") {
+      await ctx.db.patch(item._id, { lifecycle: "in_repair", updatedAt: now });
+      await recordItemHistory(ctx, {
+        inventoryItemId: item._id,
+        kind: "repair_started",
+        damageReportId: reportId,
+        actorUserId: getUserId(user),
+        at: now,
+      });
+    }
+  }
+
+  if (!reportIds.length) throw new Error("No damage reports were created.");
+
+  const type = await ctx.db.get(root.typeId);
+  const identifier = root.assetId ?? root.serialNumber ?? null;
+  const itemLabel = [type?.name ?? "Asset", identifier ? `(${identifier})` : null]
+    .filter(Boolean)
+    .join(" ");
+  const event = eventId ? await ctx.db.get(eventId) : null;
+  const firstReport = await ctx.db.get(reportIds[0]!);
+  if (firstReport) {
+    await scheduleDamageReportAdminEmails(ctx, {
+      report: firstReport,
+      itemLabel,
+      reporterName: user.name?.trim() || user.email?.trim() || "Crew",
+      eventTitle: event?.title,
+    });
+  }
+
+  return { reportIds };
+}
+
 export const create = mutation({
-  args: {
-    inventoryItemId: v.id("inventoryItems"),
-    eventId: v.optional(v.id("events")),
-    eventUnknown: v.boolean(),
-    scope: scopeValue,
-    someItemIds: v.optional(v.array(v.id("inventoryItems"))),
-    operability: operabilityValue,
-    severity: v.number(),
-    notes: v.optional(v.string()),
-    photoR2Key: v.optional(v.string()),
-  },
+  args: createArgs,
   returns: v.object({
     reportIds: v.array(v.id("damageReports")),
   }),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-
-    if (!Number.isFinite(args.severity) || args.severity < 1 || args.severity > 5) {
-      throw new Error("Severity must be between 1 and 5.");
-    }
-
-    const root = await ctx.db.get(args.inventoryItemId);
-    if (!root) throw new Error("Inventory item not found.");
-
-    let eventId: Id<"events"> | undefined;
-    if (!args.eventUnknown) {
-      if (!args.eventId) throw new Error("Select an event or mark that you don’t know when it happened.");
-      const event = await ctx.db.get(args.eventId);
-      if (!event) throw new Error("Event not found.");
-      eventId = event._id;
-    }
-
-    const children = await listChildren(ctx, root._id);
-    if (
-      (args.scope === "all_including_children" ||
-        args.scope === "children_only" ||
-        args.scope === "some_children") &&
-      children.length === 0
-    ) {
-      throw new Error("This item has no contained assets.");
-    }
-
-    const scopedIds = resolveScopedIds({
-      rootId: root._id,
-      scope: args.scope,
-      childIds: children.map((child) => child._id),
-      someItemIds: args.someItemIds,
-    });
-
-    const now = Date.now();
-    const photoKey = args.photoR2Key?.trim() || undefined;
-    const reportIds: Id<"damageReports">[] = [];
-    // One id across every scoped asset so the rows share a single comment thread.
-    const batchId = crypto.randomUUID();
-
-    for (const itemId of scopedIds) {
-      const item = await ctx.db.get(itemId);
-      if (!item) continue;
-      const reportId = await ctx.db.insert("damageReports", {
-        inventoryItemId: item._id,
-        assetId: item.assetId,
-        typeId: item.typeId,
-        eventId,
-        batchId,
-        scope: args.scope,
-        scopedItemIds: scopedIds,
-        operability: args.operability,
-        severity: Math.floor(args.severity),
-        notes: args.notes?.trim() || undefined,
-        photoR2Key: photoKey,
-        status: "open",
-        reportedByUserId: getUserId(user),
-        reportedAt: now,
-        updatedAt: now,
-      });
-      reportIds.push(reportId);
-
-      if (args.operability === "needs_repair") {
-        await ctx.db.patch(item._id, {
-          status: "needs_repair",
-          updatedAt: now,
-        });
-      }
-    }
-
-    if (!reportIds.length) throw new Error("No damage reports were created.");
-
-    const type = await ctx.db.get(root.typeId);
-    const identifier = root.assetId ?? root.serialNumber ?? null;
-    const itemLabel = [type?.name ?? "Asset", identifier ? `(${identifier})` : null]
-      .filter(Boolean)
-      .join(" ");
-    const event = eventId ? await ctx.db.get(eventId) : null;
-    const firstReport = await ctx.db.get(reportIds[0]!);
-    if (firstReport) {
-      await scheduleDamageReportAdminEmails(ctx, {
-        report: firstReport,
-        itemLabel,
-        reporterName: user.name?.trim() || user.email?.trim() || "Crew",
-        eventTitle: event?.title,
-      });
-    }
-
-    return { reportIds };
+    return await fileDamageReport(ctx, user, args);
   },
 });
 
@@ -415,7 +442,7 @@ export const updateStatus = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAnyVerticalOrAdmin(ctx, ["Operations"]);
+    const user = await requireAnyVerticalOrAdmin(ctx, ["Operations"]);
     const report = await ctx.db.get(args.reportId);
     if (!report) throw new Error("Damage report not found.");
     const now = Date.now();
@@ -424,12 +451,49 @@ export const updateStatus = mutation({
       updatedAt: now,
       resolvedAt: args.status === "resolved" ? now : undefined,
     });
-    if (args.status === "resolved" && report.operability === "needs_repair") {
-      const item = await ctx.db.get(report.inventoryItemId);
-      if (item?.status === "needs_repair") {
-        await ctx.db.patch(item._id, {
-          status: "functional",
-          updatedAt: now,
+    const wasOpen = report.status !== "resolved";
+    const isOpen = args.status !== "resolved";
+    if (wasOpen === isOpen) return null;
+    await syncFlagWithDamageReport(
+      ctx,
+      report._id,
+      isOpen ? { resolved: false } : { resolved: true, userId: getUserId(user), at: now },
+    );
+
+    const item = await ctx.db.get(report.inventoryItemId);
+    if (!item) return null;
+    await adjustOpenDamageCount(ctx, item._id, isOpen ? 1 : -1);
+    if (report.operability !== "needs_repair") return null;
+
+    const lifecycle = lifecycleOf(item);
+    if (isOpen && lifecycle === "active") {
+      // Reopened: back into repair.
+      await ctx.db.patch(item._id, { lifecycle: "in_repair", updatedAt: now });
+      await recordItemHistory(ctx, {
+        inventoryItemId: item._id,
+        kind: "repair_started",
+        damageReportId: report._id,
+        actorUserId: getUserId(user),
+        at: now,
+      });
+    } else if (!isOpen && lifecycle === "in_repair") {
+      // Out of repair once nothing else open still needs it.
+      const others = await ctx.db
+        .query("damageReports")
+        .withIndex("by_inventoryItemId", (q) => q.eq("inventoryItemId", item._id))
+        .take(200);
+      const stillBroken = others.some(
+        (other) =>
+          other._id !== report._id && other.status !== "resolved" && other.operability === "needs_repair",
+      );
+      if (!stillBroken) {
+        await ctx.db.patch(item._id, { lifecycle: "active", updatedAt: now });
+        await recordItemHistory(ctx, {
+          inventoryItemId: item._id,
+          kind: "repair_finished",
+          damageReportId: report._id,
+          actorUserId: getUserId(user),
+          at: now,
         });
       }
     }
@@ -437,12 +501,12 @@ export const updateStatus = mutation({
   },
 });
 
-/** Resolve the report and mark the inventory asset as decommissioned (out of service). */
+/** Resolve the report and retire the asset as beyond repair. */
 export const decommission = mutation({
   args: { reportId: v.id("damageReports") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAnyVerticalOrAdmin(ctx, ["Operations"]);
+    const user = await requireAnyVerticalOrAdmin(ctx, ["Operations"]);
     const report = await ctx.db.get(args.reportId);
     if (!report) throw new Error("Damage report not found.");
     if (report.status === "resolved") {
@@ -450,17 +514,30 @@ export const decommission = mutation({
     }
     const item = await ctx.db.get(report.inventoryItemId);
     if (!item) throw new Error("Inventory item not found.");
+    if (lifecycleOf(item) === "retired") throw new Error("This asset is already retired.");
 
-    const now = Date.now();
-    await ctx.db.patch(report._id, {
-      status: "resolved",
-      updatedAt: now,
-      resolvedAt: now,
-    });
-    await ctx.db.patch(item._id, {
-      status: "decommissioned",
-      updatedAt: now,
-    });
+    // Resolves this report (and any other open one on the unit) too.
+    await retireItemRecord(
+      ctx,
+      item,
+      { reason: "beyond_repair", damageReportId: report._id },
+      getUserId(user),
+      Date.now(),
+    );
     return null;
+  },
+});
+
+/** Every damage report filed on one unit, newest first, for its item panel. */
+export const listForItem = query({
+  args: { inventoryItemId: v.id("inventoryItems") },
+  returns: v.array(reportValidator),
+  handler: async (ctx, args) => {
+    await requireCrew(ctx);
+    const rows = await ctx.db
+      .query("damageReports")
+      .withIndex("by_inventoryItemId", (q) => q.eq("inventoryItemId", args.inventoryItemId))
+      .take(100);
+    return await enrichReports(ctx, rows);
   },
 });

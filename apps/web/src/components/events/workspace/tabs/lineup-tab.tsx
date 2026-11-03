@@ -5,11 +5,12 @@ import { useEffect, useState } from "react";
 import { ArrowSquareOutIcon, MicrophoneIcon } from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { DraftTextarea } from "@/components/forms/draft-text-input";
 import { EventArtistBillSection } from "@/components/events/event-artist-bill-section";
 import { EventBandRidersSection } from "@/components/events/event-band-riders-section";
 import { OutreachCard } from "@/components/events/outreach/outreach-card";
 import { Field } from "@/components/events/workspace/event-fields";
+import { HashingCard } from "@/components/events/workspace/hashing-card";
 import { useEventWorkspace } from "@/components/events/workspace/event-workspace-provider";
 
 const OPEN_MIC_SIGNUP_CLOSES_AFTER_START_MS = 4 * 60 * 60 * 1000;
@@ -77,11 +78,11 @@ function OpenMicCard() {
             Public sign-ups open until 4 hours after the event start.
           </p>
           <Field label="Open Mic notes" htmlFor="open-mic-notes">
-            <Textarea
+            <DraftTextarea
               id="open-mic-notes"
               className="min-h-20"
               value={draft.openMicNotes}
-              onChange={(e) => updateDraft({ openMicNotes: e.target.value })}
+              onCommit={(openMicNotes) => updateDraft({ openMicNotes })}
               placeholder="Theme, special instructions, etc."
             />
           </Field>
@@ -92,13 +93,14 @@ function OpenMicCard() {
 }
 
 export function LineupTab() {
-  const { eventId, canEdit, hasOperationsAccess } = useEventWorkspace();
+  const { eventId, canEdit, draft, hasOperationsAccess } = useEventWorkspace();
   return (
     <div className="space-y-4">
       <EventArtistBillSection eventId={eventId} canEdit={canEdit} />
       <OutreachCard eventId={eventId} canEdit={canEdit} />
       <EventBandRidersSection eventId={eventId} />
       {hasOperationsAccess ? <OpenMicCard /> : null}
+      {hasOperationsAccess && draft.visibility === "internal" ? <HashingCard /> : null}
     </div>
   );
 }

@@ -81,6 +81,21 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  {
+    files: ["src/**"],
+    rules: {
+      // Building an Intl formatter is far slower than using one, and render
+      // paths call these per row: typing on the event page took ~1s a key.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: ":function NewExpression[callee.object.name='Intl']",
+          message:
+            "Build Intl formatters once: use dateTimeFormat() from @/lib/format, or a module-level constant.",
+        },
+      ],
+    },
+  },
   // The design-system components own their own spacing/colors; rules should
   // only apply to call sites, not to the component definitions themselves.
   {

@@ -89,20 +89,21 @@ export const bandInviteSchema = z.object({
 
 export type BandInviteFormValues = z.infer<typeof bandInviteSchema>;
 
-export const eventBandPayoutFieldsSchema = z.object({
+/** A booking's price as typed on the Lineup: people × hours × rate, or a fixed total. */
+export const bookingPriceFieldsSchema = z.object({
   pricingMode: z.enum(["per_member_hourly", "fixed_total"]),
-  ratePerMemberPerHourUsd: z.coerce.number().min(0, "Rate must be non-negative"),
-  performanceHours: z.coerce.number().min(0, "Performance length must be non-negative"),
   memberCount: z.coerce
     .number()
-    .int("Member count must be a whole number")
-    .min(1, "Member count must be at least 1"),
-  fixedTotalUsd: z.coerce.number().min(0, "Total must be non-negative"),
+    .int("People must be a whole number")
+    .min(1, "At least one person"),
+  performanceHours: z.coerce.number().min(0, "Hours can't be negative"),
+  ratePerMemberPerHourUsd: z.coerce.number().min(0, "Rate can't be negative"),
+  fixedTotalUsd: z.coerce.number().min(0, "Total can't be negative"),
 });
 
-export type EventBandPayoutFieldsFormValues = z.infer<typeof eventBandPayoutFieldsSchema>;
+export type BookingPriceFieldsFormValues = z.infer<typeof bookingPriceFieldsSchema>;
 
-export const eventBandOnboardingInviteSchema = eventBandPayoutFieldsSchema.extend({
+export const eventBandOnboardingInviteSchema = z.object({
   email: z.string().email("Enter a valid email"),
   artistName: z.string().trim().min(1, "Enter an artist name"),
   role: z.enum(["headliner", "support", "other"]),

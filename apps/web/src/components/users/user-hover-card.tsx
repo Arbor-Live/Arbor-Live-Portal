@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useQuery } from "convex/react";
-import { EnvelopeSimpleIcon, PhoneIcon } from "@phosphor-icons/react";
+import { CarSimpleIcon, EnvelopeSimpleIcon, PhoneIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { UserAvatar } from "@/components/account/user-avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
@@ -105,6 +105,25 @@ function UserCardBody({
         ) : null}
       </div>
 
+      {card.verticals.length > 0 || card.disciplines.length > 0 ? (
+        <ul
+          aria-label="Verticals and disciplines"
+          className="flex flex-wrap gap-1"
+          data-testid="user-hover-card-verticals"
+        >
+          {card.verticals.map((vertical) => (
+            <li key={vertical} className="rounded bg-muted px-1.5 py-0.5 text-2xs font-medium">
+              {vertical}
+            </li>
+          ))}
+          {card.disciplines.map((discipline) => (
+            <li key={discipline} className="rounded border px-1.5 py-0.5 text-2xs text-muted-foreground">
+              {discipline}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       {extra ? <div className="border-t pt-2">{extra}</div> : null}
 
       <div className="space-y-1 border-t pt-2">
@@ -127,6 +146,12 @@ function UserCardBody({
             <EnvelopeSimpleIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
             <span className="truncate">{card.email}</span>
           </a>
+        ) : null}
+        {card.cartEligible ? (
+          <p className="flex items-center gap-2 text-muted-foreground">
+            <CarSimpleIcon className="size-3.5 shrink-0" aria-hidden />
+            Cart eligible
+          </p>
         ) : null}
       </div>
 

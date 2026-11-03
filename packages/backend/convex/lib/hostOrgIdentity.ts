@@ -15,11 +15,13 @@ export async function findGroupByNormalizedName(
   normalized: string,
 ): Promise<Doc<"invoiceGroups"> | null> {
   if (!normalized) return null;
+  // An archived host can share its name with a newer active one; only the active one counts.
   const byIndex = await ctx.db
     .query("invoiceGroups")
     .withIndex("by_normalizedName", (q) => q.eq("normalizedName", normalized))
-    .first();
-  if (byIndex) return byIndex;
+    .take(20);
+  const match = byIndex.find((group) => group.active);
+  if (match) return match;
 
   // Legacy rows may lack normalizedName until backfill.
   const legacy = await ctx.db.query("invoiceGroups").take(500);
@@ -78,7 +80,12 @@ export async function ensureAlias(
     .withIndex("by_normalizedAlias", (q) => q.eq("normalizedAlias", normalizedAlias))
     .first();
   if (claimed && claimed.groupId !== groupId) {
-    throw new Error(`Alias "${alias}" is already used by another host organization.`);
+    const owner = await ctx.db.get(claimed.groupId);
+    if (owner?.active) {
+      throw new Error(`Alias "${alias}" is already used by another host organization.`);
+    }
+    // An archived host's alias is free to take; restoring that host checks its aliases again.
+    await ctx.db.delete(claimed._id);
   }
 
   const otherGroup = await findGroupByNormalizedName(ctx, normalizedAlias);

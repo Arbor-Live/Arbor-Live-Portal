@@ -18,6 +18,7 @@ import {
   shortLinkStatus,
   validateShortLinkDestinationUrl,
 } from "./lib/shortLinks";
+import { dateTimeFormat } from "@arbor/format";
 
 const expiryModeValue = v.union(
   v.literal("none"),
@@ -85,7 +86,7 @@ async function eventTitleFor(
 
 function manualDateFromExpiresAt(expiresAt?: number) {
   if (expiresAt == null) return "";
-  return new Intl.DateTimeFormat("en-CA", {
+  return dateTimeFormat("en-CA", {
     timeZone: "America/Los_Angeles",
     year: "numeric",
     month: "2-digit",

@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { TOGGLE_LINK_COMMAND } from "@lexical/link";
-import { LexicalComposer } from "@lexical/react/LexicalComposer";
-import type { InitialConfigType } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
+import { LexicalExtensionComposer } from "@lexical/react/LexicalExtensionComposer";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { ListPlugin } from "@lexical/react/LexicalListPlugin";
@@ -20,6 +19,7 @@ import {
   $createParagraphNode,
   $getSelection,
   $isRangeSelection,
+  defineExtension,
   FORMAT_TEXT_COMMAND,
 } from "lexical";
 import { $setBlocksType } from "@lexical/selection";
@@ -190,16 +190,35 @@ function OnChangePlugin({
   return null;
 }
 
-function createEditorConfig(contentJson: string): InitialConfigType {
-  return {
+function createEditorExtension(contentJson: string) {
+  return defineExtension({
+    name: "ArborMarketingEditor",
     namespace: "ArborMarketingEditor",
     theme: lexicalTheme,
     onError(error: Error) {
       throw error;
     },
-    editorState: contentJson || EMPTY_LEXICAL_STATE,
+    $initialEditorState: contentJson || EMPTY_LEXICAL_STATE,
     nodes: marketingEditorNodes,
-  };
+  });
+}
+
+function MarketingEditorComposer({
+  contentJson,
+  children,
+}: {
+  contentJson: string;
+  children: React.ReactNode;
+}) {
+  // contentJson changes on every keystroke; the composer rebuilds its editor
+  // whenever the extension object changes, so only the first value is used.
+  // The parent remounts this component (via editorKey) to load a different post.
+  const [extension] = useState(() => createEditorExtension(contentJson));
+  return (
+    <LexicalExtensionComposer extension={extension} contentEditable={null}>
+      {children}
+    </LexicalExtensionComposer>
+  );
 }
 
 export function LexicalEditor({
@@ -225,7 +244,7 @@ export function LexicalEditor({
   return (
     <div className={cn("overflow-hidden rounded-md border", className)}>
       <MarketingEditorChangeContext.Provider value={handleChange}>
-        <LexicalComposer key={editorKey} initialConfig={createEditorConfig(contentJson)}>
+        <MarketingEditorComposer key={editorKey} contentJson={contentJson}>
           <EditorToolbar postId={postId} />
           <div className="relative">
             <RichTextPlugin
@@ -248,7 +267,7 @@ export function LexicalEditor({
           <LinkPlugin />
           <ImagePlugin />
           <OnChangePlugin onChange={handleChange} />
-        </LexicalComposer>
+        </MarketingEditorComposer>
       </MarketingEditorChangeContext.Provider>
     </div>
   );

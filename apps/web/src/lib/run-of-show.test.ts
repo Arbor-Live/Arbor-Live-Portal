@@ -7,6 +7,7 @@ import {
   buildRunOfShow,
   changeoverNeighbors,
   nestRunOfShow,
+  planEarlySetup,
   runOfShowIssues,
   type RunOfShowAct,
 } from "./run-of-show";
@@ -219,5 +220,37 @@ describe("mergeServerActBlocks", () => {
   it("returns null when nothing changed", () => {
     const base = act("s1", "19:00");
     expect(mergeServerActBlocks({ blocks: [base], shifts: empty }, { blocks: [base], shifts: empty }, [base])).toBeNull();
+  });
+});
+
+describe("planEarlySetup", () => {
+  const ms = (time: string) => localDateTimeInputToMs(`2026-10-12T${time}`);
+  const night = () => [
+    block("setup", "17:00", "19:00", { label: "Setup" }),
+    block("soundcheck", "18:30", "18:45"),
+    block("show", "19:00", "22:00", { label: "Show" }),
+  ];
+
+  it("runs from an hour before setup until setup when the early crew stay on", () => {
+    const plan = planEarlySetup(night(), { leadMinutes: 60, until: "setup" });
+    expect(plan).toEqual({ start: ms("16:00"), end: ms("17:00"), label: "Early setup" });
+  });
+
+  it("runs until the first soundcheck when the early crew leave", () => {
+    const plan = planEarlySetup(night(), { leadMinutes: 60, until: "soundcheck" });
+    expect(plan).toMatchObject({ start: ms("16:00"), end: ms("18:30") });
+  });
+
+  it("needs a setup section, a soundcheck to leave at, and only one early setup", () => {
+    expect(planEarlySetup([], { leadMinutes: 60, until: "setup" })).toHaveProperty("error");
+    expect(
+      planEarlySetup([block("setup", "17:00", "19:00")], { leadMinutes: 60, until: "soundcheck" }),
+    ).toHaveProperty("error");
+    expect(
+      planEarlySetup([...night(), block("setup", "16:00", "17:00", { label: "Early setup" })], {
+        leadMinutes: 60,
+        until: "setup",
+      }),
+    ).toHaveProperty("error");
   });
 });

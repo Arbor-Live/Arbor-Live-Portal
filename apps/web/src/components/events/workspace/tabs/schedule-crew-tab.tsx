@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "convex/react";
 import { ListChecksIcon, RepeatIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { api } from "@/lib/convex-api";
 import { CrewStaffingBoard } from "@/components/events/crew-staffing/crew-staffing-board";
 import { RunOfShowEditor } from "@/components/events/workspace/run-of-show/run-of-show-editor";
 import { useRunOfShowData } from "@/components/events/workspace/run-of-show/use-run-of-show-data";
 import { isSectionBlockType } from "@/lib/schedule-block-types";
+import { setSectionHeadcount } from "@/lib/crew-shift-assign";
 import { countStaffing } from "@/lib/crew-shift-kinds";
 import {
   buildQuickAddScheduleBlocks,
@@ -51,12 +54,19 @@ export function ScheduleCrewTab() {
     removeUnlinkedShifts,
     userSelectOptions,
     isAdmin,
+    isHash,
   } = useEventWorkspace();
   // Series costs, crew notes and the series pull list are recurring-only; a
   // multi-day booking's days bill and staff as ordinary linked days.
   const seriesMeta = groupMeta?.kind === "multi_day" ? null : groupMeta;
   const runOfShow = useRunOfShowData(eventId);
   const hasCrew = eventTypeHasCrewAssignment(draft.eventType);
+  const hashCrewIds = useQuery(api.hashing.listCrewIds, isHash ? {} : "skip");
+  const crewOptions = useMemo(() => {
+    if (!isHash) return userSelectOptions;
+    const ids = new Set(hashCrewIds);
+    return userSelectOptions.filter((option) => ids.has(option.value));
+  }, [hashCrewIds, isHash, userSelectOptions]);
 
   const quickAddDisabled = !draft.startAt || !draft.endAt;
   const quickAddLabel =
@@ -108,10 +118,14 @@ export function ScheduleCrewTab() {
             acts={runOfShow.acts}
             actName={runOfShow.actName}
             swaps={runOfShow.swaps}
+            hashMode={isHash}
             crewFor={(block) => {
               const staffing = countStaffing(shifts.filter((shift) => shiftBelongsToBlock(shift, block)));
               return { total: staffing.slots, filled: staffing.filled };
             }}
+            onEarlySetupAdded={(block, headcount) =>
+              setShifts((prev) => setSectionHeadcount(prev, block, headcount, getBlockRef))
+            }
             quickAdd={{
               label: quickAddLabel,
               disabled: quickAddDisabled,
@@ -151,11 +165,13 @@ export function ScheduleCrewTab() {
             shifts={shifts}
             setShifts={setShifts}
             getBlockRef={getBlockRef}
-            userSelectOptions={userSelectOptions}
-            askAvailability={hasCrew}
+            userSelectOptions={crewOptions}
+            askAvailability={hasCrew && !isHash}
             readOnly={readOnly}
             onDeleteUnlinked={onDeleteUnlinked}
-            canAssignTrainees={isAdmin}
+            canAssignTrainees={isAdmin && !isHash}
+            needsCart={draft.needsCart}
+            isHash={isHash}
           />
         </CardContent>
       </Card>

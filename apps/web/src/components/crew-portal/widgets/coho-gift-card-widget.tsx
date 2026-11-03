@@ -16,7 +16,7 @@ export function CohoGiftCardWidget() {
   }, []);
   const card = useQuery(api.cohoGiftCard.getMyCohoGiftCard, { refreshTick: now });
 
-  // Hidden unless the viewer is working now or soon — the query returns null.
+  // Hidden unless the viewer is within two hours of a shift — the query returns null.
   if (!card) return null;
 
   return (

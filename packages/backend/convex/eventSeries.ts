@@ -5,12 +5,13 @@ import {
 } from "@arbor/format";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { appError, withReportableErrors } from "./lib/errors";
 import { loadBackupUserIds } from "./lib/crewBackups";
-import { computeShiftStats as computeCrewShiftStats, isTraineeShift } from "./lib/crewShiftKinds";
+import { computeEventShiftStats } from "./lib/cartCrew";
+import { isTraineeShift } from "./lib/crewShiftKinds";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { RENTAL_EVENT_TYPES } from "./eventPullLists";
 import {
@@ -44,7 +45,7 @@ import {
 import { isMultiDayGroup } from "./lib/eventGroupKind";
 import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
 import { requireEventEditAccess } from "./lib/eventAccess";
-import { syncEventCrewCostUsd } from "./lib/crewCost";
+import { syncCrewCostAfterStatusChange, syncEventCrewCostUsd } from "./lib/crewCost";
 import {
   detachInvoiceFromAdditionalLinks,
   replaceAdditionalInvoiceLinks,
@@ -115,12 +116,12 @@ async function listOccurrencesForSeries(ctx: QueryCtx | MutationCtx, seriesId: I
   return rows.sort((a, b) => (a.occurrenceIndex ?? 0) - (b.occurrenceIndex ?? 0));
 }
 
-async function computeShiftStats(ctx: QueryCtx | MutationCtx, eventId: Id<"events">) {
+async function computeShiftStats(ctx: QueryCtx | MutationCtx, event: Doc<"events">) {
   const shifts = await ctx.db
     .query("eventCrewShifts")
-    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
     .take(500);
-  const stats = computeCrewShiftStats(shifts, await loadBackupUserIds(ctx, eventId));
+  const stats = await computeEventShiftStats(ctx, event, shifts, await loadBackupUserIds(ctx, event));
   return {
     totalShifts: stats.totalShifts,
     assignedShifts: stats.filledShifts,
@@ -156,7 +157,7 @@ export const get = query({
     const occurrences = await listOccurrencesForSeries(ctx, args.id);
     const occurrencesWithStats = await Promise.all(
       occurrences.map(async (event) => {
-        const shiftStats = await computeShiftStats(ctx, event._id);
+        const shiftStats = await computeShiftStats(ctx, event);
         const crewUsd = event.crewCostUsd ?? 0;
         const bandsUsd = event.bandsCostUsd ?? 0;
         const externalUsd = event.externalRentalsCostUsd ?? 0;
@@ -861,6 +862,7 @@ export const cancelFuture = mutation({
         updatedAt: now,
       });
       cancelledCount += 1;
+      await syncCrewCostAfterStatusChange(ctx, occurrence._id, occurrence.status, "cancelled", now);
     }
     if (isMultiDayGroup(series) && series.invoiceId) {
       await syncMultiDayGroupForInvoice(ctx, series.invoiceId, now);
@@ -1014,13 +1016,12 @@ export const updateSeriesCosts = mutation({
       for (const occurrence of occurrences) {
         if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
         const patch = buildEventPatchFromSeriesTemplate(updatedSeries, occurrence.startAt);
-        const shiftStats = await computeShiftStats(ctx, occurrence._id);
+        const shiftStats = await computeShiftStats(ctx, occurrence);
         const crewPatch =
           shiftStats.totalShifts === 0 && updatedSeries.occurrenceBudgetCrewCostUsd !== undefined
             ? { crewCostUsd: updatedSeries.occurrenceBudgetCrewCostUsd }
             : {};
         await ctx.db.patch(occurrence._id, {
-          bandsCostUsd: patch.bandsCostUsd,
           externalRentalsCostUsd: patch.externalRentalsCostUsd,
           otherCostUsd: patch.otherCostUsd,
           budgetUsd: patch.budgetUsd,

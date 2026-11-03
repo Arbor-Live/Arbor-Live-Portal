@@ -7,7 +7,7 @@ import { api } from "@/lib/convex-api";
 import { QuoteVersionHistory } from "../quote-version-history";
 import type { InvoiceDraft } from "./use-invoice-draft";
 
-/** What the client approved, and every change since. Hidden until the first approval. */
+/** Each version sent, each change the client asked for, and each approval. Hidden until the first. */
 export function InvoiceVersionsCard({ draft }: { draft: InvoiceDraft }) {
   const { activeInvoiceId, invoice } = draft;
   const revisions = useQuery(api.invoices.listRevisions, activeInvoiceId ? { id: activeInvoiceId } : "skip");
@@ -21,7 +21,8 @@ export function InvoiceVersionsCard({ draft }: { draft: InvoiceDraft }) {
           Versions
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          What the client approved, and each change since. The client sees this history too.
+          Every version sent to the client, what they asked to change, and what they approved. The client
+          sees this history too.
         </p>
       </CardHeader>
       <CardContent>

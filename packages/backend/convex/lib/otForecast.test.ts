@@ -57,4 +57,18 @@ describe("forecastOt", () => {
     expect(forecast.otDays).toEqual([{ dayKey: "2026-10-08", hours: 8.5 }]);
     expect(forecast.otWeeks).toEqual([{ weekKey: "2026-W41", hours: 40.5 }]);
   });
+
+  it("counts time on two shifts at once only once", () => {
+    // Noon–8pm elsewhere, then this event 7:45–9pm: 9h that day, not 9.25h.
+    const forecast = forecastOt(
+      [{ startsAt: at("2026-10-08T12:00"), endsAt: at("2026-10-08T20:00"), hours: 8 }],
+      [shift("2026-10-08T19:45", "2026-10-08T21:00")],
+    );
+    expect(forecast.otDays).toEqual([{ dayKey: "2026-10-08", hours: 9 }]);
+    const cancelled = forecastOt(
+      [{ startsAt: at("2026-10-08T12:00"), endsAt: at("2026-10-08T20:00"), hours: 8, cancelled: true }],
+      [shift("2026-10-08T19:45", "2026-10-08T21:00")],
+    );
+    expect(cancelled.otDays).toEqual([{ dayKey: "2026-10-08", hours: 9.25 }]);
+  });
 });

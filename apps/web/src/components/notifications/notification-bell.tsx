@@ -104,7 +104,7 @@ function NotificationList({
           </Button>
         ) : null}
       </div>
-      <div className="max-h-[min(30rem,70vh)] overflow-y-auto overscroll-contain">
+      <div className="max-h-[min(30rem,70dvh)] overflow-y-auto overscroll-contain">
         {notifications === undefined ? (
           <div role="status" className="divide-y">
             <span className="sr-only">Loading notifications</span>

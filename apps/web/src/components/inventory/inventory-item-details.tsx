@@ -23,7 +23,7 @@ export type ItemDetailsValues = {
   typeId: string;
   storageLocationId: string;
   containedInAssetId: string;
-  status: string;
+  condition: string;
   notes: string;
 };
 
@@ -91,6 +91,9 @@ export function InventoryItemDetails({
   disabled,
 }: InventoryItemDetailsProps) {
   const containerCamera = useBarcodeCamera((raw) => onScanContainedIn?.(raw));
+  // Owned here so the open preview spans both columns instead of half the grid.
+  const assetIdCamera = useBarcodeCamera((raw) => handleAssetIdScan(raw));
+  const serialCamera = useBarcodeCamera((raw) => handleSerialScan(raw));
 
   const assetLooksLikeSerial = looksLikeSerialNumber(values.assetId);
   const serialLooksLikeAssetTag = looksLikeAssetTag(values.serialNumber);
@@ -137,6 +140,7 @@ export function InventoryItemDetails({
             placeholder="e.g. ALE-0041"
             disabled={disabled}
             ariaLabel="Asset ID"
+            camera={assetIdCamera}
           />
           {errors?.assetId ? (
             <p className="text-xs text-destructive">{errors.assetId}</p>
@@ -159,6 +163,7 @@ export function InventoryItemDetails({
             placeholder="Scan or type serial"
             disabled={disabled}
             ariaLabel="Serial number"
+            camera={serialCamera}
           />
           {serialLooksLikeAssetTag ? (
             <p className="text-xs text-status-amber-700">
@@ -167,6 +172,8 @@ export function InventoryItemDetails({
           ) : null}
         </div>
       </div>
+      <BarcodeCameraView camera={assetIdCamera} idleHint="Point the camera at the asset's label." />
+      <BarcodeCameraView camera={serialCamera} idleHint="Point the camera at the serial barcode." />
 
       {fixedTypeLabel ? (
         <div className="space-y-1.5">
@@ -243,13 +250,13 @@ export function InventoryItemDetails({
       <BarcodeCameraView camera={containerCamera} idleHint="Scan the container this sits in." />
 
       <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-status`}>Status</Label>
+        <Label htmlFor={`${idPrefix}-condition`}>Condition</Label>
         <Input
-          id={`${idPrefix}-status`}
+          id={`${idPrefix}-condition`}
           type="text"
-          value={values.status}
-          onChange={(event) => onChange({ status: event.target.value })}
-          placeholder="e.g. functional, needs repair"
+          value={values.condition}
+          onChange={(event) => onChange({ condition: event.target.value })}
+          placeholder="e.g. good, scuffed corner"
           disabled={disabled}
         />
       </div>

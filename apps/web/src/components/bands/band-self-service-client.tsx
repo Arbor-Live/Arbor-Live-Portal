@@ -95,7 +95,8 @@ export function BandSelfServiceClient() {
       displayName: trimOptional(payload.displayName),
       bio: trimOptional(payload.bio),
       ...bandListingFieldsToMutation(payload),
-      performerHourlyRateUsd: payload.performerHourlyRateUsd,
+      // Members cannot change the rate; leave it out so their saves never touch payout.
+      performerHourlyRateUsd: profile?.canEditPayout ? payload.performerHourlyRateUsd : undefined,
       designatedPayeeUserId: profile?.designatedPayeeUserId,
       designatedPayeeName: profile?.designatedPayeeName,
       designatedPayeeEmail: profile?.designatedPayeeEmail,
@@ -219,7 +220,7 @@ export function BandSelfServiceClient() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <BandArborPrivateFields />
+                  <BandArborPrivateFields rateReadOnly={profile?.canEditPayout === false} />
                 </CardContent>
               </Card>
             </form>

@@ -345,6 +345,8 @@ export class FlarePipeline {
         logoScale: logo.placement.logoScale,
         uvInset: [pad / logo.width, pad / logo.height],
         edge: 1.1,
+        // vgpu 0.5 requires every reflected struct member, padding included.
+        _pad: 0,
       },
     });
   }

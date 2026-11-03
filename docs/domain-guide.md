@@ -21,6 +21,12 @@ canonical description of the domain itself.
   `?org=<id>`) for Arbor Live and the artist orgs. **Add person** in the header
   either sends an invite or creates the account with a temporary password.
   `/dashboard/users/access` redirects to People.
+- Arbor Live crew invites (not advisors or band orgs) carry a manual **Notion**
+  checklist ("Invite to Notion", "Add to Crew group") in the Invitations side
+  panel, and on the crew application panel right after "Convert to member"
+  (which stays open for it). Admins tick it by hand, there is no Notion integration, and the ticks
+  live in `inviteNotionChecklists` so they survive the invite being accepted.
+  People added with a temporary password have no invite, so no checklist.
 - Staff roles inside Arbor Live: **admins** (everything); the **Operations
   team** (`Operations` vertical) runs events end to end and books acts. They
   edit every event (details, Run of Show, crew, lineup), create events and
@@ -125,7 +131,8 @@ canonical description of the domain itself.
   a specialty — Crew: `Sound` / `Lights` / `Photography` / `Videography`,
   Marketing: `Design` / `Photography` / `Videography` (each with unsure) — and
   Crew picks Fri/Sat standing availability (5pm–midnight PT) as a scheduling
-  preference only — not auto-matched to shifts.
+  preference only — not auto-matched to shifts. It pre-fills the person's
+  usual evenings the first time they're asked (see Crew availability).
   While `submitted`, an application tracks outreach: an owner
   (`assigneeUserId`) and `outreachStage` (unset = not contacted, then
   `contacted` = Calendly sent, `meeting_booked`, `met`). Whoever first marks
@@ -181,7 +188,7 @@ canonical description of the domain itself.
   went well / what could improve + resolving their photos/videos. The day-of lead
   and event manager are asked only when they were on the show shift; setup/strike
   crew and assignees with no shift are not. It appears inline on the event **Overview** and as one combined
-  **Events → My Post-event work** page (plus the crew Home widget); the email
+  **Events → My Post-event work** page (plus review and photos cards on crew Home); the email
   link points internal recipients at the event page. The emailed
   `/postmortem/[token]` form remains a fallback. One amber nav badge counts
   events still needing review or photos (subscribed only on home/event routes to
@@ -249,17 +256,60 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   maps crew specialties onto these needs; events with no needs set are visible
   to all crew. The retired umbrella need `Marketing` was migrated to
   `Promotion`, and poster work now keys off `Design`.
-- **Crew availability** (`eventCrewAvailabilityResponses`, My Availability):
-  crew answer per event with one tap — *I can work it all* (`yes`), *Some of
-  it* (`partial`), *Backup only* (`only_if_necessary`), *Can't make it* (`no`).
-  *Some of it* ticks the Run of Show **sections** they can work (stored as
-  `partialWindows` with `scheduleBlockId`) and optional **busy times**
-  (`busyWindows`, "class 7–9pm"); a busy time unticks the sections it
-  overlaps. With no sections yet, the free time around busy times is saved.
-  Each answer stores a `scheduleFingerprint` of the sections; when the sections
-  change the answer shows as "schedule changed" to crew and admins
-  (`lib/crewAvailability.ts`). The inbox, nav badge, weekly digest, and admin
-  board all use the same window (`DEFAULT_AVAILABILITY_WEEKS`, 3 weeks).
+- **Crew availability** is physical time on the person, answered per
+  **night**, not per event (`crewAvailabilityNights`, `crewNights.ts`, pure
+  rules in `lib/crewNights.ts`):
+  - **Usual evenings** (`userAdminProfiles.usualEvenings` +
+    `usualEveningsSetAt`): per weekday *Usually free* / *Sometimes* / *Rarely*.
+    Everyone is asked once about Thursday, Friday and Saturday and may add
+    other evenings. It's a crew onboarding step, a one-time prompt on My
+    Availability (plus a dismissible dashboard banner while unset,
+    `viewer.needsUsualEvenings` on the session shell), and editable in Account
+    settings. The first ask is pre-filled from the crew application's Fri/Sat
+    (`crewAvailabilityDays`). It's stored only; it doesn't count as an answer
+    yet (staff ranking from it is a follow-up).
+  - **Nights.** My Availability shows one card per night that has crewed
+    events matching the person (teams/specialties, status, crewed types) in
+    the 3-week window (`DEFAULT_AVAILABILITY_WEEKS`), with an **OT** tag on
+    overtime events (`events.otPremium`); nights without events
+    never appear. A night is the Pacific day of an event's start; anything
+    starting before 6 AM belongs to the night before, so a show past midnight
+    stays on the night it started. The night's span runs from the earliest
+    crew call (any setup, including *Early setup*, or a daytime load-in) to the
+    last section or event end. The card lists the events, shows the usual
+    pattern as a chip, and answers with one tap: *I'm free* (*Confirm* when
+    usually free), *Only part* (tick sections or give free-from/to times minus
+    busy times), *Early setup only* (when an event that night has a setup
+    section labelled "Early setup…"), *Backup*, *Not this one*. *Dates I'm
+    away* writes `no` for every night in a range.
+  - **Stored as time.** A row per person per night (`nightKey` Pacific
+    `YYYY-MM-DD`): `status` `free` / `partial` / `backup` / `no`, and
+    `windows` (for `free` the night span when answered; for `partial` the free
+    parts; early setup only = its window). Every event that night reads the same
+    row, so one answer covers overlapping events and events added later. A
+    changed schedule doesn't make it stale; only time outside the saved windows
+    is uncovered (an "I'm free" night that later starts earlier shows as
+    needing a re-confirm). An event moved to another night reads that night's
+    answer instead.
+  - **Staff side (compatibility layer, `lib/crewNightAnswers.ts`).**
+    `getSummaryForEvent`, `listPendingCrewForEvent`, `listForAdminOverview`,
+    the conflict scan, backups (`loadBackupUserIds`), dashboard home, the nav
+    badge, the weekly digest and Insights read nights by `by_nightKey` and
+    derive the old per-event answer for team-matched people: every crew section
+    covered → `yes`; some time → `partial` (fully covered sections by id, plus
+    the free time as windows); none → `no`; `backup` → `only_if_necessary`; no
+    night row → not answered. `scheduleChanged` is always false now.
+  - **Old answers** (`eventCrewAvailabilityResponses`) were converted by
+    `migrations.convertAvailabilityToNights` for every non-cancelled event, past
+    nights included so Insights and backups keep their history (`yes` →
+    free over the event's crew span, `partial` → its windows minus busy times,
+    `only_if_necessary` → backup, `no` → no; on one night the most available
+    wins and partial time is unioned). It's idempotent and never touches a
+    night the person answered. The old table and rows are kept; nothing reads
+    them. `eventCrewAvailability.submitResponse` still works and writes the
+    event's night.
+  - The inbox, nav badge (unanswered nights), weekly digest (nights to
+    answer), home widget, and admin board all use the same 3-week window.
 - **Crew staffing** (`CrewStaffingBoard`, used on the event Schedule tab and the
   invoice crew section): a section's **headcount is its slot count** (open slots
   bill on quotes), set with the − / + stepper. Each section offers the people
@@ -269,16 +319,49 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   only fills existing open slots with people available for that section and
   free elsewhere; it never adds slots or touches trainees. An event is **fully
   staffed** when every slot has someone and none of them answered *Backup
-  only* (`lib/crewShiftKinds.ts`). A slot held by a backup counts as filled
-  ("3/3 · 1 on backup") but keeps the event on the needs-crew lists and the nav
-  badge, so a better-placed person can still replace them.
+  only* (`lib/crewShiftKinds.ts`), and, on a cart event, the cart rule below is
+  met. A slot held by a backup counts as filled ("3/3 · 1 on backup") but keeps
+  the event on the needs-crew lists and the nav badge, so a better-placed
+  person can still replace them.
   Within each availability level, people with the **fewest shift hours this
   Stanford quarter** come first (chips, person picker, *Fill open slots*, and
   the crew scheduling board's answers), so work spreads out. Hours are every
   shift starting in the quarter, worked or scheduled (`userCards.listShiftHours`).
+  **Cart eligible** (`userAdminProfiles.cartEligible`, staff admins set it in
+  the person sheet; missing ⇒ no) marks who may drive the golf cart with gear.
+  The board tags them "Cart" in the picker and assigned rows, and availability
+  pills (the "Can work this" chips, the crew scheduling board's answers and
+  waiting-on lists) show a small cart icon labelled "Cart eligible"
+  (`CartEligibleIcon`; carried on `invoices.listManagers` and on the board's
+  responder and person summaries). The summary lists the cart-eligible
+  assignees, or notes that no one on the crew is.
+  **Cart events** (`events.needsCart`, *Cart event* switch in the event's
+  Details card; copied by *Duplicate*, and by series/multi-day edits that
+  aren't "this day only") move gear by cart, so **setup and strike each need
+  someone cart eligible**. The setup group is every `setup` section (early
+  setup included), the strike group every `strike` section; one cart-eligible
+  person anywhere in a group covers it, a group with no sections asks for
+  nothing, and trainees don't count (`evaluateCartRequirement` in
+  `@arbor/format`, shared by web and Convex). On a cart event the board's
+  summary reads "Cart: setup ✓ Maya · strike needs someone cart eligible", and
+  each unmet setup/strike section header says "Needs cart person" (muted until
+  someone is on that group, then amber). An unmet cart event isn't fully
+  staffed: like a backup-held slot it stays on the needs-crew lists (crew
+  scheduling board, which flags it, and its KPIs), the nav badge, dashboard
+  home, event group days, and Insights' unconfirmed counts. Convex reads it via
+  `lib/cartCrew.ts` (`computeEventShiftStats`): nothing extra for events that
+  aren't cart events, else the blocks plus one indexed profile read per
+  setup/strike assignee not already loaded.
+  When a cart event moves to **Ready** (`events.setStatus`, or `events.update`
+  for each day it touches) the `golf_cart_event_ready` email goes to the Ops
+  Center → Settings → *Golf cart* list (`golfCartSettings`, `golfCart.ts`),
+  with the setup and strike windows. The list starts empty and, unlike crew
+  onboarding, portal admins are not added automatically; turning the switch
+  on for an event that's already Ready sends nothing.
 - **Person hover cards** (`UserHoverCard`, `userCards.getCard`): hovering a
   comment author or @mention, a staffing chip, or a name on the crew scheduling
-  board shows the person's phone, email, title and pronouns; staffing surfaces
+  board shows the person's phone, email, title, pronouns and whether they're
+  cart eligible; staffing surfaces
   add hours this week (Mon–Sun) and this quarter.
 - **Crew phones**: the event brief's People table and the event Contacts card
   ("Event team") list the event manager and day-of lead (email · phone), then
@@ -329,7 +412,12 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     of show" lays out soundchecks (reverse play order by default, ending at
     doors), doors, sets, and changeovers; changeover rows show the night rider's
     cable swaps. Warnings cover soundchecks into doors, overlaps, moments outside
-    or past their section, and tight changeovers. A platform act filling a slot
+    or past their section, and tight changeovers. *Add → Early setup…* adds a
+    setup section before the first setup (default 1 hr) for a small crew who
+    stage gear so setup starts with a cart run ready: they either stay on (the
+    section ends when setup starts) or leave when soundchecks start (the
+    section overlaps setup), and the dialog opens that many slots
+    (`planEarlySetup` in `lib/run-of-show.ts`). A platform act filling a slot
     inherits the slot's times. Copy day setup, duplicate event, and series
     templates skip act blocks. Artists see both windows on "Your shows".
   - **Outside acts** — a position can instead be filled by an act that is not on
@@ -348,9 +436,23 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   - **Swap positions** — a row's menu has **Swap with…** for when two acts
     trade slots (`eventArtistNeeds.swapPositions`). Positions keep their label
     and Run of Show times; the acts trade places, so each takes the other's
-    set and soundcheck. Payouts and invoice artist lines (`needId`) go with
-    the act. Swapping into an open position moves the act there.
-  - **Payout** — from the position's side panel, via `EventBandPaymentForm`.
+    set and soundcheck. Payouts, prices and invoice artist lines (`needId`) go
+    with the act. Swapping into an open position moves the act there.
+  - **Booking price** — each position stores what its act costs
+    (`eventArtistNeeds.price`: people × hours × rate per person per hour, or a
+    fixed total; `lib/bookingPrice.ts`). It is the one price: the quote's
+    artist line bills it and the act's payout pays it (billed = paid). Band
+    profile rate and members are only defaults, copied when an act is booked
+    into a position nothing prices yet (hours from the set length). The side
+    panel's **Price** section edits it (`eventArtistNeeds.setPrice`), which
+    rebills a draft quote's line; on an approved quote or a final invoice the
+    edit is refused and staff change it from the quote editor (approval
+    decision) or reopen billing.
+  - **Payout** — from the position's side panel, via `EventBandPaymentForm`:
+    payee and status only. Its amount is the booking price; every unpaid,
+    uncancelled payout follows price changes (a signed one goes back to
+    **Ready to send**, since the artist signed another amount). Paid payouts
+    never change.
   - **Invoice link** — an artist line tied to a day opens the position it
     stands for (`invoiceLineItems.needId`), and filling that position fills the
     line: an internal act sets its `organizationId`, an outside act clears it
@@ -363,12 +465,14 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     invoice prices are left out. **Add line → Artist** opens a new position
     (`opensPosition`). A line with no performer booked shows on the quote, PDF
     and public quote as an estimate (`ARTIST_ESTIMATE_NOTE`).
-  - **Payout from the price** — when an act fills a position a quote line
-    prices (or the line is priced after the booking), the act gets a payout
-    priced like the line (`bandPayments.seedFromInvoiceLineInternal`,
-    `payoutPricingFromLine`). Only when the act has no payout on the event yet,
-    so a payout staff set or removed is never overwritten. Unfilled positions
-    have no payout record (no `ALBPAY-`); the line's price is the plan. A line with no position first adopts one the day already has (its
+  - **Quote prices the booking** — saving a quote writes each artist line's
+    price to its position (`syncArtistSlotsForInvoice`), and a price set on the
+    Lineup comes back into an open editor (`adoptServerArtistChanges`), like
+    the Crew section follows the Run of Show. When an act fills a priced
+    position (or a staffed position is priced), it gets a payout at that price
+    (`bandPayments.seedFromBookingInternal`) — only when it has no payout on
+    the event yet, so a payout staff removed stays removed. Unfilled positions
+    have no payout record (no `ALBPAY-`); their price is the plan. A line with no position first adopts one the day already has (its
     act's, one with its name, then the first empty one) and only opens a new
     one when none is free, so a quote fills the bill instead of duplicating it.
     Removing a line's position on the event sets `positionRemoved`, and later
@@ -404,6 +508,9 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   email).
 - Event costs are direct fields on `events` (`crewCostUsd`, `bandsCostUsd`,
   `externalRentalsCostUsd`) — there is no generated expense-report workflow.
+  `bandsCostUsd` is derived and read-only (`syncEventBandsCost`): every
+  uncancelled payout, plus the booking price of each priced position whose act
+  has no payout yet (open and outside-act positions included).
   Artists and external rentals are pass-through expenses. Invoice lines may bill
   the host for transparency, but Insights *earned revenue* and net profit exclude
   them from Arbor margin (equipment / crew / fees). Matching `bandsCostUsd` /
@@ -460,6 +567,166 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   moving the act's soundcheck/set times emails each member one calendar invite
   per window (`band_scheduled`).
 
+## Hashing
+
+Crew spend an hour on a set weekday cleaning the gear closet, and every crew
+member owes one hash per academic quarter. Hashes are paid, and each one is a
+real internal event, built as an event add-on like Open Mic.
+
+**The event.** `events.hashingEnabled` marks a hash, and `lib/hashEvent.ts`
+`isHashEvent` is the one test every surface uses. A hash event is internal, has
+no invoice and one section. `hashDates` is the sidecar for what an event has no
+field for: quarter, origin, status, capacity, areas, the section's block id, the
+pinned checklist and the final counts. Only an `off` date may have no event,
+which the schema enforces, so an off week costs nothing until it's switched on.
+Hashing is the one writer of a hash's times and status: the event mutations
+refuse them, along with visibility, invoices and Open Mic. Deleting a hash event
+takes its sidecar, answers, checks and claims with it.
+
+`origin` says whose event it is. `regular` and `added` are events Hashing made,
+Services Only with `Cleaning` as their section and a location that is just a name
+from Setup. Setup changes that name on every one that hasn't started, and they
+refuse a venue. `addon` is someone else's event that carries a hash.
+
+Hashing's section is `hashDates.sectionBlockId`, never its label, so ops can
+rename it. A block's type, times and number are locked, and a change of length
+re-times every booking.
+
+Closing depends on the origin. On a date Hashing made, turning it off cancels the
+event and switching it on revives the same one, and a lapse cancels it. Removing
+an added date deletes the event outright, so no cancelled husk reaches Insights,
+search or pickers. Its queued `crew_unscheduled` notices and their bell rows drop
+their `eventId` first, because the delete cascade wipes the event's emails and
+leaves the bell pointing at nothing. An add-on's event is
+never cancelled. Off, Remove, the switch and a lapse all end its bookings and set
+`hashingEnabled` false, and it carries on as a plain event. Off and Remove delete
+the date too. A lapse keeps every date for History, with `eventId` still set.
+`getEventAddon` ignores a lapsed add-on, because its event is no longer a hash. A
+lapsed date Hashing made is still a hash on a cancelled event, so `getEventAddon`
+returns it and the card shows Never ran with a link to History.
+
+**A booking is a shift.** There is no booking table. A person's shift with the
+`Hash` role is their booking. `needsConfirmation` on the shift means the hash
+moved and they haven't answered. Hashing writes shifts through `changeHashCrew`,
+which runs the crew assignment flow: crew cost, invite sequence, emails.
+
+A crew edit on the event page is a booking too, and every hash keeps its Run of
+Show tab for it, even a Services Only one. `requireHashCrewEdit` holds anyone
+new to the booking rules (active crew, room on the date, one spot per quarter),
+refuses open slots and trainees, and saves every shift with the `Hash` role on the
+hash's section. The staffing board's hash mode adds and removes people only: it
+locks the person and role on a row, Add person opens the picker, and it hides the
+open-slot stepper, custom times, availability and trainees. The Run of Show's hash
+mode keeps names editable and hides Quick Add, Build, Add, delete and times. A
+running hash takes a walk-in the same way, so finish can tick them, past capacity
+because they are already there, but any change to a running hash's crew, a removal
+too, takes ops. The event page merges a hash's server blocks and shifts into its
+draft (`mergeServerHashSchedule`), people by person, because a schedule save
+deletes any shift the draft lacks and refuses a block whose times differ, and a
+page left open must not undo what Hashing did meanwhile. Only a label or notes
+edited on the page stay, and rows not saved yet follow the section. Hashing
+switching on or off rewrites the schedule in one write, so the page reloads its
+schedule then, and unsaved schedule edits go with it. On a
+hash that's over or a date that's off, a save with the same crew writes nothing at
+all and any change is refused, so saving a label there still works. Pay and credit
+change only through the finish list and `correctAttendance`.
+
+**The add-on.** The Hashing card sits beside Open Mic on an internal event's
+Lineup tab, and on the Overview of a hash. Turning it on makes an `addon` date
+from an event that is internal, unbilled, not in a series, ahead of now, inside a
+quarter through finals, and bare: no shift of any kind (`HASH_EVENT_HAS_CREW`),
+and no block but one custom section, which it takes over and re-times
+(`HASH_EVENT_HAS_SCHEDULE`). That is what lets the crew and block guards hold.
+Turning it off is refused once started and for a date Hashing made, removes the
+bookings, and leaves the event.
+
+**Where a hash shows.** Timecards, crew hours, crew cost, Upcoming shifts, the
+on-shift card, the weekly digest, staffing conflicts and the internal calendar
+and list all carry it. Public listings, calendar feeds and newsletters stop at
+internal visibility. Nights, the crew board, open positions, trainees, the
+booking calendar, the CoHo card, post-event work, marketing and Insights event
+counts all skip it. Insights keeps its crew cost and hours: the cost is in event
+expenses, and its own line under the margins, since a hash is never billed and so
+isn't an unbooked event.
+
+**Who owes one.** Active people on the Crew vertical whose profile has
+`includeInTimecards`. Trivia, Marketing and Operations don't owe one unless
+they're on Crew too, and a Marketing photographer isn't crew. Everyone else stays
+off Hashing's lists and can't be booked. Summer has no requirement. Booking,
+setup and the checklist use `requireAdminOrOperations`. Crew answer availability
+but never book themselves.
+
+**Quarters and dates.** `hashingQuarterFor` picks the quarter in session, else
+the next working one. Saving Setup builds `hashDates` from today through finals,
+one regular date per week, and weeks `quarterWeek` doesn't number (Thanksgiving,
+finals) are created `off`. A regular date owns its week even after it moves, so
+saving again never rebuilds it. Changing the weekday or time shifts only regular,
+unmoved, unstarted dates; moved and added dates stay, and so does a date whose
+week has no slot left, with its bookings. Dates run through finals. A moved
+date's shifts need confirmation, its availability is cleared, and those people
+are notified. A date that passes without being started stops counting as a
+booking (`isLapsed`), and the nightly `closeLapsedHashes` removes its shifts,
+closes the hash by its origin and marks it `lapsed`, so a hash nobody started pays
+nobody. A flag that ops resolved or that reached Damage & repair can't be removed. A flag sent to Damage & repair follows
+its report: closing the report or retiring the item resolves the flag, and
+reopening the report opens it again.
+
+**A person's quarter** is derived, never stored, in `deriveQuarterState`: done
+(confirmed on a finished hash), exempt, booked, no_dates_work, needs_hash.
+`hashQuarterStanding` holds "None of these work" and exemptions per quarter, so
+they reset on their own. People can write `no_dates_work` only; exemptions come
+from staff. Answering "Can do" clears `no_dates_work`.
+
+**Filling.** `fillFromAvailability` places the people with the fewest "can"
+answers first, each on their earliest open date, one spot per person, and never
+touches existing bookings.
+
+**Checklist.** `hashChecklistVersions` are immutable. A kit used by more than
+one area is shared: its items stay in step, and each area adds its own extra
+items. The seed in `lib/hashingChecklistSeed.ts` becomes version 1 lazily, the
+first time ops saves Setup or a hash starts. Publishing applies to the next hash
+started; a started hash keeps its pinned `checklistVersionId`.
+
+**Live hash.** One `hashChecks` row per tick, keyed `areaId:kitId:itemId`, so a
+shared kit's item ticks separately per area and people ticking side by side never
+contend. A flagged item counts as checked, because someone looked at it. Booked
+people or ops can tick; crew can start on the day, ops any time. Working a hash
+confirms a pending booking. Finish lists everyone booked and asks who was there.
+Crew finish on their phones, so a non-manager's list can't be empty and has to
+include them. Ops have neither rule, because a hash started by mistake or with
+nobody there has to close without false credit. Only the people listed keep their
+shift, get credit and get paid, even with items unchecked. Everyone else loses the shift and needs a hash again. A
+person who never confirmed starts unchecked. Finish sets the event to `completed`,
+the legacy status that reads as Ready, and flags stay open in History until
+resolved. A damaged flag can file a real damage report through `fileDamageReport`.
+
+A hash started and never finished keeps its shifts until someone finishes it.
+Nothing finishes it automatically. Once its end is more than a day past, it shows
+at the top of the Schedule tab with a link to the runner, and in the tab's badge.
+
+**Corrections.** `correctAttendance` is ops-only and runs from History, as Correct
+on a finished hash and Mark as done on a lapsed one. It goes through
+`changeHashCrew`, so people added get a shift, credit and pay, and people removed
+lose them with the normal notice. It records who was there, so no booking rule
+applies: someone who has since left crew, holds another hash this quarter, or
+takes the date past capacity can still be credited and paid. A new person only
+needs a real profile, which refuses a junk id.
+`listCrewTimecardOverview` lists only active and inactive staff with
+`includeInTimecards`, so the dialog marks anyone else: their shift and pay are
+real, but the overview has no row for them.
+The lapse keeps who was booked in `hashDates.bookedWhenLapsed`, which starts them
+ticked in Mark as done even if they have since left crew. It's read only while the
+date is lapsed. Marking a lapsed hash as
+done revives its event and clears that list. A lapsed add-on's event becomes a
+hash again only if it is still bare and hasn't moved.
+
+**Notifications.** Hashes use the crew assignment flow. Booking sends
+`crew_scheduled` with its calendar invite and removing sends `crew_unscheduled`.
+A move re-sends the same invite with a higher sequence, under a subject asking
+if they can still make it, and the bell mirrors it. Links go to My hashes. A
+batch from Fill is one change per date and one email per person. `crew_scheduled`
+is required mail, so only its bell can be muted.
+
 ## Stanford academic calendar and closures
 
 `packages/format/src/academicCalendar.ts` (`@arbor/format`) holds Stanford's
@@ -500,8 +767,10 @@ Update `YEARS` there when the Registrar publishes new dates.
 
 ## Booking requests → events → quotes
 
-1. Anyone with a Stanford email submits the public booking wizard
-   (`/public/request`, `eventRequests.submitPublic`). Requests get an
+1. Anyone with a valid email submits the public booking wizard
+   (`/public/request`, `eventRequests.submitPublic`). Non-Stanford addresses
+   can only request as `Individual (non-Stanford)`, with no group or
+   organization, which `submitPublic` enforces. Requests get an
    `ALREQ-`-numbered record and a public tracking token (`req_` + double
    UUID). Billing records (`invoiceGroups`, `invoiceContacts`) are provisioned
    server-side by email — anonymous callers can never pick contact records.
@@ -543,10 +812,10 @@ Update `YEARS` there when the Registrar publishes new dates.
   per host organization (`invoiceGroups`). Host orgs support aliases and admin
   merge so duplicate names resolve to one canonical record; booking can search
   existing hosts or create from free text.
-- Artist lines pick an artist/DJ (or **Artist TBD**) and pull
+- Artist lines pick an artist/DJ (or **Artist TBD**); an unpriced row pulls
   `performerHourlyRateUsd` and member count (`bandMembers.length`) from the org
   profile when an artist is selected. Linked events auto-fill artist rows from
-  assigned performers / payout totals when the invoice has no artist lines yet.
+  the lineup's booking prices when the invoice has no artist lines yet.
   An artist line tagged to a day (`eventId`) applies to that day; an unscoped
   line applies to every occurrence of a recurring series and to Day 1 otherwise
   (`lib/invoiceArtistDays.ts`, from the owning group's kind).
@@ -555,6 +824,32 @@ Update `YEARS` there when the Registrar publishes new dates.
   and the invoice↔event import matches lines to the right day.
   Artist and external-rental amounts are pass-through (excluded from Insights
   earned revenue and from net-profit margin).
+- **Crew hours and OT days.** Crew bill per person per day (one event = one
+  day), shared by the quote and event crew cost
+  (`@arbor/invoice-document/crew-hours`). Open slots assume the same people
+  stay on: per role, the first open slot of every section is one person, the
+  second another (2 setup / 2 show / 3 strike is two people all day plus one on
+  strike). Assigned crew are matched by who they are; only scheduled hours
+  count (no pay through gaps). Each person's first 8 hrs bill at 1×, the rest at
+  1.5× (`· OT after 8 hrs`). A day's OT flag is the event's own `otPremium`,
+  shown on the event Billing tab and the invoice Details sidebar (one checkbox
+  per day on multi-day bookings); an OT day bills 1.5× (`· OT`), then double
+  time after 8 hrs (`· DT after 8 hrs`). The client quote and PDF read those
+  tags back (`parseCrewLine`). Hand-added extra crew hours and recurring-series
+  template lines keep their typed rate.
+- **Overlapping shifts count once.** When one person is on two shifts at the
+  same time (two events, or two sections of one event), the shared time counts
+  once: 7–8pm at A plus 7:45–9pm at B is 2 hrs, not 2¼. The shift that **starts
+  first** keeps the shared time; the later one counts `hours − time already
+  covered` (never below 0). Ties go to the earlier-created shift; a cancelled
+  event's shift never covers anything. One helper does it
+  (`crewCountableHours` in `@arbor/invoice-document/crew-hours`; backend reads
+  in `lib/crewShiftOverlap.ts`), used by event crew cost (which re-prices the
+  other event when they share time), quote crew lines (other events' shifts
+  come from `events.getByInvoiceId` / `listCrewConflictsForEvent`), timecards
+  (the overlap comes off the later shift's event row, so the day total counts
+  it once), hours this week/quarter, the OT forecast and Insights crew
+  utilization. Open slots have no person, so they are never deduplicated.
 - **Changing an approved quote** (#405). The client's approval pins a version
   (`invoiceRevisions`, kind `approved`; `invoices.approvedRevisionId` /
   `approvedTotalUsd`). Snapshots use the portal's pricing (`snapshotInvoice`),
@@ -589,6 +884,33 @@ Update `YEARS` there when the Registrar publishes new dates.
   - Versions show in the editor (Versions card) and in the client portal (Quote
     history, plus a "we updated your quote" banner while re-approval is
     pending).
+- **Change requests are versions too.** The version history covers the whole
+  back-and-forth with the client, not just what happens after an approval:
+  - Each send to the client (`markReadyForClientReview`, `sendRevisedQuote`)
+    saves a `sent` version with the staff message.
+  - A client change request (`requestInvoiceQuoteChanges`) saves a
+    `changes_requested` version with their note. `invoices.changesRequestedAt`
+    / `clientApprovalNote` hold only the *open* request and are cleared once
+    it's answered; the version keeps it.
+  - Staff answer with **Reply with revised quote** (`sendRevisedQuote`, a
+    required message, `revisedQuotePreview` shows the diff since the request).
+    It saves a `sent` version and reopens approval. Request-portal quotes go back
+    on the portal (`booking_quote_ready`); others get `quote_updated` with
+    `reason: "changes_requested"`. Resending unchanged is allowed, with a reply.
+  - Staff can also **Send revised quote** with no request open: the same
+    mutation on a pending quote the client already has (request-portal quotes
+    must be on the portal). It saves a `sent` version; standalone quotes get
+    `quote_updated` with `reason: "revised"`, compared against the latest
+    version of any kind (none on the first send, which gets a "Your quote"
+    subject). Sends need a live link to the client (and, standalone, a client
+    email); `revisedQuotePreview` returns why as `blocked`.
+    Approved quotes are refused and go through the editor's re-approval.
+  - `resetApprovalToPending` refuses an open change request, so a request is
+    never cleared silently. Requests made before this were backfilled
+    (`backfillOpenChangeRequestRevisions`, `recordedLate`) only while still
+    open; earlier answered ones only survive in `emailNotifications`.
+  - The client portal shows a "we answered your change request" banner (their
+    request, the reply, the diff) while the reply awaits their decision.
 - Every invoice carries a `publicApprovalToken` for the client-facing quote
   page (`/public/quote/[token]`): view, approve, request changes, set payment
   contacts, download PDF — all token-gated, no login.
@@ -621,10 +943,14 @@ Update `YEARS` there when the Registrar publishes new dates.
 
 - Payouts to performing bands (`eventBandPayments` in `bandPayments.ts`) are
   optional children of `eventBandParticipations`. Staff assign the band first
-  (or create a payout which also upserts participation), then set pricing on the
-  same overview row.
+  (or create a payout which also upserts participation); the payout pays the
+  booking price set on the act's position.
 - Each band org has a designated payee (name/email/mailing address + linked
-  user id on `organizationProfiles`).
+  user id on `organizationProfiles`). Only an artist admin (`org_admin`
+  membership) or Arbor staff can change the payee or rate. Members see them
+  read-only and skip that onboarding step. Staff change a membership's role
+  from the person panel in **Users**. Add person defaults to Org Admin when
+  the artist has no admin yet.
 - **Artist payouts** (`/dashboard/financial-hub/artist-payouts`) is a pipeline
   grouped by who acts next (`lib/band-payout-stages.ts`): **Upcoming** (`draft`)
   → **Waiting on artist** (`pending_onboarding`, `pending_payee`) → **Ready to
@@ -653,10 +979,8 @@ Update `YEARS` there when the Registrar publishes new dates.
   see the artist portal; switch back via the sidebar. The payout side panel for
   pending-onboarding lists the missing steps and links to that org's panel.
 - When assigning artists, empty events with invoice artist lines get an
-  accept/confirm prompt (plus **Import from invoice** anytime). Payout money
-  defaults prefer the artist org profile (hourly rate, member count) — it is the
-  current source of truth — then the event invoice artist line (rate, hours,
-  members) as a snapshot, and leave anything still unknown blank.
+  import prompt (plus **Import from invoice** anytime); their price comes from
+  the quote.
 - Assigned artists with incomplete onboarding get a weekly reminder email
   (same Monday `weeklyJobs` cron as crew / payment-proof follow-ups, ~6-day
   cooldown) until onboarding is done — staff can also resend from the payout
@@ -713,11 +1037,38 @@ Update `YEARS` there when the Registrar publishes new dates.
   (`rental_outbound_packed`, `rental_return_processed`); series-linked invoices
   count. Completing without a client email still succeeds but surfaces a warning
   and a resend action once an invoice email exists.
+- **Item lifecycle** (`inventoryLifecycle.ts`, `lib/inventoryLifecycle.ts`):
+  `inventoryItems.lifecycle` is `active` (absent on the row means active),
+  `in_repair` (owned but can't go out) or `retired` (left service, details on
+  `retirement`). The old free-text `status` is deprecated; the free-text field
+  is now `condition` ("Condition" in the editor). Retirement reasons: `lost`,
+  `stolen`, `rma` (may come back), `decommissioned`, `beyond_repair`, `sold`,
+  `donated`, `parted_out`, `disposed`, `duplicate` (needs the real item),
+  `other` (needs a note). Retiring a case can take its contents with it (they
+  stay nested so reinstating the case brings them back) or leave them in
+  service. Any retirement can be reinstated. Retiring resolves the unit's open
+  damage reports. Outbound rental scans refuse retired and in-repair units
+  (and leave them out of a scanned case). Every change
+  lands in `inventoryItemHistory`.
+- **Retagging** (`inventoryLifecycle.retag`) gives a unit a new `assetId` and
+  keeps the old one in `inventoryAssetIdAliases`: scans and `/e/{oldTag}` still
+  resolve to the unit, and nobody else can take the old tag.
+- **Lists and search**: the items list hides retired units by default (a Status
+  chip of "is not Retired"; the header counts units in service) and has a
+  Damage chip driven by `openDamageCount`. `searchText` (tags current and old,
+  zero-padded `0041` of short numeric tags, serial, type words; see
+  `buildItemSearchText`) backs
+  the item search index, so ⌘K finds items by any tag, serial or type, with
+  retired units listed last.
 - Damage reports (`damageReports.ts`): any arbor_internal crew can create
   reports (scope for containers, operability, severity, photo, optional event).
-  Operations/admin triage at `/dashboard/inventory/damage`: rows default to a
-  Status chip of Open + In progress (`damageReports.list` `statuses`, newest 500
-  per status merged), and `?report=<id>` opens the report's side panel.
+  Each open or in-progress report counts in the item's `openDamageCount`, and a
+  `needs_repair` report puts the unit `in_repair`. Operations/admin triage at
+  `/dashboard/inventory/damage`: rows default to a Status chip of Open + In
+  progress (`damageReports.list` `statuses`, newest 500 per status merged), and
+  `?report=<id>` opens the report's side panel, which links back to the item.
+  **Retire (beyond repair)** (`damageReports.decommission`) retires the unit as
+  `beyond_repair` linked to the report and resolves its open reports.
 - **Borrow requests** (`equipmentBorrowRequests.ts`): crew submit an
   `ALBRW-`-numbered request for equipment by type or package + quantity, with a
   purpose and pickup/return window (`/dashboard/inventory/borrow-requests`).

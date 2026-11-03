@@ -7,6 +7,7 @@ import {
   CalendarDotsIcon,
   ClockIcon,
   MapPinIcon,
+  MicrophoneStageIcon,
   UsersThreeIcon,
   WarningIcon,
   XIcon,
@@ -27,7 +28,7 @@ import {
   StatTile,
   TruncatedNotice,
 } from "@/components/insights/insights-ui";
-import { RowCell, RowFlag, RowList } from "@/components/list-page";
+import { RowCell, RowFlag, RowList, RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 import { formatEventStatusLabel, normalizeEventStatus } from "@/lib/event-status";
 import { formatDate, formatUsd } from "@/lib/format";
@@ -61,6 +62,7 @@ export function InsightsEventsPanel({ startMs, endMs }: InsightsEventsPanelProps
   const calendar = useQuery(api.analyticsDemand.getCalendarLoad, rangeArgs);
   const pipelineDwell = useQuery(api.analyticsInstrumentation.getEventPipelineDwell, rangeArgs);
   const turnout = useQuery(api.analyticsInstrumentation.getDeliveryQuality, rangeArgs);
+  const openMicRegulars = useQuery(api.openMic.getLeaderboard, rangeArgs);
 
   const d90 = upcoming?.horizons.d90;
   const readiness = d90
@@ -81,7 +83,8 @@ export function InsightsEventsPanel({ startMs, endMs }: InsightsEventsPanelProps
           cancellations?.truncated ||
           calendar?.truncated ||
           pipelineDwell?.truncated ||
-          turnout?.truncated
+          turnout?.truncated ||
+          openMicRegulars?.truncated
         }
       />
 
@@ -257,6 +260,37 @@ export function InsightsEventsPanel({ startMs, endMs }: InsightsEventsPanelProps
 
           <InsightCard icon={BuildingsIcon} title="By host type" loading={volume === undefined}>
             {volume ? <CountBarChart data={volume.byHostType} valueLabel="Events" /> : null}
+          </InsightCard>
+
+          <InsightCard
+            icon={MicrophoneStageIcon}
+            title="Open mic regulars"
+            description="Most sets in the range."
+            loading={openMicRegulars === undefined}
+            testId="insights-open-mic-regulars"
+          >
+            {openMicRegulars && openMicRegulars.rows.length > 0 ? (
+              <RowList joined>
+                {openMicRegulars.rows.map((entry, index) => (
+                  <li key={entry.email} className="flex items-center gap-3 px-3 py-2 text-sm">
+                    <span className="w-5 shrink-0 text-right text-muted-foreground tabular-nums">{index + 1}</span>
+                    <RowText title={entry.name} detail={`Last set ${formatDate(entry.lastPerformedAt)}`} />
+                    <RowCell className="w-20">{plural(entry.count, "set")}</RowCell>
+                  </li>
+                ))}
+              </RowList>
+            ) : (
+              <p className="text-sm text-muted-foreground">No open mic sets in this range.</p>
+            )}
+            {openMicRegulars?.truncated ? (
+              <p className="text-xs text-muted-foreground">
+                Counts only the most recent sets in this range. Pick a shorter range for full totals.
+              </p>
+            ) : openMicRegulars && openMicRegulars.performerCount > openMicRegulars.rows.length ? (
+              <p className="text-xs text-muted-foreground">
+                Top {openMicRegulars.rows.length} of {openMicRegulars.performerCount} performers.
+              </p>
+            ) : null}
           </InsightCard>
 
           <InsightCard

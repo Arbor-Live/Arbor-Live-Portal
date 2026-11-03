@@ -8,6 +8,7 @@ import {
 } from "@/components/inventory/inventory-search-select";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -27,6 +28,7 @@ import {
   removeRow,
 } from "./line-items-layout";
 import type { InvoiceDraft } from "./use-invoice-draft";
+import { DraftTextInput } from "@/components/forms/draft-text-input";
 
 type PackageOption = NonNullable<ReturnType<InvoiceDraft["packageById"]["get"]>>;
 type TypeOption = NonNullable<ReturnType<InvoiceDraft["typeById"]["get"]>>;
@@ -194,28 +196,31 @@ export function EquipmentLines({ draft }: { draft: InvoiceDraft }) {
                       {discount > 0 ? ` · discount ${formatUsd(discount)} · billed ${formatUsd(rate)}` : ""}
                     </p>
                     <div className="grid gap-1 sm:grid-cols-2">
-                      {pkg.items.map((item) => (
-                        <label key={item.typeId} className="flex items-center gap-2 text-xs">
-                          <input
-                            type="checkbox"
-                            checked={!excluded.has(item.typeId)}
-                            onChange={(event) => {
-                              setRows((prev) =>
-                                patchRow(prev, idx, (current) => {
-                                  const next = new Set(current.excludedTypeIds ?? []);
-                                  if (event.target.checked) next.delete(item.typeId);
-                                  else next.add(item.typeId);
-                                  return { ...current, excludedTypeIds: Array.from(next), discountUsd: "" };
-                                }),
-                              );
-                            }}
-                          />
-                          <span>
-                            {item.quantity}× {item.type?.name ?? "item"}
-                            {item.type?.model ? ` · ${item.type.model}` : ""}
-                          </span>
-                        </label>
-                      ))}
+                      {pkg.items.map((item) => {
+                        const itemId = `invoice-package-item-${idx}-${item.typeId}`;
+                        return (
+                          <div key={item.typeId} className="flex items-center gap-2">
+                            <Checkbox
+                              id={itemId}
+                              checked={!excluded.has(item.typeId)}
+                              onCheckedChange={(checked) => {
+                                setRows((prev) =>
+                                  patchRow(prev, idx, (current) => {
+                                    const next = new Set(current.excludedTypeIds ?? []);
+                                    if (checked === true) next.delete(item.typeId);
+                                    else next.add(item.typeId);
+                                    return { ...current, excludedTypeIds: Array.from(next), discountUsd: "" };
+                                  }),
+                                );
+                              }}
+                            />
+                            <Label htmlFor={itemId} className="text-xs font-normal">
+                              {item.quantity}× {item.type?.name ?? "item"}
+                              {item.type?.model ? ` · ${item.type.model}` : ""}
+                            </Label>
+                          </div>
+                        );
+                      })}
                     </div>
                     {excluded.size > 0 ? (
                       <div className="flex flex-wrap items-center gap-2">
@@ -251,12 +256,12 @@ export function EquipmentLines({ draft }: { draft: InvoiceDraft }) {
                 setRows((prev) => patchRow(prev, idx, { refId: value, excludedTypeIds: [], discountUsd: "" }))
               }
             />
-            <Input
+            <DraftTextInput
               aria-label="Quantity"
               placeholder="Qty"
               inputMode="decimal"
               value={row.quantity}
-              onChange={(event) => setRows((prev) => patchRow(prev, idx, { quantity: event.target.value }))}
+              onCommit={(value) => setRows((prev) => patchRow(prev, idx, { quantity: value }))}
             />
             <StaticCell title={discount > 0 ? `Original ${formatUsd(originalRate)}` : undefined}>
               {formatUsd(rate)}
@@ -290,12 +295,12 @@ export function EquipmentLines({ draft }: { draft: InvoiceDraft }) {
               value={row.refId}
               onChange={(value) => setRows((prev) => patchRow(prev, idx, { refId: value }))}
             />
-            <Input
+            <DraftTextInput
               aria-label="Quantity"
               placeholder="Qty"
               inputMode="decimal"
               value={row.quantity}
-              onChange={(event) => setRows((prev) => patchRow(prev, idx, { quantity: event.target.value }))}
+              onCommit={(value) => setRows((prev) => patchRow(prev, idx, { quantity: value }))}
             />
             <StaticCell>{formatUsd(rate)}</StaticCell>
             <AmountCell amountUsd={billedQty * rate} hint={hint} />

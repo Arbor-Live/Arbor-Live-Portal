@@ -1,11 +1,12 @@
 "use client";
 
-import { startTransition, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   CaretDownIcon,
   LightningIcon,
   MagicWandIcon,
   PlusIcon,
+  SunHorizonIcon,
   TrashIcon,
   UsersThreeIcon,
   WarningIcon,
@@ -20,7 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
+import { DraftTextInput } from "@/components/forms/draft-text-input";
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { localDateTimeInputToMs, toLocalDateTimeInput } from "@/lib/crew-availability";
 import { formatDate, formatTime, pacificDayIndexFromAnchor } from "@/lib/format";
@@ -43,6 +44,7 @@ import {
 } from "@/lib/schedule-block-types";
 import { cn } from "@/lib/utils";
 import { BuildRunOfShowDialog } from "@/components/events/workspace/run-of-show/build-run-of-show-dialog";
+import { EarlySetupDialog } from "@/components/events/workspace/run-of-show/early-setup-dialog";
 import {
   durationLabel,
   MOMENT_ICONS,
@@ -79,6 +81,8 @@ export function RunOfShowEditor({
   crewFor,
   quickAdd,
   actsEditable = true,
+  onEarlySetupAdded,
+  hashMode = false,
 }: {
   blocks: TimelineBlockDraft[];
   onChange: (next: TimelineBlockDraft[]) => void;
@@ -96,8 +100,13 @@ export function RunOfShowEditor({
    * soundchecks and sets are shown but only change from the Run of Show tab.
    */
   actsEditable?: boolean;
+  /** Opens slots on a new early setup section; without it the section is added unstaffed. */
+  onEarlySetupAdded?: (block: TimelineBlockDraft, headcount: number) => void;
+  /** Hashing owns a hash's blocks and times, so only names can change here. */
+  hashMode?: boolean;
 }) {
   const [buildOpen, setBuildOpen] = useState(false);
+  const [earlySetupOpen, setEarlySetupOpen] = useState(false);
   const days = useMemo(() => nestRunOfShow(blocks), [blocks]);
   const issues = useMemo(
     () => runOfShowIssues(blocks, acts, { actName, swaps }),
@@ -170,6 +179,20 @@ export function RunOfShowEditor({
     commit([...latest(), block]);
   }
 
+  function addEarlySetup(plan: { start: number; end: number; label: string; headcount: number }) {
+    const block: TimelineBlockDraft = {
+      clientId: newClientId(),
+      blockType: "setup",
+      label: plan.label,
+      dayIndex: eventStartAt != null ? pacificDayIndexFromAnchor(eventStartAt, plan.start) : 0,
+      startsAt: toLocalDateTimeInput(plan.start),
+      endsAt: toLocalDateTimeInput(plan.end),
+      notes: "",
+    };
+    commit([...latest(), block]);
+    onEarlySetupAdded?.(block, plan.headcount);
+  }
+
   function build(input: BuildRunOfShowInput) {
     commit(buildRunOfShow(latest(), input, newClientId));
   }
@@ -182,7 +205,7 @@ export function RunOfShowEditor({
 
   return (
     <div className="space-y-4" data-testid="run-of-show">
-      {!readOnly ? (
+      {!readOnly && !hashMode ? (
         <div className="flex flex-wrap items-center gap-2">
           {actsEditable ? (
           <Button
@@ -224,6 +247,10 @@ export function RunOfShowEditor({
                   {SCHEDULE_BLOCK_TYPE_LABELS[type]}
                 </DropdownMenuItem>
               ))}
+              <DropdownMenuItem onSelect={() => setEarlySetupOpen(true)}>
+                <SunHorizonIcon className="size-4" />
+                Early setup…
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel>Moment</DropdownMenuLabel>
               <DropdownMenuItem onSelect={() => add("doors", "Doors", 30)}>Doors</DropdownMenuItem>
@@ -301,6 +328,7 @@ export function RunOfShowEditor({
                         moment={moment}
                         blocks={blocks}
                         readOnly={readOnly || (!actsEditable && !!moment.block.actOwned)}
+                        timesLocked={hashMode}
                         issues={issues.byRef.get(refOf(moment.block)) ?? []}
                         actName={actName}
                         swaps={swaps}
@@ -310,6 +338,7 @@ export function RunOfShowEditor({
                       />
                     )}
                     readOnly={readOnly}
+                    timesLocked={hashMode}
                     issues={issues.byRef.get(refOf(entry.section.block)) ?? []}
                     onTimes={setTimes}
                     onLabel={(block, label) => update(block, { label })}
@@ -321,6 +350,7 @@ export function RunOfShowEditor({
                       moment={entry.moments[0]!}
                       blocks={blocks}
                       readOnly={readOnly || (!actsEditable && !!entry.moments[0]!.block.actOwned)}
+                      timesLocked={hashMode}
                       issues={issues.byRef.get(refOf(entry.moments[0]!.block)) ?? []}
                       actName={actName}
                       swaps={swaps}
@@ -346,12 +376,23 @@ export function RunOfShowEditor({
           onBuild={build}
         />
       ) : null}
+      {earlySetupOpen ? (
+        <EarlySetupDialog
+          open={earlySetupOpen}
+          onOpenChange={setEarlySetupOpen}
+          blocks={blocks}
+          withHeadcount={onEarlySetupAdded != null}
+          onAdd={addEarlySetup}
+        />
+      ) : null}
     </div>
   );
 }
 
 type RowHandlers = {
   readOnly: boolean;
+  /** No time picker or delete, but the name stays editable. */
+  timesLocked: boolean;
   issues: string[];
   onTimes: (block: TimelineBlockDraft, start: string, end: string) => void;
   onLabel: (block: TimelineBlockDraft, label: string) => void;
@@ -375,56 +416,22 @@ function IssueList({ issues }: { issues: string[] }) {
   );
 }
 
-/**
- * A name field that echoes keystrokes from local state and hands the edit to
- * the workspace draft as a transition. Each label change re-renders the whole
- * event workspace; as a transition React drops that work for the next
- * keystroke instead of blocking the field.
- */
-function LabelInput({
-  value,
-  onCommit,
-  "aria-label": ariaLabel,
-}: {
-  value: string;
-  onCommit: (value: string) => void;
-  "aria-label": string;
-}) {
-  const [text, setText] = useState(value);
-  const [synced, setSynced] = useState(value);
-  // Adopt outside changes (discard, server rebase).
-  if (value !== synced) {
-    setSynced(value);
-    setText(value);
-  }
-  return (
-    <Input
-      aria-label={ariaLabel}
-      className="h-8"
-      value={text}
-      onChange={(event) => {
-        const next = event.target.value;
-        setText(next);
-        startTransition(() => onCommit(next));
-      }}
-    />
-  );
-}
-
 function RowControls({
   block,
   readOnly,
+  timesLocked,
   onTimes,
   onRemove,
   removeLabel,
 }: {
   block: TimelineBlockDraft;
   readOnly: boolean;
+  timesLocked: boolean;
   onTimes: RowHandlers["onTimes"];
   onRemove: RowHandlers["onRemove"];
   removeLabel: string;
 }) {
-  if (readOnly) return null;
+  if (readOnly || timesLocked) return null;
   return (
     <div className="flex shrink-0 items-center gap-1">
       <DateTimeRangePicker
@@ -453,6 +460,7 @@ function SectionCard({
   crew,
   renderMoment,
   readOnly,
+  timesLocked,
   issues,
   onTimes,
   onLabel,
@@ -479,8 +487,9 @@ function SectionCard({
           {readOnly ? (
             <p className="truncate text-sm font-medium">{block.label}</p>
           ) : (
-            <LabelInput
+            <DraftTextInput
               aria-label="Section name"
+              className="h-8"
               value={block.label}
               onCommit={(label) => onLabel(block, label)}
             />
@@ -504,6 +513,7 @@ function SectionCard({
         <RowControls
           block={block}
           readOnly={readOnly}
+          timesLocked={timesLocked}
           onTimes={onTimes}
           onRemove={onRemove}
           removeLabel={`Remove ${block.label || "section"}`}
@@ -525,6 +535,7 @@ function MomentRow({
   moment,
   blocks,
   readOnly,
+  timesLocked,
   issues,
   actName,
   swaps,
@@ -565,8 +576,9 @@ function MomentRow({
         {block.actOwned || readOnly ? (
           <p className="truncate text-sm font-medium">{title}</p>
         ) : (
-          <LabelInput
+          <DraftTextInput
             aria-label={`${SCHEDULE_BLOCK_TYPE_LABELS[block.blockType]} name`}
+            className="h-8"
             value={block.label}
             onCommit={(label) => onLabel(block, label)}
           />
@@ -575,6 +587,7 @@ function MomentRow({
       <RowControls
         block={block}
         readOnly={readOnly}
+        timesLocked={timesLocked}
         onTimes={onTimes}
         onRemove={onRemove}
         removeLabel={`Remove ${block.actOwned ? `${title} ${block.blockType}` : block.label}`}

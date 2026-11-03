@@ -3,11 +3,33 @@ import { v } from "convex/values";
 import { riderContentFields, riderStatusValue } from "./lib/riderSchema";
 import { artistOrganizationTypeValue } from "./lib/organizationType";
 import { scheduleBlockTypeValue } from "./lib/scheduleBlockTypes";
+import {
+  nightSourceValue,
+  nightStatusValue,
+  timeWindowValue,
+  usualEveningsValue,
+} from "./lib/crewNightValues";
 import { userStatusValue } from "./lib/userStatus";
 import { eventSeriesPositionTemplateValue } from "./lib/eventSeriesPositions";
 import { artistNeedActTypeValue, artistNeedTypeValue } from "./lib/artistNeedTypes";
+import { bookingPriceValue } from "./lib/bookingPrice";
 import { eventGroupKindValue } from "./lib/eventGroupKind";
 import { emailTemplateValue, notificationTemplateValue } from "./lib/emailTemplateValue";
+import {
+  inventoryLifecycleValue,
+  itemHistoryKindValue,
+  retirementReasonValue,
+  retirementValue,
+} from "./lib/inventoryLifecycle";
+import {
+  checklistTreeFields,
+  hashAnswerValue,
+  hashCheckStatusValue,
+  hashDateFields,
+  hashFlagReasonValue,
+  hashLiveDateStatusValue,
+  hashStandingValue,
+} from "./lib/hashingValues";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -56,6 +78,10 @@ const clientApprovalStatusValue = v.union(
 );
 
 const invoiceRevisionKindValue = v.union(
+  /** Staff sent this version to the client: the first send, or a reply to a change request. */
+  v.literal("sent"),
+  /** The client asked for changes to this version; the note is their request. */
+  v.literal("changes_requested"),
   /** The client approved this version. */
   v.literal("approved"),
   /** Staff changed an approved quote and sent it back for approval. */
@@ -502,6 +528,13 @@ export default defineSchema({
     updatedAt: v.number(),
   }),
 
+  /** Singleton row: Ops Center settings for who hears when a cart event goes Ready. */
+  golfCartSettings: defineTable({
+    /** Notified when a cart event moves to Ready; external addresses are allowed. */
+    alertRecipients: v.array(v.string()),
+    updatedAt: v.number(),
+  }),
+
   /** Singleton row: Ops Center settings for who is notified when crew finish onboarding. */
   crewOnboardingSettings: defineTable({
     /** Always notified; external addresses are allowed. */
@@ -518,7 +551,18 @@ export default defineSchema({
     typeId: v.id("inventoryTypes"),
     storageLocationId: v.optional(v.id("storageLocations")),
     containedInAssetId: v.optional(v.id("inventoryItems")),
+    /** Legacy free-text status; `migrateInventoryItemStatus` moves it to `lifecycle` / `condition`. */
     status: v.optional(v.string()),
+    /** Free-text condition note ("scuffed corner, works"). */
+    condition: v.optional(v.string()),
+    /** Absent means `active`. */
+    lifecycle: v.optional(inventoryLifecycleValue),
+    /** Set while `lifecycle` is `retired`. */
+    retirement: v.optional(retirementValue),
+    /** Open + in-progress damage reports on this unit, kept by `damageReports`. */
+    openDamageCount: v.optional(v.number()),
+    /** Tags (current and previous), serial and type words, for the search index. */
+    searchText: v.optional(v.string()),
     notes: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -526,7 +570,33 @@ export default defineSchema({
     .index("by_assetId", ["assetId"])
     .index("by_typeId", ["typeId"])
     .index("by_storageLocationId", ["storageLocationId"])
-    .index("by_containedInAssetId", ["containedInAssetId"]),
+    .index("by_containedInAssetId", ["containedInAssetId"])
+    .searchIndex("search_searchText", { searchField: "searchText" }),
+
+  /**
+   * A tag an item used to carry before it was relabeled. Scans and the public
+   * page still resolve it to the item, and no other item may take it.
+   */
+  inventoryAssetIdAliases: defineTable({
+    assetId: v.string(),
+    inventoryItemId: v.id("inventoryItems"),
+    createdAt: v.number(),
+  })
+    .index("by_assetId", ["assetId"])
+    .index("by_inventoryItemId", ["inventoryItemId"]),
+
+  /** Lifecycle changes on an item: retired, reinstated, retagged, into and out of repair. */
+  inventoryItemHistory: defineTable({
+    inventoryItemId: v.id("inventoryItems"),
+    kind: itemHistoryKindValue,
+    reason: v.optional(retirementReasonValue),
+    fromAssetId: v.optional(v.string()),
+    toAssetId: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    damageReportId: v.optional(v.id("damageReports")),
+    actorUserId: v.string(),
+    at: v.number(),
+  }).index("by_inventoryItemId_and_at", ["inventoryItemId", "at"]),
 
   inventoryPackages: defineTable({
     name: v.string(),
@@ -788,11 +858,11 @@ export default defineSchema({
     .searchIndex("search_clientGroupName", { searchField: "clientGroupName" }),
 
   /**
-   * What a quote looked like at each point that matters: when the client
-   * approved it, and each time staff changed it afterwards (sent back for
-   * re-approval, or kept the approval with a reason). Immutable snapshots, in
-   * the amounts the client saw, so "what did they agree to?" always has an
-   * answer.
+   * What a quote looked like at each point that matters: each time staff sent
+   * it, each time the client asked for changes or approved it, and each change
+   * after an approval (sent back for re-approval, or kept with a reason).
+   * Immutable snapshots, in the amounts the client saw, so "what did they ask
+   * for, and what did they agree to?" always has an answer.
    */
   invoiceRevisions: defineTable({
     invoiceId: v.id("invoices"),
@@ -812,14 +882,20 @@ export default defineSchema({
         amountUsd: v.number(),
       }),
     ),
-    /** Why it changed (required when staff keep an approval). */
+    /**
+     * Why it changed (required when staff keep an approval), the client's
+     * change request, or staff's message when sending it.
+     */
     note: v.optional(v.string()),
-    /** Who made it: the client's signed name for approvals, else the staff member. */
+    /**
+     * Who made it: the client's signed name for approvals, the client contact
+     * for change requests, else the staff member.
+     */
     actorName: v.optional(v.string()),
     actorUserId: v.optional(v.string()),
     /**
-     * Approved before revisions existed: snapshotted the first time the quote
-     * changed afterwards, so it shows the quote as it stood then.
+     * Approved (or changes requested) before revisions existed: snapshotted
+     * later, so it shows the quote as it stood then rather than as it was seen.
      */
     recordedLate: v.optional(v.boolean()),
     createdAt: v.number(),
@@ -1029,6 +1105,11 @@ export default defineSchema({
     /** Owns filling this event's lineup (the Open positions board). */
     operationsLeadUserId: v.optional(v.string()),
     otPremium: v.optional(v.boolean()),
+    /**
+     * Cart event: gear moves by golf cart, so setup and strike each need
+     * someone cart eligible (`@arbor/format` `evaluateCartRequirement`).
+     */
+    needsCart: v.optional(v.boolean()),
     crewCostBufferPercent: v.optional(v.number()),
     crewCostUsd: v.optional(v.number()),
     /**
@@ -1037,6 +1118,11 @@ export default defineSchema({
      * invite (same UID) as an update when this increases.
      */
     crewInviteSequence: v.optional(v.number()),
+    /**
+     * Artist cost, derived (never hand-edited): payouts plus booking prices
+     * not paid through a payout yet. Kept in step by
+     * `lib/bookingPriceSync.ts` `syncEventBandsCost`.
+     */
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
     otherCostUsd: v.optional(v.number()),
@@ -1060,6 +1146,11 @@ export default defineSchema({
     ),
     /** Free-form crew notes shown on the Open Mic runner and public sign-up. */
     openMicNotes: v.optional(v.string()),
+    /**
+     * This event is a hash (`lib/hashEvent.ts`). Its `hashDates` row holds the
+     * hash-only state, and only Hashing writes its times and status.
+     */
+    hashingEnabled: v.optional(v.boolean()),
 
     /** Snake choices behind the generated Wing show file. Unset = one snake. */
     patchPlan: v.optional(patchPlanValue),
@@ -1151,6 +1242,15 @@ export default defineSchema({
     requiresOnboarding: v.optional(v.boolean()),
     includeInTimecards: v.optional(v.boolean()),
     assignableAsCrew: v.optional(v.boolean()),
+    /** Staff-set: may drive the golf cart to move gear. Missing ⇒ false. */
+    cartEligible: v.optional(v.boolean()),
+    /**
+     * Usual evenings (standing availability) per weekday: usually free,
+     * sometimes, rarely. Asked once for Thu/Fri/Sat; people may add others.
+     */
+    usualEvenings: v.optional(usualEveningsValue),
+    /** When the person last confirmed `usualEvenings`. Unset ⇒ still to ask. */
+    usualEveningsSetAt: v.optional(v.number()),
     /** Email templates this user opted out of (keys from `email/constants.ts`). */
     emailOptOuts: v.optional(v.array(v.string())),
     /** Templates this user muted in the notification center (no row, so no push either). */
@@ -1391,6 +1491,8 @@ export default defineSchema({
     hours: v.number(),
     /** When true, shift times stay custom and are not force-synced from the linked block. */
     timesOverridden: v.optional(v.boolean()),
+    /** A hash moved under this booking, and the person hasn't said they can still make it. */
+    needsConfirmation: v.optional(v.boolean()),
     estimatedHourlyRateUsd: v.optional(v.number()),
     postedToExpense: v.boolean(),
     notes: v.optional(v.string()),
@@ -1434,6 +1536,30 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_eventId_and_userId", ["eventId", "userId"])
     .index("by_eventId_and_responseStatus", ["eventId", "responseStatus"]),
+
+  /**
+   * Crew availability as physical time on the person, one row per night
+   * (Pacific `YYYY-MM-DD`; past-midnight shows stay on the night they start).
+   * Every event that night reads the same answer through its windows
+   * (`lib/crewNights.ts`). Replaces `eventCrewAvailabilityResponses`, whose
+   * upcoming rows were converted (`migrations.convertAvailabilityToNights`).
+   */
+  crewAvailabilityNights: defineTable({
+    userId: v.string(),
+    nightKey: v.string(),
+    status: nightStatusValue,
+    /** `free`: the night span when answered. `partial`: the free parts. Else empty. */
+    windows: v.array(timeWindowValue),
+    /** `partial` picked as "Early setup only". */
+    earlySetupOnly: v.optional(v.boolean()),
+    notes: v.optional(v.string()),
+    source: v.optional(nightSourceValue),
+    respondedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_and_nightKey", ["userId", "nightKey"])
+    .index("by_nightKey", ["nightKey"]),
 
   /**
    * Event-level contacts that are not staff and not host-org billing people
@@ -1556,6 +1682,12 @@ export default defineSchema({
     setEndsAt: v.optional(v.number()),
     soundcheckStartsAt: v.optional(v.number()),
     soundcheckEndsAt: v.optional(v.number()),
+    /**
+     * What the act in this position costs: the single source for the quote's
+     * artist line (billed) and the act's payout (paid). An open position may
+     * carry one when a quote prices it. See `lib/bookingPrice.ts`.
+     */
+    price: v.optional(bookingPriceValue),
     createdByUserId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1691,6 +1823,18 @@ export default defineSchema({
     .index("by_token", ["token"])
     .index("by_invitationId", ["invitationId"])
     .index("by_createdAt", ["createdAt"]),
+
+  /**
+   * Manual Notion onboarding checklist for Arbor Live crew invites. Separate
+   * from `pendingUserInvites` because that row is deleted on accept, and admins
+   * tick these after the person has joined. Row existence is the rule for "this
+   * invite has a checklist"; fields hold the completed-at timestamp.
+   */
+  inviteNotionChecklists: defineTable({
+    invitationId: v.string(),
+    inviteToNotion: v.optional(v.number()),
+    addToCrewGroup: v.optional(v.number()),
+  }).index("by_invitationId", ["invitationId"]),
 
   emailNotifications: defineTable({
     template: emailTemplateValue,
@@ -2431,6 +2575,8 @@ export default defineSchema({
     reviewedAt: v.optional(v.number()),
     reviewedByUserId: v.optional(v.string()),
     convertedUserId: v.optional(v.string()),
+    /** Invitation `convertToMember` created; links the row to its Notion checklist. Unset on older conversions. */
+    invitationId: v.optional(v.string()),
     /** Admin handling the applicant (reaching out, the intro meeting). */
     assigneeUserId: v.optional(v.string()),
     /**
@@ -2545,4 +2691,91 @@ export default defineSchema({
     .index("by_dingId", ["dingId"])
     .index("by_createdAt", ["createdAt"])
     .index("by_kind_and_createdAt", ["kind", "createdAt"]),
+
+  /** Singleton: the weekly hash slot. Dates copy it when they are built. */
+  hashingSettings: defineTable({
+    /** 0 = Sunday … 6 = Saturday. */
+    weekday: v.number(),
+    /** Pacific `HH:mm`. */
+    startTime: v.string(),
+    durationMinutes: v.number(),
+    spotsPerHash: v.number(),
+    location: v.string(),
+    updatedAt: v.number(),
+    updatedBy: v.string(),
+  }),
+
+  /**
+   * The Hashing add-on's sidecar: one row per hash, holding what an event has no
+   * field for. Every live date has its event and the section block its crew sit
+   * on. Only an `off` date may have neither, so an off week costs nothing until
+   * someone switches it on.
+   */
+  hashDates: defineTable(
+    v.union(
+      v.object({
+        ...hashDateFields,
+        status: v.literal("off"),
+        eventId: v.optional(v.id("events")),
+        sectionBlockId: v.optional(v.id("eventScheduleBlocks")),
+      }),
+      v.object({
+        ...hashDateFields,
+        status: hashLiveDateStatusValue,
+        eventId: v.id("events"),
+        sectionBlockId: v.id("eventScheduleBlocks"),
+      }),
+    ),
+  )
+    .index("by_quarterId_and_dateKey", ["quarterId", "dateKey"])
+    .index("by_status_and_dateKey", ["status", "dateKey"])
+    .index("by_eventId", ["eventId"]),
+
+  hashAvailability: defineTable({
+    hashDateId: v.id("hashDates"),
+    userId: v.string(),
+    answer: hashAnswerValue,
+  })
+    .index("by_hashDateId_and_userId", ["hashDateId", "userId"])
+    .index("by_userId_and_hashDateId", ["userId", "hashDateId"]),
+
+  /** Per person per quarter, so it resets on its own when the quarter changes. */
+  hashQuarterStanding: defineTable({
+    userId: v.string(),
+    quarterId: v.string(),
+    standing: hashStandingValue,
+  }).index("by_quarterId_and_userId", ["quarterId", "userId"]),
+
+  /** Immutable published checklists; the highest version is current. */
+  hashChecklistVersions: defineTable({
+    version: v.number(),
+    ...checklistTreeFields,
+    publishedAt: v.number(),
+    /** Absent on the seeded first version. */
+    publishedBy: v.optional(v.string()),
+  }).index("by_version", ["version"]),
+
+  /** One row per tick, so people ticking side by side never contend. */
+  hashChecks: defineTable({
+    hashDateId: v.id("hashDates"),
+    /** `areaId:kitId:itemId`: a shared kit's item ticks separately per area. */
+    itemKey: v.string(),
+    areaId: v.string(),
+    status: hashCheckStatusValue,
+    flagReason: v.optional(hashFlagReasonValue),
+    note: v.optional(v.string()),
+    byUserId: v.string(),
+    resolvedAt: v.optional(v.number()),
+    resolvedBy: v.optional(v.string()),
+    damageReportId: v.optional(v.id("damageReports")),
+  })
+    .index("by_hashDateId_and_itemKey", ["hashDateId", "itemKey"])
+    .index("by_status_and_resolvedAt", ["status", "resolvedAt"])
+    .index("by_damageReportId", ["damageReportId"]),
+
+  hashAreaClaims: defineTable({
+    hashDateId: v.id("hashDates"),
+    areaId: v.string(),
+    userId: v.string(),
+  }).index("by_hashDateId_and_areaId_and_userId", ["hashDateId", "areaId", "userId"]),
 });

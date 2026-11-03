@@ -32,6 +32,8 @@ import {
   markInvitationAccepted,
   markInvitationCancelled,
   scheduleUserInviteEmail,
+  notionChecklistFlags,
+  syncInviteNotionChecklist,
   updatePendingInviteDetails,
 } from "./email/invitations";
 import {
@@ -58,6 +60,7 @@ import {
 } from "./lib/r2Lifecycle";
 import {
   assertDisciplinesMatchVerticals,
+  hasCrewSpecialty,
   resolveProfileMembership,
   userDisciplineValue,
   userVerticalValue,
@@ -111,6 +114,7 @@ import type { StanfordPosition } from "./lib/stanfordPosition";
 import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
 import { returnActTimesToPosition } from "./lib/actPositions";
 import { scheduleBandTimeEmails } from "./email/bandScheduleEmails";
+import { uniqueBandMemberNames } from "./lib/bandMembers";
 
 const invitationStatusValue = v.union(
   v.literal("pending"),
@@ -212,7 +216,7 @@ function patchBandListingProfileFields(
     demoURL: args.demoURL !== undefined ? args.demoURL.trim() || undefined : existing.demoURL,
     bandMembers:
       args.bandMembers !== undefined
-        ? normalizeStringList(args.bandMembers)
+        ? uniqueBandMemberNames(args.bandMembers)
         : existing.bandMembers,
     mainContactName:
       args.mainContactName !== undefined
@@ -288,6 +292,21 @@ async function getAllPendingInvites(ctx: QueryCtx | MutationCtx) {
   if (rows.length > MAX_PENDING_INVITES) {
     throw new Error(
       `pendingUserInvites exceeded ${MAX_PENDING_INVITES} rows; refusing to return a partial list.`,
+    );
+  }
+  return rows;
+}
+
+const MAX_INVITE_NOTION_CHECKLISTS = 5_000;
+
+/** Every checklist row or a loud failure, same contract as `getAllPendingInvites`. */
+async function getAllInviteNotionChecklists(ctx: QueryCtx | MutationCtx) {
+  const rows = await ctx.db
+    .query("inviteNotionChecklists")
+    .take(MAX_INVITE_NOTION_CHECKLISTS + 1);
+  if (rows.length > MAX_INVITE_NOTION_CHECKLISTS) {
+    throw new Error(
+      `inviteNotionChecklists exceeded ${MAX_INVITE_NOTION_CHECKLISTS} rows; refusing to return a partial list.`,
     );
   }
   return rows;
@@ -370,6 +389,7 @@ export async function ensureUserProfileDefaults(
     requiresOnboarding,
     includeInTimecards,
     assignableAsCrew,
+    cartEligible,
     emailOptOuts,
     payrollMethod,
     defaultOrganizationId,
@@ -386,6 +406,7 @@ export async function ensureUserProfileDefaults(
     requiresOnboarding?: boolean;
     includeInTimecards?: boolean;
     assignableAsCrew?: boolean;
+    cartEligible?: boolean;
     emailOptOuts?: string[];
     payrollMethod?: PayrollMethod;
     defaultOrganizationId?: string;
@@ -416,6 +437,7 @@ export async function ensureUserProfileDefaults(
         includeInTimecards !== undefined ? includeInTimecards : existing.includeInTimecards,
       assignableAsCrew:
         assignableAsCrew !== undefined ? assignableAsCrew : existing.assignableAsCrew,
+      cartEligible: cartEligible !== undefined ? cartEligible : existing.cartEligible,
       emailOptOuts:
         emailOptOuts !== undefined ? emailOptOuts : existing.emailOptOuts,
       payrollMethod: payrollMethod ?? existing.payrollMethod,
@@ -438,6 +460,7 @@ export async function ensureUserProfileDefaults(
     requiresOnboarding,
     includeInTimecards,
     assignableAsCrew,
+    cartEligible,
     emailOptOuts,
     payrollMethod,
     defaultOrganizationId,
@@ -633,6 +656,22 @@ export const listOrganizationsAdmin = query({
       }))
       .filter((org) => Boolean(org.id) && !org.archived)
       .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+/** Whether an organization already has an active admin, so a first invite can default to admin. */
+export const organizationHasActiveAdminAdmin = query({
+  args: { organizationId: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const memberships = await ctx.db
+      .query("userOrganizationMemberships")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .take(500);
+    return memberships.some(
+      (membership) => membership.active && isArtistOrgAdminRole(membership.role),
+    );
   },
 });
 
@@ -1542,6 +1581,8 @@ export const getSessionShell = query({
         status: userStatusValue,
         verticals: v.array(userVerticalValue),
         disciplines: v.array(userDisciplineValue),
+        /** Active crew who haven't told us their usual evenings yet (asked once). */
+        needsUsualEvenings: v.boolean(),
       }),
       account: v.object({
         name: v.string(),
@@ -1681,6 +1722,11 @@ export const getSessionShell = query({
         status: resolveUserStatus(profile),
         verticals: membership.verticals,
         disciplines: membership.disciplines,
+        needsUsualEvenings:
+          resolveUserStatus(profile) === "active" &&
+          hasCrewSpecialty(membership.disciplines) &&
+          resolveParticipationFlags(profile ?? {}).assignableAsCrew &&
+          !profile?.usualEveningsSetAt,
       },
       account: {
         name: user.name ?? user.email ?? "User",
@@ -1874,6 +1920,7 @@ export const listUsersForAdmin = query({
           requiresOnboarding: participation.requiresOnboarding,
           includeInTimecards: participation.includeInTimecards,
           assignableAsCrew: participation.assignableAsCrew,
+          cartEligible: profile?.cartEligible === true,
           defaultOrganizationId: profile?.defaultOrganizationId ?? "",
           organizationMemberships: memberships,
           rateMode: rate?.rateMode ?? null,
@@ -2001,10 +2048,14 @@ export const listInvitationsAdmin = query({
     const pendingByInvitationId = new Map(
       pendingInvites.map((row) => [row.invitationId, row]),
     );
+    const checklistByInvitationId = new Map(
+      (await getAllInviteNotionChecklists(ctx)).map((row) => [row.invitationId, row]),
+    );
     return invites
       .map((invite) => {
         const inviteId = getRecordId(invite);
         const pending = pendingByInvitationId.get(inviteId);
+        const checklist = checklistByInvitationId.get(inviteId);
         return {
           id: inviteId,
           email: invite.email ?? "",
@@ -2022,6 +2073,7 @@ export const listInvitationsAdmin = query({
           teams: (pending?.teams ?? []) as string[],
           verticals: (pending?.verticals ?? []) as UserVertical[],
           disciplines: (pending?.disciplines ?? []) as UserDiscipline[],
+          notionChecklist: notionChecklistFlags(checklist),
         };
       })
       .filter((invite) => Boolean(invite.id))
@@ -2121,6 +2173,12 @@ export const inviteUserAdmin = mutation({
       if (!invitationId) throw new Error("Failed to create invitation.");
     }
 
+    await syncInviteNotionChecklist(
+      ctx,
+      invitationId,
+      crewInvite.isArbor && crewInvite.inviteKind === "crew",
+    );
+
     const existingUser = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
       model: "user",
       where: [{ field: "email", value: email }],
@@ -2195,6 +2253,30 @@ export const inviteUserAdmin = mutation({
     });
 
     return { invitationId, email, expiresAt };
+    });
+  },
+});
+
+export const setInviteNotionChecklistItem = mutation({
+  args: {
+    invitationId: v.string(),
+    item: v.union(v.literal("inviteToNotion"), v.literal("addToCrewGroup")),
+    done: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    return await withReportableErrors("users.setInviteNotionChecklistItem", async () => {
+      const row = await ctx.db
+        .query("inviteNotionChecklists")
+        .withIndex("by_invitationId", (q) => q.eq("invitationId", args.invitationId))
+        .unique();
+      if (!row) {
+        appError("INVITE_NOTION_CHECKLIST_NOT_FOUND", "This invitation has no Notion checklist.");
+      }
+      // Ticking an already-ticked item keeps its original timestamp.
+      if ((row[args.item] !== undefined) === args.done) return null;
+      await ctx.db.patch(row._id, { [args.item]: args.done ? Date.now() : undefined });
+      return null;
     });
   },
 });
@@ -2625,6 +2707,8 @@ export const updateUserAdmin = mutation({
     requiresOnboarding: v.optional(v.boolean()),
     includeInTimecards: v.optional(v.boolean()),
     assignableAsCrew: v.optional(v.boolean()),
+    /** Staff-set: may drive the golf cart to move gear. */
+    cartEligible: v.optional(v.boolean()),
     /** Full opt-out list; the editor sends every applicable template's state. */
     emailOptOuts: v.optional(v.array(v.string())),
     defaultOrganizationId: v.optional(v.string()),
@@ -2711,6 +2795,7 @@ export const updateUserAdmin = mutation({
         args.assignableAsCrew !== undefined
           ? args.assignableAsCrew
           : existingProfile?.assignableAsCrew,
+      cartEligible: args.cartEligible,
       emailOptOuts: [...disabledTemplates],
       payrollMethod: args.payrollMethod ?? existingProfile?.payrollMethod,
       defaultOrganizationId: args.defaultOrganizationId ?? existingProfile?.defaultOrganizationId,
@@ -2952,6 +3037,36 @@ export const addUserOrganizationMembershipAdmin = mutation({
   },
 });
 
+export const updateUserOrganizationMembershipRoleAdmin = mutation({
+  args: {
+    userId: v.string(),
+    organizationId: v.string(),
+    role: v.string(),
+  },
+  returns: v.object({ role: v.string() }),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    return await withReportableErrors("users.updateUserOrganizationMembershipRoleAdmin", async () => {
+      const role = await normalizeMembershipRole(ctx, args.organizationId, args.role);
+      const membership = await ctx.db
+        .query("userOrganizationMemberships")
+        .withIndex("by_userId_and_organizationId", (q) =>
+          q.eq("userId", args.userId).eq("organizationId", args.organizationId),
+        )
+        .unique();
+      if (!membership) {
+        appError("MEMBERSHIP_NOT_FOUND", "This person is not a member of that organization.");
+      }
+      if (membership.role !== role) {
+        await ctx.db.patch(membership._id, { role, updatedAt: Date.now() });
+        // Arbor admin/member changes portal access; artist roles never do.
+        await syncGlobalRoleFromMemberships(ctx, args.userId);
+      }
+      return { role };
+    });
+  },
+});
+
 export const removeUserOrganizationMembershipAdmin = mutation({
   args: {
     userId: v.string(),
@@ -2992,6 +3107,37 @@ export const sendPasswordResetAdmin = mutation({
   },
 });
 
+/** Active artist admins of the org, and Arbor staff, may change payout details. */
+async function canChangeBandPayout(ctx: QueryCtx | MutationCtx, organizationId: string) {
+  const actor = await requireAuth(ctx);
+  const actorId = getUserId(actor);
+  const actorMembership = await ctx.db
+    .query("userOrganizationMemberships")
+    .withIndex("by_userId_and_organizationId", (q) =>
+      q.eq("userId", actorId).eq("organizationId", organizationId),
+    )
+    .unique();
+  return (
+    (actorMembership?.active === true && isArtistOrgAdminRole(actorMembership.role)) ||
+    (await isStaffAdmin(ctx, actor))
+  );
+}
+
+/** Names of the active artist admins, so members know whom to ask about payouts. */
+async function listArtistAdminNames(ctx: QueryCtx, organizationId: string) {
+  const memberships = await ctx.db
+    .query("userOrganizationMemberships")
+    .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+    .take(500);
+  const names: string[] = [];
+  for (const membership of memberships) {
+    if (!membership.active || !isArtistOrgAdminRole(membership.role)) continue;
+    const user = await findAuthUserById(ctx, membership.userId);
+    names.push(user?.name?.trim() || user?.email || "your artist admin");
+  }
+  return names.sort((a, b) => a.localeCompare(b));
+}
+
 export const getActiveBandProfile = query({
   args: {},
   handler: async (ctx) => {
@@ -3000,8 +3146,13 @@ export const getActiveBandProfile = query({
       .query("organizationProfiles")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", context.organizationId))
       .unique();
+    const canEditPayout = await canChangeBandPayout(ctx, context.organizationId);
     return {
       organizationId: context.organizationId,
+      canEditPayout,
+      artistAdminNames: canEditPayout
+        ? []
+        : await listArtistAdminNames(ctx, context.organizationId),
       name: context.organizationName,
       displayName: profile?.displayName ?? context.organizationName,
       bio: profile?.bio ?? "",
@@ -3072,8 +3223,9 @@ export const updateActiveBandProfile = mutation({
     // Forms resend these fields on every save, so only a real change counts.
     const text = (value: string | undefined) => value?.trim() || undefined;
     const changesPayout =
+      // The profile query reports a missing rate as 0, so 0 resent is no change.
       (args.performerHourlyRateUsd !== undefined &&
-        args.performerHourlyRateUsd !== existing?.performerHourlyRateUsd) ||
+        args.performerHourlyRateUsd !== (existing?.performerHourlyRateUsd ?? 0)) ||
       (args.designatedPayeeUserId !== undefined &&
         text(args.designatedPayeeUserId) !== existing?.designatedPayeeUserId) ||
       (args.designatedPayeeName !== undefined &&
@@ -3084,24 +3236,8 @@ export const updateActiveBandProfile = mutation({
         text(args.designatedPayeeMailingAddress) !== existing?.designatedPayeeMailingAddress) ||
       (args.designatedPayeePayoutMethod !== undefined &&
         args.designatedPayeePayoutMethod !== existing?.designatedPayeePayoutMethod);
-    if (changesPayout) {
-      const actor = await requireAuth(ctx);
-      const actorId = getUserId(actor);
-      const actorMembership = await ctx.db
-        .query("userOrganizationMemberships")
-        .withIndex("by_userId_and_organizationId", (q) =>
-          q.eq("userId", actorId).eq("organizationId", context.organizationId),
-        )
-        .unique();
-      const isOrgAdmin =
-        (actorMembership?.active === true && isArtistOrgAdminRole(actorMembership.role)) ||
-        (await isStaffAdmin(ctx, actor));
-      if (!isOrgAdmin) {
-        appError(
-          "BAND_PAYOUT_ADMIN_REQUIRED",
-          "Only an artist admin can change who gets paid.",
-        );
-      }
+    if (changesPayout && !(await canChangeBandPayout(ctx, context.organizationId))) {
+      appError("BAND_PAYOUT_ADMIN_REQUIRED", "Only an artist admin can change who gets paid.");
     }
 
     return await withReportableErrors("users.updateActiveBandProfile", async () => {

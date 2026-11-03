@@ -1,5 +1,6 @@
 import {
   BodyCopy,
+  ContactNote,
   CtaButton,
   DataCard,
   DetailRow,
@@ -15,6 +16,8 @@ export function BookingRequestReceivedEmail({
   eventName,
   eventDateText,
   trackingUrl,
+  managerName,
+  managerEmail,
 }: BookingRequestReceivedEmailProps) {
   const greeting = recipientName ? `Hi ${recipientName},` : "Hi!";
 
@@ -32,12 +35,19 @@ export function BookingRequestReceivedEmail({
         <DetailRow label="Request" value={requestNumber} />
         <DetailRow label="Event" value={eventName} />
         <DetailRow label="Date" value={eventDateText} />
+        {managerName ? (
+          <DetailRow
+            label="Manager"
+            value={managerEmail ? `${managerName} (${managerEmail})` : managerName}
+          />
+        ) : null}
       </DataCard>
       <CtaButton href={trackingUrl} label="Track your request" />
       <BodyCopy>
         Use your request tracker anytime to check status, review your quote, and approve when you are
         ready.
       </BodyCopy>
+      {managerName ? <ContactNote managerName={managerName} managerEmail={managerEmail} /> : null}
       <EmailSignOff />
     </EmailLayout>
   );

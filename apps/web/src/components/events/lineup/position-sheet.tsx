@@ -24,9 +24,13 @@ import {
   AddBandForm,
   EventBandPaymentForm,
   InviteBandForm,
-  type InvoiceArtistSuggestion,
   type PerformerRow,
 } from "@/components/events/lineup/lineup-forms";
+import {
+  BookingPriceForm,
+  describeBookingPrice,
+  type BookingPrice,
+} from "@/components/events/lineup/booking-price";
 import {
   SLOT_STATUS_OPTIONS,
   effectiveStatusClass,
@@ -60,6 +64,11 @@ export type PositionSheetHandlers = {
   saveTimes: (row: BillRow, times: ActTimesPatch) => Promise<unknown>;
   /** Cancels the act's unpaid payout (e.g. someone else pays them directly); the act stays. */
   removePayout: (performer: PerformerRow) => Promise<unknown>;
+  /** Sets what the act in the position costs; its quote line and unpaid payout follow. */
+  savePrice: (
+    slot: SlotRow,
+    price: Omit<BookingPrice, "totalUsd"> & { totalUsd?: number },
+  ) => Promise<unknown>;
   /** Resolves true once the row is gone; false if cancelled or it failed. */
   removePosition: (row: BillRow) => Promise<boolean>;
   /** Books the inquiring artist into the position and closes the queue. */
@@ -75,8 +84,6 @@ export function PositionSheet({
   canEdit,
   rider,
   excludedOrganizationIds,
-  invoiceLine,
-  invoiceDefaultsReady,
   handlers,
   eventStartAt,
   eventEndAt,
@@ -87,8 +94,6 @@ export function PositionSheet({
   canEdit: boolean;
   rider?: RiderRow;
   excludedOrganizationIds: string[];
-  invoiceLine: InvoiceArtistSuggestion | null;
-  invoiceDefaultsReady: boolean;
   handlers: PositionSheetHandlers;
   /** The event's window: performance times are entered as times on its day(s). */
   eventStartAt?: number;
@@ -129,8 +134,6 @@ export function PositionSheet({
             canEdit={canEdit}
             rider={rider}
             excludedOrganizationIds={excludedOrganizationIds}
-            invoiceLine={invoiceLine}
-            invoiceDefaultsReady={invoiceDefaultsReady}
             handlers={handlers}
             eventStartAt={eventStartAt}
             eventEndAt={eventEndAt}
@@ -154,8 +157,6 @@ function PositionSheetBody({
   canEdit,
   rider,
   excludedOrganizationIds,
-  invoiceLine,
-  invoiceDefaultsReady,
   handlers,
   eventStartAt,
   eventEndAt,
@@ -167,8 +168,6 @@ function PositionSheetBody({
   canEdit: boolean;
   rider?: RiderRow;
   excludedOrganizationIds: string[];
-  invoiceLine: InvoiceArtistSuggestion | null;
-  invoiceDefaultsReady: boolean;
   handlers: PositionSheetHandlers;
   eventStartAt?: number;
   eventEndAt?: number;
@@ -197,9 +196,16 @@ function PositionSheetBody({
   const externalNameDirty = Boolean(slot && externalName.trim() !== savedName);
   const [timesDirty, setTimesDirty] = useState(false);
   const [fillDirty, setFillDirty] = useState(false);
+  const [priceDirty, setPriceDirty] = useState(false);
   useEffect(() => {
-    onDirtyChange(slotDirty || externalNameDirty || timesDirty || fillDirty);
-  }, [slotDirty, externalNameDirty, timesDirty, fillDirty, onDirtyChange]);
+    onDirtyChange(slotDirty || externalNameDirty || timesDirty || fillDirty || priceDirty);
+  }, [slotDirty, externalNameDirty, timesDirty, fillDirty, priceDirty, onDirtyChange]);
+  const [setStart, setEnd] = rowSetWindow(row);
+  // Hours start from the set's length, to the quarter hour.
+  const setHours =
+    setStart != null && setEnd != null && setEnd > setStart
+      ? Math.round(((setEnd - setStart) / 3_600_000) * 4) / 4 || undefined
+      : undefined;
 
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
@@ -300,6 +306,21 @@ function PositionSheetBody({
         </SheetSection>
       ) : null}
 
+      {slot ? (
+        <SheetSection title="Price">
+          <BookingPriceForm
+            // Remount on a saved change, so the form starts from the new price.
+            key={JSON.stringify(slot.price)}
+            price={slot.price}
+            defaultHours={setHours}
+            quotes={slot.quotes}
+            busy={busy}
+            onSave={(price) => run(() => handlers.savePrice(slot, price))}
+            onDirtyChange={setPriceDirty}
+          />
+        </SheetSection>
+      ) : null}
+
       <SheetSection title={actName ? "Act" : "Fill this position"}>
         {performer ? (
           <PlatformAct
@@ -310,8 +331,6 @@ function PositionSheetBody({
             onEditPayout={setEditingPayout}
             busy={busy}
             onRemovePayout={() => void run(() => handlers.removePayout(performer))}
-            invoiceLine={invoiceLine}
-            invoiceDefaultsReady={invoiceDefaultsReady}
           />
         ) : slot && isExternal ? (
           <div className="space-y-3">
@@ -442,8 +461,6 @@ function PlatformAct({
   onEditPayout,
   busy,
   onRemovePayout,
-  invoiceLine,
-  invoiceDefaultsReady,
 }: {
   performer: PerformerRow;
   rider?: RiderRow;
@@ -452,8 +469,6 @@ function PlatformAct({
   onEditPayout: (editing: boolean) => void;
   busy: boolean;
   onRemovePayout: () => void;
-  invoiceLine: InvoiceArtistSuggestion | null;
-  invoiceDefaultsReady: boolean;
 }) {
   const contact = rider?.contact;
   const paid = performer.payment?.status === "paid";
@@ -491,6 +506,9 @@ function PlatformAct({
             <>
               {formatUsd(performer.payment.totalUsd)} · {performer.payment.statusLabel}
               <span className="block text-xs text-muted-foreground">
+                {describeBookingPrice(performer.payment)
+                  ? `${describeBookingPrice(performer.payment)} · `
+                  : ""}
                 Payment ID: {performer.payment.confirmationToken}
               </span>
             </>
@@ -509,8 +527,6 @@ function PlatformAct({
             payment={performer.payment}
             organizationLocked
             excludedOrganizationIds={[]}
-            invoiceLine={invoiceLine}
-            invoiceDefaultsReady={invoiceDefaultsReady}
             onSaved={() => onEditPayout(false)}
             onCancel={() => onEditPayout(false)}
           />
@@ -518,7 +534,7 @@ function PlatformAct({
       ) : (
         <div className="flex flex-wrap gap-2">
           <Button type="button" size="sm" variant="outline" onClick={() => onEditPayout(true)}>
-            {performer.payment ? "Edit payout" : "Add payout"}
+            {performer.payment ? "Payout details" : "Add payout"}
           </Button>
           {performer.payment ? (
             <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={onRemovePayout}>

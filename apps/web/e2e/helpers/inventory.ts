@@ -42,7 +42,9 @@ export type InventoryItemState = {
   assetId: string;
   serialNumber: string | null;
   typeName: string | null;
-  status: string | null;
+  condition: string | null;
+  lifecycle: "active" | "in_repair" | "retired";
+  openDamageCount: number;
   notes: string | null;
   storageLocationPath: string | null;
   containedInAssetId: string | null;

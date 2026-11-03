@@ -5,6 +5,7 @@ import { memo, useMemo, useState, type Dispatch, type SetStateAction } from "rea
 import { useQuery } from "convex/react";
 import {
   CalendarXIcon,
+  CarSimpleIcon,
   CaretDownIcon,
   ClockIcon,
   GraduationCapIcon,
@@ -21,9 +22,9 @@ import { TypeChip } from "@/components/events/workspace/run-of-show/run-of-show-
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
-import { Input } from "@/components/ui/input";
+import { DraftTextInput } from "@/components/forms/draft-text-input";
 import { UserHoverCard } from "@/components/users/user-hover-card";
-import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
+import { CartEligibleIcon, UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { AssignTraineeDialog } from "@/components/events/crew-staffing/assign-trainee-dialog";
 import { useCrewHoursWindows } from "@/hooks/use-crew-hours-windows";
 import {
@@ -53,9 +54,17 @@ import {
   type ShiftDraftForAssign,
 } from "@/lib/crew-shift-assign";
 import { formatHours } from "@/lib/crew-hours-windows";
+import {
+  cartGroupLines,
+  cartRequirementForDraft,
+  type CartGroupLine,
+  type CartGroupTone,
+} from "@/lib/cart-crew";
+import { cartGroupForBlockType } from "@/lib/format";
 import { countStaffing, isOpenSlot, isTraineeShift } from "@/lib/crew-shift-kinds";
 import { shiftBelongsToBlock, shiftTimesMatchBlock } from "@/lib/event-schedule-draft";
 import { formatDate, formatDateTimeRange } from "@/lib/format";
+import { HASH_ROLE } from "@/lib/hashing";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
@@ -98,6 +107,8 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
   onDeleteUnlinked,
   openSlotNote,
   canAssignTrainees = false,
+  needsCart = false,
+  isHash = false,
 }: {
   eventId: Id<"events">;
   sectionBlocks: TimelineBlockDraft[];
@@ -113,6 +124,10 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
   openSlotNote?: string;
   /** Staff admins assign trainees right here; otherwise it links to Crew applications. */
   canAssignTrainees?: boolean;
+  /** Cart event (`events.needsCart`): setup and strike each need someone cart eligible. */
+  needsCart?: boolean;
+  /** A hash books people: add and remove only, no open slots, roles, custom times or swaps. */
+  isHash?: boolean;
 }) {
   const [assignTraineeOpen, setAssignTraineeOpen] = useState(false);
   const summary = useQuery(
@@ -210,7 +225,6 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
     [responders],
   );
   const staffing = useMemo(() => countStaffing(shifts, backupUserIds), [shifts, backupUserIds]);
-  const stillLooking = staffing.open > 0 || staffing.backup > 0;
 
   const assignedUsers = useMemo(() => {
     const byId = new Map<string, { name: string; windows: SectionForAvailability[] }>();
@@ -224,9 +238,37 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
     }
     return [...byId.entries()].map(([userId, person]) => ({ userId, ...person }));
   }, [shifts]);
+  // Each crew needs someone who can take the golf cart with the gear.
+  const cartEligibleIds = useMemo(
+    () => new Set(userSelectOptions.filter((option) => option.cartEligible).map((option) => option.value)),
+    [userSelectOptions],
+  );
+  const cartEligibleNames = assignedUsers
+    .filter((person) => cartEligibleIds.has(person.userId))
+    .map((person) => person.name);
+  // On a cart event, setup and strike each need one of them (`@arbor/format`).
+  const cart = useMemo(
+    () => cartRequirementForDraft({ needsCart, sectionBlocks, shifts, cartEligibleIds }),
+    [needsCart, sectionBlocks, shifts, cartEligibleIds],
+  );
+  const cartLines = useMemo(() => {
+    const nameById = new Map(assignedUsers.map((person) => [person.userId, person.name]));
+    return cartGroupLines(cart, (userId) => nameById.get(userId) ?? userId);
+  }, [cart, assignedUsers]);
+  const cartToneByGroup = new Map(cartLines.map((line) => [line.group, line.tone]));
+  /** The header note for an unmet setup/strike section, if any. */
+  function sectionCartTone(block: TimelineBlockDraft) {
+    const group = cartGroupForBlockType(block.blockType);
+    const tone = group ? cartToneByGroup.get(group) : undefined;
+    return tone && tone !== "met" ? tone : undefined;
+  }
+  // A cart event without its cart people isn't fully staffed, same as a backup.
+  const stillLooking = staffing.open > 0 || staffing.backup > 0 || !cart.met;
 
-  function updateShift(index: number, next: S) {
-    setShifts((prev) => prev.map((shift, i) => (i === index ? next : shift)));
+  // A patch, not the whole row: a role edit lands as a transition, so a row
+  // object captured before it would undo it.
+  function updateShift(index: number, patch: Partial<ShiftDraftForAssign>) {
+    setShifts((prev) => prev.map((shift, i) => (i === index ? { ...shift, ...patch } : shift)));
   }
 
   function removeShift(index: number) {
@@ -260,7 +302,9 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
       <div className="space-y-2 border bg-muted/20 px-3 py-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <p className="text-sm" data-testid="crew-staffing-summary">
-            {staffing.slots === 0 ? (
+            {isHash ? (
+              <span className="font-medium tabular-nums">{staffing.filled} booked</span>
+            ) : staffing.slots === 0 ? (
               <span className="text-muted-foreground">No crew slots yet</span>
             ) : (
               <>
@@ -274,6 +318,7 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
                 </span>
                 {staffing.open > 0 ? ` · ${staffing.open} open` : null}
                 {staffing.backup > 0 ? ` · ${staffing.backup} on backup` : null}
+                {!cart.met && staffing.open === 0 ? " · needs a cart person" : null}
                 {stillLooking ? null : " · fully staffed"}
               </>
             )}
@@ -316,6 +361,15 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
             </p>
           ) : null}
         </div>
+        {needsCart ? (
+          <CartRequirementLine lines={cartLines} />
+        ) : assignedUsers.length > 0 ? (
+          <p className="text-xs text-muted-foreground" data-testid="crew-cart-eligible">
+            {cartEligibleNames.length > 0
+              ? `Cart eligible: ${cartEligibleNames.join(", ")}`
+              : "No one on this crew is cart eligible."}
+          </p>
+        ) : null}
         {assignedUsers.length > 0 ? (
           <div className="space-y-1">
             {assignedUsers.map((person) => (
@@ -351,10 +405,13 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
             userSelectOptions={userSelectOptions}
             responders={responders}
             responderById={responderById}
+            cartEligibleIds={cartEligibleIds}
+            cartTone={sectionCartTone(block)}
             conflicts={conflicts}
             quarterHours={quarterHours}
             askAvailability={askAvailability}
             readOnly={readOnly}
+            isHash={isHash}
             openSlotNote={openSlotNote}
             onChange={updateShift}
             onRemove={removeShift}
@@ -462,8 +519,9 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
                 quarterHours={quarterHours}
                 askAvailability={askAvailability}
                 readOnly={readOnly}
+                isHash={isHash}
                 openSlotNote={openSlotNote}
-                onChange={(next) => updateShift(index, next)}
+                onChange={(patch) => updateShift(index, patch)}
                 onRemove={() => removeShift(index)}
               />
             ))}
@@ -471,6 +529,35 @@ function CrewStaffingBoardImpl<S extends ShiftDraftForAssign>({
         </Collapsible>
       ) : null}
     </div>
+  );
+}
+
+const CART_TONE_CLASS: Record<CartGroupTone, string> = {
+  met: "text-status-emerald-700 dark:text-status-emerald-300",
+  missing: "text-status-amber-800 dark:text-status-amber-300",
+  waiting: "text-muted-foreground",
+};
+
+/** "Cart: setup ✓ Maya · strike needs someone cart eligible" on a cart event. */
+function CartRequirementLine({ lines }: { lines: CartGroupLine[] }) {
+  return (
+    <p
+      className="flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground"
+      data-testid="crew-cart-requirement"
+    >
+      <CarSimpleIcon className="size-3.5 shrink-0" aria-hidden />
+      <span>Cart:</span>
+      {lines.length === 0 ? (
+        <span>no setup or strike sections yet.</span>
+      ) : (
+        lines.map((line, index) => (
+          <span key={line.group} className={CART_TONE_CLASS[line.tone]}>
+            {index > 0 ? <span className="text-muted-foreground">· </span> : null}
+            {line.text}
+          </span>
+        ))
+      )}
+    </p>
   );
 }
 
@@ -576,10 +663,13 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
   userSelectOptions,
   responders,
   responderById,
+  cartEligibleIds,
+  cartTone,
   conflicts,
   quarterHours,
   askAvailability,
   readOnly,
+  isHash,
   openSlotNote,
   onChange,
   onRemove,
@@ -594,15 +684,22 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
   userSelectOptions: UserSelectOption[];
   responders: AssignableResponder[];
   responderById: Map<string, AssignableResponder>;
+  cartEligibleIds: Set<string>;
+  /** Cart event whose setup/strike group has no one cart eligible yet. */
+  cartTone?: Exclude<CartGroupTone, "met">;
   conflicts: CrewConflict[];
   quarterHours?: QuarterHoursById;
   askAvailability: boolean;
   readOnly: boolean;
+  isHash: boolean;
   openSlotNote?: string;
-  onChange: (index: number, next: S) => void;
+  onChange: (index: number, patch: Partial<ShiftDraftForAssign>) => void;
   onRemove: (index: number) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
+  // A hash refuses an open slot, so the picker's row stays out of the draft until
+  // someone is picked: dismissing it leaves nothing behind to fail a save.
+  const [addingPerson, setAddingPerson] = useState(false);
   const window = sectionWindow(block);
   const label = block.label || `Section ${blockIndex + 1}`;
   const filled = rows.filter(({ shift }) => !isOpenSlot(shift)).length;
@@ -650,6 +747,12 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
     setShifts((prev) => assignPersonToSection(prev, block, person, getBlockRef));
   }
 
+  function assignPicked(userId: string) {
+    if (!userId) return;
+    const option = userSelectOptions.find((entry) => entry.value === userId);
+    assign({ userId, name: option?.label ?? userId });
+  }
+
   function setHeadcount(next: number) {
     setShifts((prev) => setSectionHeadcount(prev, block, next, getBlockRef));
   }
@@ -662,6 +765,21 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
         <p className="text-xs text-muted-foreground tabular-nums">
           {inputRangeLabel(block.startsAt, block.endsAt)}
         </p>
+        {cartTone ? (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 text-xs",
+              cartTone === "missing"
+                ? "rounded-md bg-status-amber-500/15 px-1.5 py-0.5 text-status-amber-800 dark:text-status-amber-300"
+                : "text-muted-foreground",
+            )}
+            title={`Cart event: someone cart eligible needs to be on ${block.blockType}`}
+            data-testid="crew-section-cart-note"
+          >
+            <CarSimpleIcon className="size-3.5" aria-hidden />
+            Needs cart person
+          </span>
+        ) : null}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <span
             className={cn(
@@ -674,9 +792,9 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
             )}
             data-testid="crew-section-count"
           >
-            {filled}/{headcount} filled
+            {isHash ? `${filled} booked` : `${filled}/${headcount} filled`}
           </span>
-          {!readOnly ? (
+          {!readOnly && !isHash ? (
             <div className="flex items-center border" role="group" aria-label={`Crew needed for ${label}`}>
               <Button
                 type="button"
@@ -720,16 +838,34 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
               quarterHours={quarterHours}
               askAvailability={askAvailability}
               readOnly={readOnly}
+              isHash={isHash}
               openSlotNote={openSlotNote}
-              onChange={(next) => onChange(index, next)}
+              onChange={(patch) => onChange(index, patch)}
               onRemove={() => onRemove(index)}
             />
           ))
-        ) : (
+        ) : addingPerson ? null : (
           <p className="text-xs text-muted-foreground">
-            No crew on this section. Use + to say how many people it needs.
+            {isHash ? "Nobody is booked." : "No crew on this section. Use + to say how many people it needs."}
           </p>
         )}
+
+        {addingPerson ? (
+          <div data-testid="crew-add-person-row">
+            <UserSelect
+              value=""
+              defaultOpen
+              onChange={assignPicked}
+              onOpenChange={(open) => {
+                if (!open) setAddingPerson(false);
+              }}
+              options={addOptions}
+              showCartTag
+              emptyLabel="Add person"
+              contentClassName="w-80 max-w-[calc(100vw-2rem)]"
+            />
+          </div>
+        ) : null}
 
         {trainees.length > 0 ? (
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -738,7 +874,22 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
           </p>
         ) : null}
 
-        {!readOnly ? (
+        {readOnly ? null : isHash ? (
+          addingPerson ? null : (
+            <div className="flex justify-end border-t pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto"
+                data-testid="crew-add-person"
+                onClick={() => setAddingPerson(true)}
+              >
+                <PlusIcon />
+                Add person
+              </Button>
+            </div>
+          )
+        ) : (
           <div className="flex flex-wrap items-center gap-1.5 border-t pt-2">
             {askAvailability ? (
               <>
@@ -751,6 +902,7 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
                     candidate={candidate}
                     sectionLabel={label}
                     quarterHours={quarterHours?.get(candidate.userId)}
+                    cartEligible={cartEligibleIds.has(candidate.userId)}
                     onAssign={() => assign({ userId: candidate.userId, name: candidate.name })}
                   />
                 ))}
@@ -769,18 +921,15 @@ function SectionStaffing<S extends ShiftDraftForAssign>({
             <div className="ml-auto min-w-56">
               <UserSelect
                 value=""
-                onChange={(userId) => {
-                  if (!userId) return;
-                  const option = userSelectOptions.find((entry) => entry.value === userId);
-                  assign({ userId, name: option?.label ?? userId });
-                }}
+                onChange={assignPicked}
                 options={addOptions}
+                showCartTag
                 emptyLabel="Add someone…"
                 contentClassName="w-80 max-w-[calc(100vw-2rem)]"
               />
             </div>
           </div>
-        ) : null}
+        )}
       </div>
     </section>
   );
@@ -796,6 +945,7 @@ function ShiftRow<S extends ShiftDraftForAssign>({
   quarterHours,
   askAvailability,
   readOnly,
+  isHash,
   openSlotNote,
   onChange,
   onRemove,
@@ -810,13 +960,15 @@ function ShiftRow<S extends ShiftDraftForAssign>({
   quarterHours?: QuarterHoursById;
   askAvailability: boolean;
   readOnly: boolean;
+  isHash: boolean;
   openSlotNote?: string;
-  onChange: (next: S) => void;
+  onChange: (patch: Partial<ShiftDraftForAssign>) => void;
   onRemove: () => void;
 }) {
   const [editingTime, setEditingTime] = useState(false);
-  const showTimePicker = !block || editingTime;
+  const showTimePicker = !isHash && (!block || editingTime);
   const userId = shift.userId?.trim();
+  const personLocked = isHash && Boolean(userId);
   // The person's own shift time is what matters (it may be custom), still tied
   // to the section so section-level answers apply.
   const blockId = block?.id;
@@ -868,14 +1020,14 @@ function ShiftRow<S extends ShiftDraftForAssign>({
 
   return (
     <div className="space-y-1" data-testid="crew-shift-row">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <div className="min-w-0 flex-1 basis-24">
-          <Input
+      <div className={cn("flex min-w-0 items-center gap-2", !isHash && "flex-wrap")}>
+        <div className={cn("min-w-0 flex-1 basis-24", isHash && "max-w-16 sm:max-w-none")}>
+          <DraftTextInput
             placeholder="Role"
             aria-label="Role"
-            value={shift.role}
-            disabled={readOnly}
-            onChange={(e) => onChange({ ...shift, role: e.target.value })}
+            value={isHash ? HASH_ROLE : shift.role}
+            disabled={readOnly || isHash}
+            onCommit={(role) => onChange({ role })}
           />
         </div>
         <div className="min-w-0 flex-1 basis-40">
@@ -883,7 +1035,6 @@ function ShiftRow<S extends ShiftDraftForAssign>({
             value={shift.userId ?? ""}
             onChange={(value) =>
               onChange({
-                ...shift,
                 userId: value || undefined,
                 personName: value
                   ? (userSelectOptions.find((option) => option.value === value)?.label ?? shift.personName)
@@ -891,11 +1042,14 @@ function ShiftRow<S extends ShiftDraftForAssign>({
               })
             }
             options={options}
-            emptyLabel="Open slot — pick crew"
-            clearable
+            // Someone since off the picker's list still shows as booked.
+            emptyLabel={personLocked ? shift.personName || "Crew" : "Open slot — pick crew"}
+            clearable={!isHash}
+            disabled={personLocked}
+            showCartTag
           />
         </div>
-        {block ? (
+        {block && !isHash ? (
           <Button
             type="button"
             variant="outline"
@@ -920,15 +1074,15 @@ function ShiftRow<S extends ShiftDraftForAssign>({
               endValue={shift.endsAt}
               onChange={({ start, end }) => {
                 if (!block) {
-                  onChange({ ...shift, startsAt: start, endsAt: end });
+                  onChange({ startsAt: start, endsAt: end });
                   return;
                 }
                 if (!start || !end) {
-                  onChange({ ...shift, startsAt: block.startsAt, endsAt: block.endsAt, timesOverridden: false });
+                  onChange({ startsAt: block.startsAt, endsAt: block.endsAt, timesOverridden: false });
                   return;
                 }
                 const timesOverridden = !shiftTimesMatchBlock({ startsAt: start, endsAt: end }, block);
-                onChange({ ...shift, startsAt: start, endsAt: end, timesOverridden });
+                onChange({ startsAt: start, endsAt: end, timesOverridden });
               }}
               placeholder="Shift start and end"
             />
@@ -992,11 +1146,13 @@ function CandidateChip({
   candidate,
   sectionLabel,
   quarterHours,
+  cartEligible,
   onAssign,
 }: {
   candidate: SectionCandidate;
   sectionLabel: string;
   quarterHours?: number;
+  cartEligible: boolean;
   onAssign: () => void;
 }) {
   const booked = candidate.conflicts.length > 0;
@@ -1033,7 +1189,7 @@ function CandidateChip({
           "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs hover:brightness-95",
           booked ? CONFLICT_CLASS : LEVEL_CLASSES[candidate.level],
         )}
-        aria-label={`Add ${candidate.name} to ${sectionLabel}`}
+        aria-label={`Add ${candidate.name}${cartEligible ? " (cart eligible)" : ""} to ${sectionLabel}`}
         data-testid="crew-candidate"
         onClick={onAssign}
       >
@@ -1053,6 +1209,7 @@ function CandidateChip({
         {quarterHours !== undefined ? (
           <span className="tabular-nums opacity-60">· {formatHours(quarterHours)}</span>
         ) : null}
+        {cartEligible ? <CartEligibleIcon className="opacity-75" /> : null}
       </button>
     </UserHoverCard>
   );

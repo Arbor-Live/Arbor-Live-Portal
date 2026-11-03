@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { syncThemeColorMeta } from "@/lib/theme-color";
 
 type Theme = "light" | "dark" | "system";
 
@@ -18,6 +19,7 @@ function applyTheme(theme: Theme) {
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const resolvedDark = theme === "system" ? prefersDark : theme === "dark";
   root.classList.toggle("dark", resolvedDark);
+  syncThemeColorMeta(resolvedDark);
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

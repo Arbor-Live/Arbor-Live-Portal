@@ -8,6 +8,8 @@ import { diffQuoteLines, formatUsdDelta, type QuoteLine } from "@/lib/quote-diff
 import { QuoteChangeList } from "./quote-change-list";
 
 export type QuoteRevisionKind =
+  | "sent"
+  | "changes_requested"
   | "approved"
   | "reapproval_requested"
   | "change_kept_approval"
@@ -26,6 +28,8 @@ export type QuoteRevision = {
 };
 
 const KIND_LABELS: Record<QuoteRevisionKind, string> = {
+  sent: "Sent",
+  changes_requested: "Changes requested",
   approved: "Approved",
   reapproval_requested: "Sent for re-approval",
   change_kept_approval: "Changed, approval kept",
@@ -34,6 +38,8 @@ const KIND_LABELS: Record<QuoteRevisionKind, string> = {
 };
 
 const KIND_TONES: Record<QuoteRevisionKind, Tone> = {
+  sent: "neutral",
+  changes_requested: "amber",
   approved: "emerald",
   reapproval_requested: "amber",
   change_kept_approval: "blue",
@@ -42,9 +48,11 @@ const KIND_TONES: Record<QuoteRevisionKind, Tone> = {
 };
 
 /**
- * A quote's versions, newest first: each approval and every change after one,
- * with its total, the difference from the version before, and what changed.
- * `pending` adds an unsaved (staff) or not-yet-approved (client) row on top.
+ * A quote's back-and-forth, newest first: each version sent, each change the
+ * client asked for and our reply to it, each approval and every change after
+ * one, with its total, the difference from the version before, and what
+ * changed. `pending` adds an unsaved (staff) or not-yet-approved (client) row
+ * on top.
  */
 export function QuoteVersionHistory({
   revisions,
@@ -70,14 +78,24 @@ export function QuoteVersionHistory({
       {ordered.map((revision, index) => {
         const previous = ordered[index + 1];
         const open = openNumber === revision.number;
-        const who =
-          revision.kind === "approved"
-            ? revision.actorName
-              ? `by ${revision.actorName}`
-              : ""
-            : audience === "staff" && revision.actorName
-              ? `by ${revision.actorName}`
-              : "by Arbor Live";
+        const fromClient = revision.kind === "approved" || revision.kind === "changes_requested";
+        const who = fromClient
+          ? revision.actorName
+            ? `by ${revision.actorName}`
+            : ""
+          : audience === "staff" && revision.actorName
+            ? `by ${revision.actorName}`
+            : "by Arbor Live";
+        // Nothing left unanswered once a reply follows it.
+        const openRequest = revision.kind === "changes_requested" && index === 0;
+        const replyTo = revision.kind === "sent" && previous?.kind === "changes_requested" ? previous : null;
+        const changes = previous ? diffQuoteLines(previous.lines, revision.lines) : [];
+        // A request is about the version they were sent, and a reply may leave it as is: only
+        // show a difference when there is one. Changes after an approval always say what moved.
+        const backAndForth = revision.kind === "sent" || revision.kind === "changes_requested";
+        const changed = previous
+          ? !backAndForth || changes.length > 0 || Math.abs(revision.totalUsd - previous.totalUsd) >= 0.005
+          : false;
         return (
           <li key={revision.number} className="px-3 py-2 text-sm" data-testid={`quote-version-${revision.number}`}>
             <div className="flex items-center gap-3">
@@ -87,27 +105,47 @@ export function QuoteVersionHistory({
                   <StatusPill tone={KIND_TONES[revision.kind]} className="h-5">
                     {KIND_LABELS[revision.kind]}
                   </StatusPill>
+                  {openRequest ? (
+                    <StatusPill tone="amber" className="h-5">
+                      {audience === "staff" ? "Needs a reply" : "Waiting on us"}
+                    </StatusPill>
+                  ) : null}
                   <span className="text-xs text-muted-foreground">
                     {formatDate(revision.createdAt)} {who}
                   </span>
                 </div>
-                {revision.note ? <p className="mt-1 text-xs wrap-anywhere">“{revision.note}”</p> : null}
+                {replyTo ? (
+                  <p className="mt-1 text-xs text-muted-foreground">In reply to the changes asked for in v{replyTo.number}</p>
+                ) : null}
+                {revision.note ? (
+                  <p
+                    className={
+                      revision.kind === "changes_requested"
+                        ? "mt-1 border-l-2 border-status-amber-500/60 pl-2 text-xs whitespace-pre-line wrap-anywhere"
+                        : "mt-1 text-xs whitespace-pre-line wrap-anywhere"
+                    }
+                  >
+                    “{revision.note}”
+                  </p>
+                ) : null}
                 {revision.recordedLate ? (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Approved before versions were kept; shows the quote as it stood before the next change.
+                    {revision.kind === "changes_requested"
+                      ? "Asked before versions were kept; shows the quote as it stood when this was recorded."
+                      : "Approved before versions were kept; shows the quote as it stood before the next change."}
                   </p>
                 ) : null}
               </div>
               <div className="shrink-0 text-right">
                 <p className="font-medium tabular-nums">{formatUsd(revision.totalUsd)}</p>
-                {previous ? (
+                {previous && changed ? (
                   <p className="text-xs text-muted-foreground tabular-nums">
                     {formatUsdDelta(revision.totalUsd - previous.totalUsd, formatUsd)}
                   </p>
                 ) : null}
               </div>
             </div>
-            {previous ? (
+            {previous && changed ? (
               <div className="mt-1 pl-11">
                 <Button
                   type="button"
@@ -121,7 +159,7 @@ export function QuoteVersionHistory({
                 </Button>
                 {open ? (
                   <div className="mt-2">
-                    <QuoteChangeList changes={diffQuoteLines(previous.lines, revision.lines)} />
+                    <QuoteChangeList changes={changes} />
                   </div>
                 ) : null}
               </div>

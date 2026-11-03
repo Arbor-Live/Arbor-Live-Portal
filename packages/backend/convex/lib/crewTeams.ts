@@ -36,3 +36,11 @@ export function eventMatchesUserTeams(
 export function isCrewedEventType(eventType: string | undefined): boolean {
   return Boolean(eventType && CREWED_EVENT_TYPES.has(eventType));
 }
+
+/** Event needs that put crew on site. Trivia, Design, Promotion and Operations don't. */
+const CREW_EVENT_TEAMS = new Set(["Sound", "Lighting", "Photography", "Videography"]);
+
+/** True when the event asks for at least one on-site crew need. */
+export function eventNeedsCrew(eventTeams: string[] | undefined): boolean {
+  return Boolean(eventTeams?.some((team) => CREW_EVENT_TEAMS.has(normalizeTeamForMatch(team))));
+}

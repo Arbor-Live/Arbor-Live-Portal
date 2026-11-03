@@ -2,6 +2,7 @@ import { pacificDateKey, PORTAL_TIMEZONE } from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { normalizeEventStatus } from "./eventStatus";
+import { isHashEvent } from "./hashEvent";
 
 export const EVENT_TIMEZONE = PORTAL_TIMEZONE;
 export const MAX_BOOKING_DAY_LOAD_RANGE_DAYS = 93;
@@ -127,7 +128,7 @@ export async function buildPublicBookingDayLoad(
     .take(500);
 
   for (const event of events) {
-    if (normalizeEventStatus(event.status) === "cancelled") continue;
+    if (isHashEvent(event) || normalizeEventStatus(event.status) === "cancelled") continue;
     const dayKey = toPacificDateKey(event.startAt);
     if (!isDateKeyInRange(dayKey, rangeStart, rangeEnd)) continue;
     counts.set(dayKey, (counts.get(dayKey) ?? 0) + 1);

@@ -17,12 +17,16 @@ import { notify } from "@/lib/notify";
 import { formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
-import { resolvePayoutDefaults } from "@/lib/band-payout-defaults";
-import { eventBandOnboardingInviteSchema, eventBandPayoutFieldsSchema } from "@/lib/validations/bands";
+import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
+import { eventBandOnboardingInviteSchema } from "@/lib/validations/bands";
+import { describeBookingPrice } from "@/components/events/lineup/booking-price";
 
-/** Forms used from the Lineup: book an existing artist, invite one, and set a payout. */
+/**
+ * Forms used from the Lineup: book an existing artist, invite one, and add or
+ * refresh a payout. A payout's amount is never typed: it is the booking's
+ * price (set on the position, or by the quote that bills it).
+ */
 
-type PricingMode = "per_member_hourly" | "fixed_total";
 export type ParticipationRole = "headliner" | "support" | "other";
 
 export type PerformerRow = NonNullable<
@@ -31,65 +35,17 @@ export type PerformerRow = NonNullable<
 
 type PaymentFields = NonNullable<PerformerRow["payment"]>;
 
-type BandCatalogRow = {
-  organizationId: string;
-  name?: string;
-  displayName?: string;
-  performerHourlyRateUsd?: number;
-  memberCount?: number;
-  bandMembers?: string[];
-};
-
+/** An act a quote bills that isn't on the Lineup yet. */
 export type InvoiceArtistSuggestion = {
   organizationId: string;
   label: string;
-  rateUsd?: number;
-  performanceHours?: number;
-  memberCount?: number;
 };
-
-const PRICING_OPTIONS = [
-  { value: "per_member_hourly", label: "Per member per hour" },
-  { value: "fixed_total", label: "Fixed total" },
-];
 
 const ROLE_OPTIONS = [
   { value: "headliner", label: "Headliner" },
   { value: "support", label: "Support" },
   { value: "other", label: "Other" },
 ];
-
-function bandProfileDefaults(bands: BandCatalogRow[] | undefined, organizationId: string) {
-  const band = bands?.find((row) => row.organizationId === organizationId);
-  if (!band) return null;
-  const memberCount =
-    typeof band.memberCount === "number" && band.memberCount > 0
-      ? band.memberCount
-      : (band.bandMembers?.length ?? 0);
-  return {
-    organizationId,
-    performerHourlyRateUsd: band.performerHourlyRateUsd ?? 0,
-    memberCount,
-  };
-}
-
-function applyPayoutDefaultsForOrg(
-  bands: BandCatalogRow[] | undefined,
-  organizationId: string,
-  invoiceLine?: InvoiceArtistSuggestion | null,
-) {
-  return resolvePayoutDefaults({
-    invoiceLine: invoiceLine
-      ? {
-          organizationId: invoiceLine.organizationId,
-          rateUsd: invoiceLine.rateUsd,
-          performanceHours: invoiceLine.performanceHours,
-          memberCount: invoiceLine.memberCount,
-        }
-      : null,
-    bandProfile: bandProfileDefaults(bands, organizationId),
-  });
-}
 
 export function InviteBandForm({
   eventId,
@@ -113,23 +69,9 @@ export function InviteBandForm({
   const [email, setEmail] = useState("");
   const [artistName, setArtistName] = useState("");
   const [role, setRole] = useState<ParticipationRole>("headliner");
-  const [pricingMode, setPricingMode] = useState<PricingMode>("per_member_hourly");
-  const [ratePerMemberPerHourUsd, setRatePerMemberPerHourUsd] = useState("150");
-  const [performanceHours, setPerformanceHours] = useState("1");
-  const [memberCount, setMemberCount] = useState("4");
-  const [fixedTotalUsd, setFixedTotalUsd] = useState("0");
   const [busy, setBusy] = useState(false);
 
-  const formSignature = JSON.stringify({
-    email,
-    artistName,
-    role,
-    pricingMode,
-    ratePerMemberPerHourUsd,
-    performanceHours,
-    memberCount,
-    fixedTotalUsd,
-  });
+  const formSignature = JSON.stringify({ email, artistName, role });
   // Sent values become the new baseline: a delivered invite is no longer uncommitted.
   const [baseline, setBaseline] = useState(formSignature);
   const isDirty = formSignature !== baseline;
@@ -138,26 +80,8 @@ export function InviteBandForm({
   }, [isDirty, onDirtyChange]);
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
-  const computedTotal = useMemo(() => {
-    if (pricingMode === "fixed_total") return Number(fixedTotalUsd || "0");
-    return (
-      Number(ratePerMemberPerHourUsd || "0") *
-      Number(performanceHours || "0") *
-      Number(memberCount || "0")
-    );
-  }, [pricingMode, ratePerMemberPerHourUsd, performanceHours, memberCount, fixedTotalUsd]);
-
   async function onSubmit() {
-    const parsed = eventBandOnboardingInviteSchema.safeParse({
-      email,
-      artistName,
-      role,
-      pricingMode,
-      ratePerMemberPerHourUsd,
-      performanceHours,
-      memberCount,
-      fixedTotalUsd,
-    });
+    const parsed = eventBandOnboardingInviteSchema.safeParse({ email, artistName, role });
     if (!parsed.success) {
       notify.error(parsed.error.issues[0]?.message ?? "Check the form and try again.");
       return;
@@ -170,16 +94,6 @@ export function InviteBandForm({
         email: parsed.data.email,
         artistName: parsed.data.artistName,
         role: parsed.data.role,
-        pricingMode: parsed.data.pricingMode,
-        ratePerMemberPerHourUsd:
-          parsed.data.pricingMode === "per_member_hourly"
-            ? parsed.data.ratePerMemberPerHourUsd
-            : undefined,
-        performanceHours: parsed.data.performanceHours,
-        memberCount:
-          parsed.data.pricingMode === "per_member_hourly" ? parsed.data.memberCount : undefined,
-        totalUsd:
-          parsed.data.pricingMode === "fixed_total" ? parsed.data.fixedTotalUsd : computedTotal,
       });
       notify.success(`Invite sent to ${parsed.data.email}.`);
       setBaseline(formSignature);
@@ -226,68 +140,9 @@ export function InviteBandForm({
             emptyLabel="Role"
           />
         </div>
-        <div className="space-y-1">
-          <Label>Pricing mode</Label>
-          <SearchableSelect
-            value={pricingMode}
-            onChange={(value) => setPricingMode(value as PricingMode)}
-            options={PRICING_OPTIONS}
-            placeholder="Pricing mode"
-            emptyLabel="Select pricing mode"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="invite-band-performance-hours">Performance length (hours)</Label>
-          <Input
-            id="invite-band-performance-hours"
-            type="number"
-            min="0"
-            step="0.25"
-            value={performanceHours}
-            onChange={(e) => setPerformanceHours(e.target.value)}
-          />
-        </div>
-        {pricingMode === "per_member_hourly" ? (
-          <>
-            <div className="space-y-1">
-              <Label htmlFor="invite-band-rate">Rate per member per hour (USD)</Label>
-              <Input
-                id="invite-band-rate"
-                type="number"
-                min="0"
-                step="0.01"
-                value={ratePerMemberPerHourUsd}
-                onChange={(e) => setRatePerMemberPerHourUsd(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="invite-band-members">Member count</Label>
-              <Input
-                id="invite-band-members"
-                type="number"
-                min="1"
-                step="1"
-                value={memberCount}
-                onChange={(e) => setMemberCount(e.target.value)}
-              />
-            </div>
-          </>
-        ) : (
-          <div className="space-y-1">
-            <Label htmlFor="invite-band-total">Total payout (USD)</Label>
-            <Input
-              id="invite-band-total"
-              type="number"
-              min="0"
-              step="0.01"
-              value={fixedTotalUsd}
-              onChange={(e) => setFixedTotalUsd(e.target.value)}
-            />
-          </div>
-        )}
-        <div className="rounded-md border px-3 py-2 text-sm md:col-span-2">
-          <span className="font-medium">Computed total:</span> {formatUsd(computedTotal)}
-        </div>
+        <p className="text-sm text-muted-foreground md:col-span-2">
+          Price the act on its position once it&apos;s on the bill; its payout follows that price.
+        </p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="button" onClick={() => void onSubmit()} disabled={busy}>
@@ -420,6 +275,11 @@ export function AddBandForm({
   );
 }
 
+/**
+ * Add or refresh an act's payout: who it goes to and where it stands. The
+ * amount is read-only here; it pays the booking's price, which is set on the
+ * act's position on the Lineup (or by the quote that bills it).
+ */
 export function EventBandPaymentForm({
   eventId,
   organizationId: lockedOrganizationId,
@@ -427,8 +287,6 @@ export function EventBandPaymentForm({
   payment,
   organizationLocked,
   excludedOrganizationIds,
-  invoiceLine = null,
-  invoiceDefaultsReady = true,
   embedded = false,
   showPayee = true,
   showStatus = true,
@@ -440,12 +298,25 @@ export function EventBandPaymentForm({
   organizationId?: string;
   /** Omitted when editing from the payout queue, where the participation role isn't known. */
   role?: ParticipationRole;
-  payment: PaymentFields | null;
+  payment: Pick<
+    PaymentFields,
+    | "_id"
+    | "pricingMode"
+    | "ratePerMemberPerHourUsd"
+    | "performanceHours"
+    | "memberCount"
+    | "totalUsd"
+    | "status"
+    | "statusLabel"
+    | "designatedPayeeName"
+    | "designatedPayeeEmail"
+    | "designatedPayeeMailingAddress"
+    | "designatedPayeePayoutMethod"
+    | "payeeComplete"
+    | "eventEnded"
+  > | null;
   organizationLocked?: boolean;
   excludedOrganizationIds: string[];
-  invoiceLine?: InvoiceArtistSuggestion | null;
-  /** False while the event invoice query is still loading, so the resolved defaults don't settle early. */
-  invoiceDefaultsReady?: boolean;
   /** Inside a dialog or side panel: no card border or heading. */
   embedded?: boolean;
   /** Hide the read-only payee block where the surrounding panel already shows payee details. */
@@ -464,107 +335,29 @@ export function EventBandPaymentForm({
   const resolvedOrgId = organizationLocked
     ? (lockedOrganizationId ?? "")
     : organizationId;
+  const [busy, setBusy] = useState(false);
 
   const orgPayee = useQuery(
     api.bandPayments.getBandPayeeForOrganization,
     resolvedOrgId ? { organizationId: resolvedOrgId } : "skip",
   );
 
-  const seedDefaults = applyPayoutDefaultsForOrg(
-    bands as BandCatalogRow[] | undefined,
-    lockedOrganizationId ?? "",
-    invoiceLine,
-  );
-
-  const [pricingMode, setPricingMode] = useState<PricingMode>(
-    payment?.pricingMode ?? seedDefaults.pricingMode,
-  );
-  const [ratePerMemberPerHourUsd, setRatePerMemberPerHourUsd] = useState(
-    payment
-      ? String(payment.ratePerMemberPerHourUsd ?? 0)
-      : seedDefaults.ratePerMemberPerHourUsd,
-  );
-  const [performanceHours, setPerformanceHours] = useState(
-    String(payment?.performanceHours ?? seedDefaults.performanceHours),
-  );
-  const [memberCount, setMemberCount] = useState(
-    String(payment?.memberCount ?? seedDefaults.memberCount),
-  );
-  const [fixedTotalUsd, setFixedTotalUsd] = useState(String(payment?.totalUsd ?? 0));
-  const [busy, setBusy] = useState(false);
-  const [defaultsReadyForOrg, setDefaultsReadyForOrg] = useState(
-    Boolean(payment) || !lockedOrganizationId,
-  );
-
-  if (payment === null && bands && resolvedOrgId && !defaultsReadyForOrg && invoiceDefaultsReady) {
-    const next = applyPayoutDefaultsForOrg(
-      bands as BandCatalogRow[] | undefined,
-      resolvedOrgId,
-      invoiceLine,
-    );
-    setPricingMode(next.pricingMode);
-    setRatePerMemberPerHourUsd(next.ratePerMemberPerHourUsd);
-    setPerformanceHours(next.performanceHours);
-    setMemberCount(next.memberCount);
-    setDefaultsReadyForOrg(true);
-  }
-
   const bandOptions = useMemo(
     () => artistSelectOptions(bands, { excludeOrganizationIds: excludedOrganizationIds }),
     [bands, excludedOrganizationIds],
   );
 
-  const computedTotal = useMemo(() => {
-    if (pricingMode === "fixed_total") return Number(fixedTotalUsd || "0");
-    return (
-      Number(ratePerMemberPerHourUsd || "0") *
-      Number(performanceHours || "0") *
-      Number(memberCount || "0")
-    );
-  }, [pricingMode, ratePerMemberPerHourUsd, performanceHours, memberCount, fixedTotalUsd]);
-
   const payeeComplete = orgPayee?.payeeComplete ?? payment?.payeeComplete ?? false;
+  const paid = payment?.status === "paid";
 
   async function onSave() {
     if (!resolvedOrgId) {
       notify.error("Select an artist.");
       return;
     }
-    const payoutParsed = eventBandPayoutFieldsSchema.safeParse({
-      pricingMode,
-      ratePerMemberPerHourUsd,
-      performanceHours,
-      // Member count only drives per-member pricing; satisfy the schema's
-      // minimum in fixed-total mode when the artist has none on file.
-      memberCount: pricingMode === "per_member_hourly" ? memberCount : memberCount || "1",
-      fixedTotalUsd,
-    });
-    if (!payoutParsed.success) {
-      notify.error(payoutParsed.error.issues[0]?.message ?? "Check the form and try again.");
-      return;
-    }
     setBusy(true);
     try {
-      await upsert({
-        eventId,
-        paymentId: payment?._id,
-        organizationId: resolvedOrgId,
-        role,
-        pricingMode: payoutParsed.data.pricingMode,
-        ratePerMemberPerHourUsd:
-          payoutParsed.data.pricingMode === "per_member_hourly"
-            ? payoutParsed.data.ratePerMemberPerHourUsd
-            : undefined,
-        performanceHours: payoutParsed.data.performanceHours,
-        memberCount:
-          payoutParsed.data.pricingMode === "per_member_hourly"
-            ? payoutParsed.data.memberCount
-            : undefined,
-        totalUsd:
-          payoutParsed.data.pricingMode === "fixed_total"
-            ? payoutParsed.data.fixedTotalUsd
-            : computedTotal,
-      });
+      await upsert({ eventId, paymentId: payment?._id, organizationId: resolvedOrgId, role });
       onSaved();
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
@@ -579,11 +372,14 @@ export function EventBandPaymentForm({
     payment?.designatedPayeeMailingAddress ?? orgPayee?.designatedPayeeMailingAddress ?? "";
   const displayPayoutMethod =
     payment?.designatedPayeePayoutMethod ?? orgPayee?.designatedPayeePayoutMethod;
+  const lineupHref = resolvedOrgId
+    ? `${getEventEditorTabPath(eventId, "artists")}?act=${encodeURIComponent(resolvedOrgId)}`
+    : getEventEditorTabPath(eventId, "artists");
 
   return (
     <div className={embedded ? "space-y-4" : "space-y-4 rounded-md border bg-muted/10 p-4"}>
       {embedded ? null : (
-        <p className="text-sm font-medium">{payment ? "Edit payout" : "Add payout"}</p>
+        <p className="text-sm font-medium">{payment ? "Payout" : "Add payout"}</p>
       )}
 
       {payment && showStatus ? (
@@ -622,21 +418,7 @@ export function EventBandPaymentForm({
             <Label>Artist</Label>
             <ArtistSelect
               value={organizationId}
-              onChange={(value) => {
-                setOrganizationId(value);
-                if (!payment) {
-                  const next = applyPayoutDefaultsForOrg(
-                    bands as BandCatalogRow[] | undefined,
-                    value,
-                    invoiceLine?.organizationId === value ? invoiceLine : null,
-                  );
-                  setPricingMode(next.pricingMode);
-                  setRatePerMemberPerHourUsd(next.ratePerMemberPerHourUsd);
-                  setPerformanceHours(next.performanceHours);
-                  setMemberCount(next.memberCount);
-                  setDefaultsReadyForOrg(true);
-                }
-              }}
+              onChange={setOrganizationId}
               options={bandOptions}
               placeholder="Search artists…"
               emptyLabel="Select artist"
@@ -645,77 +427,27 @@ export function EventBandPaymentForm({
           </div>
         ) : null}
 
-        <div className="space-y-1">
-          <Label>Pricing mode</Label>
-          <SearchableSelect
-            value={pricingMode}
-            onChange={(value) => setPricingMode(value as PricingMode)}
-            options={PRICING_OPTIONS}
-            placeholder="Pricing mode"
-            emptyLabel="Select pricing mode"
-          />
-        </div>
-
-        <div className="space-y-1">
-          <Label htmlFor="band-payment-performance-hours">Performance length (hours)</Label>
-          <Input
-            id="band-payment-performance-hours"
-            type="number"
-            min="0"
-            step="0.25"
-            value={performanceHours}
-            onChange={(e) => setPerformanceHours(e.target.value)}
-            disabled={payment?.status === "paid"}
-          />
-        </div>
-
-        {pricingMode === "per_member_hourly" ? (
-          <>
-            <div className="space-y-1">
-              <Label htmlFor="band-payment-rate">Rate per member per hour (USD)</Label>
-              <Input
-                id="band-payment-rate"
-                type="number"
-                min="0"
-                step="0.01"
-                value={ratePerMemberPerHourUsd}
-                onChange={(e) => setRatePerMemberPerHourUsd(e.target.value)}
-                disabled={payment?.status === "paid"}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="band-payment-members">Member count</Label>
-              <Input
-                id="band-payment-members"
-                type="number"
-                min="1"
-                step="1"
-                value={memberCount}
-                onChange={(e) => setMemberCount(e.target.value)}
-                disabled={payment?.status === "paid"}
-              />
-            </div>
-          </>
-        ) : (
-          <div className="space-y-1 md:col-span-2">
-            <Label htmlFor="band-payment-total">Total payout (USD)</Label>
-            <Input
-              id="band-payment-total"
-              type="number"
-              min="0"
-              step="0.01"
-              value={fixedTotalUsd}
-              onChange={(e) => setFixedTotalUsd(e.target.value)}
-              disabled={payment?.status === "paid"}
-            />
-          </div>
-        )}
-
-        {pricingMode === "per_member_hourly" ? (
-          <p className="text-sm text-muted-foreground md:col-span-2">
-            Computed total: <span className="font-medium text-foreground">{formatUsd(computedTotal)}</span>
+        <div className="space-y-1 md:col-span-2" data-testid="payout-amount">
+          <Label>Amount</Label>
+          {payment ? (
+            <p className="text-sm">
+              <span className="font-medium tabular-nums">{formatUsd(payment.totalUsd)}</span>
+              {describeBookingPrice(payment) ? (
+                <span className="text-muted-foreground"> · {describeBookingPrice(payment)}</span>
+              ) : null}
+            </p>
+          ) : null}
+          <p className="text-xs text-muted-foreground">
+            {paid
+              ? "Paid, so it stays as it was paid."
+              : "Pays the act's booking price, which the quote bills too. "}
+            {paid ? null : (
+              <Link href={lineupHref} className="text-primary underline-offset-4 hover:underline">
+                Change the price on the Lineup
+              </Link>
+            )}
           </p>
-        ) : null}
+        </div>
 
         {showPayee ? (
           <div className="space-y-2 md:col-span-2">
@@ -757,18 +489,16 @@ export function EventBandPaymentForm({
         ) : null}
       </div>
 
-
       <div className={cn("flex flex-wrap gap-2", actionsClassName)}>
-        {payment?.status !== "paid" ? (
+        {!paid ? (
           <Button type="button" onClick={() => void onSave()} disabled={busy}>
-            {payment ? "Save payout" : "Save payout"}
+            {payment ? "Save payout" : "Add payout"}
           </Button>
         ) : null}
         <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
+          {payment ? "Close" : "Cancel"}
         </Button>
       </div>
     </div>
   );
 }
-

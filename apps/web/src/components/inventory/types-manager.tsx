@@ -21,9 +21,11 @@ import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import { toCategoryOptions } from "./constants";
 import {
+  EMPTY_UNIT_ROLLUP,
   formatUnitCount,
   TYPE_VISIBILITY_LABELS,
   type InventoryTypeRow,
+  type TypeUnitRollup,
   type TypeVisibility,
 } from "./type-form";
 import { TypeSettingsDialog, type TypeSettingsTab } from "./type-settings-dialog";
@@ -123,7 +125,8 @@ export function TypesManager() {
     [capabilities],
   );
   const unitCounts = useMemo(
-    () => (units ? new Map<string, number>(units.counts.map((entry) => [entry.typeId, entry.units])) : undefined),
+    () =>
+      units ? new Map<string, TypeUnitRollup>(units.counts.map(({ typeId, ...rollup }) => [typeId, rollup])) : undefined,
     [units],
   );
   const activeCapabilities = useMemo(() => (capabilities ?? []).filter((entry) => entry.active), [capabilities]);
@@ -179,7 +182,7 @@ export function TypesManager() {
 
   const filterCount = (search.trim() ? 1 : 0) + Object.keys(applied).length;
   const selectedIds = rows.filter((row) => selected.has(row._id)).map((row) => row._id);
-  const shownUnits = unitCounts ? rows.reduce((sum, row) => sum + (unitCounts.get(row._id) ?? 0), 0) : undefined;
+  const shownUnits = unitCounts ? rows.reduce((sum, row) => sum + (unitCounts.get(row._id)?.units ?? 0), 0) : undefined;
   const listedCount = rows.filter((row) => row.publicListing).length;
   const profileCount = rows.filter((row) => row.publicListing && row.publicProfile).length;
 
@@ -277,7 +280,7 @@ export function TypesManager() {
         meta={
           <>
             <MetaItem icon={PackageIcon}>
-              {unitCounts ? plural([...unitCounts.values()].reduce((sum, n) => sum + n, 0), "unit") : "Counting units…"}
+              {unitCounts ? plural([...unitCounts.values()].reduce((sum, rollup) => sum + rollup.units, 0), "unit") : "Counting units…"}
               {units?.truncated ? "+" : ""} in inventory
             </MetaItem>
             <MetaItem icon={SlidersHorizontalIcon} onClick={() => openSettings("categories")}>
@@ -418,7 +421,7 @@ export function TypesManager() {
       <TypeSheet
         open={panelIsNew || panelRow !== null}
         row={panelIsNew ? null : panelRow}
-        unitCount={panelRow ? (unitCounts ? (unitCounts.get(panelRow._id) ?? 0) : undefined) : undefined}
+        unitRollup={panelRow && unitCounts ? (unitCounts.get(panelRow._id) ?? EMPTY_UNIT_ROLLUP) : undefined}
         unitsTruncated={Boolean(units?.truncated)}
         categoryOptions={categoryOptions}
         capabilityOptions={activeCapabilities}

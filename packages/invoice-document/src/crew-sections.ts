@@ -3,7 +3,7 @@
  * portal and the PDF quote.
  *
  * The invoice editor saves one crew line per shift, labeled
- * `[Day N — ][Section — ]Role (Person[ (Lead)])` (see
+ * `[Day N — ][Section — ]Role (Person[ (Lead)])[ · OT| · OT after 8 hrs| · DT after 8 hrs]` (see
  * `invoice-crew-from-event.ts`), plus hand-entered `people × hours` rows. Read
  * as a flat list that's dense; this module regroups the same lines so a client
  * can see who works when. It never changes what is billed: every group total
@@ -45,12 +45,17 @@ export type CrewLine = {
   rateUsd: number;
   amountUsd: number;
   notes?: string;
+  /** `OT` / `DT` when the line bills at an overtime multiple (from the label's ` · OT` tag). */
+  rateTag?: string;
+  /** The same people's hours past a full day (` · OT after 8 hrs`), not more people. */
+  pastRegularDay?: string;
 };
 
 const SEPARATOR = " — ";
 const OPEN_SLOT = "Open slot";
 const UNNAMED_ASSIGNEE = "Assigned crew";
 const DAY_PREFIX = /^Day \d+$/;
+const RATE_TAG = / · (OT|DT)(?: (after \d+(?:\.\d+)? hrs))?$/;
 
 /** Splits `Role (Inner (Lead))` into `Role` and `Inner (Lead)` (balanced parens). */
 function splitTrailingParens(text: string): { head: string; inner?: string } {
@@ -88,13 +93,19 @@ function positive(value: number | undefined) {
 export function parseCrewLine(line: CrewLineInput): CrewLine {
   const people = positive(line.memberCount);
   const hoursEach = positive(line.performanceHours);
-  const base = {
+  const base: Pick<CrewLine, "id" | "rateUsd" | "amountUsd" | "notes" | "rateTag" | "pastRegularDay"> = {
     id: line.id,
     rateUsd: line.rateUsd,
     amountUsd: line.amountUsd,
     notes: line.notes?.trim() || undefined,
   };
-  const segments = line.label.split(SEPARATOR).map((segment) => segment.trim());
+  const tagMatch = RATE_TAG.exec(line.label);
+  if (tagMatch) {
+    base.rateTag = tagMatch[1];
+    if (tagMatch[2]) base.pastRegularDay = tagMatch[2];
+  }
+  const label = tagMatch ? line.label.replace(RATE_TAG, "") : line.label;
+  const segments = label.split(SEPARATOR).map((segment) => segment.trim());
   const day = segments.length > 1 && DAY_PREFIX.test(segments[0]!) ? segments.shift() : undefined;
   if (line.crewSource === "manual" || (people && people > 1)) {
     return {
@@ -142,10 +153,15 @@ export function sumCrewAmountUsd(lines: Array<Pick<CrewLine, "amountUsd">>) {
   return lines.reduce((sum, line) => sum + toCents(line.amountUsd), 0) / 100;
 }
 
-/** `4 people × 3 hrs`, or `2 people × 3 hrs + 1 person × 4.5 hrs` when hours differ. */
-export function describeHeadcount(lines: Array<Pick<CrewLine, "people" | "hoursEach">>) {
+/**
+ * `4 people × 3 hrs`, or `2 people × 3 hrs + 1 person × 4.5 hrs` when hours
+ * differ. Hours past a full day are the same people working on, so they're
+ * left out of the headcount.
+ */
+export function describeHeadcount(lines: Array<Pick<CrewLine, "people" | "hoursEach" | "pastRegularDay">>) {
   const peopleByHours = new Map<number, number>();
   for (const line of lines) {
+    if (line.pastRegularDay) continue;
     peopleByHours.set(line.hoursEach, (peopleByHours.get(line.hoursEach) ?? 0) + line.people);
   }
   return [...peopleByHours.entries()]
@@ -154,8 +170,8 @@ export function describeHeadcount(lines: Array<Pick<CrewLine, "people" | "hoursE
     .join(" + ");
 }
 
-export function headcount(lines: Array<Pick<CrewLine, "people">>) {
-  return lines.reduce((sum, line) => sum + line.people, 0);
+export function headcount(lines: Array<Pick<CrewLine, "people" | "pastRegularDay">>) {
+  return lines.reduce((sum, line) => sum + (line.pastRegularDay ? 0 : line.people), 0);
 }
 
 export function formatPeople(count: number) {
@@ -173,10 +189,13 @@ export function formatCrewRate(rateUsd: number) {
   return `${Number.isInteger(rateUsd) ? usd.replace(/\.00$/, "") : usd}/hr`;
 }
 
-/** `3 hrs × $35/hr`, or `2 × 1.5 hrs × $22/hr` on a people × hours row. */
-export function describeHoursTimesRate(line: Pick<CrewLine, "people" | "hoursEach" | "rateUsd">) {
+/** `3 hrs × $35/hr`, `2 × 1.5 hrs × $22/hr` on a people × hours row, `… × $30/hr OT [after 8 hrs]` at an overtime multiple. */
+export function describeHoursTimesRate(
+  line: Pick<CrewLine, "people" | "hoursEach" | "rateUsd" | "rateTag" | "pastRegularDay">,
+) {
   const people = line.people > 1 ? `${line.people} × ` : "";
-  return `${people}${formatHours(line.hoursEach)} × ${formatCrewRate(line.rateUsd)}`;
+  const tag = line.rateTag ? ` ${line.rateTag}${line.pastRegularDay ? ` ${line.pastRegularDay}` : ""}` : "";
+  return `${people}${formatHours(line.hoursEach)} × ${formatCrewRate(line.rateUsd)}${tag}`;
 }
 
 export function crewLinePerson(line: CrewLine) {

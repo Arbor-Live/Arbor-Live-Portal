@@ -67,7 +67,7 @@ export function BandPublicListingFields() {
 }
 
 /** Booking and contact info for Arbor staff — not shown on the public site. */
-export function BandArborPrivateFields() {
+export function BandArborPrivateFields({ rateReadOnly = false }: { rateReadOnly?: boolean } = {}) {
   return (
     <>
       <div className="grid gap-2 md:grid-cols-2">
@@ -78,6 +78,8 @@ export function BandArborPrivateFields() {
           name="performerHourlyRateUsd"
           label="Rate per person per hour (USD)"
           type="number"
+          disabled={rateReadOnly}
+          description={rateReadOnly ? "Only your artist admin can change the rate." : undefined}
         />
       </div>
     </>

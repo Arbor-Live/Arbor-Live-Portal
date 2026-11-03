@@ -1,7 +1,8 @@
 import { Migrations } from "@convex-dev/migrations";
 import { components, internal } from "./_generated/api";
 import type { DataModel, Doc, Id } from "./_generated/dataModel";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, type MutationCtx } from "./_generated/server";
+import { syncInviteNotionChecklist } from "./email/invitations";
 import { findAuthUserById } from "./lib/auth";
 import { resolveContactNameParts } from "./lib/contactName";
 import { resolveGlobalRoleForUser } from "./lib/globalRole";
@@ -27,6 +28,13 @@ import { syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
 import { ensureActPosition } from "./lib/actPositions";
 import { artistTypesOf } from "./lib/artistNeedTypes";
 import { syncMultiDayGroupForInvoice } from "./lib/eventGroups";
+import { buildItemSearchText, listPreviousAssetIds } from "./lib/inventoryLifecycle";
+import { ensureChangeRequestRevision } from "./lib/invoiceRevisions";
+import { convertLegacyResponseRow } from "./lib/crewNightConversion";
+import { uniqueBandMemberNames } from "./lib/bandMembers";
+import { decideBookingPriceBackfill } from "./lib/bookingPrice";
+import { payPayoutAtPrice, syncEventBandsCost } from "./lib/bookingPriceSync";
+import { listAdditionalInvoiceIds } from "./lib/eventInvoiceLinks";
 
 /**
  * Official @convex-dev/migrations runner.
@@ -487,6 +495,17 @@ export const backfillOrgArtistLinks = migrations.define({
   },
 });
 
+/** Drop repeated band member names (a contact listed twice inflated headcount). */
+export const dedupeBandMembers = migrations.define({
+  table: "organizationProfiles",
+  migrateOne: async (_ctx, profile) => {
+    if (!profile.bandMembers?.length) return;
+    const unique = uniqueBandMemberNames(profile.bandMembers);
+    if (unique.length === profile.bandMembers.length) return;
+    return { bandMembers: unique, updatedAt: Date.now() };
+  },
+});
+
 /** Flatten fixed band application link fields into the flexible artistLinks array. */
 export const backfillBandApplicationArtistLinks = migrations.define({
   table: "bandApplications",
@@ -762,6 +781,24 @@ export const unsetLegacyPendingInviteEmailFlags = migrations.define({
   },
 });
 
+/**
+ * Crew invites already in flight get the manual Notion checklist. Only Arbor
+ * crew invites carry a rate or the `crew` kind; crew application invites set
+ * no `inviteKind`.
+ */
+export async function backfillInviteNotionChecklist(
+  ctx: MutationCtx,
+  row: Doc<"pendingUserInvites">,
+) {
+  if (row.rateMode === undefined && row.inviteKind !== "crew") return;
+  await syncInviteNotionChecklist(ctx, row.invitationId, true);
+}
+
+export const backfillInviteNotionChecklists = migrations.define({
+  table: "pendingUserInvites",
+  migrateOne: backfillInviteNotionChecklist,
+});
+
 /** Event groups (#341), step 2: every existing series is a recurring group. */
 export const backfillEventGroupKinds = migrations.define({
   table: "eventSeries",
@@ -828,6 +865,169 @@ export const keepPaymentOpenForApprovedQuotes = migrations.define({
 });
 
 /**
+ * Inventory lifecycle: the free-text `status` becomes `lifecycle` (the values
+ * damage reports wrote) or a `condition` note (anything typed or imported),
+ * and every item gets its open-damage count and search text.
+ */
+export const migrateInventoryItemLifecycle = migrations.define({
+  table: "inventoryItems",
+  migrateOne: async (ctx, item) => {
+    const patch: Partial<Doc<"inventoryItems">> = {};
+    const status = item.status?.trim();
+    if (item.status !== undefined) {
+      patch.status = undefined;
+      const key = status?.toLowerCase().replace(/[\s-]+/g, "_");
+      if (key === "needs_repair" && !item.lifecycle) {
+        patch.lifecycle = "in_repair";
+      } else if (key === "decommissioned" && !item.lifecycle) {
+        patch.lifecycle = "retired";
+        patch.retirement = {
+          reason: "decommissioned",
+          retiredAt: item.updatedAt,
+          retiredByUserId: "migration",
+        };
+      } else if (status && key !== "functional" && !item.condition) {
+        patch.condition = status;
+      }
+    }
+
+    const reports = await ctx.db
+      .query("damageReports")
+      .withIndex("by_inventoryItemId", (q) => q.eq("inventoryItemId", item._id))
+      .take(200);
+    const openDamageCount = reports.filter((report) => report.status !== "resolved").length;
+    if (openDamageCount !== (item.openDamageCount ?? 0)) patch.openDamageCount = openDamageCount;
+
+    const type = await ctx.db.get(item.typeId);
+    const searchText = buildItemSearchText(item, type, await listPreviousAssetIds(ctx, item._id));
+    if (searchText !== item.searchText) patch.searchText = searchText;
+
+    return Object.keys(patch).length ? patch : undefined;
+  },
+});
+
+/**
+ * Open change requests made before requests were versions only live on the
+ * invoice, where replying cleared them. Record each as a revision so it stays
+ * in the history after it's answered.
+ */
+export const backfillOpenChangeRequestRevisions = migrations.define({
+  table: "invoices",
+  migrateOne: async (ctx, invoice) => {
+    await ensureChangeRequestRevision(ctx, invoice);
+  },
+});
+
+/**
+ * Availability moved from per-event answers to per-night time on the person
+ * (`crewAvailabilityNights`). Fold every answer (past nights too) into its night: yes →
+ * free over the event's crew span, partial → its windows minus busy times,
+ * only if necessary → backup, no → no; on one night the most available wins.
+ * Old rows stay in place. See `lib/crewNightConversion.ts`.
+ */
+export const convertAvailabilityToNights = migrations.define({
+  table: "eventCrewAvailabilityResponses",
+  // Each row reads its event, up to 200 blocks and one night: keep batches small.
+  batchSize: 25,
+  migrateOne: async (ctx, row) => {
+    await convertLegacyResponseRow(ctx, row);
+  },
+});
+
+/**
+ * The quote line billing a position, on an invoice that isn't void: the line
+ * that stands for it, else (older lines no position was linked to yet) the
+ * line for its act on its day. Lines carry their day (`eventId`), so a series
+ * invoice covering several days matches only the right one; a line with no
+ * day is ambiguous across a series and is skipped.
+ */
+async function findBookingLine(
+  ctx: MutationCtx,
+  slot: Doc<"eventArtistNeeds">,
+  organizationId: string | undefined,
+) {
+  const isLive = async (invoiceId: Id<"invoices">) => {
+    const invoice = await ctx.db.get(invoiceId);
+    return Boolean(invoice && invoice.status !== "void");
+  };
+  const linked = await ctx.db
+    .query("invoiceLineItems")
+    .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+    .take(10);
+  for (const line of linked) {
+    if (line.section === "artist" && (await isLive(line.invoiceId))) return line;
+  }
+  if (!organizationId) return null;
+  const event = await ctx.db.get(slot.eventId);
+  if (!event) return null;
+  const invoiceIds = [
+    ...new Set([
+      ...(event.invoiceId ? [event.invoiceId] : []),
+      ...(await listAdditionalInvoiceIds(ctx, event._id)),
+    ]),
+  ];
+  for (const invoiceId of invoiceIds) {
+    if (!(await isLive(invoiceId))) continue;
+    const lines = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_section", (q) =>
+        q.eq("invoiceId", invoiceId).eq("section", "artist"),
+      )
+      .take(200);
+    const match = lines.find(
+      (line) =>
+        !line.needId && line.eventId === slot.eventId && line.organizationId === organizationId,
+    );
+    if (match) return match;
+  }
+  return null;
+}
+
+/**
+ * Prices live on the booking (`eventArtistNeeds.price`). Each position
+ * without one takes the quote line billing it (the quote wins, so billed =
+ * paid), else its act's payout. Unpaid, uncancelled payouts move to the
+ * quote's price; paid and cancelled ones never change. The event's artist cost
+ * is then recomputed. Positions that already have a price are skipped, so it
+ * is idempotent. See `decideBookingPriceBackfill`.
+ */
+export const backfillBookingPrices = migrations.define({
+  table: "eventArtistNeeds",
+  // Each row reads its lines, act, payouts and the event's lineup: keep batches small.
+  batchSize: 25,
+  migrateOne: async (ctx, slot) => {
+    if (slot.price) return;
+    const act = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+      .first();
+    const [line, payouts] = await Promise.all([
+      findBookingLine(ctx, slot, act?.organizationId),
+      act
+        ? ctx.db
+            .query("eventBandPayments")
+            .withIndex("by_eventId_and_organizationId", (q) =>
+              q.eq("eventId", slot.eventId).eq("organizationId", act.organizationId),
+            )
+            .take(10)
+        : Promise.resolve([]),
+    ]);
+    const decision = decideBookingPriceBackfill({
+      line,
+      payouts: payouts.map((payout) => ({ ...payout, id: payout._id })),
+    });
+    if (!decision) return;
+    await ctx.db.patch(slot._id, { price: decision.price, updatedAt: Date.now() });
+    for (const payout of payouts) {
+      if (decision.payoutIdsToUpdate.includes(payout._id)) {
+        await payPayoutAtPrice(ctx, payout, decision.price);
+      }
+    }
+    await syncEventBandsCost(ctx, slot.eventId);
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -869,6 +1069,12 @@ const MIGRATION_SERIES = [
   internal.migrations.groupMultiDayBookings,
   internal.migrations.migratePositionArtistTypeToArtistTypes,
   internal.migrations.migrateSeriesPositionTemplateArtistTypes,
+  internal.migrations.migrateInventoryItemLifecycle,
+  internal.migrations.backfillOpenChangeRequestRevisions,
+  internal.migrations.convertAvailabilityToNights,
+  internal.migrations.dedupeBandMembers,
+  internal.migrations.backfillBookingPrices,
+  internal.migrations.backfillInviteNotionChecklists,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

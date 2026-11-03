@@ -144,7 +144,7 @@ const PAYEE_OPTIONS = [
 ];
 
 const PRICING_OPTIONS = [
-  { value: "fixed", label: "Fixed total" },
+  { value: "fixed", label: "Lump sum" },
   { value: "hourly", label: "Per member, hourly" },
 ];
 

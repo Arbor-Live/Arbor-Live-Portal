@@ -53,9 +53,14 @@ test.describe("Operations team access", () => {
   test("ops gets the Ops Center and booking areas, not the admin ones", async ({ page }) => {
     await signInAsOps(page);
     await page.goto("/dashboard/ops-center");
-    await expect(page.getByTestId("attention-booking-requests")).toBeVisible({ timeout: 30_000 });
+    // Scope to <main>: right after load, React can still hold a hidden streamed
+    // copy of the page in `<div hidden id="S:…">` at the end of <body> (its
+    // reveal is deferred up to ~2.3s), so an unscoped test id hits two cards
+    // and fails strict mode instantly.
+    const main = page.getByRole("main");
+    await expect(main.getByTestId("attention-booking-requests")).toBeVisible({ timeout: 30_000 });
     // Crew payroll and settings stay admin-only.
-    await expect(page.getByTestId("attention-timecards")).toHaveCount(0);
+    await expect(main.getByTestId("attention-timecards")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Settings" })).toHaveCount(0);
 
     for (const path of [
@@ -73,9 +78,13 @@ test.describe("Operations team access", () => {
     await expect(page.getByText("Admin access required").first()).toBeVisible({ timeout: 30_000 });
 
     const sidebar = page.locator('[data-slot="sidebar"]').first();
-    await expect(sidebar.getByRole("button", { name: "Ops Center", exact: true })).toBeVisible();
-    await expect(sidebar.getByRole("link", { name: "Users", exact: true })).toHaveCount(0);
-    await expect(sidebar.getByRole("button", { name: "Users", exact: true })).toHaveCount(0);
+    // Nav buttons grow a pending-count chip once `navBadges` resolves ("Ops
+    // Center 2"), so an exact name match races that unrelated query — it only
+    // passes while the badges are still in flight. Match the label itself,
+    // and let the absence checks count chip-decorated names too.
+    await expect(sidebar.getByText("Ops Center", { exact: true })).toBeVisible();
+    await expect(sidebar.getByRole("link", { name: /^Users/ })).toHaveCount(0);
+    await expect(sidebar.getByRole("button", { name: /^Users/ })).toHaveCount(0);
   });
 
   test("convex grants ops their work and still refuses admin-only calls", async ({ page }) => {

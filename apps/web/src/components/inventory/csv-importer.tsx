@@ -530,7 +530,7 @@ export function CsvImporter() {
             serialNumber: serial || undefined,
             typeId: typeId as never,
             storageLocationId: storageLocationId as never,
-            status: row["Condition"] || undefined,
+            condition: row["Condition"] || undefined,
             notes: row["Description"] || undefined,
           };
 

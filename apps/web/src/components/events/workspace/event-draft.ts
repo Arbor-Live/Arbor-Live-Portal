@@ -126,10 +126,11 @@ export type EventDraft = {
   managerUserId: string;
   dayOfLeadUserId: string;
   operationsLeadUserId: string;
-  bandsCostUsd: string;
   externalRentalsCostUsd: string;
   otherCostUsd: string;
   otPremium: boolean;
+  /** Cart event: setup and strike each need someone cart eligible. */
+  needsCart: boolean;
   crewCostBufferPercent: string;
   notes: string;
   openMicEnabled: boolean;
@@ -155,10 +156,10 @@ export const EMPTY_EVENT_DRAFT: EventDraft = {
   managerUserId: "",
   dayOfLeadUserId: "",
   operationsLeadUserId: "",
-  bandsCostUsd: "0",
   externalRentalsCostUsd: "0",
   otherCostUsd: "0",
   otPremium: false,
+  needsCart: false,
   crewCostBufferPercent: "",
   notes: "",
   openMicEnabled: false,
@@ -192,10 +193,10 @@ const DRAFT_FIELD_SECTIONS: Record<EventDraftKey, DraftSection> = {
   managerUserId: "details",
   dayOfLeadUserId: "details",
   operationsLeadUserId: "details",
-  bandsCostUsd: "billing",
   externalRentalsCostUsd: "billing",
   otherCostUsd: "billing",
   otPremium: "billing",
+  needsCart: "details",
   crewCostBufferPercent: "billing",
   notes: "details",
   openMicEnabled: "lineup",
@@ -232,10 +233,10 @@ export function draftFromEvent(
     managerUserId: event.eventManagerUserId ?? "",
     dayOfLeadUserId: event.dayOfLeadUserId ?? "",
     operationsLeadUserId: event.operationsLeadUserId ?? "",
-    bandsCostUsd: String(event.bandsCostUsd ?? 0),
     externalRentalsCostUsd: String(event.externalRentalsCostUsd ?? 0),
     otherCostUsd: String(event.otherCostUsd ?? 0),
     otPremium: event.otPremium === true,
+    needsCart: event.needsCart === true,
     crewCostBufferPercent:
       event.crewCostBufferPercent !== undefined ? String(event.crewCostBufferPercent) : "",
     notes: event.notes ?? "",
@@ -291,10 +292,10 @@ export function buildEventUpdatePatch(
     eventManagerUserId?: string;
     dayOfLeadUserId?: string;
     operationsLeadUserId?: string;
-    bandsCostUsd?: number;
     externalRentalsCostUsd?: number;
     otherCostUsd?: number;
     otPremium?: boolean;
+    needsCart?: boolean;
     crewCostBufferPercent?: number;
     notes?: string;
     openMicEnabled?: boolean;
@@ -341,12 +342,12 @@ export function buildEventUpdatePatch(
   if (changed.has("operationsLeadUserId")) {
     patch.operationsLeadUserId = draft.operationsLeadUserId;
   }
-  if (changed.has("bandsCostUsd")) patch.bandsCostUsd = parseUsd(draft.bandsCostUsd);
   if (changed.has("externalRentalsCostUsd")) {
     patch.externalRentalsCostUsd = parseUsd(draft.externalRentalsCostUsd);
   }
   if (changed.has("otherCostUsd")) patch.otherCostUsd = parseUsd(draft.otherCostUsd);
   if (changed.has("notes")) patch.notes = draft.notes;
+  if (changed.has("needsCart")) patch.needsCart = draft.needsCart;
   if (options.isAdmin) {
     if (changed.has("otPremium")) patch.otPremium = draft.otPremium;
     if (changed.has("crewCostBufferPercent") && draft.crewCostBufferPercent.trim() !== "") {

@@ -180,6 +180,31 @@ async function allocatePorts(registry) {
   throw new Error(`no free Convex port pair found starting at ${BASE_PORT}`);
 }
 
+/**
+ * The anonymous Convex CLI reads its ports from `.convex/local/default/config.json`
+ * and keeps whatever a previous run wrote there (often the default 3210), which
+ * collides with other worktrees' backends. Keep it on this worktree's ports.
+ * A missing config is left alone: the first `convex dev` creates it with the
+ * `--local-cloud-port` / `--local-site-port` flags this script passes.
+ */
+function syncLocalBackendConfigPorts(ports) {
+  const configPath = path.join(backendDir, ".convex/local/default/config.json");
+  if (!fs.existsSync(configPath)) return;
+  let config;
+  try {
+    config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  } catch {
+    return;
+  }
+  const current = config.ports ?? {};
+  if (current.cloud === ports.cloudPort && current.site === ports.sitePort) return;
+  config.ports = { ...current, cloud: ports.cloudPort, site: ports.sitePort };
+  fs.writeFileSync(configPath, JSON.stringify(config));
+  console.log(
+    `worktree-convex: pointed .convex/local config at :${ports.cloudPort} (was :${current.cloud ?? "unset"})`,
+  );
+}
+
 function writeBackendEnvLocal(ports) {
   removeEnvLocal(BACKEND_ENV_LOCAL, {
     preserve: isTrunkEnvLocal(path.join(repoRoot, BACKEND_ENV_LOCAL)),
@@ -267,6 +292,7 @@ async function switchLocal() {
     const ports = { cloudPort: entry.cloudPort, sitePort: entry.sitePort };
     writeBackendEnvLocal(ports);
     writeWebEnvLocal(ports);
+    syncLocalBackendConfigPorts(ports);
     console.log(
       `worktree-convex: local mode — isolated backend @ http://127.0.0.1:${ports.cloudPort} (HTTP actions http://127.0.0.1:${ports.sitePort})`,
     );
@@ -299,6 +325,7 @@ async function ensure() {
   if (entry?.mode === "local" && entry.cloudPort && entry.sitePort) {
     writeBackendEnvLocal({ cloudPort: entry.cloudPort, sitePort: entry.sitePort });
     writeWebEnvLocal({ cloudPort: entry.cloudPort, sitePort: entry.sitePort });
+    syncLocalBackendConfigPorts({ cloudPort: entry.cloudPort, sitePort: entry.sitePort });
     console.log(`worktree-convex: restored local mode @ :${entry.cloudPort}`);
     return;
   }
@@ -324,6 +351,7 @@ function runConvexDev({ cloudPort, sitePort, anonymous }) {
   if (!fs.existsSync(convexBin)) {
     throw new Error(`Convex CLI not found at ${convexBin} — run \`pnpm install\` first.`);
   }
+  if (anonymous && cloudPort && sitePort) syncLocalBackendConfigPorts({ cloudPort, sitePort });
   const args =
     anonymous && cloudPort && sitePort
       ? [

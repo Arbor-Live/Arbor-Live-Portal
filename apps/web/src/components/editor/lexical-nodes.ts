@@ -1,7 +1,7 @@
 import { AutoLinkNode, LinkNode } from "@lexical/link";
 import { ListItemNode, ListNode } from "@lexical/list";
-import type { InitialConfigType } from "@lexical/react/LexicalComposer";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
+import type { LexicalNodeConfig } from "lexical";
 import { ImageNode } from "./lexical-image-node";
 
 export const marketingEditorNodes = [
@@ -12,4 +12,4 @@ export const marketingEditorNodes = [
   LinkNode,
   AutoLinkNode,
   ImageNode,
-] as InitialConfigType["nodes"];
+] as readonly LexicalNodeConfig[];

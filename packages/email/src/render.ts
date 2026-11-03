@@ -7,6 +7,7 @@ import { QuoteApprovedEmail } from "../emails/quote-approved";
 import { PaymentProofRejectedEmail } from "../emails/payment-proof-rejected";
 import { DamageReportAdminEmail } from "../emails/damage-report-admin";
 import { CohoGiftCardLowBalanceEmail } from "../emails/coho-gift-card-low-balance";
+import { GolfCartEventReadyEmail } from "../emails/golf-cart-event-ready";
 import { ArtistNeedInquiryEmail } from "../emails/artist-need-inquiry";
 import { EventCancelledEmail } from "../emails/event-cancelled";
 import { PasswordResetEmail } from "../emails/password-reset";
@@ -58,6 +59,7 @@ import type {
   PaymentProofRejectedEmailProps,
   DamageReportAdminEmailProps,
   CohoGiftCardLowBalanceEmailProps,
+  GolfCartEventReadyEmailProps,
   ArtistNeedInquiryEmailProps,
   EventEmailProps,
   PasswordResetEmailProps,
@@ -311,6 +313,10 @@ export async function renderCohoGiftCardLowBalanceEmail(
   props: CohoGiftCardLowBalanceEmailProps,
 ) {
   return render(CohoGiftCardLowBalanceEmail(props));
+}
+
+export async function renderGolfCartEventReadyEmail(props: GolfCartEventReadyEmailProps) {
+  return render(GolfCartEventReadyEmail(props));
 }
 
 export async function renderArtistNeedInquiryEmail(props: ArtistNeedInquiryEmailProps) {

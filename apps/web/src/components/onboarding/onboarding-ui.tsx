@@ -149,7 +149,7 @@ export function OnboardingTextarea(
     <textarea
       {...props}
       className={cn(
-        "min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-(--focus-ring-width) focus-visible:ring-ring/50",
+        "min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-(--focus-ring-width) focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
         props.className,
       )}
     />

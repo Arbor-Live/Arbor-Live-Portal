@@ -318,7 +318,7 @@ export function StagePlotCanvas({
   return (
     <div
       ref={wrapperRef}
-      className={cn("relative w-full", zoomed && "max-h-[70vh] overflow-auto overscroll-contain", className)}
+      className={cn("relative w-full", zoomed && "max-h-[70dvh] overflow-auto overscroll-contain", className)}
       onDragOver={(event) => {
         if (readOnly || !event.dataTransfer.types.includes(RIDER_SYMBOL_MIME)) return;
         event.preventDefault();

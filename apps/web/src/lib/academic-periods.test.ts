@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { pacificDateKey } from "@/lib/format";
-import { nextQuarterPeriod, quarterWeek, recentQuarters } from "./academic-periods";
+import { pacificDateKey, quarterWeek } from "@/lib/format";
+import { nextQuarterPeriod, recentQuarters } from "./academic-periods";
 
 describe("recentQuarters", () => {
   it("lists working quarters that have started, newest first, skipping summer", () => {

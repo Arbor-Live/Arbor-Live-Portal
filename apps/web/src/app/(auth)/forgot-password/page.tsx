@@ -44,7 +44,7 @@ export default function ForgotPasswordPage() {
   });
 
   return (
-    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6">
+    <div className="mx-auto flex min-h-[80svh] w-full max-w-md items-center px-6">
       <Card className="w-full">
         <CardHeader>
           <CardTitle>Reset your password</CardTitle>

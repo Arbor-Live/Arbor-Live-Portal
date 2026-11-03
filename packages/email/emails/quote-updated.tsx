@@ -13,7 +13,11 @@ import { currency } from "./_components/format";
 import type { QuoteUpdatedEmailProps } from "../src/types";
 import { quoteUpdatedPreviewProps } from "./_preview-props";
 
-/** Sent to the client when staff change an approved quote and ask for approval again. */
+/**
+ * Sent to the client when staff change an approved quote and ask for approval
+ * again, answer the changes the client asked for, or revise a quote the client
+ * hasn't decided on yet.
+ */
 export function QuoteUpdatedEmail({
   recipientName,
   eventTitle,
@@ -23,24 +27,46 @@ export function QuoteUpdatedEmail({
   previousTotalUsd,
   newTotalUsd,
   changeNote,
+  reason = "approved",
+  requestNote,
   portalUrl,
   managerName,
   managerEmail,
 }: QuoteUpdatedEmailProps) {
   const greeting = recipientName ? `Hi ${recipientName},` : "Hi!";
-  const difference = Math.round((newTotalUsd - previousTotalUsd) * 100) / 100;
+  const difference =
+    previousTotalUsd === undefined ? null : Math.round((newTotalUsd - previousTotalUsd) * 100) / 100;
   const differenceLabel =
-    difference === 0
+    difference === null || difference === 0
       ? "No change"
       : `${difference > 0 ? "+" : "−"}${currency(Math.abs(difference))}`;
 
+  const answersRequest = reason === "changes_requested";
+  const firstSend = previousTotalUsd === undefined;
+
   return (
-    <EmailLayout preview={`Your quote for ${eventTitle} was updated`} heading="Quote Updated">
+    <EmailLayout
+      preview={firstSend ? `Your quote for ${eventTitle}` : `Your quote for ${eventTitle} was updated`}
+      heading={firstSend ? "Your Quote" : "Quote Updated"}
+    >
       <BodyCopy>{greeting}</BodyCopy>
-      <BodyCopy>
-        We updated the quote you approved for {eventTitle}. Please review the changes and approve it
-        again so we can keep planning.
-      </BodyCopy>
+      {answersRequest ? (
+        <BodyCopy>
+          We looked at the changes you asked for on the quote for {eventTitle}. Please review it and
+          approve it, or tell us what else should change.
+        </BodyCopy>
+      ) : reason === "revised" ? (
+        <BodyCopy>
+          {firstSend ? "Here's" : "We revised"} the quote for {eventTitle}. Please
+          review it and approve it, or tell us what should change.
+        </BodyCopy>
+      ) : (
+        <BodyCopy>
+          We updated the quote you approved for {eventTitle}. Please review the changes and approve it
+          again so we can keep planning.
+        </BodyCopy>
+      )}
+      {answersRequest && requestNote ? <MutedCopy>You asked: “{requestNote}”</MutedCopy> : null}
       {changeNote ? <BodyCopy>“{changeNote}”</BodyCopy> : null}
       <EventDetailsSection
         eventTitle={eventTitle}
@@ -49,11 +75,16 @@ export function QuoteUpdatedEmail({
       />
       <DataCard title="Quote">
         <DetailRow label="Quote" value={invoiceNumber} />
-        <DetailRow label="You approved" value={currency(previousTotalUsd)} />
-        <DetailRow label="Updated total" value={currency(newTotalUsd)} emphasis />
-        <DetailRow label="Difference" value={differenceLabel} />
+        {previousTotalUsd === undefined ? null : (
+          <DetailRow
+            label={reason === "approved" ? "You approved" : "Previous total"}
+            value={currency(previousTotalUsd)}
+          />
+        )}
+        <DetailRow label={firstSend ? "Total" : "Updated total"} value={currency(newTotalUsd)} emphasis />
+        {difference === null ? null : <DetailRow label="Difference" value={differenceLabel} />}
       </DataCard>
-      <CtaButton href={portalUrl} label="Review the updated quote" />
+      <CtaButton href={portalUrl} label={firstSend ? "Review the quote" : "Review the updated quote"} />
       <ContactNote managerName={managerName} managerEmail={managerEmail} />
       <MutedCopy>
         This is still an estimate. Your final invoice comes after the event, once hours are final,

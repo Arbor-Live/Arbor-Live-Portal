@@ -1,12 +1,13 @@
 "use client";
 
-import { LexicalComposer } from "@lexical/react/LexicalComposer";
-import type { InitialConfigType } from "@lexical/react/LexicalComposer";
+import { useMemo } from "react";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
+import { LexicalExtensionComposer } from "@lexical/react/LexicalExtensionComposer";
 import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
+import { defineExtension } from "lexical";
 import { cn } from "@/lib/utils";
 import { marketingEditorNodes } from "./lexical-nodes";
 import {
@@ -15,17 +16,18 @@ import {
   lexicalViewerClassName,
 } from "./lexical-theme";
 
-function createViewerConfig(contentJson: string): InitialConfigType {
-  return {
+function createViewerExtension(contentJson: string) {
+  return defineExtension({
+    name: "ArborMarketingViewer",
     namespace: "ArborMarketingViewer",
     theme: lexicalTheme,
     editable: false,
     onError(error: Error) {
       throw error;
     },
-    editorState: contentJson || EMPTY_LEXICAL_STATE,
+    $initialEditorState: contentJson || EMPTY_LEXICAL_STATE,
     nodes: marketingEditorNodes,
-  };
+  });
 }
 
 export function LexicalViewer({
@@ -35,9 +37,13 @@ export function LexicalViewer({
   contentJson: string;
   className?: string;
 }) {
+  // The composer rebuilds its editor whenever the extension object changes,
+  // so it must only change when the content does.
+  const extension = useMemo(() => createViewerExtension(contentJson), [contentJson]);
+
   return (
     <div className={cn(lexicalViewerClassName, className)}>
-      <LexicalComposer key={contentJson} initialConfig={createViewerConfig(contentJson)}>
+      <LexicalExtensionComposer extension={extension} contentEditable={null}>
         <RichTextPlugin
           contentEditable={<ContentEditable className="outline-none" aria-readonly />}
           placeholder={null}
@@ -45,7 +51,7 @@ export function LexicalViewer({
         />
         <ListPlugin />
         <LinkPlugin />
-      </LexicalComposer>
+      </LexicalExtensionComposer>
     </div>
   );
 }

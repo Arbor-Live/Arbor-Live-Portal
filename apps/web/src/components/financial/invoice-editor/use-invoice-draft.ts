@@ -10,13 +10,16 @@ import { assignableCrewSelectOptions } from "@/lib/user-select-description";
 import {
   buildCrewRowsFromLinkedEvent,
   buildInvoiceCrewRowsFromShiftTemplateDrafts,
+  applyCrewDayRates,
   mergeEventCrewWithManualRows,
   type CrewAssigneeRate,
+  type CrewOtherShift,
   type InvoiceCrewRow,
 } from "@/lib/invoice-crew-from-event";
 import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
 import { getConvexAppErrorData, getConvexErrorMessage } from "@/lib/convex-error";
 import { formatUsd } from "@/lib/format";
+import { normalizeEventStatus } from "@/lib/event-status";
 import { notify } from "@/lib/notify";
 import { computeInvoiceDraftTotals } from "@/lib/compute-invoice-draft-totals";
 import {
@@ -32,6 +35,7 @@ import {
   artistLineKey,
   adoptServerArtistChanges,
   artistRowFromLineItem,
+  artistRowPriceFields,
   buildInvoiceLineItems,
   buildInvoicePayload,
   emptyDraftFields,
@@ -219,22 +223,27 @@ export function useInvoiceDraft({
 
   // --- Crew lines from the linked event -----------------------------------
 
-  const flattenCrewBuckets = useCallback((dayEvents: Array<{ _id: Id<"events">; title: string }>) => {
-    const multiDay = dayEvents.length > 1;
-    const rows: InvoiceCrewRow[] = [];
-    for (let index = 0; index < dayEvents.length; index += 1) {
-      const day = dayEvents[index]!;
-      const dayRows = crewRowsByEventRef.current.get(day._id) ?? [];
-      const dayPrefix = multiDay ? `Day ${index + 1} — ` : "";
-      for (const row of dayRows) {
-        rows.push({
-          ...row,
-          label: row.label.startsWith(dayPrefix) ? row.label : `${dayPrefix}${row.label}`,
-        });
+  // Each day prices its schedule rows: past 8 hrs at 1.5×, and OT days (`events.otPremium`) 1.5× / double time.
+  const flattenCrewBuckets = useCallback(
+    (dayEvents: Array<{ _id: Id<"events">; title: string; otPremium?: boolean }>) => {
+      const multiDay = dayEvents.length > 1;
+      const rows: InvoiceCrewRow[] = [];
+      for (let index = 0; index < dayEvents.length; index += 1) {
+        const day = dayEvents[index]!;
+        const dayRows = crewRowsByEventRef.current.get(day._id) ?? [];
+        const dayPrefix = multiDay ? `Day ${index + 1} — ` : "";
+        for (const row of dayRows) {
+          const prefixed = {
+            ...row,
+            label: row.label.startsWith(dayPrefix) ? row.label : `${dayPrefix}${row.label}`,
+          };
+          rows.push(applyCrewDayRates(prefixed, day.otPremium === true));
+        }
       }
-    }
-    return rows;
-  }, []);
+      return rows;
+    },
+    [],
+  );
 
   const handleEventCrewRowsChange = useCallback(
     (eventRows: InvoiceCrewRow[]) => {
@@ -289,6 +298,25 @@ export function useInvoiceDraft({
       shiftsByEvent.set(shift.eventId, list);
     }
 
+    // A person's time on another event, or another day of this booking, isn't
+    // billed twice: shared time stays with the shift that starts first.
+    const cancelledDayIds = new Set(
+      days.filter((day) => normalizeEventStatus(day.status) === "cancelled").map((day) => day._id as string),
+    );
+    const outsideShifts: Array<CrewOtherShift & { eventId: string }> = [
+      ...(linkedEvent.otherEventShifts ?? []),
+      ...linkedEvent.shifts,
+    ].map((shift) => ({
+      id: shift._id,
+      eventId: shift.eventId,
+      userId: shift.userId,
+      startsAt: shift.startsAt,
+      endsAt: shift.endsAt,
+      hours: shift.hours,
+      createdAt: shift._creationTime,
+      cancelled: cancelledDayIds.has(shift.eventId),
+    }));
+
     crewRowsByEventRef.current = new Map();
     for (const eventId of dayIds) {
       const blocks = blocksByEvent.get(eventId) ?? [];
@@ -298,16 +326,29 @@ export function useInvoiceDraft({
         role: shift.role,
         personName: shift.personName,
         userId: shift.userId,
+        crewApplicationId: shift.crewApplicationId,
         hours: shift.hours,
+        startsAt: shift.startsAt,
+        endsAt: shift.endsAt,
+        _creationTime: shift._creationTime,
       }));
       crewRowsByEventRef.current.set(
         eventId,
         buildCrewRowsFromLinkedEvent(
           {
-            blocks: blocks.map((block) => ({ _id: block._id, label: block.label, blockType: block.blockType })),
+            blocks: blocks.map((block) => ({
+              _id: block._id,
+              label: block.label,
+              blockType: block.blockType,
+              startsAt: block.startsAt,
+            })),
             shifts,
           },
-          { ratesByUserId: crewRatesByUserId, openSlotRateUsd: defaultCrewHourlyRateUsd },
+          {
+            ratesByUserId: crewRatesByUserId,
+            openSlotRateUsd: defaultCrewHourlyRateUsd,
+            otherShifts: outsideShifts.filter((shift) => shift.eventId !== eventId),
+          },
         ),
       );
     }
@@ -324,6 +365,14 @@ export function useInvoiceDraft({
     linkedSeries,
     setCrewRows,
   ]);
+
+  // Marking a day OT (here or on the event) re-prices its rows without re-reading the schedule.
+  const overtimeDaysKey = linkedDayEvents.map((day) => (day.otPremium ? "1" : "0")).join("");
+  useEffect(() => {
+    if (!crewBucketsHydratedInvoiceRef.current || linkedSeries || linkedDayEvents.length === 0) return;
+    setCrewRows((current) => mergeEventCrewWithManualRows(flattenCrewBuckets(linkedDayEvents), current));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when a day's OT flag flips
+  }, [overtimeDaysKey]);
 
   // --- Defaults and hydration ---------------------------------------------
 
@@ -520,44 +569,21 @@ export function useInvoiceDraft({
     setSection(
       "artists",
       eventPerformers.map((performer) => {
-        const payment = performer.payment;
-        const eventId = performer.eventId;
-        const needId = performer.needId ?? undefined;
-        if (payment && payment.totalUsd > 0) {
-          if (payment.pricingMode === "fixed_total") {
-            return {
-              organizationId: performer.organizationId,
-              label: performer.bandName,
-              hours: "1",
-              people: "1",
-              rateUsd: payment.totalUsd.toString(),
-              eventId,
-              needId,
-            };
-          }
-          const hours = payment.performanceHours && payment.performanceHours > 0 ? payment.performanceHours : 1;
-          const members = payment.memberCount && payment.memberCount > 0 ? payment.memberCount : 1;
-          const rate = payment.ratePerMemberPerHourUsd ?? rateByOrg.get(performer.organizationId) ?? 0;
-          return {
-            organizationId: performer.organizationId,
-            label: performer.bandName,
-            hours: String(hours),
-            people: String(members),
-            rateUsd: rate.toString(),
-            eventId,
-            needId,
-          };
-        }
+        const base = {
+          organizationId: performer.organizationId,
+          label: performer.bandName,
+          eventId: performer.eventId,
+          needId: performer.needId ?? undefined,
+        };
+        // The booking's price is the one the quote bills.
+        if (performer.price) return { ...base, ...artistRowPriceFields(performer.price) };
         const profileRate = rateByOrg.get(performer.organizationId) ?? 0;
         const profileMembers = membersByOrg.get(performer.organizationId) ?? 0;
         return {
-          organizationId: performer.organizationId,
-          label: performer.bandName,
+          ...base,
           hours: "1",
           people: profileMembers > 0 ? profileMembers.toString() : "1",
           rateUsd: profileRate > 0 ? profileRate.toString() : "0",
-          eventId,
-          needId,
         };
       }),
     );

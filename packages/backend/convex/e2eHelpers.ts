@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { customAlphabet } from "nanoid";
 import { hashPassword } from "better-auth/crypto";
 import { api, components, internal } from "./_generated/api";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import {
   loadInvoiceCrewRateSettings,
@@ -14,6 +14,7 @@ import {
 import { resolveProfileMembership, userVerticalValue } from "./lib/userVerticals";
 import { resolveUserStatus } from "./lib/userStatus";
 import { assertE2eHelpersEnabled } from "./lib/e2eGuard";
+import { buildItemSearchText, inventoryLifecycleValue, lifecycleOf } from "./lib/inventoryLifecycle";
 import { emailTemplateValue } from "./lib/emailTemplateValue";
 import { recordInAppNotification } from "./lib/inAppNotifications";
 import { recordInvoiceRevision, snapshotInvoice } from "./lib/invoiceRevisions";
@@ -37,6 +38,8 @@ import {
 import { listFulfillmentPackageBom } from "./lib/packageBom";
 import { eventStatusValue } from "./lib/eventStatus";
 import { syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
+import { syncEventBandsCost } from "./lib/bookingPriceSync";
+import { eventCrewSpan, nightKeyForEvent } from "./lib/crewNights";
 
 const makeToken = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 24);
 const makeInvoiceSuffix = customAlphabet(
@@ -1005,6 +1008,14 @@ export const seedCrewedEventWithSchedule = mutation({
     openPosition: v.optional(v.boolean()),
     /** Also seeds an open "Opener" (live band) position, for multi-slot bills. */
     openerPosition: v.optional(v.boolean()),
+    /** Days from today (default 16), and Pacific `HH:mm` show times (default 18:00–22:00). */
+    daysAhead: v.optional(v.number()),
+    startTime: v.optional(v.string()),
+    endTime: v.optional(v.string()),
+    /** Adds a one-hour "Early setup" section before setup. */
+    earlySetup: v.optional(v.boolean()),
+    /** Marks the event as overtime (crew paid 1.5×, then double time). */
+    otPremium: v.optional(v.boolean()),
   },
   returns: v.object({
     eventId: v.id("events"),
@@ -1016,7 +1027,12 @@ export const seedCrewedEventWithSchedule = mutation({
   handler: async (ctx, args) => {
     assertE2eHelpersEnabled();
     const now = Date.now();
-    const { startAt, endAt } = futureEventWindow(16);
+    const window = futureEventWindow(args.daysAhead ?? 16);
+    const startAt = args.startTime
+      ? pacificDateAndTimeToMs(window.dateKey, args.startTime)!
+      : window.startAt;
+    let endAt = args.endTime ? pacificDateAndTimeToMs(window.dateKey, args.endTime)! : window.endAt;
+    if (endAt <= startAt) endAt = addPacificCalendarDays(endAt, 1);
     const title = args.title?.trim() || `E2E Seeded Event ${now}`;
     const eventId = await ctx.db.insert("events", {
       title,
@@ -1033,6 +1049,7 @@ export const seedCrewedEventWithSchedule = mutation({
       eventType: "Crewed Event",
       // Match crew discipline names used by availability filtering.
       teamsInterested: ["Sound"],
+      ...(args.otPremium ? { otPremium: true } : {}),
       createdAt: now,
       updatedAt: now,
     });
@@ -1044,6 +1061,16 @@ export const seedCrewedEventWithSchedule = mutation({
     const strikeStart = showEnd;
     const strikeEnd = showEnd + 60 * 60 * 1000;
     const blocks = [
+      ...(args.earlySetup
+        ? [
+            {
+              blockType: "setup" as const,
+              label: "Early setup",
+              startsAt: setupStart - 60 * 60 * 1000,
+              endsAt: setupStart,
+            },
+          ]
+        : []),
       { blockType: "setup" as const, label: "Setup", startsAt: setupStart, endsAt: setupEnd },
       { blockType: "show" as const, label: "Show", startsAt: showStart, endsAt: showEnd },
       { blockType: "strike" as const, label: "Strike", startsAt: strikeStart, endsAt: strikeEnd },
@@ -2288,6 +2315,8 @@ export const ensureCrewUser = mutation({
     username: v.optional(v.string()),
     /** `["Operations"]` makes an Operations-team member; defaults to Crew (Sound). */
     verticals: v.optional(v.array(userVerticalValue)),
+    /** Marks the person cart eligible (`userAdminProfiles.cartEligible`). */
+    cartEligible: v.optional(v.boolean()),
   },
   returns: v.object({
     ok: v.literal(true),
@@ -2465,6 +2494,7 @@ export const ensureCrewUser = mutation({
         disciplines,
         defaultOrganizationId: organizationId,
         ...(assignedUsername ? { username: assignedUsername } : {}),
+        ...(args.cartEligible !== undefined ? { cartEligible: args.cartEligible } : {}),
         updatedAt: now,
       });
       if (!assignedUsername && existingUserProfile.username) {
@@ -2478,6 +2508,7 @@ export const ensureCrewUser = mutation({
         disciplines,
         defaultOrganizationId: organizationId,
         username: assignedUsername,
+        cartEligible: args.cartEligible,
         createdAt: now,
         updatedAt: now,
       });
@@ -2528,43 +2559,71 @@ export const ensureCrewUser = mutation({
 });
 
 /**
- * Test-only: insert a Yes availability response for a crew user on an event.
+ * Test-only: mark a crew user free for the whole night of an event (every
+ * event that night reads it as "yes").
  */
 export const seedCrewYesResponse = mutation({
   args: {
     eventId: v.id("events"),
     userId: v.string(),
   },
-  returns: v.object({ responseId: v.id("eventCrewAvailabilityResponses") }),
+  returns: v.object({ responseId: v.id("crewAvailabilityNights") }),
   handler: async (ctx, args) => {
     assertE2eHelpersEnabled();
     const now = Date.now();
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found");
+    const blocks = await ctx.db
+      .query("eventScheduleBlocks")
+      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
+      .take(200);
+    const nightKey = nightKeyForEvent(event);
+    const fields = {
+      userId: args.userId,
+      nightKey,
+      status: "free" as const,
+      windows: [eventCrewSpan(event, blocks)],
+      notes: "E2E seeded yes",
+      source: "answer" as const,
+      respondedAt: now,
+      updatedAt: now,
+    };
     const existing = await ctx.db
-      .query("eventCrewAvailabilityResponses")
-      .withIndex("by_eventId_and_userId", (q) =>
-        q.eq("eventId", args.eventId).eq("userId", args.userId),
-      )
+      .query("crewAvailabilityNights")
+      .withIndex("by_userId_and_nightKey", (q) => q.eq("userId", args.userId).eq("nightKey", nightKey))
       .unique();
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        responseStatus: "yes",
-        partialWindows: undefined,
-        notes: "E2E seeded yes",
-        respondedAt: now,
-        updatedAt: now,
-      });
+      await ctx.db.replace(existing._id, { ...fields, createdAt: existing.createdAt });
       return { responseId: existing._id };
     }
-    const responseId = await ctx.db.insert("eventCrewAvailabilityResponses", {
-      eventId: args.eventId,
-      userId: args.userId,
-      responseStatus: "yes",
-      notes: "E2E seeded yes",
-      respondedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
-    return { responseId };
+    return { responseId: await ctx.db.insert("crewAvailabilityNights", { ...fields, createdAt: now }) };
+  },
+});
+
+/** Test-only: forget a user's usual evenings and night answers in a window (to re-ask). */
+export const resetCrewAvailability = mutation({
+  args: { userId: v.string(), clearNights: v.optional(v.boolean()) },
+  returns: v.object({ deletedNights: v.number() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .unique();
+    if (profile) {
+      await ctx.db.patch(profile._id, { usualEvenings: undefined, usualEveningsSetAt: undefined });
+    }
+    let deletedNights = 0;
+    if (args.clearNights) {
+      for (const row of await ctx.db
+        .query("crewAvailabilityNights")
+        .withIndex("by_userId_and_nightKey", (q) => q.eq("userId", args.userId))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedNights += 1;
+      }
+    }
+    return { deletedNights };
   },
 });
 
@@ -2647,6 +2706,70 @@ export const seedAssignCrewToAllBlocks = mutation({
       shiftIds.push(shiftId);
     }
     return { shiftIds, blockCount: blocks.length };
+  },
+});
+
+/** Test-only: an event with one crew shift placed relative to the current time. */
+export const seedOnShiftEvent = internalMutation({
+  args: {
+    userId: v.string(),
+    title: v.string(),
+    venueName: v.optional(v.string()),
+    startOffsetMinutes: v.number(),
+    endOffsetMinutes: v.number(),
+    status: v.optional(eventStatusValue),
+  },
+  returns: v.object({ eventId: v.id("events") }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const startsAt = now + args.startOffsetMinutes * 60_000;
+    const endsAt = now + args.endOffsetMinutes * 60_000;
+    const eventId = await ctx.db.insert("events", {
+      title: args.title,
+      venueName: args.venueName,
+      status: args.status ?? "ready",
+      visibility: "internal",
+      startAt: startsAt,
+      endAt: endsAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: false,
+      eventType: "Crewed Event",
+      teamsInterested: ["Sound"],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("eventCrewShifts", {
+      eventId,
+      role: "FOH",
+      userId: args.userId,
+      startsAt,
+      endsAt,
+      hours: (endsAt - startsAt) / 3_600_000,
+      postedToExpense: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { eventId };
+  },
+});
+
+/** Test-only: removes a `seedOnShiftEvent` fixture so it stops showing on crew home. */
+export const clearOnShiftEvent = internalMutation({
+  args: { eventId: v.id("events") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const shifts = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(50);
+    for (const shift of shifts) await ctx.db.delete(shift._id);
+    await ctx.db.delete(args.eventId);
+    return null;
   },
 });
 
@@ -2950,10 +3073,9 @@ export const seedDryHireWithPullList = mutation({
     const assetId = args.assetId?.trim() || `E2E-ALE-${String(now).slice(-6)}`;
 
     const typeName = `E2E Mic ${now}`;
+    const type = { name: typeName, category: "misc", model: "E2E-MIC-1" };
     const typeId = await ctx.db.insert("inventoryTypes", {
-      name: typeName,
-      category: "misc",
-      model: "E2E-MIC-1",
+      ...type,
       manualUrls: [],
       capabilities: [],
       createdAt: now,
@@ -2962,7 +3084,7 @@ export const seedDryHireWithPullList = mutation({
     const inventoryItemId = await ctx.db.insert("inventoryItems", {
       assetId,
       typeId,
-      status: "functional",
+      searchText: buildItemSearchText({ assetId }, type, []),
       createdAt: now,
       updatedAt: now,
     });
@@ -3069,19 +3191,21 @@ export const seedOpenDamageReport = mutation({
     assertE2eHelpersEnabled();
     const now = Date.now();
     const assetId = args.assetId?.trim() || `E2E-DMG-${String(now).slice(-6)}`;
+    const type = { name: `E2E Damaged ${now}`, category: "misc", model: "E2E-DMG-1" };
     const typeId = await ctx.db.insert("inventoryTypes", {
-      name: `E2E Damaged ${now}`,
-      category: "misc",
-      model: "E2E-DMG-1",
+      ...type,
       manualUrls: [],
       capabilities: [],
       createdAt: now,
       updatedAt: now,
     });
+    // Matches what `damageReports.create` leaves: in repair, one open report.
     const inventoryItemId = await ctx.db.insert("inventoryItems", {
       assetId,
       typeId,
-      status: "needs_repair",
+      lifecycle: "in_repair",
+      openDamageCount: 1,
+      searchText: buildItemSearchText({ assetId }, type, []),
       createdAt: now,
       updatedAt: now,
     });
@@ -3145,6 +3269,8 @@ export const ensureBandPayeeUser = mutation({
     bandName: v.optional(v.string()),
     /** Override to get a band org isolated from the shared e-sign fixture. */
     orgSlug: v.optional(v.string()),
+    /** Defaults to org_admin; org_member seeds a plain member who cannot set the payee. */
+    membershipRole: v.optional(v.union(v.literal("org_admin"), v.literal("org_member"))),
   },
   returns: v.object({
     ok: v.literal(true),
@@ -3158,6 +3284,7 @@ export const ensureBandPayeeUser = mutation({
     const email = args.email.trim().toLowerCase();
     const name = (args.name ?? "E2E Band Payee").trim() || "E2E Band Payee";
     const bandName = (args.bandName ?? "E2E Test Band").trim() || "E2E Test Band";
+    const membershipRole = args.membershipRole ?? "org_admin";
     if (!email) throw new Error("Email is required.");
     if (args.password.length < 8) throw new Error("Password must be at least 8 characters.");
 
@@ -3260,7 +3387,7 @@ export const ensureBandPayeeUser = mutation({
           data: {
             organizationId,
             userId,
-            role: "owner",
+            role: membershipRole === "org_admin" ? "owner" : "member",
             createdAt: now,
           },
         },
@@ -3275,7 +3402,7 @@ export const ensureBandPayeeUser = mutation({
       .unique();
     if (existingAppMembership) {
       await ctx.db.patch(existingAppMembership._id, {
-        role: "org_admin",
+        role: membershipRole,
         active: true,
         updatedAt: now,
       });
@@ -3283,7 +3410,7 @@ export const ensureBandPayeeUser = mutation({
       await ctx.db.insert("userOrganizationMemberships", {
         userId,
         organizationId,
-        role: "org_admin",
+        role: membershipRole,
         active: true,
         createdAt: now,
         updatedAt: now,
@@ -3936,10 +4063,7 @@ export const seedDraftBandPayment = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.db.patch(args.eventId, {
-      bandsCostUsd: (event.bandsCostUsd ?? 0) + (args.totalUsd ?? 400),
-      updatedAt: now,
-    });
+    await syncEventBandsCost(ctx, args.eventId);
     return { paymentId, confirmationToken, status: "draft" as const };
   },
 });
@@ -5097,6 +5221,111 @@ export const seedTimecardShift = mutation({
 });
 
 /**
+ * Test-only: an event that ended `hoursAgo` hours ago with a show shift for the
+ * user, so it owes them a review and photos in post-event work.
+ */
+export const seedEndedShowShift = internalMutation({
+  args: {
+    userId: v.string(),
+    title: v.optional(v.string()),
+    hoursAgo: v.optional(v.number()),
+    venueName: v.optional(v.string()),
+  },
+  returns: v.object({ eventId: v.id("events"), title: v.string() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const title = args.title?.trim() || `E2E Ended Show ${now}`;
+    const endAt = now - (args.hoursAgo ?? 2) * 60 * 60 * 1000;
+    const startAt = endAt - 3 * 60 * 60 * 1000;
+    const eventId = await ctx.db.insert("events", {
+      title,
+      status: "completed",
+      visibility: "internal",
+      publicToken: makeToken(),
+      startAt,
+      endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      eventType: "Crewed Event",
+      teamsInterested: ["Sound"],
+      ...(args.venueName ? { venueName: args.venueName } : {}),
+      createdAt: now,
+      updatedAt: now,
+    });
+    const scheduleBlockId = await ctx.db.insert("eventScheduleBlocks", {
+      eventId,
+      blockType: "show",
+      label: "Show",
+      dayIndex: 0,
+      startsAt: startAt,
+      endsAt: endAt,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("eventCrewShifts", {
+      eventId,
+      scheduleBlockId,
+      role: "Sound",
+      userId: args.userId,
+      startsAt: startAt,
+      endsAt: endAt,
+      hours: 3,
+      postedToExpense: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { eventId, title };
+  },
+});
+
+/** Test-only: mark every evening as usually free or rarely free. */
+export const seedUsualEvenings = internalMutation({
+  args: { userId: v.string(), level: v.union(v.literal("usually"), v.literal("rarely")) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .unique();
+    if (!profile) throw new Error("Profile not found");
+    const { level } = args;
+    await ctx.db.patch(profile._id, {
+      usualEvenings: {
+        monday: level,
+        tuesday: level,
+        wednesday: level,
+        thursday: level,
+        friday: level,
+        saturday: level,
+        sunday: level,
+      },
+      usualEveningsSetAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/** Test-only: clear a user's ended show shifts, so Home's post-event cards start from none. */
+export const clearCrewShifts = internalMutation({
+  args: { userId: v.string() },
+  returns: v.object({ deletedShifts: v.number() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const shifts = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_userId_and_startsAt", (q) => q.eq("userId", args.userId))
+      .take(500);
+    for (const shift of shifts) await ctx.db.delete(shift._id);
+    return { deletedShifts: shifts.length };
+  },
+});
+
+/**
  * Test-only: short link lookup by slug for CRUD assertions.
  */
 export const getShortLinkBySlug = query({
@@ -5152,10 +5381,9 @@ export const seedLostFoundAsset = mutation({
     const assetId = args.assetId?.trim() || `E2E-LF-${String(now).slice(-6)}`;
     const typeName = `E2E Lost Found Type ${now}`;
 
+    const type = { name: typeName, category: "misc", model: "E2E-LF-1" };
     const typeId = await ctx.db.insert("inventoryTypes", {
-      name: typeName,
-      category: "misc",
-      model: "E2E-LF-1",
+      ...type,
       manualUrls: [],
       capabilities: [],
       createdAt: now,
@@ -5164,7 +5392,7 @@ export const seedLostFoundAsset = mutation({
     const inventoryItemId = await ctx.db.insert("inventoryItems", {
       assetId,
       typeId,
-      status: "functional",
+      searchText: buildItemSearchText({ assetId }, type, []),
       createdAt: now,
       updatedAt: now,
     });
@@ -5462,6 +5690,9 @@ export const pruneStaleE2eUsers = mutation({
         await ctx.db.delete(row._id);
       }
       for (const row of await ctx.db.query("eventCrewAvailabilityResponses").withIndex("by_userId", (q) => q.eq("userId", userId)).take(500)) {
+        await ctx.db.delete(row._id);
+      }
+      for (const row of await ctx.db.query("crewAvailabilityNights").withIndex("by_userId_and_nightKey", (q) => q.eq("userId", userId)).take(500)) {
         await ctx.db.delete(row._id);
       }
     };
@@ -6425,6 +6656,11 @@ export const deleteInvitationsByEmail = mutation({
         await ctx.db.delete(pending._id);
         deletedPending += 1;
       }
+      const checklist = await ctx.db
+        .query("inviteNotionChecklists")
+        .withIndex("by_invitationId", (q) => q.eq("invitationId", invitationId))
+        .unique();
+      if (checklist) await ctx.db.delete(checklist._id);
       await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
         input: {
           model: "invitation",
@@ -6666,12 +6902,13 @@ export const seedInventoryItem = mutation({
       if (!location) throw new Error(`No storage location at path "${locationPath}".`);
       storageLocationId = location._id;
     }
+    const serialNumber = args.serialNumber?.trim();
     const itemId = await ctx.db.insert("inventoryItems", {
       assetId,
-      serialNumber: args.serialNumber?.trim(),
+      serialNumber,
       typeId: type._id,
       storageLocationId,
-      status: "functional",
+      searchText: buildItemSearchText({ assetId, serialNumber }, type, []),
       createdAt: now,
       updatedAt: now,
     });
@@ -6833,7 +7070,9 @@ export const getInventoryItemByAssetId = query({
       assetId: v.string(),
       serialNumber: v.union(v.string(), v.null()),
       typeName: v.union(v.string(), v.null()),
-      status: v.union(v.string(), v.null()),
+      condition: v.union(v.string(), v.null()),
+      lifecycle: inventoryLifecycleValue,
+      openDamageCount: v.number(),
       notes: v.union(v.string(), v.null()),
       storageLocationPath: v.union(v.string(), v.null()),
       containedInAssetId: v.union(v.string(), v.null()),
@@ -6877,7 +7116,9 @@ export const getInventoryItemByAssetId = query({
       assetId: item.assetId,
       serialNumber: item.serialNumber ?? null,
       typeName: type?.name ?? null,
-      status: item.status ?? null,
+      condition: item.condition ?? null,
+      lifecycle: lifecycleOf(item),
+      openDamageCount: item.openDamageCount ?? 0,
       notes: item.notes ?? null,
       storageLocationPath: location?.path ?? null,
       containedInAssetId: container?.assetId ?? null,

@@ -43,6 +43,7 @@ test.describe("crew hover cards and phones", () => {
     await chip.hover();
     const card = page.getByTestId("user-hover-card");
     await expect(card).toContainText(CREW_PHONE, { timeout: 15_000 });
+    await expect(card.getByTestId("user-hover-card-verticals").getByRole("listitem")).toHaveText(["Crew", "Sound"]);
     await expect(card.getByTestId("user-hover-card-hours")).toContainText("This week");
 
     await page.goto(worked.path);

@@ -1,4 +1,5 @@
 import { pacificDateKey, pacificStartOfDayMs } from "@arbor/format";
+import { crewCountableHours } from "@arbor/invoice-document/crew-hours";
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import {
@@ -11,15 +12,18 @@ import {
 import {
   analyticsRangeArgs,
   assertValidRange,
-  computeShiftStats,
   CREWED_EVENT_SCAN_LIMIT,
   isShiftFilled,
   loadEventsInRange,
+  loadEventsInRangeWithHashes,
   requireAnalyticsAccess,
   SHIFTS_PER_EVENT_LIMIT,
 } from "./lib/analyticsQuery";
 import { findAuthUsersByIds } from "./lib/auth";
+import { computeEventShiftStats } from "./lib/cartCrew";
 import { loadBackupUserIds } from "./lib/crewBackups";
+import { loadNightRows, loadProfilesForRows, profileMatchesEvent } from "./lib/crewNightAnswers";
+import { nightKeyForEvent } from "./lib/crewNights";
 import {
   CREW_HOURS_BANDS,
   CREW_QUARTER_EXPECTED_HOURS,
@@ -33,6 +37,7 @@ import { resolveUserStatus } from "./lib/userStatus";
 import { loadAllAdminProfiles } from "./lib/userProfiles";
 import { isCrewedEventType } from "./lib/crewTeams";
 import { normalizeEventStatus } from "./lib/eventStatus";
+import { isHashEvent } from "./lib/hashEvent";
 
 function getIsoWeekKey(dayKey: string) {
   const [year, month, day] = dayKey.split("-").map(Number);
@@ -65,6 +70,24 @@ async function loadCrewedEventsInRange(
   return {
     events: crewed.slice(0, CREWED_EVENT_SCAN_LIMIT),
     truncated: scanTruncated || crewed.length > CREWED_EVENT_SCAN_LIMIT,
+  };
+}
+
+/** Crewed events plus hashes: hash time is paid crew time, though nobody staffs a hash from here. */
+async function loadCrewTimeEventsInRange(
+  ctx: Parameters<typeof requireAnalyticsAccess>[0],
+  startMs: number,
+  endMs: number,
+) {
+  const { events: rows, truncated: scanTruncated } = await loadEventsInRangeWithHashes(ctx, startMs, endMs);
+  const worked = rows.filter(
+    (event) =>
+      normalizeEventStatus(event.status) !== "cancelled" &&
+      (isCrewedEventType(event.eventType) || isHashEvent(event)),
+  );
+  return {
+    events: worked.slice(0, CREWED_EVENT_SCAN_LIMIT),
+    truncated: scanTruncated || worked.length > CREWED_EVENT_SCAN_LIMIT,
   };
 }
 
@@ -106,7 +129,7 @@ export const getCrewFillRate = query({
         .query("eventCrewShifts")
         .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
         .take(SHIFTS_PER_EVENT_LIMIT);
-      const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event._id));
+      const stats = await computeEventShiftStats(ctx, event, shifts, await loadBackupUserIds(ctx, event));
       totalShifts += stats.totalShifts;
       filledShifts += stats.filledShifts;
       if (!stats.isCrewConfirmed) unconfirmedEvents += 1;
@@ -170,41 +193,58 @@ export const getCrewHoursAndOt = query({
     await requireAnalyticsAccess(ctx);
     assertValidRange(args.startMs, args.endMs);
 
-    const { events, truncated } = await loadCrewedEventsInRange(ctx, args.startMs, args.endMs);
+    const { events, truncated } = await loadCrewTimeEventsInRange(ctx, args.startMs, args.endMs);
     const hoursByWeek = new Map<string, number>();
     const hoursByUserDay = new Map<string, Map<string, number>>();
     const hoursByUserWeek = new Map<string, Map<string, number>>();
     const users = new Set<string>();
     const perUser = new Map<string, { hours: number; shifts: number; events: Set<string> }>();
 
-    for (const event of events) {
-      const shifts = await ctx.db
-        .query("eventCrewShifts")
-        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-        .take(SHIFTS_PER_EVENT_LIMIT);
+    const filledShifts = (
+      await Promise.all(
+        events.map((event) =>
+          ctx.db
+            .query("eventCrewShifts")
+            .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+            .take(SHIFTS_PER_EVENT_LIMIT),
+        ),
+      )
+    )
+      .flat()
+      .filter((shift) => isShiftFilled(shift) && shift.userId);
+    // One person on two shifts at once counts the shared time once (`crewCountableHours`).
+    const countable = crewCountableHours(
+      filledShifts.map((shift) => ({
+        id: shift._id,
+        userId: shift.userId!.trim(),
+        startsAt: shift.startsAt,
+        endsAt: shift.endsAt,
+        hours: shift.hours,
+        createdAt: shift._creationTime,
+      })),
+    );
 
-      for (const shift of shifts) {
-        if (!isShiftFilled(shift) || !shift.userId) continue;
-        const userId = shift.userId.trim();
-        users.add(userId);
-        const dayKey = pacificDateKey(shift.startsAt);
-        const weekKey = getIsoWeekKey(dayKey);
+    for (const shift of filledShifts) {
+      const userId = shift.userId!.trim();
+      const hours = countable.get(shift._id) ?? shift.hours;
+      users.add(userId);
+      const dayKey = pacificDateKey(shift.startsAt);
+      const weekKey = getIsoWeekKey(dayKey);
 
-        hoursByWeek.set(weekKey, roundHours((hoursByWeek.get(weekKey) ?? 0) + shift.hours));
-        const totals = perUser.get(userId) ?? { hours: 0, shifts: 0, events: new Set<string>() };
-        totals.hours += shift.hours;
-        totals.shifts += 1;
-        totals.events.add(event._id);
-        perUser.set(userId, totals);
+      hoursByWeek.set(weekKey, roundHours((hoursByWeek.get(weekKey) ?? 0) + hours));
+      const totals = perUser.get(userId) ?? { hours: 0, shifts: 0, events: new Set<string>() };
+      totals.hours += hours;
+      totals.shifts += 1;
+      totals.events.add(shift.eventId);
+      perUser.set(userId, totals);
 
-        const dayMap = hoursByUserDay.get(userId) ?? new Map<string, number>();
-        dayMap.set(dayKey, roundHours((dayMap.get(dayKey) ?? 0) + shift.hours));
-        hoursByUserDay.set(userId, dayMap);
+      const dayMap = hoursByUserDay.get(userId) ?? new Map<string, number>();
+      dayMap.set(dayKey, roundHours((dayMap.get(dayKey) ?? 0) + hours));
+      hoursByUserDay.set(userId, dayMap);
 
-        const weekMap = hoursByUserWeek.get(userId) ?? new Map<string, number>();
-        weekMap.set(weekKey, roundHours((weekMap.get(weekKey) ?? 0) + shift.hours));
-        hoursByUserWeek.set(userId, weekMap);
-      }
+      const weekMap = hoursByUserWeek.get(userId) ?? new Map<string, number>();
+      weekMap.set(weekKey, roundHours((weekMap.get(weekKey) ?? 0) + hours));
+      hoursByUserWeek.set(userId, weekMap);
     }
 
     let otRiskUsers = 0;
@@ -273,10 +313,11 @@ export const getAvailabilityLatency = query({
     const latencies: number[] = [];
 
     for (const event of events) {
-      const responses = await ctx.db
-        .query("eventCrewAvailabilityResponses")
-        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-        .take(200);
+      // Answers are per night now; each night answer counts for the events that night.
+      // Only people whose crew teams match the event were asked about it.
+      const rows = await loadNightRows(ctx, nightKeyForEvent(event));
+      const profiles = await loadProfilesForRows(ctx, rows);
+      const responses = rows.filter((row) => profileMatchesEvent(profiles.get(row.userId), event));
       for (const response of responses) {
         // Proxy: event createdAt ≈ when crew was asked (no dedicated request-sent timestamp).
         if (response.respondedAt < event.createdAt) continue;
@@ -317,7 +358,7 @@ export const getCrewAttentionAging = query({
         .query("eventCrewShifts")
         .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
         .take(SHIFTS_PER_EVENT_LIMIT);
-      const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event._id));
+      const stats = await computeEventShiftStats(ctx, event, shifts, await loadBackupUserIds(ctx, event));
       if (stats.isCrewConfirmed) continue;
       unconfirmedEvents += 1;
       // Lead time only means something for events still ahead.
@@ -365,7 +406,7 @@ export const getCrewSchedulingKpis = query({
         .query("eventCrewShifts")
         .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
         .take(SHIFTS_PER_EVENT_LIMIT);
-      const stats = computeShiftStats(shifts, await loadBackupUserIds(ctx, event._id));
+      const stats = await computeEventShiftStats(ctx, event, shifts, await loadBackupUserIds(ctx, event));
       totalShifts += stats.totalShifts;
       filledShifts += stats.filledShifts;
       backupShifts += stats.backupShifts;

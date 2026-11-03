@@ -298,6 +298,7 @@ labels (`TAB_ICONS` in `event-workspace-nav.tsx`, `MOMENT_ICONS` in
 | Artist / act | `MicrophoneStageIcon` (Lineup tab, sets); `GuitarIcon` is the Artists *nav* item only |
 | Soundcheck · doors · changeover | `SpeakerHighIcon` · `DoorOpenIcon` · `ArrowsLeftRightIcon` |
 | Equipment | `PackageIcon` |
+| Background music link (open mic) | `MusicNotesIcon` |
 | External rental (pass-through gear) | `TruckIcon` |
 | Billing / quote / invoice | `ReceiptIcon`; money totals and fees `CurrencyDollarIcon` |
 | Due date | `CalendarCheckIcon` (meta line) |
@@ -327,6 +328,7 @@ labels (`TAB_ICONS` in `event-workspace-nav.tsx`, `MOMENT_ICONS` in
 | Insights sections | Finances `CurrencyDollarIcon` · Demand `TrendUpIcon` · Events `CalendarDotsIcon` · Crew `UsersThreeIcon` · Ops `WrenchIcon` · Feedback / ratings `StarIcon` (`TAB_ICONS` in `insights/insights-tab-nav.tsx`) |
 | Trend / chart card ("This month", revenue by month) | `ChartLineIcon` |
 | Hours against a target (quarterly crew hours) | `GaugeIcon` |
+| Cart eligible / cart event (gear moves by golf cart) | `CarSimpleIcon` (`CartEligibleTag`, or icon-only `CartEligibleIcon` on availability pills, in `users/user-select.tsx`) |
 | Link to the page behind a stat tile | `ArrowRightIcon` (`size-3`, after the label) |
 | Magic / auto-build | `MagicWandIcon` (Build run of show); quick fill `LightningIcon` |
 | Signature / e-sign | `SignatureIcon` (awaiting signature, artist payouts) |
@@ -341,6 +343,7 @@ labels (`TAB_ICONS` in `event-workspace-nav.tsx`, `MOMENT_ICONS` in
 | Undo · redo | `ArrowCounterClockwiseIcon` · `ArrowClockwiseIcon` |
 | Zoom out · zoom in | `MagnifyingGlassMinusIcon` · `MagnifyingGlassPlusIcon` |
 | Rotate left · right | `ArrowArcLeftIcon` · `ArrowArcRightIcon` |
+| Hashing (closet cleaning, My hashes tab, the event add-on) · flag an item | `BroomIcon` · `FlagIcon` (`HASHING_TAB_ICONS` in `lib/hashing-tabs.ts`) |
 | Security camera (nav, clip placeholder) · battery | `VideoCameraIcon` · `BatteryMediumIcon` (meta line) |
 | Camera clip types | `RING_CLIP_KIND_ICONS` in `lib/ring-clips.ts`: motion `PersonSimpleWalkIcon`, doorbell `BellRingingIcon`, live view `BroadcastIcon` |
 | Stage plot symbols | Drawn from `packages/rider-document/src/glyphs.ts` (Phosphor paths in to-scale outlines), never hand-picked per page; render with `RiderSymbolGlyph` |
