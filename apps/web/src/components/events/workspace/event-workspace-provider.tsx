@@ -20,6 +20,7 @@ import type { TimelineBlockDraft } from "@/components/events/event-timeline-sche
 import type { UserSelectOption } from "@/components/users/user-select";
 import { assignableCrewSelectOptions } from "@/lib/user-select-description";
 import { normalizeEventStatus } from "@/lib/event-status";
+import { carryServerSummaryBlock } from "@/lib/event-notes-merge";
 import {
   applyShiftTimesOverrideFlags,
   attachShiftsToPersistedBlocks,
@@ -196,15 +197,27 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     });
     const edited = new Set(changedDraftKeys(draft, baseline));
     const rebase: Partial<EventDraft> = {};
+    const draftRebase: Partial<EventDraft> = {};
     for (const key of changedDraftKeys(server, baseline)) {
       if (!edited.has(key)) {
         Object.assign(rebase, { [key]: server[key] });
+      } else if (key === "notes") {
+        // Notes save as one string, so an edited draft must carry the server's email summary or the next save erases it.
+        const carried = carryServerSummaryBlock({
+          draft: draft.notes,
+          baseline: baseline.notes,
+          server: server.notes,
+        });
+        if (carried) {
+          rebase.notes = carried.baseline;
+          draftRebase.notes = carried.draft;
+        }
       }
     }
     if (Object.keys(rebase).length === 0) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from the Convex subscription; converges once baseline matches the server
     setBaseline((prev) => (prev ? { ...prev, ...rebase } : prev));
-    setDraft((prev) => ({ ...prev, ...rebase }));
+    setDraft((prev) => ({ ...prev, ...rebase, ...draftRebase }));
   }, [eventData, baseline, draft]);
 
   useEffect(() => {

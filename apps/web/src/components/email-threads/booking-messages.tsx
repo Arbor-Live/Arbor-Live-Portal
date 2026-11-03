@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { CopyIcon, EnvelopeSimpleIcon, PaperclipIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { EmptyState } from "@/components/list-page";
@@ -157,6 +157,37 @@ function FailedReplyRow({ reply, canRetry }: { reply: FailedReply; canRetry: boo
         </Button>
       ) : null}
     </li>
+  );
+}
+
+function AddSummaryButton({ eventId }: { eventId: Id<"events"> }) {
+  const addSummary = useAction(api.bookingSummary.addSummaryToEventNotes);
+  const [busy, setBusy] = useState(false);
+
+  async function onClick() {
+    setBusy(true);
+    try {
+      const { result } = await addSummary({ eventId });
+      if (result === "added") notify.success("Summary added");
+      else notify.info("Nothing operational to add");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Could not add the summary."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="xs"
+      disabled={busy}
+      onClick={() => void onClick()}
+      data-testid="add-email-summary"
+    >
+      Add summary to notes
+    </Button>
   );
 }
 
@@ -329,25 +360,32 @@ export function BookingMessages(props: { record: BookingMessagesRecord; readOnly
             </span>
           ) : null}
         </CardTitle>
-        {data?.address ? (
-          <div className="flex min-w-0 items-center gap-1">
-            <code
-              className="min-w-0 truncate text-xs text-muted-foreground"
-              data-testid="booking-address"
-            >
-              {data.address}
-            </code>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              aria-label="Copy booking address"
-              onClick={() => void copyAddress(data.address!)}
-            >
-              <CopyIcon aria-hidden />
-            </Button>
-          </div>
-        ) : null}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {"eventId" in props.record &&
+          !readOnly &&
+          data?.messages.some((message) => message.direction === "inbound") ? (
+            <AddSummaryButton eventId={props.record.eventId} />
+          ) : null}
+          {data?.address ? (
+            <div className="flex min-w-0 items-center gap-1">
+              <code
+                className="min-w-0 truncate text-xs text-muted-foreground"
+                data-testid="booking-address"
+              >
+                {data.address}
+              </code>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Copy booking address"
+                onClick={() => void copyAddress(data.address!)}
+              >
+                <CopyIcon aria-hidden />
+              </Button>
+            </div>
+          ) : null}
+        </div>
       </CardHeader>
       <CardContent>
         {data === undefined ? (
