@@ -197,7 +197,6 @@ const adminEventSummaryValue = v.object({
   notes: v.optional(v.string()),
   /** Underlying event lifecycle status, surfaced for the inbox UI. */
   eventStatus: v.string(),
-  /** Whether the runner is currently inside the [start-1h, end+1h] bookable window. */
   runnerOpensAt: v.number(),
   runnerClosesAt: v.number(),
   queuedCount: v.number(),
@@ -347,12 +346,19 @@ const leaderboardEntryValue = v.object({
   lastPerformedAt: v.number(),
 });
 
-/** Open mic regulars: sets performed in `[startMs, endMs)`, most sets first. */
+/** Sets read per leaderboard query: about a year of weekly nights; past it the counts are partial and flagged. */
 const LEADERBOARD_SCAN = 2000;
+const LEADERBOARD_ROWS = 10;
 
+/** Open mic regulars: sets performed in `[startMs, endMs)`, most sets first. */
 export const getLeaderboard = query({
   args: { startMs: v.number(), endMs: v.number() },
-  returns: v.object({ rows: v.array(leaderboardEntryValue), truncated: v.boolean() }),
+  returns: v.object({
+    rows: v.array(leaderboardEntryValue),
+    /** Everyone who performed in the range; `rows` is the top of this. */
+    performerCount: v.number(),
+    truncated: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
     const performed = await ctx.db
@@ -361,7 +367,9 @@ export const getLeaderboard = query({
         q.eq("status", "performed").gte("performedAt", args.startMs).lt("performedAt", args.endMs),
       )
       .order("desc")
-      .take(LEADERBOARD_SCAN);
+      .take(LEADERBOARD_SCAN + 1);
+    const truncated = performed.length > LEADERBOARD_SCAN;
+    if (truncated) performed.pop();
 
     // Newest first, so the first set seen for an email is their latest one and names it.
     const byEmail = new Map<string, { email: string; name: string; count: number; lastPerformedAt: number }>();
@@ -378,8 +386,8 @@ export const getLeaderboard = query({
     }
     const rows = Array.from(byEmail.values())
       .sort((a, b) => b.count - a.count || b.lastPerformedAt - a.lastPerformedAt)
-      .slice(0, 10);
-    return { rows, truncated: performed.length === LEADERBOARD_SCAN };
+      .slice(0, LEADERBOARD_ROWS);
+    return { rows, performerCount: byEmail.size, truncated };
   },
 });
 

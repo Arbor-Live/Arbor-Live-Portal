@@ -34,7 +34,10 @@ export function formatNightStart(ms: number) {
 
 export type RunnerWindow = "before" | "open" | "after";
 
-/** Where `now` sits against the runner window (1h before start to 1h after end). */
+/**
+ * Where `now` sits against the runner window (1h before start to 1h after end).
+ * Mirrors `runnerWindowOpenAt` in the backend, which gates the mutations.
+ */
 export function runnerWindowAt(night: { runnerOpensAt: number; runnerClosesAt: number }, now: number): RunnerWindow {
   if (now < night.runnerOpensAt) return "before";
   return now <= night.runnerClosesAt ? "open" : "after";

@@ -282,6 +282,11 @@ export function InsightsEventsPanel({ startMs, endMs }: InsightsEventsPanelProps
             ) : (
               <p className="text-sm text-muted-foreground">No open mic sets in this range.</p>
             )}
+            {openMicRegulars && openMicRegulars.performerCount > openMicRegulars.rows.length ? (
+              <p className="text-xs text-muted-foreground">
+                Top {openMicRegulars.rows.length} of {openMicRegulars.performerCount} performers.
+              </p>
+            ) : null}
           </InsightCard>
 
           <InsightCard

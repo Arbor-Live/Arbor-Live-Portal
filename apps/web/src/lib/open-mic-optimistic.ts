@@ -167,9 +167,13 @@ export function optimisticSetOpenMicStatus(
 ) {
   const list = localStore.getQuery(api.openMic.listEvents, {});
   if (list) {
-    const next: EventSummary[] = list.map((event) =>
-      event._id === args.eventId ? { ...event, status: args.status } : event,
-    );
+    const next: EventSummary[] = list.map((event) => {
+      if (event._id !== args.eventId) return event;
+      if (args.status === "completed" && event.currentName) {
+        return { ...event, status: args.status, currentName: undefined, performedCount: event.performedCount + 1 };
+      }
+      return { ...event, status: args.status };
+    });
     localStore.setQuery(api.openMic.listEvents, {}, next);
   }
 

@@ -88,6 +88,7 @@ test("counts only sets performed inside [startMs, endMs)", async () => {
       { email: "sam@stanford.edu", name: "Sam", count: 1, lastPerformedAt: END - 1 },
       { email: "kim@stanford.edu", name: "Kim", count: 1, lastPerformedAt: START + DAY },
     ],
+    performerCount: 3,
     truncated: false,
   });
 });
@@ -100,32 +101,70 @@ test("returns nothing when no set falls in the range", async () => {
 
   const result = await asUser(t, crew).query(api.openMic.getLeaderboard, { startMs: START, endMs: END });
 
-  expect(result).toEqual({ rows: [], truncated: false });
+  expect(result).toEqual({ rows: [], performerCount: 0, truncated: false });
 });
 
-test("marking a night completed counts the set on stage", async () => {
+test("flags a range with more sets than one scan reads", async () => {
   const t = makeTest();
   const crew = await arborCrew(t);
   const eventId = await seedEvent(t);
-  const signupId = await t.run(async (ctx) =>
-    ctx.db.insert("openMicSignups", {
-      eventId,
-      name: "Ana",
-      email: "ana@stanford.edu",
-      whatTheyreDoing: "Songs",
-      equipment: [],
-      status: "current",
-      skipsCount: 0,
-      position: START,
-      submittedAt: START,
-      createdAt: START,
-      updatedAt: START,
-    }),
-  );
+  await t.run(async (ctx) => {
+    for (let i = 0; i < 2001; i += 1) {
+      await ctx.db.insert("openMicSignups", {
+        eventId,
+        name: "Ana",
+        email: "ana@stanford.edu",
+        whatTheyreDoing: "Songs",
+        equipment: [],
+        status: "performed",
+        skipsCount: 0,
+        position: START + i,
+        performedAt: START + i,
+        submittedAt: START,
+        createdAt: START,
+        updatedAt: START,
+      });
+    }
+  });
 
+  const result = await asUser(t, crew).query(api.openMic.getLeaderboard, { startMs: START, endMs: END });
+
+  expect(result.truncated).toBe(true);
+  expect(result.rows[0]?.count).toBe(2000);
+});
+
+test("marking a night completed counts the set on stage and leaves the queue alone", async () => {
+  const t = makeTest();
+  const crew = await arborCrew(t);
+  const eventId = await seedEvent(t);
+  const insert = (name: string, status: "current" | "queued") =>
+    t.run(async (ctx) =>
+      ctx.db.insert("openMicSignups", {
+        eventId,
+        name,
+        email: `${name.toLowerCase()}@stanford.edu`,
+        whatTheyreDoing: "Songs",
+        equipment: [],
+        status,
+        skipsCount: 0,
+        position: START,
+        submittedAt: START,
+        createdAt: START,
+        updatedAt: START,
+      }),
+    );
+  await insert("Ana", "current");
+  const queuedId = await insert("Sam", "queued");
+
+  const before = Date.now();
   await asUser(t, crew).mutation(api.openMic.setOpenMicStatus, { eventId, status: "completed" });
+  const regulars = await asUser(t, crew).query(api.openMic.getLeaderboard, {
+    startMs: before,
+    endMs: Date.now() + 1,
+  });
 
-  const signup = await t.run(async (ctx) => ctx.db.get(signupId));
-  expect(signup?.status).toBe("performed");
-  expect(typeof signup?.performedAt).toBe("number");
+  expect(regulars.rows.map(({ email, count }) => ({ email, count }))).toEqual([
+    { email: "ana@stanford.edu", count: 1 },
+  ]);
+  expect((await t.run(async (ctx) => ctx.db.get(queuedId)))?.status).toBe("queued");
 });

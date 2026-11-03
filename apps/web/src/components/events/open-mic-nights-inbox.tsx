@@ -46,7 +46,7 @@ export function OpenMicEventsInbox() {
   const nights = useQuery(api.openMic.listEvents, {});
   const setStatus = useSetOpenMicStatus();
   const updateEvent = useMutation(api.events.update);
-  const now = useNow(30_000);
+  const now = useNow(5_000);
   const [showAllPast, setShowAllPast] = useState(false);
 
   const groups = useMemo(() => {
@@ -55,7 +55,7 @@ export function OpenMicEventsInbox() {
     const past: Night[] = [];
     for (const night of nights ?? []) {
       if (night.status === "live") live.push(night);
-      else if (night.status === "scheduled" && night.runnerClosesAt > now) upcoming.push(night);
+      else if (night.status === "scheduled" && runnerWindowAt(night, now) !== "after") upcoming.push(night);
       else past.push(night);
     }
     live.sort((a, b) => a.startAt - b.startAt);
@@ -86,7 +86,7 @@ export function OpenMicEventsInbox() {
         data-testid={`open-mic-event-${night._id}`}
         actions={
           <div className="flex items-center gap-1">
-            {moves.next === "live" && runnerWindow === "open" ? (
+            {moves.next === "live" && runnerWindow === "open" && night.eventStatus !== "cancelled" ? (
               <Button type="button" size="sm" onClick={() => void setStatus(night, "live")}>
                 Go live
               </Button>

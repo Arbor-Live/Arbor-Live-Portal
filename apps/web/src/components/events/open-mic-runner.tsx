@@ -222,7 +222,7 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
   const removeSignup = useMutation(api.openMic.removeSignup).withOptimisticUpdate(optimisticRemoveSignup);
   const setStatus = useSetOpenMicStatus();
   const [selectedId, setSelectedId] = useSheetParam("signup");
-  const now = useNow(30_000);
+  const now = useNow(5_000);
 
   const signups = state?.signups;
   const view = useMemo(() => deriveRunnerView(signups ?? []), [signups]);
@@ -343,7 +343,7 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
         }
       />
 
-      {runnerWindow !== "open" ? (
+      {runnerWindow !== "open" && moves.canRun ? (
         <Alert className={cn("border-status-amber-500/40 bg-status-amber-500/10", AMBER_TEXT)}>
           <WarningIcon aria-hidden />
           <AlertDescription className={AMBER_TEXT}>
