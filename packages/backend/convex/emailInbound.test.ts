@@ -2,7 +2,14 @@
 import { describe, expect, it } from "vitest";
 import { internal } from "./_generated/api";
 import { seedEvent, seedInvoice, seedRequest } from "./test/bookingSeeds.helpers";
-import { createUser, makeTest, type Test } from "./test/setup.helpers";
+import {
+  addMembership,
+  createOrg,
+  createUser,
+  makeTest,
+  setVerticals,
+  type Test,
+} from "./test/setup.helpers";
 
 const RECEIVED_AT = Date.UTC(2026, 10, 3, 18);
 
@@ -223,6 +230,32 @@ describe("booking staff notifications", () => {
     expect(await record(t, inbound())).toBe("matched");
     const rows = await t.run(async (ctx) => ctx.db.query("notifications").collect());
     expect(rows.map((row) => row.userId)).toEqual([assignee._id]);
+  });
+
+  it("notifies the Crew portal admins when nobody owns the booking, never a band org admin", async () => {
+    const t = makeTest();
+    const arbor = await createOrg(t, { type: "arbor_internal" });
+    const band = await createOrg(t, { type: "band" });
+    const crewAdmin = await createUser(t, { role: "admin", email: "crew-admin@arbor.st" });
+    await addMembership(t, crewAdmin._id, arbor.organizationId, "org_admin");
+    await setVerticals(t, crewAdmin._id, ["Crew"]);
+    const opsAdmin = await createUser(t, { role: "admin", email: "ops-admin@arbor.st" });
+    await addMembership(t, opsAdmin._id, arbor.organizationId, "org_admin");
+    await setVerticals(t, opsAdmin._id, ["Operations"]);
+    const bandAdmin = await createUser(t, { role: "admin", email: "band-admin@band.test" });
+    await addMembership(t, bandAdmin._id, band.organizationId, "org_admin");
+    await setVerticals(t, bandAdmin._id, ["Crew"]);
+    const ids = await seedBooking(t);
+
+    expect(await record(t, inbound())).toBe("matched");
+
+    const rows = await t.run(async (ctx) => ctx.db.query("notifications").collect());
+    expect(rows.map((row) => row.userId)).toEqual([crewAdmin._id]);
+    expect(rows[0]).toMatchObject({
+      template: "booking_email_received",
+      title: "Reply from Maya Rivera",
+      path: `/dashboard/ops-center/requests/${ids.requestId}`,
+    });
   });
 
   it("does not notify for unmatched mail", async () => {

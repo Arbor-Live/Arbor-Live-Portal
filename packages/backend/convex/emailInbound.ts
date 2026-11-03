@@ -8,7 +8,7 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { bookingRequestsAdminUrl, eventDashboardUrl, invoiceDashboardUrl } from "./email/constants";
-import { findAuthUsersByIds } from "./lib/auth";
+import { findAuthUsersByIds, listAdminUsersForVertical } from "./lib/auth";
 import { parseBookingAddress } from "./lib/emailAddresses";
 import {
   type BookingRef,
@@ -162,7 +162,6 @@ async function notifyBookingStaff(
   for (const userId of [invoice?.managerUserId, request?.assigneeUserId, event?.eventManagerUserId]) {
     if (userId) userIds.add(userId);
   }
-  if (userIds.size === 0) return;
 
   const url = thread.requestId
     ? bookingRequestsAdminUrl(thread.requestId)
@@ -173,14 +172,20 @@ async function notifyBookingStaff(
         : null;
   if (!url) return;
 
-  const sender = message.fromEmail.toLowerCase();
   const staffById = await findAuthUsersByIds(ctx, [...userIds]);
-  for (const userId of userIds) {
+  let recipients: { userId: string; email?: string | null }[] = [...userIds].flatMap((userId) => {
     const staff = staffById.get(userId);
+    return staff ? [{ userId, email: staff.email }] : [];
+  });
+  // Nobody owns the booking yet: the Crew admins who triage new requests hear about it instead.
+  if (recipients.length === 0) recipients = await listAdminUsersForVertical(ctx, "Crew");
+
+  const sender = message.fromEmail.toLowerCase();
+  for (const recipient of recipients) {
     // A manager CC'ing the booking address on their own mail is not news to them.
-    if (!staff || staff.email?.toLowerCase() === sender) continue;
+    if (recipient.email?.toLowerCase() === sender) continue;
     await recordBookingEmailNotification(ctx, {
-      userId,
+      userId: recipient.userId,
       resendEmailId: message.resendEmailId,
       title: `Reply from ${message.fromName ?? message.fromEmail}`,
       body: message.bodyText,

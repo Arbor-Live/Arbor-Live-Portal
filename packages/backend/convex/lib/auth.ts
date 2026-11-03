@@ -558,18 +558,38 @@ export async function listPortalAdminEmails(ctx: AuthCtx): Promise<string[]> {
   return [...emails];
 }
 
+async function listPortalAdminUsersForVertical(
+  ctx: AuthCtx,
+  vertical: UserVertical,
+): Promise<AuthUser[]> {
+  const admins: AuthUser[] = [];
+  for (const user of await listPortalAdminUsers(ctx)) {
+    const profile = await getUserAdminProfile(ctx, getUserId(user));
+    const { verticals } = resolveProfileMembership(profile ?? {});
+    if (hasVertical(verticals, vertical)) admins.push(user);
+  }
+  return admins;
+}
+
 /** Portal admins whose profile includes the given vertical (for staff inbox emails). */
 export async function listAdminEmailsForVertical(
   ctx: AuthCtx,
   vertical: UserVertical,
 ): Promise<string[]> {
   const emails = new Set<string>();
-  for (const user of await listPortalAdminUsers(ctx)) {
-    const userId = getUserId(user);
-    const profile = await getUserAdminProfile(ctx, userId);
-    const { verticals } = resolveProfileMembership(profile ?? {});
-    if (!hasVertical(verticals, vertical)) continue;
+  for (const user of await listPortalAdminUsersForVertical(ctx, vertical)) {
     if (user.email) emails.add(user.email.trim().toLowerCase());
   }
   return [...emails];
+}
+
+/** The same audience as `listAdminEmailsForVertical`, as user ids (for in-app notifications). */
+export async function listAdminUsersForVertical(
+  ctx: AuthCtx,
+  vertical: UserVertical,
+): Promise<{ userId: string; email?: string }[]> {
+  return (await listPortalAdminUsersForVertical(ctx, vertical)).map((user) => ({
+    userId: getUserId(user),
+    email: user.email ?? undefined,
+  }));
 }
