@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { WarningIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
+import { BookingMessages } from "@/components/email-threads/booking-messages";
 import { InvoicePaymentStatusSection } from "@/components/financial/invoice-payment-status-section";
 import { InvoiceQuoteApprovalDetails } from "@/components/financial/invoice-quote-approval-details";
 import { FormSaveBar } from "@/components/forms";
@@ -72,6 +73,7 @@ export function InvoiceEditor({
           {activeInvoiceId && invoice && (invoice.clientApprovalStatus ?? "pending") === "approved" ? (
             <InvoicePaymentStatusSection invoiceId={activeInvoiceId} />
           ) : null}
+          {activeInvoiceId ? <BookingMessages record={{ invoiceId: activeInvoiceId }} /> : null}
         </div>
         <InvoiceSummaryRail draft={draft} />
       </div>

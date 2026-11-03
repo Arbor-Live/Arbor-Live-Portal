@@ -21,6 +21,7 @@ import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { VenuePicker } from "@/components/venues/venue-picker";
 import { UserSelect } from "@/components/users/user-select";
 import { CommentsSection } from "@/components/comments/comments-section";
+import { BookingMessages } from "@/components/email-threads/booking-messages";
 import { EventContactsSection } from "@/components/events/event-contacts-section";
 import {
   EventPostMortemSection,
@@ -153,6 +154,7 @@ export function OverviewTab() {
         </Card>
 
         <EventContactsSection eventId={eventId} canEdit={canEdit} />
+        <BookingMessages record={{ eventId }} />
         <EventFilesCard eventId={eventId} artifacts={eventData?.artifacts ?? []} canEdit={canEdit} />
         <EventPostMortemSection eventId={eventId} />
         {canEdit ? <EventPostMortemSummary eventId={eventId} /> : null}

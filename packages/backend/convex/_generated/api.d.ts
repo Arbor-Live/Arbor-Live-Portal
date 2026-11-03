@@ -76,6 +76,7 @@ import type * as email_templates from "../email/templates.js";
 import type * as email_triggers from "../email/triggers.js";
 import type * as email_weeklyDigest from "../email/weeklyDigest.js";
 import type * as emailInbound from "../emailInbound.js";
+import type * as emailThreads from "../emailThreads.js";
 import type * as equipmentBorrowRequests from "../equipmentBorrowRequests.js";
 import type * as eventArtifacts from "../eventArtifacts.js";
 import type * as eventArtistNeeds from "../eventArtistNeeds.js";
@@ -395,6 +396,7 @@ declare const fullApi: ApiFromModules<{
   "email/triggers": typeof email_triggers;
   "email/weeklyDigest": typeof email_weeklyDigest;
   emailInbound: typeof emailInbound;
+  emailThreads: typeof emailThreads;
   equipmentBorrowRequests: typeof equipmentBorrowRequests;
   eventArtifacts: typeof eventArtifacts;
   eventArtistNeeds: typeof eventArtistNeeds;
