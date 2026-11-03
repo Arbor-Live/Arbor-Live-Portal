@@ -1,7 +1,7 @@
 import { pacificDateKey, recentPayPeriods } from "@arbor/format";
 import { v } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   findAuthUsersByIds,
   getUserId,
@@ -9,20 +9,17 @@ import {
   requireArborInternalContext,
   requireAuth,
 } from "./lib/auth";
-import { DEFAULT_AVAILABILITY_WEEKS } from "./lib/crewTeams";
-import { listMyPendingNights } from "./lib/crewNightInbox";
-import { profileHasCrewSpecialty } from "./lib/userVerticals";
+import {
+  listUserShiftsNear,
+  ON_SHIFT_PADDING_MS,
+  summarizeOnShiftEvents,
+} from "./lib/crewShiftWindow";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
-import { resolveUserStatus } from "./lib/userStatus";
 import { normalizeEventStatus } from "./lib/eventStatus";
+import { isHashEvent } from "./lib/hashEvent";
+import { loadDateForEvent } from "./lib/hashingData";
 import { listMyPostEventWork as listMyPostEventWorkForUser } from "./lib/myEventActions";
 import { listShowShifts, userWorkedShowShift } from "./lib/showShift";
-
-const pendingNightValue = v.object({
-  nightKey: v.string(),
-  startAt: v.number(),
-  events: v.array(v.object({ _id: v.id("events"), title: v.string() })),
-});
 
 const scheduledEventValue = v.object({
   eventId: v.id("events"),
@@ -31,6 +28,18 @@ const scheduledEventValue = v.object({
   startAt: v.number(),
   endAt: v.number(),
   shiftCount: v.number(),
+  /** Set for a hash: crew go to the runner, not the event page. */
+  hashDateId: v.optional(v.id("hashDates")),
+});
+
+const activeShiftValue = v.object({
+  eventId: v.id("events"),
+  title: v.string(),
+  venueName: v.optional(v.string()),
+  startsAt: v.number(),
+  endsAt: v.number(),
+  phase: v.union(v.literal("upcoming"), v.literal("now"), v.literal("ended")),
+  hashDateId: v.optional(v.id("hashDates")),
 });
 
 const postEventWorkValue = v.object({
@@ -53,41 +62,13 @@ const payPeriodSummaryValue = v.object({
   daysWorked: v.number(),
 });
 
+async function hashDateIdOf(ctx: QueryCtx, event: Doc<"events">) {
+  return isHashEvent(event) ? (await loadDateForEvent(ctx, event._id))?._id : undefined;
+}
+
 function weeksToMs(weeks: number) {
   return weeks * 7 * 24 * 60 * 60 * 1000;
 }
-
-async function getCurrentUserProfile(ctx: QueryCtx, userId: string) {
-  return await ctx.db
-    .query("userAdminProfiles")
-    .withIndex("by_userId", (q) => q.eq("userId", userId))
-    .unique();
-}
-
-export const listMyPendingAvailability = query({
-  args: {
-    now: v.number(),
-    weeksAhead: v.optional(v.number()),
-  },
-  returns: v.array(pendingNightValue),
-  handler: async (ctx, args) => {
-    const user = await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
-    const userId = getUserId(user);
-    const profile = await getCurrentUserProfile(ctx, userId);
-    if (resolveUserStatus(profile) !== "active") return [];
-    if (!profileHasCrewSpecialty(profile ?? {})) return [];
-    const weeksAhead = args.weeksAhead ?? DEFAULT_AVAILABILITY_WEEKS;
-    const windowEnd = args.now + weeksToMs(weeksAhead);
-    // Availability is answered per night, so this lists unanswered nights.
-    const pending = await listMyPendingNights(ctx, userId, profile, args.now, windowEnd);
-    return pending.map((night) => ({
-      nightKey: night.nightKey,
-      startAt: Math.min(...night.events.map((event) => event.startAt)),
-      events: night.events.map((event) => ({ _id: event._id, title: event.title })),
-    }));
-  },
-});
 
 export const listMyScheduledEvents = query({
   args: {
@@ -140,9 +121,37 @@ export const listMyScheduledEvents = query({
         startAt: summary.earliestStart,
         endAt: summary.latestEnd,
         shiftCount: summary.shiftCount,
+        hashDateId: await hashDateIdOf(ctx, event),
       });
     }
     return results.sort((a, b) => a.startAt - b.startAt);
+  },
+});
+
+/** The events the viewer is working around `now`, most pressing first. */
+export const listMyActiveShifts = query({
+  args: { now: v.number() },
+  returns: v.array(activeShiftValue),
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const shifts = await listUserShiftsNear(ctx, getUserId(user), args.now, ON_SHIFT_PADDING_MS);
+
+    const results = [];
+    for (const { eventId, startsAt, endsAt, phase } of summarizeOnShiftEvents(shifts, args.now)) {
+      const event = await ctx.db.get(eventId);
+      if (!event || normalizeEventStatus(event.status) === "cancelled") continue;
+      results.push({
+        eventId,
+        title: event.title,
+        venueName: event.venueName,
+        startsAt,
+        endsAt,
+        phase,
+        hashDateId: await hashDateIdOf(ctx, event),
+      });
+    }
+    return results;
   },
 });
 

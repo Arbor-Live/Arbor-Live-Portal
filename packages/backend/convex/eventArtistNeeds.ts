@@ -24,6 +24,7 @@ import {
   type ArtistOpportunityRow,
   type EffectiveArtistNeedStatus,
 } from "./lib/eventArtistNeeds";
+import { isHashEvent } from "./lib/hashEvent";
 import {
   latestWebsiteVisibleDesign,
   MAX_DESIGNS_PER_EVENT,
@@ -840,7 +841,7 @@ export const listOpenPositions = query({
     const out = [];
     for (const event of events) {
       const status = normalizeEventStatus(event.status);
-      if (status === "cancelled") continue;
+      if (status === "cancelled" || isHashEvent(event)) continue;
       const positions = await ctx.db
         .query("eventArtistNeeds")
         .withIndex("by_eventId", (q) => q.eq("eventId", event._id))

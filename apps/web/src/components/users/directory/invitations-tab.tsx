@@ -2,13 +2,14 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { CaretRightIcon, DotsThreeIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, DotsThreeIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatDate } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { useConvexForm } from "@/hooks/use-convex-form";
+import { FilterBar, matchesFilter, type FilterDefinition, type FilterState } from "@/components/filter-bar";
 import { ListRow } from "@/components/list-row";
 import { StatusPill } from "@/components/page-header";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -20,7 +21,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -32,7 +32,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   EmptyRows,
   INVITE_STATUS_LABELS,
@@ -50,7 +49,8 @@ import {
   type InviteStatus,
   type OrgOption,
 } from "@/components/users/directory/shared";
-import { OrgFilterSelect, useUsersDirectory } from "@/components/users/directory/users-directory-shell";
+import { NOTION_CHECKLIST_ITEMS, NotionChecklistSection } from "@/components/users/notion-checklist-section";
+import { useOrgFilter, useUsersDirectory } from "@/components/users/directory/users-directory-shell";
 import {
   editInviteSchema,
   type EditInviteFormValues,
@@ -58,9 +58,16 @@ import {
   type UserVerticalOption,
 } from "@/lib/validations/users";
 
-type StatusFilter = InviteStatus | "all";
+const STATUS_FILTER: FilterDefinition = {
+  id: "status",
+  label: "Status",
+  options: (["pending", "expired", "accepted", "cancelled"] as const).map((value) => ({
+    value,
+    label: INVITE_STATUS_LABELS[value],
+  })),
+};
 
-const STATUS_FILTERS: StatusFilter[] = ["pending", "expired", "accepted", "cancelled", "all"];
+const DEFAULT_FILTERS: FilterState = { status: { operator: "is", values: ["pending"] } };
 
 /** Invite actions shared by a row's `⋯` menu and the invite panel. Each returns whether it succeeded. */
 function useInviteActions() {
@@ -100,16 +107,19 @@ function useInviteActions() {
 
 /** Invitations to the filtered organization, newest first, with a side panel to edit, resend, or cancel. */
 export function InvitationsTab() {
-  const { orgOptions, filterOrgId, openAddPerson } = useUsersDirectory();
+  const { orgOptions, openAddPerson } = useUsersDirectory();
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const orgFilter = useOrgFilter(filters, setFilters);
+  const { organizationId } = orgFilter;
   const invitations = useQuery(
     api.users.listInvitationsAdmin,
-    orgOptions === undefined ? "skip" : { organizationId: filterOrgId },
+    orgOptions === undefined ? "skip" : { organizationId },
   );
   const actions = useInviteActions();
   const [selectedId, setSelectedId] = useSheetParam("invite");
   const [search, setSearch] = useState("");
   const query = useDeferredValue(search.trim().toLowerCase());
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending");
+  const filterDefinitions = useMemo(() => [orgFilter.definition, STATUS_FILTER], [orgFilter.definition]);
 
   const counts = useMemo(() => {
     const result: Record<InviteStatus, number> = { pending: 0, accepted: 0, expired: 0, cancelled: 0 };
@@ -120,47 +130,29 @@ export function InvitationsTab() {
   const rows = useMemo(
     () =>
       (invitations ?? []).filter((invite) => {
-        if (statusFilter !== "all" && inviteStatus(invite.status) !== statusFilter) return false;
+        if (!matchesFilter(filters.status, inviteStatus(invite.status))) return false;
         if (!query) return true;
         return [invite.email, invite.organizationName, invite.inviterName, invite.role]
           .join(" ")
           .toLowerCase()
           .includes(query);
       }),
-    [invitations, statusFilter, query],
+    [invitations, filters, query],
   );
 
   const selectedInvite = invitations?.find((invite) => invite.id === selectedId) ?? null;
 
   return (
     <div className="space-y-3" data-testid="invitations-tab">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full sm:w-64">
-          <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            aria-label="Search invitations"
-            placeholder="Search email or inviter…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <OrgFilterSelect />
-        <ToggleGroup
-          type="single"
-          size="sm"
-          variant="outline"
-          aria-label="Invitation status"
-          value={statusFilter}
-          onValueChange={(value) => value && setStatusFilter(value as StatusFilter)}
-        >
-          {STATUS_FILTERS.map((value) => (
-            <ToggleGroupItem key={value} value={value}>
-              {value === "all" ? "All" : INVITE_STATUS_LABELS[value]}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      </div>
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search email or inviter…"
+        searchLabel="Search invitations"
+        filters={filterDefinitions}
+        value={orgFilter.value}
+        onChange={orgFilter.onChange}
+      />
 
       {invitations === undefined ? (
         <div className="space-y-2">
@@ -186,7 +178,7 @@ export function InvitationsTab() {
                   to send one.
                 </>
               ) : (
-                "No invitations match. Pick another status, or clear the search."
+                "No invitations match. Change the filters, or clear the search."
               )}
             </EmptyRows>
           ) : (
@@ -229,6 +221,10 @@ function InviteRowItem({
 }) {
   const status = inviteStatus(invite.status);
   const pending = status === "pending";
+  const notionChecklist = pending || status === "accepted" ? invite.notionChecklist : null;
+  const notionDone = notionChecklist
+    ? NOTION_CHECKLIST_ITEMS.filter((item) => notionChecklist[item.key]).length
+    : null;
   return (
     <ListRow
       data-testid={`invite-row-${invite.id}`}
@@ -265,6 +261,11 @@ function InviteRowItem({
         <p className="truncate text-xs text-muted-foreground">
           <span data-testid="invite-role">{roleLabel(invite.role)}</span> · Invited by {invite.inviterName}
           {invite.createdAt ? ` · ${formatDate(invite.createdAt)}` : ""}
+          {notionDone !== null && notionDone < NOTION_CHECKLIST_ITEMS.length ? (
+            <span data-testid="invite-notion-progress">
+              {" · "}Notion {notionDone}/{NOTION_CHECKLIST_ITEMS.length}
+            </span>
+          ) : null}
         </p>
       </div>
       <span className="hidden w-44 shrink-0 text-right text-xs whitespace-nowrap text-muted-foreground tabular-nums md:block">
@@ -398,6 +399,10 @@ function InviteSheetBody({ invite, orgOptions }: { invite: InviteRow; orgOptions
           ))}
         </dl>
       </SheetSection>
+
+      {invite.notionChecklist ? (
+        <NotionChecklistSection invitationId={invite.id} checklist={invite.notionChecklist} />
+      ) : null}
 
       <SheetSection title="Role and teams">
         <fieldset disabled={!pending} className="space-y-4">

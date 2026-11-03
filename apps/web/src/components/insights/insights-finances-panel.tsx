@@ -149,6 +149,11 @@ export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelP
                     : ""}
                 </p>
               ) : null}
+              {profit.hashCostUsd > 0 ? (
+                <p className="text-xs text-muted-foreground" data-testid="insights-hash-cost">
+                  Hashes cost {formatUsd(profit.hashCostUsd)}, which isn&apos;t in these margins.
+                </p>
+              ) : null}
             </>
           ) : null}
         </InsightCard>

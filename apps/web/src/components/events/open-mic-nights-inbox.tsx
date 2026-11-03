@@ -1,168 +1,194 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { api } from "@/lib/convex-api";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState, RowFlag, RowList, RowMenu, RowText } from "@/components/list-page";
+import { EmptyState, ListSummary, RowCell, RowFlag, RowGroup, RowMenu, RowText } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
-import { formatDateTime } from "@/lib/format";
-import { getConvexErrorMessage } from "@/lib/convex-error";
-import { optimisticSetOpenMicStatus } from "@/lib/open-mic-optimistic";
+import { StatusPill } from "@/components/page-header";
+import { attempt, useSetOpenMicStatus } from "@/lib/open-mic-actions";
+import { formatTime } from "@/lib/format";
+import {
+  formatNightStart,
+  OPEN_MIC_MOVES,
+  OPEN_MIC_STATUS,
+  canGoLive,
+  eventCancelled,
+  runnerWindowAt,
+  type RunnerWindow,
+} from "@/lib/open-mic-status";
+import { useNow } from "@/lib/use-now";
 
-function statusLabel(status: string) {
-  switch (status) {
-    case "scheduled":
-      return "Scheduled";
-    case "live":
-      return "Live";
-    case "completed":
-      return "Completed";
-    case "cancelled":
-      return "Cancelled";
-    default:
-      return status;
+type Night = FunctionReturnType<typeof api.openMic.listEvents>[number];
+
+const PAST_PREVIEW = 5;
+
+function nightDetail(night: Night, runnerWindow: RunnerWindow) {
+  if (night.status === "live") {
+    const parts = [night.currentName ? `${night.currentName} on stage` : null, `${night.queuedCount} queued`];
+    return parts.filter(Boolean).join(" · ");
   }
+  if (night.status !== "scheduled") return undefined;
+  if (runnerWindow === "before") return `Runner opens ${formatTime(night.runnerOpensAt)}`;
+  return runnerWindow === "open" ? "Runner open" : "Never went live";
+}
+
+function nightCount(night: Night) {
+  return night.status === "scheduled" ? `${night.queuedCount} signed up` : `${night.performedCount} performed`;
 }
 
 export function OpenMicEventsInbox() {
-  const { confirm, alert } = useAppDialog();
-  const events = useQuery(api.openMic.listEvents, {});
-  const setOpenMicStatus = useMutation(api.openMic.setOpenMicStatus).withOptimisticUpdate(
-    optimisticSetOpenMicStatus,
-  );
+  const { confirm } = useAppDialog();
+  const nights = useQuery(api.openMic.listEvents, {});
+  const setStatus = useSetOpenMicStatus();
   const updateEvent = useMutation(api.events.update);
-  const [now] = useState(() => Date.now());
+  const now = useNow(5_000);
+  const [showAllPast, setShowAllPast] = useState(false);
+
+  const groups = useMemo(() => {
+    const live: Night[] = [];
+    const upcoming: Night[] = [];
+    const past: Night[] = [];
+    for (const night of nights ?? []) {
+      if (night.status === "live") live.push(night);
+      else if (night.status === "scheduled" && runnerWindowAt(night, now) !== "after") upcoming.push(night);
+      else past.push(night);
+    }
+    live.sort((a, b) => a.startAt - b.startAt);
+    upcoming.sort((a, b) => a.startAt - b.startAt);
+    past.sort((a, b) => b.startAt - a.startAt);
+    return { live, upcoming, past };
+  }, [nights, now]);
+
+  async function turnOff(night: Night) {
+    const ok = await confirm({
+      title: `Turn off Open Mic on ${night.title}?`,
+      description: "Queues stay archived in the runner.",
+      confirmLabel: "Turn off Open Mic",
+      destructive: true,
+    });
+    if (!ok) return;
+    await attempt(() => updateEvent({ id: night._id, openMicEnabled: false }));
+  }
+
+  function renderRow(night: Night) {
+    const status = OPEN_MIC_STATUS[night.status];
+    const moves = OPEN_MIC_MOVES[night.status];
+    const runnerWindow = runnerWindowAt(night, now);
+    return (
+      <ListRow
+        key={night._id}
+        href={`/dashboard/events/open-mic/${night._id}`}
+        data-testid={`open-mic-event-${night._id}`}
+        actions={
+          <div className="flex items-center gap-1">
+            {canGoLive(night) && runnerWindow === "open" ? (
+              <Button type="button" size="sm" onClick={() => void setStatus(night, "live")}>
+                Go live
+              </Button>
+            ) : null}
+            <RowMenu label={`More for ${night.title}`}>
+              <DropdownMenuItem asChild>
+                <Link href={`/dashboard/events/open-mic/${night._id}`}>Open runner</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={`/dashboard/events/${night._id}`}>Open event</Link>
+              </DropdownMenuItem>
+              {moves.next === "completed" || moves.canCancel ? <DropdownMenuSeparator /> : null}
+              {moves.next === "completed" ? (
+                <DropdownMenuItem onSelect={() => void setStatus(night, "completed")}>Mark completed</DropdownMenuItem>
+              ) : null}
+              {moves.canCancel ? (
+                <DropdownMenuItem variant="destructive" onSelect={() => void setStatus(night, "cancelled")}>
+                  Cancel night
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={() => void turnOff(night)}>
+                Turn off Open Mic
+              </DropdownMenuItem>
+            </RowMenu>
+          </div>
+        }
+      >
+        <RowText eyebrow={formatNightStart(night.startAt)} title={night.title} detail={nightDetail(night, runnerWindow)} />
+        {eventCancelled(night) ? <RowFlag tone="rose">Event cancelled</RowFlag> : null}
+        <RowCell hideBelow="md" className="w-28" muted>
+          {nightCount(night)}
+        </RowCell>
+        <span className="hidden w-28 shrink-0 justify-end md:flex">
+          <StatusPill tone={status.tone}>{status.label}</StatusPill>
+        </span>
+      </ListRow>
+    );
+  }
+
+  if (nights === undefined) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-16 w-full" />
+      </div>
+    );
+  }
+  if (nights.length === 0) {
+    return (
+      <EmptyState>
+        No events have Open Mic turned on. Turn it on from an event&rsquo;s Add-ons.
+      </EmptyState>
+    );
+  }
+
+  const { live, upcoming, past } = groups;
+  const summary = [
+    live.length > 0 ? `${live.length} live` : null,
+    upcoming.length > 0 ? `${upcoming.length} upcoming` : null,
+    past.length > 0 ? `${past.length} past` : null,
+  ].filter(Boolean);
+  const visiblePast = showAllPast ? past : past.slice(0, PAST_PREVIEW);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button asChild className="ml-auto">
-          <Link href="/open-mic" target="_blank">
-            Open public form
-          </Link>
-        </Button>
-      </div>
+    <div className="space-y-4" data-testid="open-mic-inbox-list">
+      <ListSummary
+        testId="open-mic-inbox-summary"
+        order="Live first, then upcoming soonest first, then past newest first. Turn Open Mic on from an event's Add-ons."
+      >
+        {summary.join(" · ")}
+      </ListSummary>
 
-      <p className="border border-dashed px-3 py-2 text-sm text-muted-foreground">
-        Open Mic is an add-on on events. Enable it from an event&rsquo;s
-        <span className="px-1 text-foreground">Add-ons</span> section to list it here.
-      </p>
-
-      {events === undefined ? (
-        <div className="space-y-2">
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-        </div>
-      ) : events.length === 0 ? (
-        <EmptyState>No events with Open Mic enabled. Turn it on from an event&rsquo;s Add-ons section.</EmptyState>
-      ) : (
-        <RowList testId="open-mic-inbox-list">
-          {events.map((event) => {
-            const past = event.startAt < now;
-            return (
-              <ListRow
-                key={event._id}
-                href={`/dashboard/events/${event._id}`}
-                data-testid={`open-mic-event-${event._id}`}
-                actions={
-                  <RowMenu label={`More for ${event.title}`}>
-                    <DropdownMenuItem asChild>
-                      <Link href={`/dashboard/events/${event._id}`}>Open event</Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href={`/dashboard/events/open-mic/${event._id}`}>Runner</Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    {event.status === "scheduled" && !past ? (
-                      <DropdownMenuItem
-                        disabled={!event.runnerWindowOpen}
-                        title={
-                          event.runnerWindowOpen
-                            ? "Open the runner queue"
-                            : `Runner opens ${formatDateTime(event.runnerOpensAt)} (1h before start)`
-                        }
-                        onSelect={() =>
-                          void setOpenMicStatus({ eventId: event._id, status: "live" }).catch((err) => {
-                            void alert(getConvexErrorMessage(err));
-                          })
-                        }
-                      >
-                        Go live
-                      </DropdownMenuItem>
-                    ) : null}
-                    {event.status === "live" ? (
-                      <DropdownMenuItem
-                        onSelect={() =>
-                          void setOpenMicStatus({ eventId: event._id, status: "completed" })
-                        }
-                      >
-                        Mark completed
-                      </DropdownMenuItem>
-                    ) : null}
-                    {event.status !== "cancelled" && event.status !== "completed" ? (
-                      <DropdownMenuItem
-                        onSelect={() =>
-                          void setOpenMicStatus({ eventId: event._id, status: "cancelled" })
-                        }
-                      >
-                        Cancel
-                      </DropdownMenuItem>
-                    ) : null}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      variant="destructive"
-                      onSelect={() => {
-                        void (async () => {
-                          if (
-                            !(await confirm({
-                              title: "Disable Open Mic on this event?",
-                              description: "Queues stay archived in the runner.",
-                              confirmLabel: "Disable Open Mic",
-                              destructive: true,
-                            }))
-                          ) {
-                            return;
-                          }
-                          await updateEvent({ id: event._id, openMicEnabled: false }).catch((err) => {
-                            void alert(getConvexErrorMessage(err));
-                          });
-                        })();
-                      }}
-                    >
-                      Disable
-                    </DropdownMenuItem>
-                  </RowMenu>
-                }
-              >
-                <div className="min-w-0 flex-1 space-y-1">
-                  <RowText
-                    eyebrow={statusLabel(event.status)}
-                    title={event.title}
-                    detail={formatDateTime(event.startAt)}
-                  />
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {event.eventStatus ? (
-                      <RowFlag tone="neutral">Event: {event.eventStatus}</RowFlag>
-                    ) : null}
-                    <RowFlag tone={event.runnerWindowOpen ? "emerald" : "neutral"}>
-                      Runner: {event.runnerWindowOpen ? "Open" : "Closed"}
-                    </RowFlag>
-                    <RowFlag tone="neutral">Queued: {event.queuedCount}</RowFlag>
-                    <RowFlag tone="neutral">Performed: {event.performedCount}</RowFlag>
-                    {event.hasCurrent ? <RowFlag tone="emerald">Performer on stage</RowFlag> : null}
-                  </div>
-                </div>
-              </ListRow>
-            );
-          })}
-        </RowList>
-      )}
+      {live.length > 0 ? (
+        <RowGroup title="Live now" count={live.length} tone="emerald" className="border">
+          {live.map(renderRow)}
+        </RowGroup>
+      ) : null}
+      {upcoming.length > 0 ? (
+        <RowGroup title="Upcoming" count={upcoming.length} className="border">
+          {upcoming.map(renderRow)}
+        </RowGroup>
+      ) : null}
+      {past.length > 0 ? (
+        <RowGroup
+          title="Past"
+          count={past.length}
+          className="border"
+          aside={
+            past.length > PAST_PREVIEW ? (
+              <Button type="button" variant="ghost" size="sm" onClick={() => setShowAllPast((open) => !open)}>
+                {showAllPast ? "Show fewer" : `Show all ${past.length}`}
+              </Button>
+            ) : null
+          }
+        >
+          {visiblePast.map(renderRow)}
+        </RowGroup>
+      ) : null}
     </div>
   );
 }

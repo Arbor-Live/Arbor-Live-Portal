@@ -82,6 +82,7 @@ export function RunOfShowEditor({
   quickAdd,
   actsEditable = true,
   onEarlySetupAdded,
+  hashMode = false,
 }: {
   blocks: TimelineBlockDraft[];
   onChange: (next: TimelineBlockDraft[]) => void;
@@ -101,6 +102,8 @@ export function RunOfShowEditor({
   actsEditable?: boolean;
   /** Opens slots on a new early setup section; without it the section is added unstaffed. */
   onEarlySetupAdded?: (block: TimelineBlockDraft, headcount: number) => void;
+  /** Hashing owns a hash's blocks and times, so only names can change here. */
+  hashMode?: boolean;
 }) {
   const [buildOpen, setBuildOpen] = useState(false);
   const [earlySetupOpen, setEarlySetupOpen] = useState(false);
@@ -202,7 +205,7 @@ export function RunOfShowEditor({
 
   return (
     <div className="space-y-4" data-testid="run-of-show">
-      {!readOnly ? (
+      {!readOnly && !hashMode ? (
         <div className="flex flex-wrap items-center gap-2">
           {actsEditable ? (
           <Button
@@ -325,6 +328,7 @@ export function RunOfShowEditor({
                         moment={moment}
                         blocks={blocks}
                         readOnly={readOnly || (!actsEditable && !!moment.block.actOwned)}
+                        timesLocked={hashMode}
                         issues={issues.byRef.get(refOf(moment.block)) ?? []}
                         actName={actName}
                         swaps={swaps}
@@ -334,6 +338,7 @@ export function RunOfShowEditor({
                       />
                     )}
                     readOnly={readOnly}
+                    timesLocked={hashMode}
                     issues={issues.byRef.get(refOf(entry.section.block)) ?? []}
                     onTimes={setTimes}
                     onLabel={(block, label) => update(block, { label })}
@@ -345,6 +350,7 @@ export function RunOfShowEditor({
                       moment={entry.moments[0]!}
                       blocks={blocks}
                       readOnly={readOnly || (!actsEditable && !!entry.moments[0]!.block.actOwned)}
+                      timesLocked={hashMode}
                       issues={issues.byRef.get(refOf(entry.moments[0]!.block)) ?? []}
                       actName={actName}
                       swaps={swaps}
@@ -385,6 +391,8 @@ export function RunOfShowEditor({
 
 type RowHandlers = {
   readOnly: boolean;
+  /** No time picker or delete, but the name stays editable. */
+  timesLocked: boolean;
   issues: string[];
   onTimes: (block: TimelineBlockDraft, start: string, end: string) => void;
   onLabel: (block: TimelineBlockDraft, label: string) => void;
@@ -411,17 +419,19 @@ function IssueList({ issues }: { issues: string[] }) {
 function RowControls({
   block,
   readOnly,
+  timesLocked,
   onTimes,
   onRemove,
   removeLabel,
 }: {
   block: TimelineBlockDraft;
   readOnly: boolean;
+  timesLocked: boolean;
   onTimes: RowHandlers["onTimes"];
   onRemove: RowHandlers["onRemove"];
   removeLabel: string;
 }) {
-  if (readOnly) return null;
+  if (readOnly || timesLocked) return null;
   return (
     <div className="flex shrink-0 items-center gap-1">
       <DateTimeRangePicker
@@ -450,6 +460,7 @@ function SectionCard({
   crew,
   renderMoment,
   readOnly,
+  timesLocked,
   issues,
   onTimes,
   onLabel,
@@ -502,6 +513,7 @@ function SectionCard({
         <RowControls
           block={block}
           readOnly={readOnly}
+          timesLocked={timesLocked}
           onTimes={onTimes}
           onRemove={onRemove}
           removeLabel={`Remove ${block.label || "section"}`}
@@ -523,6 +535,7 @@ function MomentRow({
   moment,
   blocks,
   readOnly,
+  timesLocked,
   issues,
   actName,
   swaps,
@@ -574,6 +587,7 @@ function MomentRow({
       <RowControls
         block={block}
         readOnly={readOnly}
+        timesLocked={timesLocked}
         onTimes={onTimes}
         onRemove={onRemove}
         removeLabel={`Remove ${block.actOwned ? `${title} ${block.blockType}` : block.label}`}

@@ -2,6 +2,7 @@ import { Migrations } from "@convex-dev/migrations";
 import { components, internal } from "./_generated/api";
 import type { DataModel, Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
+import { syncInviteNotionChecklist } from "./email/invitations";
 import { findAuthUserById } from "./lib/auth";
 import { resolveContactNameParts } from "./lib/contactName";
 import { resolveGlobalRoleForUser } from "./lib/globalRole";
@@ -780,6 +781,24 @@ export const unsetLegacyPendingInviteEmailFlags = migrations.define({
   },
 });
 
+/**
+ * Crew invites already in flight get the manual Notion checklist. Only Arbor
+ * crew invites carry a rate or the `crew` kind; crew application invites set
+ * no `inviteKind`.
+ */
+export async function backfillInviteNotionChecklist(
+  ctx: MutationCtx,
+  row: Doc<"pendingUserInvites">,
+) {
+  if (row.rateMode === undefined && row.inviteKind !== "crew") return;
+  await syncInviteNotionChecklist(ctx, row.invitationId, true);
+}
+
+export const backfillInviteNotionChecklists = migrations.define({
+  table: "pendingUserInvites",
+  migrateOne: backfillInviteNotionChecklist,
+});
+
 /** Event groups (#341), step 2: every existing series is a recurring group. */
 export const backfillEventGroupKinds = migrations.define({
   table: "eventSeries",
@@ -1055,6 +1074,7 @@ const MIGRATION_SERIES = [
   internal.migrations.convertAvailabilityToNights,
   internal.migrations.dedupeBandMembers,
   internal.migrations.backfillBookingPrices,
+  internal.migrations.backfillInviteNotionChecklists,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

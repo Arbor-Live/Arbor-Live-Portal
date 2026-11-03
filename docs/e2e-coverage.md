@@ -17,7 +17,7 @@ plan. Opt into shared cloud Dev with `E2E_USE_CLOUD_DEV=1` or
 `CONVEX_AGENT_MODE=cloud`. `E2E_SKIP_BOOT=1` reuses a running stack and warns if
 the URL looks like cloud.
 
-**Last updated:** 2026-09-23 (artist-org invite resend/remove on `/dashboard/artists`)
+**Last updated:** 2026-11-01 (crew Home to-do stack, `crew/crew-home-todo.spec.ts`)
 
 ## Batch history
 
@@ -81,7 +81,7 @@ the URL looks like cloud.
 
 | Surface | Status | Spec / notes |
 |---------|--------|--------------|
-| Public `/request` wizard submit | Covered | `booking/booking-submit.spec.ts` (Batch 3) |
+| Public `/request` wizard submit | Covered | `booking/booking-submit.spec.ts` (Batch 3), including a non-Stanford email requesting as an individual |
 | Staff convert → quote + tentative event | Covered | `booking/booking-convert.spec.ts` |
 | Client track approve (`/request/track/[token]`) | Covered | `booking/booking-convert-approve.spec.ts` — also the quote's crew card: grouped by day and Run of Show section, headcount × hours per section, per-person rate on expand, and the crew total matching the billed subtotal (`seedBookingReadyForTrackApprove` `crew: "multi_day"`) |
 | Request inbox / status filters | Covered | `booking/request-inbox.spec.ts` (Batch 13) — default open view lists submitted + action_required + pending_client and hides completed; "Declined" and "All statuses" filters |
@@ -132,6 +132,7 @@ the URL looks like cloud.
 | Event series editors ("this occurrence" scope) | Covered | `events/event-series-edit-scope.spec.ts` (Batch 11 — pins the applyScope reset guard; navigates the group page's Run of Show template tab and uses the shared scope toggle) |
 | Event groups: multi-day booking (header pill, group page, position template on every day, idempotent re-apply, "Apply this day's setup", cancel from a day, "All days" edit spreads only the edited fields, add a day) | Covered | `events/event-group-multi-day.spec.ts` (#341) |
 | Crew scheduling board | Covered | `crew/crew-scheduling-board.spec.ts` (Batch 5) |
+| Current shift card on crew home | Covered | `crew/crew-on-shift-card.spec.ts` — seeded via `seedOnShiftEvent`; card shows and links through to the event |
 | Open Mic public + runner | None | Deferred on product priority, not on difficulty — 575 lines and three routes, the largest untested module left. See the batch candidates |
 | FullCalendar drag/resize | Deferred | Flaky; keep unit/manual |
 
@@ -217,6 +218,7 @@ the URL looks like cloud.
 | `booking/booking-convert-approve.spec.ts` | Track approve |
 | `events/event-edit-dry-hire.spec.ts` | Edit + dry hire schedule |
 | `crew/crew-availability-assign.spec.ts` | Availability + assign |
+| `crew/crew-on-shift-card.spec.ts` | Current shift card on crew home |
 | `crew/crew-application.spec.ts` | Crew apply + admin list |
 | `inventory/rental-fulfillment.spec.ts` | Delivery + return |
 | `inventory/damage-triage.spec.ts` | Damage triage (via the report detail sheet) |

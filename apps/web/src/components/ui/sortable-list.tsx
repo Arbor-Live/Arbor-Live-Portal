@@ -206,6 +206,9 @@ export function SortableList<T>({
             ref={(element) => setRowRef(id, element)}
             data-testid={rowTestId}
             onPointerDown={(event) => {
+              // A list nested in this row already took the gesture. Two lists
+              // dragging at once lose the inner drop when the outer one ends.
+              if (event.defaultPrevented) return;
               if (!draggable(item, index) || event.button !== 0) return;
               if ((event.target as HTMLElement).closest(INTERACTIVE_SELECTOR)) return;
               event.preventDefault();

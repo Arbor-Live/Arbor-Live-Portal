@@ -7,6 +7,7 @@ import { getUserId, requireAnyVerticalOrAdmin, requireArborInternalContext, requ
 import { SITE_URL } from "./email/constants";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { normalizeEventVisibility } from "./lib/eventVisibility";
+import { isHashEvent } from "./lib/hashEvent";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
   releaseReplacedR2Reference,
@@ -49,6 +50,7 @@ type AuthUserRecord = {
 };
 
 function isMarketingPosterEligible(event: Doc<"events">, now: number): boolean {
+  if (isHashEvent(event)) return false;
   if (!eventHasDesignTeamInterest(event.teamsInterested)) return false;
   if (!isMarketingPosterWorkVisibility(event.visibility)) return false;
   if (normalizeEventStatus(event.status) === "cancelled") return false;

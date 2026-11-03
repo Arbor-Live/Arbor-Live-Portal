@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { ChatCircleIcon, PhoneOutgoingIcon, UserCircleIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, ChatCircleIcon, PhoneOutgoingIcon, UserCircleIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
@@ -31,7 +31,19 @@ import { formatDate, formatTime, pacificDateKey } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { outreachStage, outreachSummary, type OutreachStage } from "@/lib/artist-outreach";
 import { useSheetParam } from "@/hooks/use-sheet-param";
-import { DetailSheet, DetailSheetFooter, DetailSheetHeader, SheetSection } from "@/components/list-page";
+import {
+  DetailSheet,
+  DetailSheetFooter,
+  DetailSheetHeader,
+  EmptyState,
+  ListSummary,
+  RowCell,
+  RowFlag,
+  RowGroup,
+  RowText,
+  SheetSection,
+} from "@/components/list-page";
+import { ListRow } from "@/components/list-row";
 import { OutreachChecklist } from "@/components/events/outreach/outreach-checklist";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -83,17 +95,12 @@ const OUTREACH_TONE: Record<OutreachStage, string> = {
 
 type BoardEvent = FunctionReturnType<typeof api.eventArtistNeeds.listOpenPositions>["events"][number];
 
-/** Days until the show: red inside a week, amber inside three. */
+/** Days until the show: rose inside a week, amber inside three. */
 function countdown(startAt: number, now: number) {
   const days = Math.max(0, Math.ceil((startAt - now) / DAY_MS));
   const label = days === 0 ? "Today" : days === 1 ? "Tomorrow" : `In ${days} days`;
-  const tone =
-    days < 7
-      ? "border-destructive/40 bg-destructive/10 text-destructive"
-      : days < 21
-        ? "border-status-amber-500/40 bg-status-amber-500/10 text-status-amber-700 dark:text-status-amber-300"
-        : "border-border text-muted-foreground";
-  return { label, tone };
+  const tone = days < 7 ? "rose" : days < 21 ? "amber" : "neutral";
+  return { label, tone } as const;
 }
 
 /**
@@ -258,18 +265,20 @@ export function OpenPositionsBoard() {
 
       {events === undefined ? (
         <p className="text-sm text-muted-foreground">Loading open positions…</p>
+      ) : openCount === 0 ? (
+        <EmptyState>
+          {assignedToMe
+            ? "No open positions assigned to you in this range."
+            : "Every position in this range is filled."}
+        </EmptyState>
       ) : (
-        <p className="text-sm text-muted-foreground" data-testid="open-positions-summary">
-          {openCount === 0
-            ? assignedToMe
-              ? "No open positions assigned to you in this range."
-              : "Every position in this range is filled."
-            : `${openCount} open position${openCount === 1 ? "" : "s"} across ${visible.length} event${
-                visible.length === 1 ? "" : "s"
-              }${withInquiries ? ` · ${withInquiries} with inquiries to review` : ""}${
-                awaitingReplies ? ` · ${awaitingReplies} waiting on replies` : ""
-              }`}
-        </p>
+        <ListSummary testId="open-positions-summary" order="Soonest show first, then by set time.">
+          {`${openCount} open position${openCount === 1 ? "" : "s"} across ${visible.length} event${
+            visible.length === 1 ? "" : "s"
+          }${withInquiries ? ` · ${withInquiries} with inquiries to review` : ""}${
+            awaitingReplies ? ` · ${awaitingReplies} waiting on replies` : ""
+          }`}
+        </ListSummary>
       )}
       {result?.truncated ? (
         <p className="text-sm text-status-amber-700 dark:text-status-amber-300">
@@ -281,84 +290,87 @@ export function OpenPositionsBoard() {
       <div className="space-y-3">
         {visible.map((event) => {
           const due = countdown(event.startAt, now);
-          const filled = event.filled;
           const lineupPath = getEventEditorTabPath(event.eventId, "artists");
+          const openOutreach = () => setOutreachEventId(event.eventId);
           return (
-            <section key={event.eventId} className="border" data-testid="open-positions-event">
-              <header className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-muted/20 px-3 py-2">
-                <span className="w-28 shrink-0 text-sm font-semibold tabular-nums">
-                  {formatDate(event.startAt)}
-                </span>
-                <span className={cn("shrink-0 border px-1.5 py-0.5 text-2xs font-semibold uppercase", due.tone)}>
-                  {due.label}
-                </span>
-                <Link href={lineupPath} className="min-w-0 flex-1 truncate text-sm font-medium hover:underline">
-                  {event.title}
-                  {event.venueName ? (
-                    <span className="font-normal text-muted-foreground"> · {event.venueName}</span>
-                  ) : null}
-                </Link>
-                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                  {filled} of {event.totalPositions} filled
-                </span>
-              </header>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t px-3 py-2">
-                <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                  <UserCircleIcon className="size-3.5" />
-                  Operations lead
-                </span>
-                <div className="w-full min-w-0 sm:w-56">
-                  <UserSelect
-                    value={leadFor(event.eventId, event.operationsLeadUserId)}
-                    onChange={(value) => void changeLead(event.eventId, value)}
-                    options={userSelectOptions}
-                    emptyLabel="Unassigned"
-                    clearable
-                  />
+            <RowGroup
+              key={event.eventId}
+              testId="open-positions-event"
+              className="border"
+              leading={
+                <div className="w-28 shrink-0 space-y-1">
+                  <p className="text-sm font-semibold tabular-nums">{formatDate(event.startAt)}</p>
+                  <RowFlag tone={due.tone} className="inline-block text-2xs font-semibold uppercase">
+                    {due.label}
+                  </RowFlag>
                 </div>
-                <span
-                  className={cn("ml-auto text-xs", OUTREACH_TONE[outreachStage(event.outreach)])}
-                  data-testid="open-positions-outreach"
-                >
-                  {outreachSummary(event.outreach)}
-                </span>
-                <Button type="button" size="sm" variant="outline" onClick={() => setOutreachEventId(event.eventId)}>
-                  <PhoneOutgoingIcon />
-                  Outreach
-                </Button>
-              </div>
-              <ul className="divide-y border-t">
-                {event.openPositions.map((position) => (
-                  <li
-                    key={position.needId}
-                    className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2"
+              }
+              title={
+                <Link href={lineupPath} className="min-w-0 truncate hover:underline">
+                  {event.title}
+                </Link>
+              }
+              count={event.openPositions.length}
+              description={[event.venueName, `${event.filled} of ${event.totalPositions} filled`]
+                .filter(Boolean)
+                .join(" · ")}
+              aside={
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                  <span
+                    className={cn("text-xs", OUTREACH_TONE[outreachStage(event.outreach)])}
+                    data-testid="open-positions-outreach"
                   >
-                    <span className="w-28 shrink-0 text-sm text-muted-foreground tabular-nums">
-                      {position.setStartsAt != null
-                        ? `${formatTime(position.setStartsAt)}${
-                            position.setEndsAt != null ? ` – ${formatTime(position.setEndsAt)}` : ""
-                          }`
-                        : "No set time"}
-                    </span>
-                    <div className="min-w-40 flex-1">
-                      <p className="truncate text-sm font-medium">{position.label || "Unnamed position"}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {[artistTypesLabel(position.artistTypes), position.genres].filter(Boolean).join(" · ")}
-                      </p>
+                    {outreachSummary(event.outreach)}
+                  </span>
+                  <div className="flex w-full min-w-0 items-center gap-1.5 sm:w-56" title="Operations lead">
+                    <UserCircleIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                    <span className="sr-only">Operations lead</span>
+                    <div className="min-w-0 flex-1">
+                      <UserSelect
+                        value={leadFor(event.eventId, event.operationsLeadUserId)}
+                        onChange={(value) => void changeLead(event.eventId, value)}
+                        options={userSelectOptions}
+                        emptyLabel="No operations lead"
+                        clearable
+                      />
                     </div>
-                    {position.inquiryCount > 0 ? (
-                      <span className="flex shrink-0 items-center gap-1 text-xs text-status-emerald-700 dark:text-status-emerald-300">
-                        <ChatCircleIcon className="size-3.5" />
-                        {position.inquiryCount} inquir{position.inquiryCount === 1 ? "y" : "ies"}
-                      </span>
-                    ) : null}
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={`${lineupPath}?position=${position.needId}`}>Fill</Link>
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </section>
+                  </div>
+                  <Button type="button" size="sm" variant="outline" onClick={openOutreach}>
+                    <PhoneOutgoingIcon />
+                    Outreach
+                  </Button>
+                </div>
+              }
+            >
+              {event.openPositions.map((position) => (
+                <ListRow
+                  key={position.needId}
+                  data-testid={`open-position-${position.needId}`}
+                  href={`${lineupPath}?position=${position.needId}`}
+                >
+                  <RowCell align="left" className="w-28 text-muted-foreground">
+                    {position.setStartsAt != null
+                      ? `${formatTime(position.setStartsAt)}${
+                          position.setEndsAt != null ? ` – ${formatTime(position.setEndsAt)}` : ""
+                        }`
+                      : "No set time"}
+                  </RowCell>
+                  <RowText
+                    eyebrow={artistTypesLabel(position.artistTypes)}
+                    title={position.label || "Unnamed position"}
+                    detail={position.genres || undefined}
+                  />
+                  {position.inquiryCount > 0 ? (
+                    <RowFlag tone="emerald" className="flex items-center gap-1">
+                      <ChatCircleIcon className="size-3.5" aria-hidden />
+                      {position.inquiryCount} inquir{position.inquiryCount === 1 ? "y" : "ies"}
+                    </RowFlag>
+                  ) : null}
+                  <span className="shrink-0 text-xs font-medium">Fill</span>
+                  <CaretRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                </ListRow>
+              ))}
+            </RowGroup>
           );
         })}
       </div>

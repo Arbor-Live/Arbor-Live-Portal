@@ -25,6 +25,7 @@ import {
   attachShiftsToPersistedBlocks,
   blockDraftFromRow,
   mergeServerActBlocks,
+  mergeServerHashSchedule,
   mergeServerTraineeShifts,
   resolveShiftScheduleBlockId,
   shiftBelongsToBlock,
@@ -101,6 +102,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
   const canSeeBilling = hasOperationsAccess;
 
   const eventData = useQuery(api.events.get, { id: eventId, detail: "full" });
+  const isHash = eventData?.event.hashingEnabled === true;
   const siblingDays = useQuery(api.events.listSiblingDays, { eventId });
   // One assignable-user list feeds the header, people pickers, and crew assignment.
   const managerList = useQuery(api.invoices.listManagers, {});
@@ -120,8 +122,8 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
   const [blocks, setBlocks] = useState<TimelineBlockDraft[]>([]);
   const [shifts, setShifts] = useState<ShiftDraft[]>([]);
   const [scheduleBaseline, setScheduleBaseline] = useState("");
-  // State (not a ref) so effects in the hydrating render still see the old id.
-  const [scheduleEventId, setScheduleEventId] = useState<string | null>(null);
+  // State (not a ref) so effects in the hydrating render still see the old key.
+  const [hydratedScheduleKey, setHydratedScheduleKey] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [editScopeRequest, setEditScopeRequest] = useState<
@@ -133,6 +135,10 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
   const [hydrationToken, setHydrationToken] = useState(0);
   const hydratedTokenRef = useRef(0);
   const localBlockCounterRef = useRef(0);
+  // Hashing switching on or off rewrites the schedule in one write: it deletes
+  // every booking, or takes over the section. Nothing in the draft survives that,
+  // so the flip reloads the schedule rather than trying to merge it.
+  const scheduleKey = eventData?.event ? `${eventData.event._id}:${hydrationToken}:${isHash}` : null;
 
   const linkedInvoiceIdForLookup = (draft.invoiceId || eventData?.event.invoiceId) as
     | Id<"invoices">
@@ -164,15 +170,20 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     });
     setDraft(nextDraft);
     setBaseline(nextDraft);
-    const nextBlocks = sortScheduleBlocksByTime(eventData.blocks.map((row) => blockDraftFromRow(row)));
-    const nextShifts = applyShiftTimesOverrideFlags(eventData.shifts.map(shiftDraftFromRow), nextBlocks);
-    setBlocks(nextBlocks);
-    setShifts(nextShifts);
-    setScheduleBaseline(JSON.stringify({ blocks: nextBlocks, shifts: nextShifts }));
-    setScheduleEventId(`${eventData.event._id}:${hydrationToken}`);
     setSaveStatus("idle");
     setSaveError(null);
   }, [eventData, hydrationToken]);
+
+  useEffect(() => {
+    if (!eventData?.event || hydratedScheduleKey === scheduleKey || saveStatus === "saving") return;
+    const nextBlocks = sortScheduleBlocksByTime(eventData.blocks.map((row) => blockDraftFromRow(row)));
+    const nextShifts = applyShiftTimesOverrideFlags(eventData.shifts.map(shiftDraftFromRow), nextBlocks);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration per schedule key
+    setBlocks(nextBlocks);
+    setShifts(nextShifts);
+    setScheduleBaseline(JSON.stringify({ blocks: nextBlocks, shifts: nextShifts }));
+    setHydratedScheduleKey(scheduleKey);
+  }, [eventData, scheduleKey, hydratedScheduleKey, saveStatus]);
 
   useEffect(() => {
     if (!eventData?.event || !baseline || hydratedEventIdRef.current !== eventData.event._id) return;
@@ -199,7 +210,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
   useEffect(() => {
     // Only rebase a draft hydrated for this event: in the render that hydrates,
     // `blocks` still holds the previous (or empty) draft.
-    if (!eventData?.event || scheduleEventId !== `${eventData.event._id}:${hydrationToken}`) return;
+    if (!eventData?.event || hydratedScheduleKey !== scheduleKey) return;
     // Act soundcheck/set blocks change on the server too (another editor, or a
     // platform act taking over a lineup position); merge those in without
     // overwriting this user's unsaved Run of Show edits.
@@ -219,27 +230,35 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     setBlocks(merged.state.blocks);
     setShifts(merged.state.shifts);
     setScheduleBaseline(JSON.stringify(merged.baseline));
-  }, [eventData, scheduleEventId, hydrationToken, scheduleBaseline, saveStatus, blocks, shifts]);
+  }, [eventData, hydratedScheduleKey, scheduleKey, scheduleBaseline, saveStatus, blocks, shifts]);
 
   useEffect(() => {
-    if (!eventData?.event || scheduleEventId !== `${eventData.event._id}:${hydrationToken}`) return;
-    // Trainees are assigned from this page (or Crew applications) by their own
-    // mutation, which writes straight to the server. Pull them into the draft,
-    // or the next schedule save would delete them.
+    if (!eventData?.event || hydratedScheduleKey !== scheduleKey) return;
+    // Trainees are assigned from this page (or Crew applications), and a hash's
+    // schedule from Hashing, by mutations that write straight to the server. Pull
+    // them into the draft, or the next schedule save would undo them or be refused.
     if (!scheduleBaseline || saveStatus === "saving") return;
-    const merged = mergeServerTraineeShifts(
-      { blocks, shifts },
-      JSON.parse(scheduleBaseline) as SavedSchedule,
-      applyShiftTimesOverrideFlags(
-        eventData.shifts.filter((row) => isTraineeShift(row)).map(shiftDraftFromRow),
-        blocks,
-      ),
-    );
+    const state = { blocks, shifts };
+    const saved = JSON.parse(scheduleBaseline) as SavedSchedule;
+    const serverShifts = eventData.shifts.map(shiftDraftFromRow);
+    const merged = isHash
+      ? mergeServerHashSchedule(
+          state,
+          saved,
+          eventData.blocks.map((row) => blockDraftFromRow(row)),
+          serverShifts,
+        )
+      : mergeServerTraineeShifts(
+          state,
+          saved,
+          applyShiftTimesOverrideFlags(serverShifts.filter(isTraineeShift), blocks),
+        );
     if (!merged) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from the Convex subscription; converges once the baseline matches
+    setBlocks(merged.state.blocks);
     setShifts(merged.state.shifts);
     setScheduleBaseline(JSON.stringify(merged.baseline));
-  }, [eventData, scheduleEventId, hydrationToken, scheduleBaseline, saveStatus, blocks, shifts]);
+  }, [eventData, isHash, hydratedScheduleKey, scheduleKey, scheduleBaseline, saveStatus, blocks, shifts]);
 
   const updateDraft = useCallback((patch: Partial<EventDraft>) => {
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -343,13 +362,16 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
   const visibleTabs = useMemo(
     () =>
       EVENT_EDITOR_TABS.filter((tab) => {
+        // A hash's section and crew live on the Run of Show, whatever its event type.
+        if (tab === "schedule" && isHash) return true;
         if ((tab === "schedule" || tab === "equipment") && !eventTypeHasLogistics(draft.eventType)) {
           return false;
         }
         if (tab === "billing" && !canSeeBilling) return false;
+        if (isHash && (tab === "billing" || tab === "promo" || tab === "artists")) return false;
         return true;
       }),
-    [draft.eventType, canSeeBilling],
+    [draft.eventType, canSeeBilling, isHash],
   );
   const resolvedActiveTab: EventEditorTabId = visibleTabs.includes(activeTab) ? activeTab : "overview";
 
@@ -602,6 +624,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     readOnly,
     activeTab: resolvedActiveTab,
     visibleTabs,
+    isHash,
     draft,
     updateDraft,
     baseline,

@@ -5,9 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import {
-  ArrowLeftIcon,
   BuildingsIcon,
   CalendarBlankIcon,
+  CalendarDotsIcon,
   CalendarPlusIcon,
   EyeIcon,
   MapPinIcon,
@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/page-header";
 import { Switch } from "@/components/ui/switch";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { VenuePicker } from "@/components/venues/venue-picker";
@@ -199,22 +200,14 @@ export function EventCreateForm() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <Button asChild variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
-        <Link href="/dashboard/events">
-          <ArrowLeftIcon />
-          Events
-        </Link>
-      </Button>
+    <div className="mx-auto max-w-3xl space-y-4" data-testid="event-create-page">
+      <PageHeader back={{ href: "/dashboard/events", label: "Events" }} title="Create event" />
       <Card>
-        <CardHeader className="border-b">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <CalendarPlusIcon className="size-5 text-primary" />
-            Create event
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarDotsIcon className="size-4 text-muted-foreground" aria-hidden />
+            Details
           </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Start with the essentials. Schedule, crew, equipment, and billing come after it&apos;s saved.
-          </p>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           <Field label="Title" icon={TextTIcon} className="md:col-span-2">
@@ -286,131 +279,138 @@ export function EventCreateForm() {
               />
             </Field>
           ) : null}
+        </CardContent>
+      </Card>
 
-          <div className="space-y-3 border-t pt-4 md:col-span-2">
-            <label className="flex w-fit cursor-pointer items-center gap-2 text-sm font-medium">
-              <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />
-              <RepeatIcon className="size-4 text-muted-foreground" />
+      <Card>
+        <CardHeader
+          className={cn("flex flex-row items-center justify-between gap-2", isRecurring && "border-b")}
+        >
+          <CardTitle className="flex items-center gap-2">
+            <RepeatIcon className="size-4 text-muted-foreground" aria-hidden />
+            <label htmlFor="event-create-recurring" className="cursor-pointer">
               Recurring event series
             </label>
-            {isRecurring ? (
-              <div className="grid gap-3 md:grid-cols-3">
-                <Field label="Repeat every">
-                  <SearchableSelect
-                    value={intervalWeeks}
-                    onChange={setIntervalWeeks}
-                    options={[
-                      { value: "1", label: "Weekly" },
-                      { value: "2", label: "Every 2 weeks" },
-                      { value: "3", label: "Every 3 weeks" },
-                      { value: "4", label: "Every 4 weeks" },
-                    ]}
-                    placeholder="Interval..."
-                  />
-                </Field>
-                <Field label="Ends">
-                  <SearchableSelect
-                    value={recurrenceEndMode}
-                    onChange={(value) => setRecurrenceEndMode(value as RecurrenceEndMode)}
-                    options={[
-                      { value: "count", label: "After N occurrences" },
-                      { value: "date", label: "On end date" },
-                    ]}
-                    placeholder="End mode..."
-                  />
-                </Field>
-                {recurrenceEndMode === "count" ? (
-                  <Field label="Occurrence count" hint="A quarter is typically about 10 weeks.">
-                    <Input
-                      type="number"
-                      min={1}
-                      value={occurrenceCount}
-                      onChange={(event) => setOccurrenceCount(event.target.value)}
-                    />
-                  </Field>
-                ) : (
-                  <Field label="Series end date">
-                    <Input
-                      type="date"
-                      value={seriesEndAt}
-                      onChange={(event) => setSeriesEndAt(event.target.value)}
-                    />
-                    {quarterEnd ? (
-                      <Button
-                        type="button"
-                        variant="link"
-                        size="sm"
-                        className="h-auto px-0"
-                        onClick={() => setSeriesEndAt(quarterEnd.lastClassDate)}
-                      >
-                        End with {quarterEnd.quarter.label} classes
-                      </Button>
-                    ) : null}
-                  </Field>
-                )}
-                <Field
-                  label="Stanford calendar"
-                  className="md:col-span-3"
-                  hint="Arbor is closed winter break, spring break, and summer. Skipped weeks don't count toward the occurrence count."
-                >
-                  <SearchableSelect
-                    value={academicSkip}
-                    onChange={(value) => setAcademicSkip(value as AcademicSkipMode | "none")}
-                    options={ACADEMIC_SKIP_OPTIONS}
-                    placeholder="Academic calendar..."
-                  />
-                </Field>
-                <div className="space-y-2 md:col-span-3">
-                  <p className="text-sm font-medium">
-                    Preview ({recurrencePreview.keptCount} occurrences)
-                  </p>
-                  {recurrencePreview.error ? (
-                    <p className="text-sm text-status-rose-700">{recurrencePreview.error}</p>
-                  ) : (
-                    <ul className="max-h-40 divide-y overflow-y-auto border text-sm">
-                      {recurrencePreview.rows.map((row) => (
-                        <li
-                          key={row.occurrenceIndex}
+          </CardTitle>
+          <Switch id="event-create-recurring" checked={isRecurring} onCheckedChange={setIsRecurring} />
+        </CardHeader>
+        {isRecurring ? (
+          <CardContent className="grid gap-3 md:grid-cols-3">
+            <Field label="Repeat every">
+              <SearchableSelect
+                value={intervalWeeks}
+                onChange={setIntervalWeeks}
+                options={[
+                  { value: "1", label: "Weekly" },
+                  { value: "2", label: "Every 2 weeks" },
+                  { value: "3", label: "Every 3 weeks" },
+                  { value: "4", label: "Every 4 weeks" },
+                ]}
+                placeholder="Interval..."
+              />
+            </Field>
+            <Field label="Ends">
+              <SearchableSelect
+                value={recurrenceEndMode}
+                onChange={(value) => setRecurrenceEndMode(value as RecurrenceEndMode)}
+                options={[
+                  { value: "count", label: "After N occurrences" },
+                  { value: "date", label: "On end date" },
+                ]}
+                placeholder="End mode..."
+              />
+            </Field>
+            {recurrenceEndMode === "count" ? (
+              <Field label="Occurrence count" hint="A quarter is typically about 10 weeks.">
+                <Input
+                  type="number"
+                  min={1}
+                  value={occurrenceCount}
+                  onChange={(event) => setOccurrenceCount(event.target.value)}
+                />
+              </Field>
+            ) : (
+              <Field label="Series end date">
+                <Input
+                  type="date"
+                  value={seriesEndAt}
+                  onChange={(event) => setSeriesEndAt(event.target.value)}
+                />
+                {quarterEnd ? (
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="h-auto px-0"
+                    onClick={() => setSeriesEndAt(quarterEnd.lastClassDate)}
+                  >
+                    End with {quarterEnd.quarter.label} classes
+                  </Button>
+                ) : null}
+              </Field>
+            )}
+            <Field
+              label="Stanford calendar"
+              className="md:col-span-3"
+              hint="Arbor is closed winter break, spring break, and summer. Skipped weeks don't count toward the occurrence count."
+            >
+              <SearchableSelect
+                value={academicSkip}
+                onChange={(value) => setAcademicSkip(value as AcademicSkipMode | "none")}
+                options={ACADEMIC_SKIP_OPTIONS}
+                placeholder="Academic calendar..."
+              />
+            </Field>
+            <div className="space-y-2 md:col-span-3">
+              <p className="text-sm font-medium">
+                Preview ({recurrencePreview.keptCount} occurrences)
+              </p>
+              {recurrencePreview.error ? (
+                <p className="text-sm text-status-rose-700">{recurrencePreview.error}</p>
+              ) : (
+                <ul className="max-h-40 divide-y overflow-y-auto border text-sm">
+                  {recurrencePreview.rows.map((row) => (
+                    <li
+                      key={row.occurrenceIndex}
+                      className={cn(
+                        "flex items-center justify-between gap-2 px-3 py-2",
+                        row.skipped && "text-muted-foreground",
+                      )}
+                    >
+                      <span className={cn(row.skipped && "line-through")}>
+                        {formatOccurrencePreview(row.startAt)}
+                      </span>
+                      {row.note ? (
+                        <span
                           className={cn(
-                            "flex items-center justify-between gap-2 px-3 py-2",
-                            row.skipped && "text-muted-foreground",
+                            "text-xs",
+                            row.skipped ? "text-muted-foreground" : "text-status-amber-700",
                           )}
                         >
-                          <span className={cn(row.skipped && "line-through")}>
-                            {formatOccurrencePreview(row.startAt)}
-                          </span>
-                          {row.note ? (
-                            <span
-                              className={cn(
-                                "text-xs",
-                                row.skipped ? "text-muted-foreground" : "text-status-amber-700",
-                              )}
-                            >
-                              {row.skipped ? `Skipped · ${row.note.label}` : row.note.label}
-                            </span>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    Crew scheduling stays separate for each generated occurrence.
-                  </p>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </CardContent>
-        <div className="flex items-center justify-end gap-2 border-t px-4 pt-4">
-          <Button asChild variant="outline">
-            <Link href="/dashboard/events">Cancel</Link>
-          </Button>
-          <Button type="button" disabled={creating} onClick={() => void submit()}>
-            {isRecurring ? <RepeatIcon /> : <CalendarPlusIcon />}
-            {creating ? "Creating…" : createLabel}
-          </Button>
-        </div>
+                          {row.skipped ? `Skipped · ${row.note.label}` : row.note.label}
+                        </span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Crew scheduling stays separate for each generated occurrence.
+              </p>
+            </div>
+          </CardContent>
+        ) : null}
       </Card>
+
+      <div className="flex items-center justify-end gap-2">
+        <Button asChild variant="outline">
+          <Link href="/dashboard/events">Cancel</Link>
+        </Button>
+        <Button type="button" disabled={creating} onClick={() => void submit()}>
+          {isRecurring ? <RepeatIcon /> : <CalendarPlusIcon />}
+          {creating ? "Creating…" : createLabel}
+        </Button>
+      </div>
     </div>
   );
 }

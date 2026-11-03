@@ -120,7 +120,8 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
   them. Extra invoices are per occurrence; a series still shares one primary.
 - Quote back-and-forth lives in `invoiceRevisions` (`sent`, `changes_requested`,
   `approved`, …). Never clear a client change request without recording it:
-  answer it via `sendRevisedQuote` (see `docs/domain-guide.md`).
+  answer it via `sendRevisedQuote`, which also sends a staff-initiated
+  revision of a pending quote (see `docs/domain-guide.md`).
 
 ## Event groups (series + multi-day bookings)
 - `eventSeries` rows are **event groups**: `kind: "recurring"` (series) or `"multi_day"` (days sharing one primary invoice). Days

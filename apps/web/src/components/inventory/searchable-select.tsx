@@ -53,6 +53,9 @@ export function SearchableSelect({
   clearable = false,
   clearLabel = "Clear",
   queryVariants,
+  disabled = false,
+  defaultOpen = false,
+  onOpenChange,
 }: {
   /** Wires the trigger to a `<Label htmlFor>`. */
   id?: string;
@@ -79,9 +82,13 @@ export function SearchableSelect({
    * inside a pasted `arbor.st/e/ALE-0041` link.
    */
   queryVariants?: (query: string) => string[];
+  disabled?: boolean;
+  /** Open as soon as it mounts, for a picker that was just asked for. */
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const serverBacked = Boolean(onQueryChange);
 
   const selected = useMemo(
@@ -150,6 +157,7 @@ export function SearchableSelect({
   return (
     <Combobox
       autoHighlight
+      disabled={disabled}
       items={listOptions}
       value={selected ?? null}
       onValueChange={(next) => {
@@ -159,6 +167,7 @@ export function SearchableSelect({
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
+        onOpenChange?.(nextOpen);
         if (nextOpen) return;
         setQuery("");
         onQueryChange?.("");

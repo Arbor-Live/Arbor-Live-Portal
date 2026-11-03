@@ -425,7 +425,7 @@ export async function requireBandContext(
   return context;
 }
 
-async function getUserAdminProfile(ctx: AuthCtx, userId: string) {
+export async function getUserAdminProfile(ctx: AuthCtx, userId: string) {
   return await ctx.db
     .query("userAdminProfiles")
     .withIndex("by_userId", (q) => q.eq("userId", userId))

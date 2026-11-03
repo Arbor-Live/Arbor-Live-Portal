@@ -59,7 +59,7 @@ export const listForAdmin = query({
     const aliases = await ctx.db.query("invoiceGroupAliases").take(2000);
     const contactCountByGroup = new Map<string, number>();
     for (const contact of contacts) {
-      if (!contact.groupId) continue;
+      if (!contact.groupId || !contact.active) continue;
       contactCountByGroup.set(
         contact.groupId,
         (contactCountByGroup.get(contact.groupId) ?? 0) + 1,
@@ -261,11 +261,10 @@ export const update = mutation({
     name: v.optional(v.string()),
     type: v.optional(groupTypeValue),
     equipmentPricingMode: v.optional(equipmentPricingModeValue),
-    active: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminOrOperations(ctx);
     await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Group not found.");
@@ -278,16 +277,16 @@ export const update = mutation({
           `Another host organization already uses "${conflict.name}". Merge or pick a different name.`,
         );
       }
-      await ensureAlias(ctx, args.id, existing.name, "rename");
     }
     await ctx.db.patch(args.id, {
       name: nextName,
       normalizedName,
       type: args.type ?? existing.type,
       equipmentPricingMode: args.equipmentPricingMode ?? existing.equipmentPricingMode,
-      active: args.active ?? existing.active,
       updatedAt: Date.now(),
     });
+    // After the patch, or ensureAlias sees the old name as the host's own and skips it.
+    if (nextName !== existing.name) await ensureAlias(ctx, args.id, existing.name, "rename");
     return null;
   },
 });
@@ -499,10 +498,17 @@ export const merge = mutation({
       await ctx.db.patch(victim._id, { active: false, updatedAt: now });
 
       await ensureAlias(ctx, args.survivorId, victim.name, "merge");
-      const victimAliases = await listAliasesForGroup(ctx, victim._id);
-      for (const alias of victimAliases) {
-        await ensureAlias(ctx, args.survivorId, alias.alias, "merge");
-        await ctx.db.delete(alias._id);
+      const survivorAliases = new Set(
+        (await listAliasesForGroup(ctx, args.survivorId)).map((row) => row.normalizedAlias),
+      );
+      for (const alias of await listAliasesForGroup(ctx, victim._id)) {
+        // Move the row, keeping its source and date; drop it if the survivor already answers to it.
+        if (survivorAliases.has(alias.normalizedAlias) || alias.normalizedAlias === normalizeHostOrgName(survivor.name)) {
+          await ctx.db.delete(alias._id);
+        } else {
+          await ctx.db.patch(alias._id, { groupId: args.survivorId });
+          survivorAliases.add(alias.normalizedAlias);
+        }
       }
     }
 
@@ -542,11 +548,39 @@ export const merge = mutation({
   },
 });
 
+/**
+ * Reactivates an archived host, unless its name or one of its aliases now
+ * resolves to another active host: a merge kept it as the survivor's alias, or
+ * a new host took the name.
+ */
+export const restore = mutation({
+  args: { id: v.id("invoiceGroups") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireAdminOrOperations(ctx);
+    await requireArborInternalContext(ctx);
+    const existing = await ctx.db.get(args.id);
+    if (!existing) throw new Error("Host organization not found.");
+    if (existing.active) return null;
+    const aliases = await listAliasesForGroup(ctx, args.id);
+    for (const name of [existing.name, ...aliases.map((row) => row.alias)]) {
+      const owner = await findGroupByNameOrAlias(ctx, name);
+      if (owner && owner._id !== args.id) {
+        throw new Error(
+          `"${name}" now points to the active host "${owner.name}". Use that host instead of restoring this one.`,
+        );
+      }
+    }
+    await ctx.db.patch(args.id, { active: true, updatedAt: Date.now() });
+    return null;
+  },
+});
+
 export const archive = mutation({
   args: { id: v.id("invoiceGroups") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminOrOperations(ctx);
     await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Group not found.");

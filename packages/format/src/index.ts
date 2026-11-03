@@ -85,8 +85,13 @@ export function formatDateTime(
   style: keyof typeof dateTimePresets = "short",
   timezone: string = PORTAL_TIMEZONE,
 ) {
-  const preset = dateTimePresets[style];
-  return dateTimeFormat("en-US", { ...preset, timeZone: timezone }).format(new Date(ms));
+  const { hour, minute, ...datePart } = dateTimePresets[style];
+  const date = new Date(ms);
+  const time = dateTimeFormat("en-US", { hour, minute, timeZone: timezone }).format(date);
+  if (!("day" in datePart)) return time;
+  // Safari joins a combined date-time format with " at " and Node with ", ",
+  // so server-rendered dates would not match on hydration in Safari.
+  return `${dateTimeFormat("en-US", { ...datePart, timeZone: timezone }).format(date)}, ${time}`;
 }
 
 export function formatDate(ms: number, timezone: string = PORTAL_TIMEZONE) {

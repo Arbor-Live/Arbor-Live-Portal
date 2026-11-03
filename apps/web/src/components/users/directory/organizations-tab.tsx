@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
-import { CaretRightIcon, DotsThreeIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, DotsThreeIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { FilterBar, matchesFilter, type FilterDefinition, type FilterState } from "@/components/filter-bar";
 import { ListRow } from "@/components/list-row";
 import { OrganizationCSVImporter } from "@/components/org-csv-importer";
 import { Button } from "@/components/ui/button";
@@ -17,9 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   ORG_TYPE_LABELS,
   OrganizationSheet,
@@ -29,14 +28,27 @@ import {
 import { EmptyRows, FLAG_CLASS, STATUS_CHIP, useSheetParam } from "@/components/users/directory/shared";
 import { useUsersDirectory } from "@/components/users/directory/users-directory-shell";
 
-type OrgFilter = "all" | "artists" | "internal" | "archived";
-
-const ORG_FILTERS: Array<{ value: OrgFilter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "artists", label: "Artists" },
-  { value: "internal", label: "Internal" },
-  { value: "archived", label: "Archived" },
+const FILTER_DEFINITIONS: FilterDefinition[] = [
+  {
+    id: "type",
+    label: "Type",
+    options: [
+      { value: "artist", label: "Artist" },
+      { value: "internal", label: "Internal" },
+    ],
+  },
+  {
+    id: "status",
+    label: "Status",
+    single: true,
+    options: [
+      { value: "active", label: "Active" },
+      { value: "archived", label: "Archived" },
+    ],
+  },
 ];
+
+const DEFAULT_FILTERS: FilterState = { status: { operator: "is", values: ["active"] } };
 
 /**
  * Every organization people belong to: Arbor Live itself and the artist orgs,
@@ -50,7 +62,7 @@ export function OrganizationsTab() {
   const [selectedId, setSelectedId] = useSheetParam("org");
   const [search, setSearch] = useState("");
   const query = useDeferredValue(search.trim().toLowerCase());
-  const [filter, setFilter] = useState<OrgFilter>("all");
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
 
   const organizations = useMemo<DirectoryOrg[] | undefined>(() => {
     if (!orgOptions || !artistOrgs) return undefined;
@@ -99,45 +111,27 @@ export function OrganizationsTab() {
   const rows = useMemo(
     () =>
       (organizations ?? []).filter((org) => {
-        if (filter === "archived" ? !org.archived : org.archived) return false;
-        if (filter === "artists" && !org.artist) return false;
-        if (filter === "internal" && org.artist) return false;
+        if (!matchesFilter(filters.status, org.archived ? "archived" : "active")) return false;
+        if (!matchesFilter(filters.type, org.artist ? "artist" : "internal")) return false;
         if (!query) return true;
         return [org.name, org.displayName, org.slug].join(" ").toLowerCase().includes(query);
       }),
-    [organizations, filter, query],
+    [organizations, filters, query],
   );
 
   const selectedOrg = organizations?.find((org) => org.id === selectedId) ?? null;
 
   return (
     <div className="space-y-3" data-testid="organizations-tab">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full sm:w-64">
-          <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            aria-label="Search organizations"
-            placeholder="Search organizations…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <ToggleGroup
-          type="single"
-          size="sm"
-          variant="outline"
-          aria-label="Organization type"
-          value={filter}
-          onValueChange={(value) => value && setFilter(value as OrgFilter)}
-        >
-          {ORG_FILTERS.map((option) => (
-            <ToggleGroupItem key={option.value} value={option.value}>
-              {option.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      </div>
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search organizations…"
+        searchLabel="Search organizations"
+        filters={FILTER_DEFINITIONS}
+        value={filters}
+        onChange={setFilters}
+      />
 
       {organizations === undefined ? (
         <div className="space-y-2">
@@ -169,9 +163,9 @@ export function OrganizationsTab() {
           </div>
           {rows.length === 0 ? (
             <EmptyRows>
-              {filter === "archived"
+              {filters.status?.values[0] === "archived"
                 ? "No archived organizations."
-                : "No organizations match. Clear the search, or create one with New organization."}
+                : "No organizations match. Change the filters, or create one with New organization."}
             </EmptyRows>
           ) : (
             <ul className="space-y-2">

@@ -13,15 +13,19 @@ import { enqueueEmail } from "./enqueue";
 
 /**
  * Tell the client their quote changed and needs their decision: an approved
- * quote staff changed, or our reply to the changes they asked for.
+ * quote staff changed, our reply to the changes they asked for, or a revision
+ * staff sent on their own.
  */
 export async function scheduleQuoteUpdatedEmail(
   ctx: MutationCtx,
   args: {
     invoice: Doc<"invoices">;
-    /** What the previous total was: the one they approved, or the one they asked about. */
-    reason?: "approved" | "changes_requested";
-    previousTotalUsd: number;
+    reason?: "approved" | "changes_requested" | "revised";
+    /**
+     * The total they approved, asked about, or were last sent. Missing when
+     * they were never sent a version, so there's nothing to compare.
+     */
+    previousTotalUsd?: number;
     newTotalUsd: number;
     changeNote?: string;
     /** Their change request, when this answers one. */
@@ -45,7 +49,10 @@ export async function scheduleQuoteUpdatedEmail(
   await enqueueEmail(ctx, {
     template: "quote_updated",
     to: clientEmail,
-    subject: subjectForTemplate("quote_updated", eventTitle),
+    subject:
+      args.previousTotalUsd === undefined
+        ? `Your quote: ${eventTitle}`
+        : subjectForTemplate("quote_updated", eventTitle),
     eventId: event?._id,
     idempotencyKey: `quote_updated:${args.invoice._id}:${args.revisionNumber}`,
     replyTo: args.invoice.managerEmail ? [args.invoice.managerEmail] : undefined,

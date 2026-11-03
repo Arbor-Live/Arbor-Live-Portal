@@ -21,6 +21,8 @@ import {
   isWithinCohoQrWindow,
   pickBestCohoGiftCard,
 } from "./lib/cohoGiftCards";
+import { listUserShiftsNear } from "./lib/crewShiftWindow";
+import { isHashEvent } from "./lib/hashEvent";
 import { scheduleCohoGiftCardLowBalanceEmails } from "./email/cohoGiftCardEmails";
 
 /** Warn once a card drops below this, unless Ops Center overrides it. */
@@ -28,15 +30,6 @@ export const DEFAULT_LOW_BALANCE_THRESHOLD_USD = 50;
 
 /** Cap the number of cards an admin can register. */
 export const MAX_COHO_GIFT_CARDS = 10;
-
-/**
- * Bounds the shift scan: shifts longer than this, or with a call time this far
- * before their start, are not considered.
- */
-const CREW_SHIFT_MAX_SPAN_MS = 24 * 60 * 60 * 1000;
-
-/** Cap shifts scanned when deciding whether the viewer is working. */
-const CREW_SHIFT_SCAN_CAP = 50;
 
 function toastAccountUrl(token: string) {
   return `https://ws-api.toasttab.com/loyalty/v1/guest/account/${encodeURIComponent(token)}`;
@@ -332,17 +325,11 @@ export const getMyCohoGiftCard = query({
     const userId = getUserId(user);
     const now = Date.now();
 
-    const shifts = await ctx.db
-      .query("eventCrewShifts")
-      .withIndex("by_userId_and_startsAt", (q) =>
-        q
-          .eq("userId", userId)
-          .gte("startsAt", now - CREW_SHIFT_MAX_SPAN_MS - COHO_QR_SHIFT_PADDING_MS)
-          .lte("startsAt", now + CREW_SHIFT_MAX_SPAN_MS + COHO_QR_SHIFT_PADDING_MS),
-      )
-      .take(CREW_SHIFT_SCAN_CAP);
-    const isWorking = shifts.some((shift) => isWithinCohoQrWindow(shift, now));
-    if (!isWorking) return null;
+    const shifts = await listUserShiftsNear(ctx, userId, now, COHO_QR_SHIFT_PADDING_MS);
+    // The card feeds crew through a show. A hash is an hour in the closet.
+    const nearEventIds = new Set(shifts.filter((shift) => isWithinCohoQrWindow(shift, now)).map((shift) => shift.eventId));
+    const nearEvents = await Promise.all([...nearEventIds].map((eventId) => ctx.db.get(eventId)));
+    if (!nearEvents.some((event) => event && !isHashEvent(event))) return null;
 
     const best = pickBestCohoGiftCard(await listCards(ctx));
     return best?.cardNumber ? { cardNumber: best.cardNumber } : null;

@@ -18,7 +18,7 @@ import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api } from "@/lib/convex-api";
+import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatDate, plural } from "@/lib/format";
 import { notify } from "@/lib/notify";
@@ -72,12 +72,20 @@ export function CrewApplicationsAdminClient() {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [pending, setPending] = useState(false);
+  // The application just converted. It leaves the loaded list (converted isn't
+  // in the default Progress filter), so a separate query keeps its panel, and
+  // the Notion checklist inside it, alive.
+  const [convertedPanelId, setConvertedPanelId] = useState<string | null>(null);
   // Ticks so a trainee moves to Decision needed while the page is open.
   const now = useNow(60_000);
 
   const applied = activeFilters(filters);
   const statuses = statusesForProgressFilter(applied.progress);
   const applications = useQuery(api.crewApplications.listAdmin, statuses ? { statuses } : {});
+  const convertedApplication = useQuery(
+    api.crewApplications.listAdmin,
+    convertedPanelId ? { applicationId: convertedPanelId as Id<"crewApplications"> } : "skip",
+  );
   const managers = useQuery(api.invoices.listManagers, {});
 
   const setAssignee = useMutation(api.crewApplications.setAssignee);
@@ -152,16 +160,22 @@ export function CrewApplicationsAdminClient() {
     [now, rows],
   );
 
-  const panelRow = panel ? allRows.find((row) => row._id === panel) : undefined;
+  const panelRow = panel
+    ? (allRows.find((row) => row._id === panel) ??
+      (convertedPanelId === panel
+        ? (convertedApplication as CrewApplicationRow[] | undefined)?.[0]
+        : undefined))
+    : undefined;
+  const awaitingConverted = convertedPanelId === panel && convertedApplication === undefined;
 
   // A `?application=` link to a row that isn't loaded (deleted, or outside the
   // progress filter): drop the param rather than hold an empty panel open.
   useEffect(() => {
-    if (!panel || applications === undefined || panelRow) return;
+    if (!panel || applications === undefined || panelRow || awaitingConverted) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- close the panel once the list says the row is gone
     setPanel(null);
     setApplicationParam(null);
-  }, [applications, panel, panelRow]);
+  }, [applications, awaitingConverted, panel, panelRow]);
 
   const notContacted = rows.filter((row) => applicationProgress(row, now) === "new").length;
   const decisionsNeeded = rows.filter((row) => applicationProgress(row, now) === "decision_needed").length;
@@ -170,6 +184,7 @@ export function CrewApplicationsAdminClient() {
 
   function openPanel(value: string | null) {
     setPanel(value);
+    setConvertedPanelId(null);
     setApplicationParam(value);
   }
 
@@ -180,8 +195,17 @@ export function CrewApplicationsAdminClient() {
     return ok;
   }
 
-  /** Builds args from a form; a missing field shows as an error toast instead of throwing. */
-  function withArgs<T>(getArgs: () => T, then: (args: T) => Promise<unknown>, success: string) {
+  /**
+   * Builds args from a form; a missing field shows as an error toast instead of
+   * throwing. Closes the panel on success unless `keepOpen` (convert shows the
+   * Notion checklist there).
+   */
+  function withArgs<T>(
+    getArgs: () => T,
+    then: (args: T) => Promise<unknown>,
+    success: string,
+    keepOpen = false,
+  ) {
     let args: T;
     try {
       args = getArgs();
@@ -189,8 +213,11 @@ export function CrewApplicationsAdminClient() {
       notify.error(getConvexErrorMessage(error));
       return;
     }
+    // Subscribe before the mutation lands so the row never has a gap in the list.
+    if (keepOpen) setConvertedPanelId(panel);
     void run(() => then(args), success).then((ok) => {
-      if (ok) openPanel(null);
+      if (!ok) setConvertedPanelId(null);
+      else if (!keepOpen) openPanel(null);
     });
   }
 
@@ -388,6 +415,7 @@ export function CrewApplicationsAdminClient() {
                 getArgs,
                 (args) => convertToMember({ applicationId: panelRow._id, ...args }),
                 `Invited ${panelRow.name} as a member`,
+                true,
               )
             }
             onTurnAway={() => void turnAway(panelRow)}

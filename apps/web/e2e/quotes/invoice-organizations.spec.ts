@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { acceptAppDialog } from "../helpers/auth";
 import { pollConvex } from "../helpers/convex";
+import { formField } from "../helpers/form";
 import {
   addInvoiceLine,
   invoiceIdFromUrl,
@@ -26,6 +27,22 @@ type ClientState = {
   clientContactName: string | null;
   equipmentPricingMode: string;
 };
+
+/** Create a host through the New host dialog; resolves once Convex has it. */
+async function createHost(page: Page, name: string, pricing?: string) {
+  await page.getByRole("button", { name: "New host" }).click();
+  const dialog = page.getByTestId("new-host-dialog");
+  await expect(dialog).toBeVisible({ timeout: 25_000 });
+  await formField(dialog, "Name").fill(name);
+  if (pricing) await pickSelectOption(page, dialog.locator("#new-host-pricing"), pricing);
+  await dialog.getByRole("button", { name: "Add host" }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 25_000 });
+  return pollConvex<GroupState>("e2eHelpers:getInvoiceGroupByName", { name }, (row) => Boolean(row?.groupId));
+}
+
+function hostsPage(groupId?: string) {
+  return groupId ? `/dashboard/ops-center/organizations?host=${groupId}` : "/dashboard/ops-center/organizations";
+}
 
 /**
  * Open a SearchableSelect, search it, and pick the first matching option.
@@ -80,36 +97,25 @@ test.describe("invoice host organizations and contacts", () => {
     const contactLast = "Testerly";
     const contactEmail = `e2e-host-${stamp}@example.com`;
 
-    await page.goto("/dashboard/ops-center/organizations");
-    await expect(page.getByText("Billing hosts").first()).toBeVisible({ timeout: 25_000 });
+    await page.goto(hostsPage());
+    await expect(page.getByRole("heading", { name: "Billing hosts" })).toBeVisible({ timeout: 25_000 });
 
     // Create the host as non-subsidized so its pricing mode is distinguishable
     // from the "subsidized" default.
-    const createForm = page.locator("form").filter({ has: page.getByPlaceholder("New host name") });
-    await createForm.getByPlaceholder("New host name").fill(hostName);
-    await pickSelectOption(page, createForm.locator("#new-host-pricing"), "Non-subsidized");
-    await createForm.getByRole("button", { name: "Add host" }).click();
-
-    const group = await pollConvex<GroupState>(
-      "e2eHelpers:getInvoiceGroupByName",
-      { name: hostName },
-      (row) => Boolean(row?.groupId),
-    );
+    const group = await createHost(page, hostName, "Non-subsidized");
     expect(group.active).toBe(true);
     expect(group.equipmentPricingMode).toBe("nonSubsidized");
 
-    // Select the host, then add a client contact under it.
-    await page.getByRole("button").filter({ hasText: hostName }).first().click();
-    await expect(page.getByText(`Edit host: ${hostName}`)).toBeVisible({ timeout: 25_000 });
-
-    const contactForm = page
-      .locator("form")
-      .filter({ has: page.getByRole("button", { name: "Add client" }) });
-    await contactForm.getByPlaceholder("First name").fill(contactFirst);
-    await contactForm.getByPlaceholder("Last name").fill(contactLast);
-    await contactForm.getByPlaceholder("Email").fill(contactEmail);
-    await contactForm.getByPlaceholder("Phone").fill("6505550123");
-    await contactForm.getByRole("button", { name: "Add client" }).click();
+    // A new host opens in the side panel; add a client contact under it.
+    const sheet = page.getByTestId("host-sheet");
+    await expect(sheet.getByRole("heading", { name: hostName })).toBeVisible({ timeout: 25_000 });
+    await sheet.getByRole("button", { name: "Add contact" }).click();
+    const contactForm = sheet.getByTestId("host-contact-new-form");
+    await formField(contactForm, "First name").fill(contactFirst);
+    await formField(contactForm, "Last name").fill(contactLast);
+    await formField(contactForm, "Email").fill(contactEmail);
+    await formField(contactForm, "Phone").fill("6505550123");
+    await contactForm.getByRole("button", { name: "Add contact" }).click();
 
     const withContact = await pollConvex<GroupState>(
       "e2eHelpers:getInvoiceGroupByName",
@@ -167,22 +173,13 @@ test.describe("invoice host organizations and contacts", () => {
     // The host's pricing mode carried onto the invoice.
     expect(billed.equipmentPricingMode).toBe("nonSubsidized");
 
-    // Archiving drops the host out of the default (active-only) list.
-    await page.goto("/dashboard/ops-center/organizations");
-    await page.getByRole("button").filter({ hasText: hostName }).first().click();
-    const editCard = page.locator("[data-slot='card']").filter({ hasText: `Edit host: ${hostName}` });
-    await expect(editCard).toBeVisible({ timeout: 25_000 });
-
-    // Two buttons read exactly "Archive" once the host has a contact — the host's
-    // own and the contact row's — and nothing in either subtree distinguishes
-    // them by text. The host form is rendered before the "Client contacts"
-    // block, so take the first.
-    const archiveHost = editCard
-      .getByRole("button", { name: "Archive", exact: true })
-      .first();
-
-    await archiveHost.click();
-    await acceptAppDialog(page, "Archive");
+    // Archiving drops the host out of the default (active-only) list. The
+    // `?host=` deep link opens its panel straight away.
+    await page.goto(hostsPage(group.groupId));
+    await expect(sheet.getByRole("heading", { name: hostName })).toBeVisible({ timeout: 25_000 });
+    await expect(sheet.getByTestId("host-contact-list")).toContainText(contactEmail, { timeout: 25_000 });
+    await sheet.getByRole("button", { name: "Archive host" }).click();
+    await acceptAppDialog(page, "Archive host");
 
     const archived = await pollConvex<GroupState>(
       "e2eHelpers:getInvoiceGroupByName",
@@ -191,15 +188,15 @@ test.describe("invoice host organizations and contacts", () => {
     );
     expect(archived.active).toBe(false);
 
-    await expect(page.getByRole("button").filter({ hasText: hostName })).toHaveCount(0, {
-      timeout: 25_000,
-    });
+    await expect(sheet.getByRole("button", { name: "Restore host" })).toBeVisible({ timeout: 25_000 });
+    await page.keyboard.press("Escape");
+    const row = page.getByTestId(`billing-host-row-${group.groupId}`);
+    await expect(row).toHaveCount(0, { timeout: 25_000 });
 
-    // ...but "Show archived" brings it back into view.
-    await page.getByText("Show archived").click();
-    await expect(page.getByRole("button").filter({ hasText: hostName }).first()).toBeVisible({
-      timeout: 25_000,
-    });
+    // ...but dropping the "Status is Active" filter brings it back into view.
+    await page.getByRole("button", { name: "Remove the Status filter" }).click();
+    await expect(row).toBeVisible({ timeout: 25_000 });
+    await expect(row).toContainText("Archived");
   });
 
   test("admin merges duplicate hosts and keeps invoice on survivor", async ({ page }) => {
@@ -208,33 +205,25 @@ test.describe("invoice host organizations and contacts", () => {
     const survivorName = `E2E Merge Survivor ${stamp}`;
     const victimName = `E2E Merge Victim ${stamp}`;
 
-    await page.goto("/dashboard/ops-center/organizations");
-    await expect(page.getByText("Billing hosts").first()).toBeVisible({ timeout: 25_000 });
+    await page.goto(hostsPage());
+    await expect(page.getByRole("heading", { name: "Billing hosts" })).toBeVisible({ timeout: 25_000 });
 
-    const createForm = page.locator("form").filter({ has: page.getByPlaceholder("New host name") });
-    await createForm.getByPlaceholder("New host name").fill(survivorName);
-    await createForm.getByRole("button", { name: "Add host" }).click();
-    await pollConvex<GroupState>(
-      "e2eHelpers:getInvoiceGroupByName",
-      { name: survivorName },
-      (row) => Boolean(row?.groupId),
-    );
+    await createHost(page, victimName);
+    await page.keyboard.press("Escape");
+    const survivorGroup = await createHost(page, survivorName);
 
-    await createForm.getByPlaceholder("New host name").fill(victimName);
-    await createForm.getByRole("button", { name: "Add host" }).click();
-    await pollConvex<GroupState>(
-      "e2eHelpers:getInvoiceGroupByName",
-      { name: victimName },
-      (row) => Boolean(row?.groupId),
-    );
-
-    await page.getByRole("button").filter({ hasText: survivorName }).first().click();
-    await expect(page.getByText(`Edit host: ${survivorName}`)).toBeVisible({ timeout: 25_000 });
-    await page.getByRole("button", { name: "Merge into this host…" }).click();
-    await expect(page.getByTestId("host-merge-panel")).toBeVisible();
-    await page.getByRole("checkbox", { name: victimName }).check();
-    await page.getByTestId("host-merge-confirm").click();
-    await acceptAppDialog(page, "Merge");
+    const sheet = page.getByTestId("host-sheet");
+    await expect(sheet.getByRole("heading", { name: survivorName })).toBeVisible({ timeout: 25_000 });
+    await sheet.getByRole("button", { name: "Merge hosts into this one" }).click();
+    const mergeDialog = page.getByTestId("host-merge-panel");
+    await expect(mergeDialog).toBeVisible();
+    await mergeDialog.getByLabel("Search hosts to merge").fill(victimName);
+    await mergeDialog.getByRole("checkbox", { name: victimName }).check();
+    await expect(mergeDialog.getByTestId("host-merge-preview")).toContainText(`to ${survivorName}`, {
+      timeout: 25_000,
+    });
+    await mergeDialog.getByTestId("host-merge-confirm").click();
+    await expect(mergeDialog).toHaveCount(0, { timeout: 25_000 });
 
     const survivor = await pollConvex<GroupState>(
       "e2eHelpers:getInvoiceGroupByName",
@@ -250,6 +239,8 @@ test.describe("invoice host organizations and contacts", () => {
     );
     expect(victim.active).toBe(false);
 
-    await expect(page.getByTestId("host-alias-list")).toContainText(victimName, { timeout: 25_000 });
+    expect(survivor.groupId).toBe(survivorGroup.groupId);
+
+    await expect(sheet.getByTestId("host-alias-list")).toContainText(victimName, { timeout: 25_000 });
   });
 });

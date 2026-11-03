@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ComponentType } from "react";
+import { useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { DotsSixVerticalIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
@@ -55,16 +55,27 @@ function normalizePreference(
   return { widgetOrder, hiddenWidgetIds };
 }
 
+export type DashboardLayoutParts = {
+  header: ReactNode;
+  /** The Customize / Done button, for a layout that hides the header. */
+  customize: ReactNode;
+  /** Reset layout while customizing, for a layout that hides the header's menu. */
+  reset: ReactNode;
+  body: ReactNode;
+};
+
 export function CustomizableWidgetDashboard({
   dashboardKey,
   title,
   description,
   widgets,
+  layout,
 }: {
   dashboardKey: DashboardWidgetKey;
   title: string;
-  description: string;
+  description?: string;
   widgets: DashboardWidgetDefinition[];
+  layout?: (parts: DashboardLayoutParts) => ReactNode;
 }) {
   const preference = useQuery(api.dashboardPreferences.getMyDashboardPreference, {
     dashboardKey,
@@ -91,7 +102,9 @@ export function CustomizableWidgetDashboard({
         .filter((widget): widget is DashboardWidgetDefinition => widget !== undefined),
     [widgetOrder, widgetsById],
   );
-  const visibleWidgets = orderedWidgets.filter((widget) => !hiddenWidgetIds.includes(widget.id));
+  const visibleWidgets = orderedWidgets.filter(
+    (widget) => !hiddenWidgetIds.includes(widget.id),
+  );
 
   async function persist(nextOrder: string[], nextHidden: string[]) {
     try {
@@ -128,28 +141,34 @@ export function CustomizableWidgetDashboard({
     }
   }
 
-  return (
-    <div className="space-y-4 pb-24" data-testid={`${dashboardKey}-dashboard`}>
-      <PageHeader
-        title={title}
-        description={description}
-        actions={
-          isCustomizing ? (
-            <Button size="sm" onClick={() => setIsCustomizing(false)}>
-              Done
-            </Button>
-          ) : (
-            <Button variant="outline" size="sm" onClick={() => setIsCustomizing(true)}>
-              <SlidersHorizontalIcon />
-              Customize
-            </Button>
-          )
-        }
-        menu={
-          <DropdownMenuItem onSelect={() => void handleResetLayout()}>Reset layout</DropdownMenuItem>
-        }
-      />
+  const customize = isCustomizing ? (
+    <Button size="sm" onClick={() => setIsCustomizing(false)}>
+      Done
+    </Button>
+  ) : (
+    <Button variant="outline" size="sm" onClick={() => setIsCustomizing(true)}>
+      <SlidersHorizontalIcon />
+      Customize
+    </Button>
+  );
 
+  const header = (
+    <PageHeader
+      title={title}
+      description={description}
+      actions={customize}
+      menu={<DropdownMenuItem onSelect={() => void handleResetLayout()}>Reset layout</DropdownMenuItem>}
+    />
+  );
+
+  const reset = isCustomizing ? (
+    <Button variant="ghost" size="sm" onClick={() => void handleResetLayout()}>
+      Reset layout
+    </Button>
+  ) : null;
+
+  const body = (
+    <>
       {isCustomizing ? (
         <div className="space-y-2" data-testid="dashboard-customize">
           <p className="text-sm text-muted-foreground">
@@ -218,6 +237,19 @@ export function CustomizableWidgetDashboard({
             </div>
           ))}
         </div>
+      )}
+    </>
+  );
+
+  return (
+    <div className="space-y-4 pb-24" data-testid={`${dashboardKey}-dashboard`}>
+      {layout ? (
+        layout({ header, customize, reset, body })
+      ) : (
+        <>
+          {header}
+          {body}
+        </>
       )}
     </div>
   );

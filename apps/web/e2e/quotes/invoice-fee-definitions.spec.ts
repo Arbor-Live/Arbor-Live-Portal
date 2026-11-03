@@ -90,7 +90,7 @@ test.describe("invoice fee definitions", () => {
 
     // Edit the default amount in the row.
     const row = page
-      .locator("div.rounded-md.border.p-3.text-sm")
+      .getByRole("listitem")
       .filter({ hasText: crudLabel });
     await expect(row).toBeVisible({ timeout: 25_000 });
     await row.locator("input[type='number']").fill("90");

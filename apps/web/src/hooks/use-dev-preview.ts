@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { useIsClient } from "@/hooks/use-hydrated-session";
 
 function subscribeDevPreview(onStoreChange: () => void) {
   window.addEventListener("popstate", onStoreChange);
@@ -14,13 +15,6 @@ function getDevPreviewSnapshot() {
 
 function getDevPreviewServerSnapshot() {
   return false;
-}
-
-const emptySubscribe = () => () => {};
-
-/** True after hydration (client-only). */
-function useIsClient() {
-  return useSyncExternalStore(emptySubscribe, () => true, () => false);
 }
 
 /**

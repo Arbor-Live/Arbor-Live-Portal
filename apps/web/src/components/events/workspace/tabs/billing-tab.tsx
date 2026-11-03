@@ -21,6 +21,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RowCell } from "@/components/list-page";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { DraftTextInput } from "@/components/forms/draft-text-input";
 import type { SearchableSelectOption } from "@/components/inventory/searchable-select";
 import { EventLinkedInvoicesField } from "@/components/events/event-linked-invoices-field";
@@ -377,14 +379,16 @@ export function BillingTab() {
 
           {isAdmin ? (
             <div className="grid gap-3 border border-dashed p-3 md:grid-cols-2">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="event-billing-ot-premium"
                   checked={draft.otPremium}
-                  onChange={(e) => updateDraft({ otPremium: e.target.checked })}
+                  onCheckedChange={(otPremium) => updateDraft({ otPremium })}
                 />
-                OT premium (1.5×, double time after 8 hrs)
-              </label>
+                <Label htmlFor="event-billing-ot-premium" className="font-normal">
+                  OT premium (1.5×, double time after 8 hrs)
+                </Label>
+              </div>
               <Field label="Per-event crew buffer %">
                 <DraftTextInput
                   value={draft.crewCostBufferPercent}

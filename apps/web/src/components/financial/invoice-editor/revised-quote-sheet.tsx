@@ -22,14 +22,15 @@ import { formatUsd } from "@/lib/format";
 import { diffQuoteLines, formatUsdDelta } from "@/lib/quote-diff";
 
 /**
- * Answer the client's change request: their request, what changed in the
- * quote since they asked, and a reply. Sending records a new version after
- * the request, so both stay in the history.
+ * Send the client a new version: a reply to their change request, or a
+ * revision staff make on their own. Shows what changed since the request or
+ * the last version sent, and takes the message that goes with it.
  */
 export function RevisedQuoteSheet({
   open,
   onOpenChange,
   invoiceId,
+  isReply: isReplyWhenOpened,
   toEmail,
   managerEmail,
   isRequestLinked,
@@ -40,6 +41,8 @@ export function RevisedQuoteSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   invoiceId: Id<"invoices">;
+  /** Answering the client's open change request, rather than revising on our own. */
+  isReply: boolean;
   toEmail: string;
   managerEmail?: string;
   isRequestLinked: boolean;
@@ -47,14 +50,20 @@ export function RevisedQuoteSheet({
   sending: boolean;
   onSend: (message: string) => Promise<void>;
 }) {
-  const preview = useQuery(api.invoices.revisedQuotePreview, open ? { id: invoiceId } : "skip");
+  const livePreview = useQuery(api.invoices.revisedQuotePreview, open ? { id: invoiceId } : "skip");
+  // Sending changes what the preview compares against; keep showing what was sent while the sheet closes.
+  const [sentPreview, setSentPreview] = useState<typeof livePreview>(undefined);
+  const preview = sentPreview ?? livePreview;
   const [message, setMessage] = useState("");
+  // The parent remounts the sheet on each open (its `key`), so this is the state when it opened.
+  const [isReply] = useState(isReplyWhenOpened);
   const [error, setError] = useState<string | null>(null);
   const trimmed = message.trim();
 
-  const request = preview?.request;
-  const changes = request?.lines && preview ? diffQuoteLines(request.lines, preview.current.lines) : null;
-  const delta = request?.totalUsd != null && preview ? preview.current.totalUsd - request.totalUsd : null;
+  const basis = preview?.basis;
+  const current = preview?.current;
+  const changes = basis?.lines && current ? diffQuoteLines(basis.lines, current.lines) : null;
+  const delta = basis?.totalUsd != null && current ? current.totalUsd - basis.totalUsd : null;
   const unchanged = changes !== null && changes.length === 0 && (delta === null || Math.abs(delta) < 0.005);
 
   const replyTo = [managerEmail?.trim() || null, ARBOR_CONTACT_EMAIL].filter(
@@ -64,14 +73,22 @@ export function RevisedQuoteSheet({
 
   async function handleSend() {
     if (!trimmed) {
-      setError(unchanged ? "Tell the client why the quote stays as it is." : "Tell the client what changed.");
+      setError(
+        unchanged
+          ? isReply
+            ? "Tell the client why the quote stays as it is."
+            : "Tell the client why you're resending it."
+          : "Tell the client what changed.",
+      );
       return;
     }
     setError(null);
+    setSentPreview(livePreview);
     try {
       await onSend(trimmed);
       onOpenChange(false);
     } catch (err) {
+      setSentPreview(undefined);
       setError(getConvexErrorMessage(err, "Could not send the revised quote."));
     }
   }
@@ -80,41 +97,52 @@ export function RevisedQuoteSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-md" data-testid="revised-quote-sheet">
         <SheetHeader>
-          <SheetTitle>Reply to the change request</SheetTitle>
+          <SheetTitle>{isReply ? "Reply to the change request" : "Send a revised quote"}</SheetTitle>
           <SheetDescription>
-            Sends the quote as it stands with your reply, and asks the client to approve it again.{" "}
+            Sends the quote as it stands with your {isReply ? "reply" : "message"}, as a new version for the
+            client to approve.{" "}
             {isRequestLinked
               ? "It goes back on their request portal with the quote PDF."
-              : "They get an email with their quote link."}{" "}
-            Their request stays in the version history.
+              : "They get an email with their quote link."}
+            {isReply ? " Their request stays in the version history." : null}
           </SheetDescription>
         </SheetHeader>
 
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 pb-2">
-          <div className="space-y-1.5">
-            <p className="text-sm font-medium">They asked</p>
-            <p className="border-l-2 border-status-amber-500/60 pl-2 text-sm whitespace-pre-line wrap-anywhere">
-              {request?.note ? `“${request.note}”` : "—"}
-            </p>
-          </div>
+          {isReply ? (
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">They asked</p>
+              <p className="border-l-2 border-status-amber-500/60 pl-2 text-sm whitespace-pre-line wrap-anywhere">
+                {basis?.note ? `“${basis.note}”` : "—"}
+              </p>
+            </div>
+          ) : null}
 
           <div className="space-y-1.5">
-            <p className="text-sm font-medium">What changed since</p>
+            <p className="text-sm font-medium">
+              What changed since{!isReply && basis?.number ? ` v${basis.number}` : ""}
+            </p>
             {preview === undefined ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : preview?.blocked ? (
+              <p className="text-sm text-destructive" data-testid="revised-quote-blocked">
+                {preview.blocked}
+              </p>
             ) : changes === null ? (
               <p className="text-sm text-muted-foreground">
-                This request came in before versions were kept, so there&apos;s nothing to compare against.
+                {isReply
+                  ? "This request came in before versions were kept, so there's nothing to compare against."
+                  : "The client hasn't been sent a version yet, so there's nothing to compare against."}
               </p>
             ) : unchanged ? (
               <p className="text-sm text-status-amber-700 dark:text-status-amber-300" data-testid="revised-quote-unchanged">
-                Nothing yet: you&apos;ll resend the same quote ({formatUsd(preview?.current.totalUsd ?? 0)}). Say why
-                in your reply, or make the changes first.
+                Nothing yet: you&apos;ll resend the same quote ({formatUsd(current?.totalUsd ?? 0)}). Say why
+                in your {isReply ? "reply" : "message"}, or make the changes first.
               </p>
             ) : (
               <>
                 <p className="text-sm tabular-nums">
-                  {formatUsd(request?.totalUsd ?? 0)} → {formatUsd(preview?.current.totalUsd ?? 0)}
+                  {formatUsd(basis?.totalUsd ?? 0)} → {formatUsd(current?.totalUsd ?? 0)}
                   {delta !== null ? (
                     <span className="text-muted-foreground"> ({formatUsdDelta(delta, formatUsd)})</span>
                   ) : null}
@@ -134,7 +162,7 @@ export function RevisedQuoteSheet({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="revised-quote-message">Your reply</Label>
+            <Label htmlFor="revised-quote-message">{isReply ? "Your reply" : "Your message"}</Label>
             <Textarea
               id="revised-quote-message"
               data-testid="revised-quote-message"
@@ -143,7 +171,9 @@ export function RevisedQuoteSheet({
               onChange={(event) => setMessage(event.target.value)}
               placeholder={
                 unchanged
-                  ? "Why the quote stays as it is"
+                  ? isReply
+                    ? "Why the quote stays as it is"
+                    : "Why you're resending it"
                   : "What you changed, e.g. Removed the second photographer and trimmed setup by an hour."
               }
             />
@@ -163,7 +193,7 @@ export function RevisedQuoteSheet({
             type="button"
             data-testid="revised-quote-send"
             onClick={() => void handleSend()}
-            disabled={!trimmed || sending}
+            disabled={!trimmed || sending || !preview || Boolean(preview.blocked)}
           >
             {sending ? "Sending…" : unchanged ? "Resend unchanged" : "Send revised quote"}
           </Button>

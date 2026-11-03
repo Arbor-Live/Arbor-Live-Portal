@@ -28,7 +28,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PersonSheet, usePersonActions } from "@/components/users/directory/person-sheet";
 import {
-  ALL_ORGS,
   EmptyRows,
   FLAG_CLASS,
   STATUS_CHIP,
@@ -41,7 +40,7 @@ import {
   type CrewOnboardingRow,
   type UserStatus,
 } from "@/components/users/directory/shared";
-import { OrgFilterSelect, useUsersDirectory } from "@/components/users/directory/users-directory-shell";
+import { useOrgFilter, useUsersDirectory } from "@/components/users/directory/users-directory-shell";
 
 type AccessFilter = UserStatus | "all";
 
@@ -66,18 +65,17 @@ function userSearchScore(user: AdminUser, query: string) {
 
 /** Everyone with an account in the filtered organization, alphabetical (best match first while searching), with a side panel per person. */
 export function PeopleTab() {
-  const { orgOptions, filterOrgId, setOrgFilter, openAddPerson } = useUsersDirectory();
-  const users = useQuery(
-    api.users.listUsersForAdmin,
-    orgOptions === undefined ? "skip" : { organizationId: filterOrgId },
-  );
+  const { orgOptions, setOrgFilter, openAddPerson } = useUsersDirectory();
+  const [filters, setFilters] = useState<FilterState>({});
+  const orgFilter = useOrgFilter(filters, setFilters);
+  const { organizationId } = orgFilter;
+  const users = useQuery(api.users.listUsersForAdmin, orgOptions === undefined ? "skip" : { organizationId });
   const crewOnboarding = useQuery(api.onboarding.listCrewOnboardingForAdmin, {});
   const actions = usePersonActions();
   const [selectedId, setSelectedId] = useSheetParam("user");
   const [search, setSearch] = useState("");
   const query = useDeferredValue(search.trim().toLowerCase());
   const [access, setAccess] = useState<AccessFilter>("active");
-  const [filters, setFilters] = useState<FilterState>({});
 
   const onboardingByUserId = useMemo(() => {
     const map = new Map<string, CrewOnboardingRow>();
@@ -98,6 +96,7 @@ export function PeopleTab() {
 
   const filterDefinitions = useMemo<FilterDefinition[]>(
     () => [
+      orgFilter.definition,
       { id: "onboarding", label: "Onboarding", options: ONBOARDING_OPTIONS, single: true },
       {
         id: "role",
@@ -113,7 +112,7 @@ export function PeopleTab() {
         options: USER_DISCIPLINE_OPTIONS.map((value) => ({ value, label: value })),
       },
     ],
-    [users],
+    [orgFilter.definition, users],
   );
 
   const rows = useMemo(() => {
@@ -148,13 +147,13 @@ export function PeopleTab() {
   const widenedForDeepLink = useRef(false);
   useEffect(() => {
     if (!users || !selectedId || selectedUser) return;
-    if (filterOrgId && !widenedForDeepLink.current) {
+    if (organizationId && !widenedForDeepLink.current) {
       widenedForDeepLink.current = true;
-      setOrgFilter(ALL_ORGS);
+      setOrgFilter(null);
     } else {
       setSelectedId(null);
     }
-  }, [users, selectedId, selectedUser, filterOrgId, setOrgFilter, setSelectedId]);
+  }, [users, selectedId, selectedUser, organizationId, setOrgFilter, setSelectedId]);
 
   const filtersActive = Boolean(query) || access !== "all" || Object.keys(activeFilters(filters)).length > 0;
 
@@ -166,10 +165,9 @@ export function PeopleTab() {
         searchPlaceholder="Search name, email, team…"
         searchLabel="Search people"
         filters={filterDefinitions}
-        value={filters}
-        onChange={setFilters}
+        value={orgFilter.value}
+        onChange={orgFilter.onChange}
       >
-        <OrgFilterSelect />
         <ToggleGroup
           type="single"
           size="sm"

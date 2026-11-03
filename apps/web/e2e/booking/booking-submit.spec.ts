@@ -28,7 +28,7 @@ test.describe("public booking submit", () => {
     await expect(page.getByText("Welcome!").first()).toBeVisible({ timeout: 20_000 });
 
     await clickNext(page);
-    await page.getByLabel("Stanford email").fill(email);
+    await page.getByLabel("Email").fill(email);
     await clickNext(page);
 
     await page.getByLabel("First name").fill("E2E");
@@ -95,5 +95,64 @@ test.describe("public booking submit", () => {
     });
     await expect(adminPage.getByTestId("request-status")).toHaveText("Submitted");
     await adminContext.close();
+  });
+
+  test("a non-Stanford email requests as an individual and sees the OSE warning", async ({ page }) => {
+    const stamp = Date.now();
+    const email = `e2e.booking.${stamp}@example.com`;
+    const eventName = `E2E Non-Stanford Booking ${stamp}`;
+
+    await page.goto("/request");
+    await expect(page.getByText("Welcome!").first()).toBeVisible({ timeout: 20_000 });
+
+    await clickNext(page);
+    await page.getByLabel("Email").fill(email);
+    await clickNext(page);
+
+    await page.getByLabel("First name").fill("E2E");
+    await page.getByLabel("Last name").fill("Outsider");
+    await page.getByLabel("Phone").fill("6505550189");
+    await clickNext(page);
+
+    await expect(page.getByRole("radio")).toHaveCount(1);
+    await expect(page.getByRole("radio", { name: "Individual (non-Stanford)" })).toBeChecked();
+    await expect(page.locator("[data-slot='alert']")).toHaveText(
+      "Your event must be approved by Stanford's Office of Student Engagement (OSE) and can't violate campus policy.",
+    );
+    await clickNext(page);
+
+    // Venue is optional.
+    await clickNext(page);
+
+    await pickFutureCalendarDay(page);
+    await page.getByText("Flexible setup time").click();
+    await clickNext(page);
+
+    await page.getByLabel("What is the name for your event?").fill(eventName);
+    await clickNext(page);
+
+    await page.getByRole("radio", { name: "Speaker Event" }).click();
+    await clickNext(page);
+
+    await page.getByRole("button", { name: "Crewed", exact: true }).click();
+    await clickNext(page);
+
+    await page.getByRole("button", { name: "Skip", exact: true }).click();
+    await page.getByRole("button", { name: "Skip", exact: true }).click();
+
+    await page.getByLabel("Expected turnout").fill("75");
+    await clickNext(page);
+
+    await page.getByRole("button", { name: "Skip", exact: true }).click();
+    await page.getByRole("button", { name: "Submit", exact: true }).click();
+
+    await expect(page.getByText("Thank you!").first()).toBeVisible({ timeout: 45_000 });
+
+    const request = await pollConvex<{ email: string; eventName: string | null }>(
+      "e2eHelpers:getLatestBookingRequestByEmail",
+      { email },
+      (row) => row?.eventName === eventName,
+    );
+    expect(request.email).toBe(email);
   });
 });

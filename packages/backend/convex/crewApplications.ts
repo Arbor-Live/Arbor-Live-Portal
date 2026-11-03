@@ -37,6 +37,8 @@ import { bumpInviteSequence } from "./email/inviteSequence";
 import {
   markInvitationAccepted,
   scheduleUserInviteEmail,
+  notionChecklistFlags,
+  syncInviteNotionChecklist,
 } from "./email/invitations";
 import { scheduleCrewScheduledEmails } from "./email/triggers";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
@@ -299,6 +301,8 @@ export const listAdmin = query({
   args: {
     /** Statuses to include; omit for all of them. */
     statuses: v.optional(v.array(applicationStatusValue)),
+    /** One application by id, past the per-status cap. Takes priority over `statuses`. */
+    applicationId: v.optional(v.id("crewApplications")),
   },
   returns: v.array(
     v.object({
@@ -324,6 +328,12 @@ export const listAdmin = query({
       outreachUpdatedByName: v.optional(v.string()),
       /** Trainees only: when their last training shift ends ("Decision needed" after that). */
       trainingEndsAt: v.optional(v.number()),
+      invitationId: v.optional(v.string()),
+      /** Null when the application was converted before checklists were linked. */
+      notionChecklist: v.union(
+        v.null(),
+        v.object({ inviteToNotion: v.boolean(), addToCrewGroup: v.boolean() }),
+      ),
     }),
   ),
   handler: async (ctx, args) => {
@@ -333,19 +343,24 @@ export const listAdmin = query({
     const statuses = args.statuses
       ? [...new Set(args.statuses)]
       : (["submitted", "trainee", "converted", "closed"] as const);
-    const rows = (
-      await Promise.all(
-        statuses.map((status) =>
-          ctx.db
-            .query("crewApplications")
-            .withIndex("by_status_and_submittedAt", (q) => q.eq("status", status))
-            .order("desc")
-            .take(200),
-        ),
-      )
-    )
-      .flat()
-      .sort((a, b) => b.submittedAt - a.submittedAt);
+    const single = args.applicationId ? await ctx.db.get(args.applicationId) : null;
+    const rows = args.applicationId
+      ? single
+        ? [single]
+        : []
+      : (
+          await Promise.all(
+            statuses.map((status) =>
+              ctx.db
+                .query("crewApplications")
+                .withIndex("by_status_and_submittedAt", (q) => q.eq("status", status))
+                .order("desc")
+                .take(200),
+            ),
+          )
+        )
+          .flat()
+          .sort((a, b) => b.submittedAt - a.submittedAt);
 
     const userIds = rows.flatMap((row) =>
       [row.assigneeUserId, row.outreachUpdatedByUserId].filter((id): id is string => Boolean(id)),
@@ -356,6 +371,23 @@ export const listAdmin = query({
         rows
           .filter((row) => row.status === "trainee")
           .map(async (row) => [row._id, await loadTrainingEndsAt(ctx, row._id)] as const),
+      ),
+    );
+
+    const checklistByApplicationId = new Map(
+      await Promise.all(
+        rows
+          .filter((row) => row.invitationId)
+          .map(
+            async (row) =>
+              [
+                row._id,
+                await ctx.db
+                  .query("inviteNotionChecklists")
+                  .withIndex("by_invitationId", (q) => q.eq("invitationId", row.invitationId!))
+                  .unique(),
+              ] as const,
+          ),
       ),
     );
 
@@ -382,6 +414,8 @@ export const listAdmin = query({
         outreachUpdatedAt: row.outreachUpdatedAt,
         outreachUpdatedByName: authUserDisplayName(userByKey, row.outreachUpdatedByUserId),
         trainingEndsAt: trainingEndsAtById.get(row._id),
+        invitationId: row.invitationId,
+        notionChecklist: notionChecklistFlags(checklistByApplicationId.get(row._id)),
       }));
   },
 });
@@ -817,6 +851,9 @@ export const convertToMember = mutation({
       await markInvitationAccepted(ctx, invitationId);
     }
 
+    // This path always invites crew into Arbor Live (it sets no `inviteKind`).
+    await syncInviteNotionChecklist(ctx, invitationId, true);
+
     await scheduleUserInviteEmail(ctx, {
       invitationId,
       email,
@@ -839,6 +876,7 @@ export const convertToMember = mutation({
       reviewedAt: now,
       reviewedByUserId: adminId,
       convertedUserId: existingUserId || undefined,
+      invitationId,
       updatedAt: now,
     });
 
