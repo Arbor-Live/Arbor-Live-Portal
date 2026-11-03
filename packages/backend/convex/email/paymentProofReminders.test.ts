@@ -1,9 +1,9 @@
 // @vitest-environment edge-runtime
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { internal } from "../_generated/api";
-import { seedEvent } from "../test/bookingSeeds.helpers";
+import { seedEvent, seedInvoice } from "../test/bookingSeeds.helpers";
 import { makeTest, type Test } from "../test/setup.helpers";
-import { REMINDER_EVENT_BATCH_SIZE } from "./paymentProofReminderShared";
+import { REMINDER_EVENT_BATCH_SIZE, REMINDER_UNLINKED_BATCH_SIZE } from "./paymentProofReminderShared";
 
 const NOW = Date.UTC(2026, 10, 3, 17);
 
@@ -52,4 +52,23 @@ it("walks the events in batches, then the unlinked invoices, with one fixed cloc
   const after = await pendingContinuations(t);
   expect(after.filter((c) => c.run.phase === "unlinked")).toHaveLength(1);
   expect(after).toHaveLength(2);
+});
+
+it("pages through approved invoices with no event instead of scanning them all at once", async () => {
+  const t = makeTest();
+  for (let i = 0; i <= REMINDER_UNLINKED_BATCH_SIZE; i += 1) {
+    const invoiceId = await seedInvoice(t, { invoiceNumber: `ALINV-UNLINK${String(i).padStart(2, "0")}` });
+    await t.run(async (ctx) =>
+      ctx.db.patch(invoiceId, { clientApprovalStatus: "approved", approvedAt: NOW - 60_000 }),
+    );
+  }
+  const unlinked = { mode: "first" as const, run: { now: NOW, phase: "unlinked" as const, cursor: null, remindedInvoiceIds: [] } };
+
+  await t.mutation(internal.email.paymentProofReminders.continueRun, unlinked);
+  const next = (await pendingContinuations(t)).filter((c) => c.run.phase === "unlinked");
+  expect(next).toHaveLength(1);
+  expect(next[0]!.run.cursor).toEqual(expect.any(String));
+
+  await t.mutation(internal.email.paymentProofReminders.continueRun, next[0]!);
+  expect((await pendingContinuations(t)).filter((c) => c.run.phase === "unlinked")).toHaveLength(1);
 });

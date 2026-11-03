@@ -1,7 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { listAdditionalInvoiceIds } from "../lib/eventInvoiceLinks";
-import { listApprovedInvoicesWithoutEvent } from "../lib/invoiceEvents";
+import { listEventsLinkedToInvoice } from "../lib/invoiceEvents";
 import {
   computeLateFeeSummary,
   getPaymentDueAt,
@@ -20,11 +20,14 @@ import { schedulePaymentProofReminderEmail } from "./paymentProofEmails";
 const REMINDER_LOOKBACK_MS = 90 * 24 * 60 * 60 * 1000;
 
 /**
- * Events per transaction. Each can fan out to a few invoices, and each reminder
- * resolves a booking thread and queues an email; 50 keeps a batch far inside the
- * mutation read/write limits while a normal week still finishes in a few batches.
+ * Work per transaction. An event fans out to its primary invoice plus up to 12
+ * linked ones, and each candidate reads its proof submissions, portal token and
+ * booking thread before queuing an email, so batches stay small enough that a
+ * worst case still fits the mutation read limits. A normal week still finishes
+ * in a handful of batches.
  */
-export const REMINDER_EVENT_BATCH_SIZE = 50;
+export const REMINDER_EVENT_BATCH_SIZE = 10;
+export const REMINDER_UNLINKED_BATCH_SIZE = 25;
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -111,11 +114,21 @@ export async function runPaymentProofReminderBatch(
   }
 
   if (run.phase === "unlinked") {
-    const unlinked = await listApprovedInvoicesWithoutEvent(ctx, windowStart, remindedInvoiceIds);
-    for (const invoice of unlinked) {
+    const page = await ctx.db
+      .query("invoices")
+      .withIndex("by_approvedAt", (q) => q.gte("approvedAt", windowStart))
+      .paginate({ numItems: REMINDER_UNLINKED_BATCH_SIZE, cursor: run.cursor });
+    for (const invoice of page.page) {
+      if (remindedInvoiceIds.has(invoice._id)) continue;
+      if ((await listEventsLinkedToInvoice(ctx, invoice._id)).length > 0) continue;
       await considerInvoice(invoice, null);
     }
-    return { enqueuedCount, next: null };
+    return {
+      enqueuedCount,
+      next: page.isDone
+        ? null
+        : { now, phase: "unlinked", cursor: page.continueCursor, remindedInvoiceIds: [...remindedInvoiceIds] },
+    };
   }
 
   const page = await ctx.db
