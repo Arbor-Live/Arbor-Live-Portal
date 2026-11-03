@@ -14,6 +14,7 @@ import {
   createUser,
   makeTest,
   setActiveOrg,
+  setVerticals,
   type Test,
 } from "../test/setup.helpers";
 
@@ -269,13 +270,14 @@ describe("sendQueuedEmail for the quote PDF", () => {
 });
 
 describe("sendQueuedEmail for a staff reply", () => {
-  async function queueReply(attachQuote: boolean) {
+  async function queueReply(attachQuote: boolean, name = "Jamie Park") {
     const t = makeTest();
     const { requestId } = await seedBooking(t);
-    const user = await createUser(t, { email: "jamie@arbor.st", name: "Jamie Park" });
+    const user = await createUser(t, { email: "jamie@arbor.st", name });
     const arbor = await createOrg(t, { type: "arbor_internal" });
     await addMembership(t, user._id, arbor.organizationId, "member", true);
     await setActiveOrg(t, user._id, arbor.organizationId);
+    await setVerticals(t, user._id, ["Operations"]);
     await asUser(t, user).mutation(api.emailThreads.sendReply, {
       requestId,
       body: "Quote attached.\nThanks!",
@@ -319,5 +321,21 @@ describe("sendQueuedEmail for a staff reply", () => {
       from: '"Jamie Park at Arbor Live" <bookings@arbor.st>',
       to: "maya@client.test",
     });
+  }, SEND_TEST_TIMEOUT_MS);
+
+  it("sends from plain Arbor Live when the sender has no name, and records the same name", async () => {
+    const { t } = await queueReply(false, "");
+
+    expect(resend.componentSends).toHaveLength(1);
+    const [send] = resend.componentSends;
+    expect(send!.from).toBe('"Arbor Live" <bookings@arbor.st>');
+    const html = send!.html as string;
+    expect(html).not.toContain("Message from");
+    const [message] = await t.run(async (ctx) => ctx.db.query("emailMessages").collect());
+    expect(message).toMatchObject({ direction: "outbound", fromName: "Arbor Live" });
+    expect(message!.bodyText).not.toContain("Message from");
+    expect(message!.bodyText.startsWith("Quote attached.\nThanks!\n\nArbor Live\n\nOpen your request tracker")).toBe(
+      true,
+    );
   }, SEND_TEST_TIMEOUT_MS);
 });

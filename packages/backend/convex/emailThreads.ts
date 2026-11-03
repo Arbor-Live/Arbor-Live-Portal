@@ -1,7 +1,14 @@
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
-import { getUserId, requireArborInternalContext, requireAuth } from "./lib/auth";
+import type { Doc, Id } from "./_generated/dataModel";
+import { mutation, type MutationCtx, query, type QueryCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import {
+  getUserId,
+  hasOperationsAccess,
+  requireAdminOrOperations,
+  requireArborInternalContext,
+  requireAuth,
+} from "./lib/auth";
 import { appError } from "./lib/errors";
 import { previewBookingEmail } from "./lib/bookingEmail";
 import { bookingAddressFor, normalizePlainAddress } from "./lib/emailAddresses";
@@ -16,8 +23,10 @@ import {
   getOrCreateThreadForBooking,
   hasAttachableQuote,
   loadBookingParties,
+  MAX_CHANGE_NOTE_CHARS,
   resolveBookingRefs,
   threadBookingRef,
+  truncateOnWord,
 } from "./lib/emailThreads";
 import { publicQuoteUrl, requestTrackingUrl } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
@@ -30,6 +39,16 @@ export const MAX_REPLY_CHARS = 10_000;
 /** A manager copies a colleague or two; ten is a mailing list. */
 export const MAX_REPLY_CC = 10;
 const MAX_CLIENT_REQUEST_ID_CHARS = 100;
+
+/** Failed replies shown on a thread; staff retry or resend them, so a pile of them is not normal. */
+const FAILED_REPLY_LIMIT = 20;
+/** Enough of a failed reply to recognise it; the full text is in the queued payload. */
+const FAILED_REPLY_PREVIEW_CHARS = 500;
+
+function replyBody(payload: unknown) {
+  const body = (payload as { body?: unknown } | null)?.body;
+  return typeof body === "string" ? body : "";
+}
 
 const messageValue = v.object({
   _id: v.id("emailMessages"),
@@ -49,6 +68,42 @@ const messageValue = v.object({
   /** Staff may turn this message into the quote change request (server-checked again on click). */
   canMakeChangeRequest: v.boolean(),
 });
+
+const failedReplyValue = v.object({
+  _id: v.id("emailNotifications"),
+  to: v.string(),
+  cc: v.array(v.string()),
+  /** Start of what staff wrote. */
+  bodyPreview: v.string(),
+  error: v.string(),
+  createdAt: v.number(),
+});
+
+/** The link a reply carries so the client can open their booking, or null when none is live. */
+async function replyPortalLink(
+  ctx: QueryCtx | MutationCtx,
+  request: Doc<"eventRequests"> | null,
+  invoice: Doc<"invoices"> | null,
+) {
+  const tracker = (token: string) => ({
+    url: requestTrackingUrl(token),
+    label: "Open your request tracker",
+  });
+  const portal = invoice ? await resolvePortalTokenForInvoice(ctx, invoice) : null;
+  if (portal?.portal === "request") return tracker(portal.token);
+  // A void or expired quote link opens a dead page, so it is never sent.
+  const quoteDead =
+    invoice?.status === "void" ||
+    (invoice?.publicApprovalTokenExpiresAt !== undefined &&
+      invoice.publicApprovalTokenExpiresAt < Date.now());
+  if (portal && !quoteDead) {
+    return { url: publicQuoteUrl(portal.token), label: "Open your quote" };
+  }
+  if (request?.publicToken && !isRequestPublicTokenExpired(request)) {
+    return tracker(request.publicToken);
+  }
+  return null;
+}
 
 const bookingRecordArgs = {
   requestId: v.optional(v.id("eventRequests")),
@@ -70,15 +125,21 @@ export const getForRecord = query({
     clientEmail: v.union(v.string(), v.null()),
     /** The booking has a quote (not void) that a reply can attach as a PDF. */
     canAttachQuote: v.boolean(),
+    /** The viewer may email the client and make change requests (admins and Operations). */
+    canReply: v.boolean(),
     thread: v.union(v.object({ id: v.id("emailThreads"), messageCount: v.number() }), v.null()),
     messages: v.array(messageValue),
+    /** Replies that never went out, oldest first. */
+    failedReplies: v.array(failedReplyValue),
   }),
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    const canReply = await hasOperationsAccess(ctx, user);
 
     const refs = await resolveBookingRefs(ctx, bookingRefFromArgs(args));
-    const { request, invoice, clientEmails } = await loadBookingParties(ctx, refs);
+    const thread = await findThreadForBooking(ctx, refs);
+    const { request, invoice, clientEmails } = await loadBookingParties(ctx, refs, thread);
     // Every page of a booking shows its shortest address; the others still route.
     const address =
       (request ? bookingAddressFor({ kind: "request", requestNumber: request.requestNumber }) : null) ??
@@ -88,8 +149,17 @@ export const getForRecord = query({
     const clientEmail = clientReplyAddress(request, invoice);
     const canAttachQuote = hasAttachableQuote(invoice);
 
-    const thread = await findThreadForBooking(ctx, refs);
-    if (!thread) return { address, clientEmail, canAttachQuote, thread: null, messages: [] };
+    if (!thread) {
+      return { address, clientEmail, canAttachQuote, canReply, thread: null, messages: [], failedReplies: [] };
+    }
+
+    const failed = await ctx.db
+      .query("emailNotifications")
+      .withIndex("by_booking_threadId_and_status", (q) =>
+        q.eq("booking.threadId", thread._id).eq("status", "failed"),
+      )
+      .order("desc")
+      .take(FAILED_REPLY_LIMIT);
 
     const newest = await ctx.db
       .query("emailMessages")
@@ -101,6 +171,7 @@ export const getForRecord = query({
       address,
       clientEmail,
       canAttachQuote,
+      canReply,
       thread: { id: thread._id, messageCount: thread.messageCount },
       messages: newest.reverse().map((message) => ({
         _id: message._id,
@@ -115,8 +186,20 @@ export const getForRecord = query({
         fromClient: clientEmails.has(message.fromEmail.toLowerCase()),
         receivedAt: message.receivedAt,
         changeRequestedAt: message.changeRequestedAt,
-        canMakeChangeRequest: changeRequestBlocker({ message, invoice, clientEmails }) === null,
+        canMakeChangeRequest:
+          canReply && changeRequestBlocker({ message, invoice, clientEmails }) === null,
       })),
+      failedReplies: failed
+        .filter((row) => row.template === "booking_reply")
+        .reverse()
+        .map((row) => ({
+          _id: row._id,
+          to: row.to,
+          cc: row.cc ?? [],
+          bodyPreview: replyBody(row.payload).slice(0, FAILED_REPLY_PREVIEW_CHARS),
+          error: row.error ?? "Unknown error.",
+          createdAt: row.createdAt,
+        })),
     };
   },
 });
@@ -152,8 +235,7 @@ export const sendReply = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const user = await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
+    const user = await requireAdminOrOperations(ctx);
 
     const body = args.body.trim();
     if (!body) appError("EMAIL_REPLY_EMPTY", "Write a message before sending.");
@@ -161,18 +243,28 @@ export const sendReply = mutation({
       appError("EMAIL_REPLY_TOO_LONG", `Replies are limited to ${MAX_REPLY_CHARS} characters, got ${body.length}.`);
     }
     const clientRequestId = args.clientRequestId.trim();
-    if (!clientRequestId || clientRequestId.length > MAX_CLIENT_REQUEST_ID_CHARS) {
-      appError("EMAIL_REPLY_REQUEST_ID", "The reply is missing its request id.");
+    if (!clientRequestId) appError("EMAIL_REPLY_REQUEST_ID", "The reply is missing its request id.");
+    if (clientRequestId.length > MAX_CLIENT_REQUEST_ID_CHARS) {
+      appError(
+        "EMAIL_REPLY_REQUEST_ID_TOO_LONG",
+        `The reply's request id is too long (max ${MAX_CLIENT_REQUEST_ID_CHARS}, got ${clientRequestId.length}).`,
+      );
     }
 
     const ref = bookingRefFromArgs(args);
     const refs = await resolveBookingRefs(ctx, ref);
-    const { request, invoice } = await loadBookingParties(ctx, refs);
-    const to = clientReplyAddress(request, invoice);
-    if (!to) appError("EMAIL_REPLY_NO_CLIENT", "This booking has no client email to reply to.");
-    const toAddress = normalizePlainAddress(to);
+    const { request, invoice } = await loadBookingParties(
+      ctx,
+      refs,
+      await findThreadForBooking(ctx, refs),
+    );
+    const toAddress = clientReplyAddress(request, invoice);
     if (!toAddress) {
-      appError("EMAIL_REPLY_BAD_CLIENT", `The client email "${to}" is not a valid address.`);
+      const unusable = request?.email?.trim() || invoice?.clientEmail?.trim();
+      if (unusable) {
+        appError("EMAIL_REPLY_BAD_CLIENT", `The client email "${unusable}" is not a valid address.`);
+      }
+      appError("EMAIL_REPLY_NO_CLIENT", "This booking has no client email to reply to.");
     }
 
     const cc: string[] = [];
@@ -194,23 +286,12 @@ export const sendReply = mutation({
       quote = { invoiceId: invoice._id, invoiceNumber: invoice.invoiceNumber };
     }
 
-    let portalUrl: string | undefined;
-    let portalLabel: string | undefined;
-    const invoicePortal = invoice ? await resolvePortalTokenForInvoice(ctx, invoice) : null;
-    if (invoicePortal) {
-      portalUrl =
-        invoicePortal.portal === "request"
-          ? requestTrackingUrl(invoicePortal.token)
-          : publicQuoteUrl(invoicePortal.token);
-      portalLabel = invoicePortal.portal === "request" ? "Open your request tracker" : "Open your quote";
-    } else if (request?.publicToken && !isRequestPublicTokenExpired(request)) {
-      portalUrl = requestTrackingUrl(request.publicToken);
-      portalLabel = "Open your request tracker";
-    }
+    const portal = await replyPortalLink(ctx, request, invoice);
 
     // The key names the thread, which only exists once the booking has one.
     const thread = await getOrCreateThreadForBooking(ctx, ref);
-    const senderName = user.name?.trim() || undefined;
+    // No name means plain "Arbor Live", never the invoice manager's name.
+    const senderName = user.name?.trim() || null;
 
     await enqueueEmail(ctx, {
       template: "booking_reply",
@@ -220,9 +301,8 @@ export const sendReply = mutation({
       idempotencyKey: `booking_reply:${thread._id}:${clientRequestId}`,
       payload: {
         body,
-        senderName: senderName ?? "Arbor Live",
-        portalUrl,
-        portalLabel,
+        ...(senderName ? { senderName } : {}),
+        ...(portal ? { portalUrl: portal.url, portalLabel: portal.label } : {}),
         ...(quote ? { attachQuote: true, ...quote } : {}),
       },
     });
@@ -238,8 +318,7 @@ export const makeChangeRequest = mutation({
   args: { messageId: v.id("emailMessages") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const user = await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
+    const user = await requireAdminOrOperations(ctx);
 
     const message = await ctx.db.get(args.messageId);
     if (!message) appError("EMAIL_MESSAGE_NOT_FOUND", "Message not found.");
@@ -247,15 +326,47 @@ export const makeChangeRequest = mutation({
     const ref = thread ? threadBookingRef(thread) : null;
     if (!ref) appError("EMAIL_CHANGE_NOT_INBOUND", "Only a client's reply on a booking can become a change request.");
 
-    const { invoice, clientEmails } = await loadBookingParties(ctx, await resolveBookingRefs(ctx, ref));
+    const { invoice, clientEmails } = await loadBookingParties(
+      ctx,
+      await resolveBookingRefs(ctx, ref),
+      thread,
+    );
     const blocker = changeRequestBlocker({ message, invoice, clientEmails });
     if (blocker) appError(blocker.code, blocker.message);
     if (!invoice) appError("EMAIL_CHANGE_NO_QUOTE", "This booking has no quote to change.");
 
-    await requestInvoiceQuoteChanges(ctx, invoice, message.bodyText);
+    await requestInvoiceQuoteChanges(
+      ctx,
+      invoice,
+      truncateOnWord(message.bodyText, MAX_CHANGE_NOTE_CHARS),
+    );
     await ctx.db.patch(message._id, {
       changeRequestedAt: Date.now(),
       changeRequestedByUserId: getUserId(user),
+    });
+    return null;
+  },
+});
+
+/**
+ * Queue a failed reply again. Same notification and idempotency key, so the
+ * client still gets one email and the thread records it once when it goes out.
+ */
+export const retryReply = mutation({
+  args: { notificationId: v.id("emailNotifications") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireAdminOrOperations(ctx);
+    const notification = await ctx.db.get(args.notificationId);
+    if (!notification || notification.template !== "booking_reply" || !notification.booking) {
+      appError("EMAIL_RETRY_NOT_FOUND", "Reply not found.");
+    }
+    if (notification.status !== "failed") {
+      appError("EMAIL_RETRY_NOT_FAILED", "Only a reply that failed to send can be tried again.");
+    }
+    await ctx.db.patch(notification._id, { status: "queued", error: undefined });
+    await ctx.scheduler.runAfter(0, internal.email.send.sendQueuedEmail, {
+      notificationId: notification._id,
     });
     return null;
   },

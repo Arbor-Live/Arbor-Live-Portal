@@ -29,8 +29,12 @@ const DEFAULT_BOOKINGS_ADDRESS = "bookings@arbor.st";
 export type BookingEmailSource = {
   ref: BookingRef;
   loaded?: LoadedBookingDocs;
-  /** The signed-in sender, for mail a person writes; otherwise the booking's manager signs. */
-  senderName?: string;
+  /**
+   * The signed-in sender, for mail a person writes; otherwise the booking's
+   * manager signs. `null` is a sender with no name: the email comes from plain
+   * "Arbor Live" rather than borrowing the manager's name.
+   */
+  senderName?: string | null;
 };
 
 export type BookingEmailEnvelope = {
@@ -115,7 +119,7 @@ async function computeBookingEnvelope(
   thread: Pick<Doc<"emailThreads">, "subject" | "messageCount"> | null,
   refs: BookingRefs,
   cache: BookingDocCache,
-  senderName?: string,
+  senderName?: string | null,
 ) {
   const [request, invoice, event] = await Promise.all([
     refs.requestId ? cache.get(refs.requestId) : null,
@@ -123,8 +127,9 @@ async function computeBookingEnvelope(
     refs.eventId ? cache.get(refs.eventId) : null,
   ]);
 
-  let managerName = senderName?.trim() || invoice?.managerName?.trim() || undefined;
-  if (!managerName && request?.assigneeUserId) {
+  let managerName =
+    senderName === null ? undefined : senderName?.trim() || invoice?.managerName?.trim() || undefined;
+  if (!managerName && senderName !== null && request?.assigneeUserId) {
     const assignee = (await findAuthUsersByIds(ctx, [request.assigneeUserId])).get(
       request.assigneeUserId,
     );

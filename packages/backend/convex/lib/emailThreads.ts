@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { appError } from "./errors";
+import { normalizePlainAddress } from "./emailAddresses";
 
 /**
  * A booking is the request, its invoice and its events, joined by
@@ -211,12 +212,20 @@ export function threadBookingRef(thread: Doc<"emailThreads">): BookingRef | null
   return null;
 }
 
-/** The booking's request and invoice, and the addresses that count as the client. */
-export async function loadBookingParties(ctx: QueryCtx | MutationCtx, refs: BookingRefs) {
-  const [request, invoice] = await Promise.all([
-    refs.requestId ? ctx.db.get(refs.requestId) : null,
-    refs.invoiceId ? ctx.db.get(refs.invoiceId) : null,
-  ]);
+/**
+ * The booking's request and invoice, and the addresses that count as the client.
+ * The invoice is the thread's own first (`thread.invoiceId`), then the request's
+ * `linkedInvoiceId`, then whichever the caller named, so the page that shows a
+ * message and the action that uses it always read the same quote.
+ */
+export async function loadBookingParties(
+  ctx: QueryCtx | MutationCtx,
+  refs: BookingRefs,
+  thread: Pick<Doc<"emailThreads">, "invoiceId"> | null,
+) {
+  const request = refs.requestId ? await ctx.db.get(refs.requestId) : null;
+  const invoiceId = thread?.invoiceId ?? request?.linkedInvoiceId ?? refs.invoiceId;
+  const invoice = invoiceId ? await ctx.db.get(invoiceId) : null;
   const clientEmails = new Set(
     [request?.email, invoice?.clientEmail].flatMap((email) =>
       email?.trim() ? [email.trim().toLowerCase()] : [],
@@ -225,12 +234,33 @@ export async function loadBookingParties(ctx: QueryCtx | MutationCtx, refs: Book
   return { request, invoice, clientEmails };
 }
 
-/** The address staff reply to: the request's contact, else the invoice's. */
+/** The address staff reply to: the request's contact, else the invoice's, whichever is a usable address. */
 export function clientReplyAddress(
   request: Doc<"eventRequests"> | null,
   invoice: Doc<"invoices"> | null,
 ) {
-  return request?.email?.trim() || invoice?.clientEmail?.trim() || null;
+  for (const raw of [request?.email, invoice?.clientEmail]) {
+    const address = raw ? normalizePlainAddress(raw) : null;
+    if (address) return address;
+  }
+  return null;
+}
+
+/** A change-request note longer than this is cut; the full email stays on the thread. */
+export const MAX_CHANGE_NOTE_CHARS = 2000;
+
+/** `text` trimmed to at most `max` characters, cut at a word boundary with a trailing `…`. */
+export function truncateOnWord(text: string, max: number) {
+  const trimmed = text.trim();
+  if (trimmed.length <= max) return trimmed;
+  let cut = trimmed.slice(0, max - 1);
+  if (!/\s/.test(trimmed[max - 1]!)) {
+    const lastSpace = cut.search(/\s\S*$/);
+    if (lastSpace > 0) cut = cut.slice(0, lastSpace);
+  }
+  // A cut through a surrogate pair would leave an invalid string.
+  if (/[\uD800-\uDBFF]$/.test(cut)) cut = cut.slice(0, -1);
+  return `${cut.trimEnd()}…`;
 }
 
 /** An invoice whose current quote can go out as a PDF. */
@@ -259,6 +289,12 @@ export function changeRequestBlocker(args: {
   }
   if (!invoice.clientReviewReadyAt) {
     return { code: "EMAIL_CHANGE_QUOTE_NOT_READY", message: "The quote has not been sent to the client for review." };
+  }
+  if (message.receivedAt < invoice.clientReviewReadyAt) {
+    return {
+      code: "EMAIL_CHANGE_STALE",
+      message: "This message arrived before the current quote was sent for review.",
+    };
   }
   if ((invoice.clientApprovalStatus ?? "pending") !== "pending") {
     return { code: "EMAIL_CHANGE_QUOTE_DECIDED", message: "The client already decided on this quote." };

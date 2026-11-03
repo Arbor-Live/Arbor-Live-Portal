@@ -5,6 +5,7 @@ import {
   findThreadForBooking,
   getOrCreateThreadForBooking,
   resolveBookingRefs,
+  truncateOnWord,
 } from "./lib/emailThreads";
 import { seedEvent, seedInvoice, seedRequest } from "./test/bookingSeeds.helpers";
 import {
@@ -14,6 +15,7 @@ import {
   createUser,
   makeTest,
   setActiveOrg,
+  setVerticals,
   type Test,
 } from "./test/setup.helpers";
 
@@ -113,6 +115,7 @@ async function staffViewer(t: Test) {
   const arbor = await createOrg(t, { type: "arbor_internal" });
   await addMembership(t, user._id, arbor.organizationId, "member", true);
   await setActiveOrg(t, user._id, arbor.organizationId);
+  await setVerticals(t, user._id, ["Operations"]);
   return asUser(t, user);
 }
 
@@ -185,8 +188,10 @@ describe("emailThreads.getForRecord", () => {
       address: "alreq-aaaaaaa@arbor.st",
       clientEmail: "maya@client.test",
       canAttachQuote: true,
+      canReply: true,
       thread: null,
       messages: [],
+      failedReplies: [],
     });
     expect(await t.run(async (ctx) => ctx.db.query("emailThreads").collect())).toHaveLength(0);
   });
@@ -259,7 +264,10 @@ describe("emailThreads.getForRecord", () => {
 });
 
 /** A booking whose quote the client is reviewing, with one emailed reply from the client. */
-async function seedReviewedBooking(t: ReturnType<typeof makeTest>, overrides: { fromEmail?: string } = {}) {
+async function seedReviewedBooking(
+  t: ReturnType<typeof makeTest>,
+  overrides: { fromEmail?: string; text?: string } = {},
+) {
   const ids = await seedBooking(t);
   await t.run(async (ctx) => {
     await ctx.db.patch(ids.invoiceId, {
@@ -280,7 +288,7 @@ async function seedReviewedBooking(t: ReturnType<typeof makeTest>, overrides: { 
     cc: [],
     receivedFor: [],
     subject: "Re: Your quote",
-    text: "Can we swap the wireless mics for wired?",
+    text: overrides.text ?? "Can we swap the wireless mics for wired?",
     attachments: [],
     receivedAt: Date.UTC(2026, 10, 3, 18),
   });
@@ -288,11 +296,13 @@ async function seedReviewedBooking(t: ReturnType<typeof makeTest>, overrides: { 
   return { ...ids, messageId: messages[0]!._id };
 }
 
+/** An Operations member of Arbor Live: allowed to email clients. */
 async function namedStaff(t: Test, name: string) {
   const user = await createUser(t, { email: "alex@arbor.st", name });
   const arbor = await createOrg(t, { type: "arbor_internal" });
   await addMembership(t, user._id, arbor.organizationId, "member", true);
   await setActiveOrg(t, user._id, arbor.organizationId);
+  await setVerticals(t, user._id, ["Operations"]);
   return { staff: asUser(t, user), user };
 }
 
@@ -567,5 +577,450 @@ describe("emailThreads.getForRecord reply affordances", () => {
     const { staff } = await namedStaff(t, "Jamie Park");
     const result = await staff.query(api.emailThreads.getForRecord, { requestId: ids.requestId });
     expect(result.messages.map((m) => [m.fromClient, m.canMakeChangeRequest])).toEqual([[false, false]]);
+  });
+});
+
+/** Arbor Live members in the three roles that matter to client email. */
+async function viewersByRole(t: Test) {
+  const arbor = await createOrg(t, { type: "arbor_internal" });
+  const bandOrg = await createOrg(t, { type: "band" });
+
+  const plain = await createUser(t, { email: "plain@arbor.st", name: "Plain Member" });
+  await addMembership(t, plain._id, arbor.organizationId, "member", true);
+  await setActiveOrg(t, plain._id, arbor.organizationId);
+
+  const crew = await createUser(t, { email: "crew@arbor.st", name: "Sound Crew" });
+  await addMembership(t, crew._id, arbor.organizationId, "member", true);
+  await setActiveOrg(t, crew._id, arbor.organizationId);
+  await setVerticals(t, crew._id, ["Crew"]);
+
+  const admin = await createUser(t, { email: "admin@arbor.st", name: "Portal Admin", role: "admin" });
+  await addMembership(t, admin._id, arbor.organizationId, "admin", true);
+  await setActiveOrg(t, admin._id, arbor.organizationId);
+
+  const bandAdmin = await createUser(t, { email: "bandadmin@example.com", name: "Band Admin", role: "admin" });
+  await addMembership(t, bandAdmin._id, bandOrg.organizationId, "admin", true);
+  await setActiveOrg(t, bandAdmin._id, bandOrg.organizationId);
+
+  const ops = await createUser(t, { email: "ops@arbor.st", name: "Jamie Park" });
+  await addMembership(t, ops._id, arbor.organizationId, "member", true);
+  await setActiveOrg(t, ops._id, arbor.organizationId);
+  await setVerticals(t, ops._id, ["Operations"]);
+
+  return {
+    ops: asUser(t, ops),
+    plain: asUser(t, plain),
+    crew: asUser(t, crew),
+    admin: asUser(t, admin),
+    bandAdmin: asUser(t, bandAdmin),
+  };
+}
+
+describe("who may email clients", () => {
+  it("refuses a member without Operations and a band-org admin on both mutations", async () => {
+    const t = makeTest();
+    const ids = await seedReviewedBooking(t);
+    const viewers = await viewersByRole(t);
+    const reply = { requestId: ids.requestId, body: "Hi", attachQuote: false, clientRequestId: "a" };
+
+    for (const viewer of [viewers.plain, viewers.crew, viewers.bandAdmin]) {
+      await expect(viewer.mutation(api.emailThreads.sendReply, reply)).rejects.toThrow();
+      await expect(
+        viewer.mutation(api.emailThreads.makeChangeRequest, { messageId: ids.messageId }),
+      ).rejects.toThrow();
+    }
+    expect(
+      (await t.run(async (ctx) => ctx.db.query("emailNotifications").collect())).filter(
+        (n) => n.template === "booking_reply",
+      ),
+    ).toHaveLength(0);
+    expect((await t.run(async (ctx) => ctx.db.get(ids.invoiceId)))?.clientApprovalStatus).toBe("pending");
+  });
+
+  it("lets a portal admin and an Operations member send and make change requests", async () => {
+    const t = makeTest();
+    const ids = await seedReviewedBooking(t);
+    const viewers = await viewersByRole(t);
+    await viewers.admin.mutation(api.emailThreads.sendReply, {
+      requestId: ids.requestId,
+      body: "From admin",
+      attachQuote: false,
+      clientRequestId: "a",
+    });
+    await viewers.admin.mutation(api.emailThreads.makeChangeRequest, { messageId: ids.messageId });
+    expect((await t.run(async (ctx) => ctx.db.get(ids.invoiceId)))?.clientApprovalStatus).toBe(
+      "changes_requested",
+    );
+
+    await viewers.ops.mutation(api.emailThreads.sendReply, {
+      requestId: ids.requestId,
+      body: "From operations",
+      attachQuote: false,
+      clientRequestId: "b",
+    });
+    expect(
+      (await t.run(async (ctx) => ctx.db.query("emailNotifications").collect())).filter(
+        (n) => n.template === "booking_reply",
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("shows everyone in Arbor Live the thread, but canReply only to admins and Operations", async () => {
+    const t = makeTest();
+    const ids = await seedReviewedBooking(t);
+    const viewers = await viewersByRole(t);
+    const staff = viewers.ops;
+
+    const summary = async (viewer: Test) => {
+      const result = await viewer.query(api.emailThreads.getForRecord, { requestId: ids.requestId });
+      return [result.canReply, result.messages.map((m) => m.canMakeChangeRequest)];
+    };
+    expect(await summary(viewers.plain)).toEqual([false, [false]]);
+    expect(await summary(viewers.crew)).toEqual([false, [false]]);
+    expect(await summary(viewers.admin)).toEqual([true, [true]]);
+    expect(await summary(staff)).toEqual([true, [true]]);
+    const plainView = await viewers.plain.query(api.emailThreads.getForRecord, { requestId: ids.requestId });
+    expect(plainView.messages.map((m) => m.bodyText)).toEqual(["Can we swap the wireless mics for wired?"]);
+    await expect(
+      viewers.bandAdmin.query(api.emailThreads.getForRecord, { requestId: ids.requestId }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("change requests from an email", () => {
+  it("is blocked once the quote went out for review again after the email arrived", async () => {
+    const t = makeTest();
+    const ids = await seedReviewedBooking(t);
+    const { staff } = await namedStaff(t, "Jamie Park");
+    const buttons = async () =>
+      (await staff.query(api.emailThreads.getForRecord, { invoiceId: ids.invoiceId })).messages.map(
+        (m) => m.canMakeChangeRequest,
+      );
+    expect(await buttons()).toEqual([true]);
+
+    // The quote is sent again after the client's email (18:00).
+    await t.run(async (ctx) =>
+      ctx.db.patch(ids.invoiceId, { clientReviewReadyAt: Date.UTC(2026, 10, 3, 19) }),
+    );
+    expect(await buttons()).toEqual([false]);
+    await expect(
+      staff.mutation(api.emailThreads.makeChangeRequest, { messageId: ids.messageId }),
+    ).rejects.toThrow(/EMAIL_CHANGE_STALE/);
+    const invoice = await t.run(async (ctx) => ctx.db.get(ids.invoiceId));
+    expect(invoice?.clientApprovalStatus).toBe("pending");
+    expect((await t.run(async (ctx) => ctx.db.get(ids.messageId)))?.changeRequestedAt).toBeUndefined();
+  });
+
+  it("uses the same invoice for the button and the action when a newer invoice is linked", async () => {
+    const t = makeTest();
+    const requestId = await seedRequest(t, { requestNumber: "ALREQ-AAAAAAA" });
+    const oldInvoiceId = await seedInvoice(t, {
+      invoiceNumber: "ALINV-OLDOLDO",
+      sourceEventRequestId: requestId,
+    });
+    const newInvoiceId = await seedInvoice(t, {
+      invoiceNumber: "ALINV-NEWNEWN",
+      sourceEventRequestId: requestId,
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(oldInvoiceId, {
+        status: "finalized",
+        clientReviewReadyAt: Date.UTC(2026, 10, 3, 17),
+      });
+      await ctx.db.patch(requestId, { linkedInvoiceId: newInvoiceId });
+      await ctx.db.insert("emailThreads", {
+        requestId,
+        invoiceId: oldInvoiceId,
+        lastMessageAt: 0,
+        messageCount: 0,
+        createdAt: 0,
+      });
+    });
+    await t.mutation(internal.emailInbound.recordInboundEmail, {
+      resendEmailId: "re_1",
+      messageId: "m1@client.test",
+      references: [],
+      fromEmail: "maya@client.test",
+      to: ["alreq-aaaaaaa@arbor.st"],
+      cc: [],
+      receivedFor: [],
+      subject: "Re: quote",
+      text: "Please add a second mic.",
+      attachments: [],
+      receivedAt: Date.UTC(2026, 10, 3, 18),
+    });
+    const [message] = await t.run(async (ctx) => ctx.db.query("emailMessages").collect());
+    const { staff } = await namedStaff(t, "Jamie Park");
+
+    for (const record of [{ requestId }, { invoiceId: oldInvoiceId }, { invoiceId: newInvoiceId }]) {
+      const result = await staff.query(api.emailThreads.getForRecord, record);
+      expect(result.messages.map((m) => m.canMakeChangeRequest)).toEqual([true]);
+    }
+    await staff.mutation(api.emailThreads.makeChangeRequest, { messageId: message!._id });
+    expect((await t.run(async (ctx) => ctx.db.get(oldInvoiceId)))?.clientApprovalNote).toBe(
+      "Please add a second mic.",
+    );
+    expect((await t.run(async (ctx) => ctx.db.get(newInvoiceId)))?.clientApprovalStatus).toBe("pending");
+  });
+
+  it("cuts a long email to 2,000 characters on a word boundary and keeps the full email", async () => {
+    const t = makeTest();
+    const text = "alpha ".repeat(600);
+    const ids = await seedReviewedBooking(t, { text });
+    const { staff } = await namedStaff(t, "Jamie Park");
+    await staff.mutation(api.emailThreads.makeChangeRequest, { messageId: ids.messageId });
+
+    const note = (await t.run(async (ctx) => ctx.db.get(ids.invoiceId)))?.clientApprovalNote;
+    expect(note).toBe(`${Array(333).fill("alpha").join(" ")}…`);
+    expect(note).toHaveLength(1998);
+    expect((await t.run(async (ctx) => ctx.db.get(ids.messageId)))?.bodyText).toBe(text.trim());
+  });
+
+  it("truncateOnWord leaves short text alone and never splits a surrogate pair", () => {
+    expect(truncateOnWord("  short note  ", 2000)).toBe("short note");
+    expect(truncateOnWord("one two three", 9)).toBe("one two…");
+    expect(truncateOnWord("one two three", 8)).toBe("one two…");
+    expect(truncateOnWord("one two three", 7)).toBe("one…");
+    expect(truncateOnWord("abcdefghij", 6)).toBe("abcde…");
+    expect(truncateOnWord("ab😀cd", 4)).toBe("ab…");
+  });
+});
+
+describe("emailThreads.sendReply details", () => {
+  const reply = (ids: { requestId: never }, overrides: Record<string, unknown> = {}) => ({
+    requestId: ids.requestId,
+    body: "Hi",
+    attachQuote: false,
+    clientRequestId: "a",
+    ...overrides,
+  });
+
+  it("sends from plain Arbor Live, not the invoice manager, when the sender has no name", async () => {
+    const t = makeTest();
+    const ids = await seedReviewedBooking(t);
+    await t.run(async (ctx) => ctx.db.patch(ids.invoiceId, { managerName: "Rory Manager" }));
+    const { staff } = await namedStaff(t, "");
+    await staff.mutation(api.emailThreads.sendReply, reply(ids as never));
+
+    const [row] = (await t.run(async (ctx) => ctx.db.query("emailNotifications").collect())).filter(
+      (n) => n.template === "booking_reply",
+    );
+    expect(row!.booking?.from).toBe('"Arbor Live" <bookings@arbor.st>');
+    expect(row!.payload).toEqual({
+      body: "Hi",
+      portalUrl: "http://localhost:3000/request/track/tok-request",
+      portalLabel: "Open your request tracker",
+    });
+  });
+
+  it("names the limit when the request id is too long", async () => {
+    const t = makeTest();
+    const ids = await seedReviewedBooking(t);
+    const { staff } = await namedStaff(t, "Jamie Park");
+    await expect(
+      staff.mutation(api.emailThreads.sendReply, reply(ids as never, { clientRequestId: "x".repeat(101) })),
+    ).rejects.toThrow(/max 100, got 101/);
+    await expect(
+      staff.mutation(api.emailThreads.sendReply, reply(ids as never, { clientRequestId: "  " })),
+    ).rejects.toThrow(/missing its request id/);
+  });
+
+  it("falls back to the invoice's address when the request's does not parse", async () => {
+    const t = makeTest();
+    const ids = await seedReviewedBooking(t);
+    await t.run(async (ctx) => {
+      await ctx.db.patch(ids.requestId, { email: "Maya Rivera <not-an-address" });
+      await ctx.db.patch(ids.invoiceId, { clientEmail: "Billing@Client.test" });
+    });
+    const { staff } = await namedStaff(t, "Jamie Park");
+    const view = await staff.query(api.emailThreads.getForRecord, { requestId: ids.requestId });
+    expect(view.clientEmail).toBe("billing@client.test");
+
+    await staff.mutation(api.emailThreads.sendReply, reply(ids as never));
+    const [row] = (await t.run(async (ctx) => ctx.db.query("emailNotifications").collect())).filter(
+      (n) => n.template === "booking_reply",
+    );
+    expect(row!.to).toBe("billing@client.test");
+
+    await t.run(async (ctx) => ctx.db.patch(ids.invoiceId, { clientEmail: "also bad" }));
+    expect(
+      (await staff.query(api.emailThreads.getForRecord, { requestId: ids.requestId })).clientEmail,
+    ).toBeNull();
+    await expect(
+      staff.mutation(api.emailThreads.sendReply, reply(ids as never, { clientRequestId: "b" })),
+    ).rejects.toThrow(/The client email .*Maya Rivera <not-an-address.* is not a valid address/);
+  });
+
+  describe("the portal link", () => {
+    async function payloadFor(
+      t: Test,
+      ids: { requestId: never; invoiceId: never },
+      patch: { invoice?: Record<string, unknown>; request?: Record<string, unknown> },
+    ) {
+      await t.run(async (ctx) => {
+        if (patch.invoice) await ctx.db.patch(ids.invoiceId, patch.invoice as never);
+        if (patch.request) await ctx.db.patch(ids.requestId, patch.request as never);
+      });
+      const { staff } = await namedStaff(t, "Jamie Park");
+      await staff.mutation(api.emailThreads.sendReply, reply(ids as never));
+      const rows = await t.run(async (ctx) => ctx.db.query("emailNotifications").collect());
+      const payload = rows.find((n) => n.template === "booking_reply")!.payload as Record<string, unknown>;
+      return [payload.portalUrl ?? null, payload.portalLabel ?? null];
+    }
+
+    it("links a live quote when the booking has no tracker", async () => {
+      const t = makeTest();
+      const ids = await seedReviewedBooking(t);
+      expect(
+        await payloadFor(t, ids as never, {
+          request: { publicToken: undefined },
+          invoice: { publicApprovalToken: "quote-tok", publicApprovalTokenExpiresAt: Date.now() + 100_000 },
+        }),
+      ).toEqual(["http://localhost:3000/event/quote-tok", "Open your quote"]);
+    });
+
+    it("drops the quote link when the quote is void or its link expired", async () => {
+      for (const invoice of [
+        { publicApprovalToken: "quote-tok", status: "void" as const },
+        { publicApprovalToken: "quote-tok", publicApprovalTokenExpiresAt: Date.now() - 1000 },
+      ]) {
+        const t = makeTest();
+        const ids = await seedReviewedBooking(t);
+        expect(await payloadFor(t, ids as never, { request: { publicToken: undefined }, invoice })).toEqual([
+          null,
+          null,
+        ]);
+      }
+    });
+
+    it("falls back to the request tracker when the quote link is dead", async () => {
+      const t = makeTest();
+      const ids = await seedReviewedBooking(t);
+      expect(
+        await payloadFor(t, ids as never, {
+          // The invoice is not tied to the request by sourceEventRequestId, so the quote link is tried first.
+          invoice: {
+            sourceEventRequestId: undefined,
+            publicApprovalToken: "quote-tok",
+            publicApprovalTokenExpiresAt: Date.now() - 1000,
+          },
+        }),
+      ).toEqual(["http://localhost:3000/request/track/tok-request", "Open your request tracker"]);
+    });
+  });
+});
+
+describe("failed replies", () => {
+  async function sendOneReply(t: Test, ids: { requestId: never }, staff: Test) {
+    await staff.mutation(api.emailThreads.sendReply, {
+      requestId: ids.requestId,
+      body: "Wired mics work.",
+      attachQuote: false,
+      clientRequestId: "attempt-1",
+    });
+    const rows = await t.run(async (ctx) => ctx.db.query("emailNotifications").collect());
+    return rows.find((n) => n.template === "booking_reply")!;
+  }
+
+  it("shows a reply that failed to send, and queues it again on retry", async () => {
+    const t = makeTest();
+    const ids = await seedReviewedBooking(t);
+    const { staff } = await namedStaff(t, "Jamie Park");
+    const notification = await sendOneReply(t, ids as never, staff);
+    const view = () => staff.query(api.emailThreads.getForRecord, { eventId: ids.eventId });
+
+    expect((await view()).failedReplies).toEqual([]);
+
+    await t.run(async (ctx) =>
+      ctx.db.patch(notification._id, { status: "failed", error: "[Resend] invalid_to_address" }),
+    );
+    expect((await view()).failedReplies).toEqual([
+      {
+        _id: notification._id,
+        to: "maya@client.test",
+        cc: [],
+        bodyPreview: "Wired mics work.",
+        error: "[Resend] invalid_to_address",
+        createdAt: notification.createdAt,
+      },
+    ]);
+
+    await staff.mutation(api.emailThreads.retryReply, { notificationId: notification._id });
+
+    const retried = await t.run(async (ctx) => ctx.db.get(notification._id));
+    expect(retried).toMatchObject({ status: "queued", idempotencyKey: notification.idempotencyKey });
+    expect(retried?.error).toBeUndefined();
+    expect((await view()).failedReplies).toEqual([]);
+    const scheduled = await t.run(async (ctx) =>
+      (await ctx.db.system.query("_scheduled_functions").collect()).filter(
+        (row) => row.name.endsWith("sendQueuedEmail") && row.state.kind === "pending",
+      ),
+    );
+    expect(scheduled.map((row) => row.args[0])).toContainEqual({ notificationId: notification._id });
+  });
+
+  it("ignores failures of other emails and bounds the preview", async () => {
+    const t = makeTest();
+    const ids = await seedReviewedBooking(t);
+    const { staff } = await namedStaff(t, "Jamie Park");
+    const notification = await sendOneReply(t, ids as never, staff);
+    await t.run(async (ctx) => {
+      await ctx.db.patch(notification._id, {
+        status: "failed",
+        error: "boom",
+        payload: { body: "y".repeat(800) },
+      });
+      await ctx.db.insert("emailNotifications", {
+        template: "booking_quote_ready",
+        status: "failed",
+        to: "maya@client.test",
+        subject: "Your quote",
+        booking: { threadId: notification.booking!.threadId, from: '"Arbor Live" <bookings@arbor.st>' },
+        idempotencyKey: "quote-ready",
+        payload: {},
+        error: "other failure",
+        createdAt: 1,
+      });
+    });
+    const { failedReplies } = await staff.query(api.emailThreads.getForRecord, { requestId: ids.requestId });
+    expect(failedReplies.map((reply) => [reply.error, reply.bodyPreview.length])).toEqual([["boom", 500]]);
+  });
+
+  it("refuses to retry a reply that is not failed, another email, and non-Operations callers", async () => {
+    const t = makeTest();
+    const ids = await seedReviewedBooking(t);
+    const viewers = await viewersByRole(t);
+    const staff = viewers.ops;
+    const notification = await sendOneReply(t, ids as never, staff);
+
+    await expect(
+      staff.mutation(api.emailThreads.retryReply, { notificationId: notification._id }),
+    ).rejects.toThrow(/EMAIL_RETRY_NOT_FAILED/);
+
+    await t.run(async (ctx) => ctx.db.patch(notification._id, { status: "failed", error: "boom" }));
+    for (const viewer of [viewers.plain, viewers.bandAdmin]) {
+      await expect(
+        viewer.mutation(api.emailThreads.retryReply, { notificationId: notification._id }),
+      ).rejects.toThrow();
+    }
+    expect((await t.run(async (ctx) => ctx.db.get(notification._id)))?.status).toBe("failed");
+
+    const otherId = await t.run(async (ctx) =>
+      ctx.db.insert("emailNotifications", {
+        template: "booking_quote_ready",
+        status: "failed",
+        to: "maya@client.test",
+        subject: "Your quote",
+        booking: { threadId: notification.booking!.threadId, from: '"Arbor Live" <bookings@arbor.st>' },
+        idempotencyKey: "quote-ready",
+        payload: {},
+        createdAt: 1,
+      }),
+    );
+    await expect(staff.mutation(api.emailThreads.retryReply, { notificationId: otherId })).rejects.toThrow(
+      /EMAIL_RETRY_NOT_FOUND/,
+    );
+    await viewers.admin.mutation(api.emailThreads.retryReply, { notificationId: notification._id });
+    expect((await t.run(async (ctx) => ctx.db.get(notification._id)))?.status).toBe("queued");
   });
 });
