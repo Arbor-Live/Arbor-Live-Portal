@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { BillingHostsManager } from "@/components/financial/billing-hosts/billing-hosts-manager";
-import { ArborOnlyGuard } from "@/components/org-context-guard";
+import { ArborOnlyGuard, OperationsOrAdminGuard } from "@/components/org-context-guard";
 
 export const metadata: Metadata = {
   title: "Billing hosts",
@@ -10,9 +10,11 @@ export const metadata: Metadata = {
 export default function BillingHostsPage() {
   return (
     <ArborOnlyGuard>
-      <Suspense>
-        <BillingHostsManager />
-      </Suspense>
+      <OperationsOrAdminGuard>
+        <Suspense>
+          <BillingHostsManager />
+        </Suspense>
+      </OperationsOrAdminGuard>
     </ArborOnlyGuard>
   );
 }
