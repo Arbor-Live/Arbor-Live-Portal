@@ -70,6 +70,7 @@ verified domain, e.g. `noreply@arbor.st`.
 | `E2E_HELPERS` | No (local e2e) | Enables Playwright seed helpers; localhost `SITE_URL` required |
 | `E2E_EMAIL_MOCK` | No (local e2e) | With `E2E_HELPERS`, skips Resend entirely after render (no quota). Set by `pnpm test:e2e` |
 | `ORGANIZER_EMAIL` | No | Organizer contact shown in emails; defaults to the address in `EMAIL_FROM` |
+| `BOOKINGS_EMAIL_FROM` | No | Address client booking emails send from; defaults to `bookings@arbor.st` |
 | `PAYMENTS_EMAIL_FROM` | No | From address for band-payment emails; has a default |
 | `BAND_PAYMENTS_CC_EMAIL` | No | CC on band-payment emails; has a default |
 
@@ -108,8 +109,9 @@ reply.
 Resend Receiving is on the whole `arbor.st` domain. Its `email.received` webhook
 posts to `https://<deployment>.convex.site/email-webhook`
 ([`http/emailWebhook.ts`](../packages/backend/convex/http/emailWebhook.ts)).
-Mail is stored read-only on the booking's request, invoice and event pages;
-sending from the portal is not built yet.
+Mail is stored read-only on the booking's request, invoice and event pages,
+together with the booking emails we send (see [Booking emails](#booking-emails)).
+Sending from the portal is not built yet.
 
 - **Signature.** The handler verifies the Svix signature itself
   ([`lib/svixSignature.ts`](../packages/backend/convex/lib/svixSignature.ts),
@@ -147,6 +149,48 @@ sending from the portal is not built yet.
 - **Staff notification.** A matched message sends an in-app notification
   (`booking_email_received`, with push) to the invoice manager, request assignee
   and event manager, except a person whose own email sent it. No email is sent.
+
+## Booking emails
+
+Client-facing emails about one booking go out as one conversation instead of
+separate "Request received", "Your quote is ready" and "Your quote was updated"
+threads. [`lib/bookingEmail.ts`](../packages/backend/convex/lib/bookingEmail.ts)
+`resolveBookingEmail` computes `{ emailThreadId, from, replyTo, subject }`; every
+enqueue site spreads it into `enqueueEmail`.
+
+- **Templates.** `booking_request_received`, `booking_request_declined`,
+  `booking_quote_ready`, `quote_updated`, `payment_proof_reminder`,
+  `payment_proof_rejected` and `paying_party_added`. Staff-facing emails
+  (`booking_request_admin`, `quote_changes_requested`, `quote_approved`,
+  `payment_proof_submitted`, …) keep `EMAIL_FROM`, their own subject and no
+  thread.
+- **Sender.** `BOOKINGS_EMAIL_FROM` (default `bookings@arbor.st`), with the
+  display name `"<Manager name> at Arbor Live"` from the invoice manager, else
+  the request's assignee, else `"Arbor Live"`.
+- **Reply-To.** Only the booking's address: the request's if it has a request
+  number, else the invoice's (the same choice as the page header). Existing CCs
+  (the manager and the shared inbox on quote emails) are unchanged, so a manager's
+  Reply All also lands in the portal.
+- **Subject.** One per booking: `Arbor Live booking: <event name> (<ALREQ-… or
+  ALINV-…>)`. The first message uses it as-is; every later one is `Re: ` plus the
+  first email's subject, so renaming the event does not split the conversation.
+  Each template's own heading ("Quote Ready", …) still opens the body.
+- **Headers.** A notification with `emailThreadId` sends through the raw Resend
+  SDK (`sendEmailWithAttachments`), which returns the Resend id at once and takes
+  headers. `emailOutbound.getThreadHeaders` reads the thread's stored messages,
+  inbound and outbound: `In-Reply-To` is the newest message's id and `References`
+  is the last 20 ids in order. The `Idempotency-Key` header stays.
+- **Recording.** After a successful send, `emailOutbound.recordOutboundEmail`
+  stores an outbound `emailMessages` row (booking sender, `to`, `cc`, subject,
+  plain-text body from the rendered HTML capped at 20k chars, attachment names)
+  and bumps the thread. It never notifies staff. A failure to record is logged and
+  does not fail the already-sent email.
+- **Message-ID.** Resend assigns it after the send, so
+  `emailOutbound.captureMessageId` calls `GET /emails/{id}` and stores
+  `message_id` without angle brackets, retrying after 10s, 60s and 5min while it
+  is missing. Until then the row is skipped when building headers.
+- **E2E mock.** With `E2E_EMAIL_MOCK` the row is still recorded, with the message
+  id `e2e-mock-<notificationId>@arbor.st`, and Resend is not called.
 
 ## This Week at Arbor (newsletter)
 
