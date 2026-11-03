@@ -159,9 +159,11 @@ describe("emailThreads.getForRecord", () => {
     const fromInvoice = await staff.query(api.emailThreads.getForRecord, { invoiceId: ids.invoiceId });
     const fromEvent = await staff.query(api.emailThreads.getForRecord, { eventId: ids.eventId });
 
-    expect(fromRequest.address).toBe("alreq-aaaaaaa@arbor.st");
-    expect(fromInvoice.address).toBe("alinv-bbbbbbb@arbor.st");
-    expect(fromEvent.address).toBe(`alevt-${ids.eventId}@arbor.st`);
+    expect([fromRequest.address, fromInvoice.address, fromEvent.address]).toEqual([
+      "alreq-aaaaaaa@arbor.st",
+      "alreq-aaaaaaa@arbor.st",
+      "alreq-aaaaaaa@arbor.st",
+    ]);
     for (const result of [fromRequest, fromInvoice, fromEvent]) {
       expect(result.thread).toEqual({ id: fromRequest.thread!.id, messageCount: 2 });
       expect(result.messages.map((m) => m.bodyText)).toEqual(["Sounds good!", "Thanks Maya"]);
@@ -181,6 +183,18 @@ describe("emailThreads.getForRecord", () => {
     const result = await staff.query(api.emailThreads.getForRecord, { requestId: ids.requestId });
     expect(result).toEqual({ address: "alreq-aaaaaaa@arbor.st", thread: null, messages: [] });
     expect(await t.run(async (ctx) => ctx.db.query("emailThreads").collect())).toHaveLength(0);
+  });
+
+  it("falls back to the invoice, then the event, for the booking address", async () => {
+    const t = makeTest();
+    const invoiceId = await seedInvoice(t, { invoiceNumber: "ALINV-CCCCCCC" });
+    const eventId = await seedEvent(t, { invoiceId });
+    const loneEventId = await seedEvent(t, {});
+    const staff = await staffViewer(t);
+    const fromEvent = await staff.query(api.emailThreads.getForRecord, { eventId });
+    const fromLoneEvent = await staff.query(api.emailThreads.getForRecord, { eventId: loneEventId });
+    expect(fromEvent.address).toBe("alinv-ccccccc@arbor.st");
+    expect(fromLoneEvent.address).toBe(`alevt-${loneEventId}@arbor.st`);
   });
 
   it("has no address for a legacy request without a number", async () => {

@@ -126,8 +126,10 @@ sending from the portal is not built yet.
 - **Booking addresses.** Each booking has an address on `INBOUND_EMAIL_DOMAIN`
   (default `arbor.st`): a request is `alreq-xxxxxxx@` (its `requestNumber`,
   lowercased), an invoice `alinv-xxxxxxx@` (its `invoiceNumber`) and an event
-  `alevt-<eventId>@`. Matching is case-insensitive. Legacy requests with no
-  number have no address. Managers CC the address on their own threads.
+  `alevt-<eventId>@`. Every page of a booking shows the request address if there
+  is one, else the invoice's, else the event's; all of them route. Matching is
+  case-insensitive, including older invoice numbers with a mixed-case suffix.
+  Managers CC the address on their own threads.
 - **Matching order.** The first booking address in To, CC or the envelope
   recipients (`received_for`) that names an existing record wins
   (`matchedBy: "address"`). Otherwise the `In-Reply-To` and `References` ids are

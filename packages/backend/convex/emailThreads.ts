@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { appError } from "./lib/errors";
-import { bookingAddressFor, type BookingAddressRecord } from "./lib/emailAddresses";
+import { bookingAddressFor } from "./lib/emailAddresses";
 import {
   type BookingRef,
   findThreadForBooking,
@@ -47,34 +47,33 @@ export const getForRecord = query({
     await requireArborInternalContext(ctx);
 
     let ref: BookingRef;
-    let own: BookingAddressRecord | null = null;
     if (args.requestId && !args.invoiceId && !args.eventId) {
       ref = { requestId: args.requestId };
-      const request = await ctx.db.get(args.requestId);
-      own = request ? { kind: "request", requestNumber: request.requestNumber } : null;
     } else if (args.invoiceId && !args.requestId && !args.eventId) {
       ref = { invoiceId: args.invoiceId };
-      const invoice = await ctx.db.get(args.invoiceId);
-      own = invoice ? { kind: "invoice", invoiceNumber: invoice.invoiceNumber } : null;
     } else if (args.eventId && !args.requestId && !args.invoiceId) {
       ref = { eventId: args.eventId };
-      own = { kind: "event", id: args.eventId };
     } else {
       return appError(
         "EMAIL_THREAD_REF",
         "Pass exactly one of requestId, invoiceId or eventId.",
       );
     }
-    const address = own ? bookingAddressFor(own) : null;
 
     const refs = await resolveBookingRefs(ctx, ref);
-    const thread = await findThreadForBooking(ctx, refs);
-    if (!thread) return { address, thread: null, messages: [] };
-
     const [request, invoice] = await Promise.all([
       refs.requestId ? ctx.db.get(refs.requestId) : null,
       refs.invoiceId ? ctx.db.get(refs.invoiceId) : null,
     ]);
+    // Every page of a booking shows its shortest address; the others still route.
+    const address =
+      (request ? bookingAddressFor({ kind: "request", requestNumber: request.requestNumber }) : null) ??
+      (invoice ? bookingAddressFor({ kind: "invoice", invoiceNumber: invoice.invoiceNumber }) : null) ??
+      (refs.eventId ? bookingAddressFor({ kind: "event", id: refs.eventId }) : null);
+
+    const thread = await findThreadForBooking(ctx, refs);
+    if (!thread) return { address, thread: null, messages: [] };
+
     const clientEmails = new Set(
       [request?.email, invoice?.clientEmail].flatMap((email) =>
         email?.trim() ? [email.trim().toLowerCase()] : [],
