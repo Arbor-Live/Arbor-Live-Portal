@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { acceptAppDialog, dismissAppDialog } from "../helpers/auth";
 import { runConvex } from "../helpers/convex";
 import { getLatestEmailNotification } from "../helpers/email";
+import { editFilter } from "../helpers/filter-bar";
 import { formField, selectByLabel } from "../helpers/form";
 import { pickSelectOption } from "../helpers/select";
 import {
@@ -9,7 +10,6 @@ import {
   listInvitationsByEmail,
   openAddPersonDialog,
   orgFilter,
-  toggleFilter,
   waitForInvitationState,
 } from "../helpers/users";
 
@@ -53,7 +53,7 @@ test.describe("user invite lifecycle", () => {
     // The invite goes to the shared organization filter's org. Arbor Live is
     // the default (arbor_internal), which unlocks Member/Admin plus rate and
     // payroll fields on the invite form.
-    await expect(orgFilter(page)).toHaveText("Arbor Live", { timeout: 30_000 });
+    await expect(orgFilter(page)).toContainText("Organization is Arbor Live", { timeout: 30_000 });
 
     const modal = await openAddPersonDialog(page);
 
@@ -163,7 +163,7 @@ test.describe("user invite lifecycle", () => {
     // Default status filter is Pending, so the cancelled row drops out of the
     // list until the operator switches the filter.
     await expect(inviteRow).toHaveCount(0, { timeout: 30_000 });
-    await toggleFilter(page, "Invitation status", "Cancelled").click();
+    await editFilter(page, "status", { toggle: ["Cancelled", "Pending"] });
 
     const cancelledInviteRow = page.getByTestId(`invite-row-${invited.invitationId}`);
     await expect(cancelledInviteRow.getByTestId("invite-status")).toHaveText("Cancelled", {
@@ -175,7 +175,7 @@ test.describe("user invite lifecycle", () => {
     await page.goto("/dashboard/users/invitations");
     // The invite goes to the organization filter's org, which is empty until
     // the org list resolves — submit before then and validation refuses it.
-    await expect(orgFilter(page)).toHaveText("Arbor Live", { timeout: 30_000 });
+    await expect(orgFilter(page)).toContainText("Organization is Arbor Live", { timeout: 30_000 });
 
     let modal = await openAddPersonDialog(page);
     await formField(modal, "Email").fill(reinviteEmail);

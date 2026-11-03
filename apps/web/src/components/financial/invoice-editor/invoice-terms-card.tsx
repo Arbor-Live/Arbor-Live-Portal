@@ -5,6 +5,7 @@ import { useQuery } from "convex/react";
 import { NotePencilIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { DraftTextarea } from "@/components/forms/draft-text-input";
 import type { InvoiceDraft } from "./use-invoice-draft";
@@ -46,23 +47,24 @@ export function InvoiceTermsCard({ draft }: { draft: InvoiceDraft }) {
             ) : (
               termsDefinitions.map((row) => {
                 const checked = fields.termsIds.includes(row._id);
+                const termsId = `invoice-terms-${row._id}`;
                 return (
-                  <label key={row._id} className="flex cursor-pointer items-start gap-2">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 shrink-0"
+                  <div key={row._id} className="flex items-start gap-2">
+                    <Checkbox
+                      id={termsId}
+                      className="mt-0.5"
                       checked={checked}
-                      onChange={() =>
+                      onCheckedChange={() =>
                         setField(
                           "termsIds",
                           checked ? fields.termsIds.filter((id) => id !== row._id) : [...fields.termsIds, row._id],
                         )
                       }
                     />
-                    <span className="min-w-0 break-words">
+                    <Label htmlFor={termsId} className="block min-w-0 cursor-pointer leading-normal font-normal break-words">
                       {row.label} ({row.version})
-                    </span>
-                  </label>
+                    </Label>
+                  </div>
                 );
               })
             )}

@@ -47,7 +47,7 @@ test.describe("create user and grant admin", () => {
     await page.goto("/dashboard/users");
     // Add person defaults to the filtered organization, Arbor Live, once the
     // org list resolves.
-    await expect(orgFilter(page)).toHaveText("Arbor Live", { timeout: 30_000 });
+    await expect(orgFilter(page)).toContainText("Organization is Arbor Live", { timeout: 30_000 });
 
     const modal = await openAddPersonDialog(page);
     const createMode = toggleFilter(page, "Add person mode", "Create account");

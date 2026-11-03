@@ -23,9 +23,6 @@ export type CrewOnboardingRow = FunctionReturnType<
 export type UserStatus = AdminUser["status"];
 export type InviteStatus = "pending" | "accepted" | "expired" | "cancelled";
 
-/** Filter value meaning "don't filter by organization". */
-export const ALL_ORGS = "__all__";
-
 export const USER_STATUS_OPTIONS: Array<{ value: UserStatus; label: string; tone: Tone }> = [
   { value: "active", label: "Active", tone: "emerald" },
   { value: "inactive", label: "Inactive", tone: "neutral" },
