@@ -15,6 +15,25 @@ describe("htmlToText", () => {
       "<style>p{color:red}</style><div>Hi&nbsp;Maya,</div><div>Fish &amp; chips &#8217;ok&#x21;</div><p>Bye<br>now</p>";
     expect(htmlToText(html)).toBe("Hi Maya,\nFish & chips ’ok!\nBye\nnow");
   });
+
+  it("drops script and head blocks but keeps a header element", () => {
+    const html =
+      "<HEAD><title>x</title></HEAD><header><p>Top</p></header><SCRIPT>alert(1)</script><p>Body</p>";
+    expect(htmlToText(html)).toBe("Top\nBody");
+  });
+
+  it("keeps the body when the head is never closed", () => {
+    expect(htmlToText("<head><meta charset=utf-8><body><p>Load-in at 4pm</p>")).toBe(
+      "Load-in at 4pm",
+    );
+  });
+
+  it("stays fast on many unclosed special tags", () => {
+    const hostile = "<script>".repeat(10_000) + "<style>".repeat(10_000) + "<p>end</p>";
+    const started = performance.now();
+    expect(htmlToText(hostile)).toBe("end");
+    expect(performance.now() - started).toBeLessThan(500);
+  });
 });
 
 describe("parseReceivedEmail", () => {

@@ -70,13 +70,49 @@ const ENTITIES: Record<string, string> = {
   nbsp: " ",
 };
 
+/** HTML is only a fallback for a missing text part; parse no more than this. */
+export const MAX_HTML_CHARS = 200_000;
+
+const SPECIAL_OPEN = /<(script|style|head)\b/gi;
+
+/**
+ * Drops `<script>`, `<style>` and `<head>` blocks in one forward pass. A lazy
+ * regex rescans the rest of the input for every unclosed opening tag, which
+ * untrusted mail can turn quadratic. Once a closing tag is known to be absent,
+ * later openings of that name only lose their own tag, so an HTML email that
+ * omits `</head>` keeps its body.
+ */
+function stripSpecialTagBlocks(html: string): string {
+  const lower = html.toLowerCase();
+  const missingClose = new Set<string>();
+  const parts: string[] = [];
+  let cursor = 0;
+  SPECIAL_OPEN.lastIndex = 0;
+  for (let match = SPECIAL_OPEN.exec(html); match; match = SPECIAL_OPEN.exec(html)) {
+    if (match.index < cursor) continue;
+    const name = match[1]!.toLowerCase();
+    parts.push(html.slice(cursor, match.index));
+    const close = missingClose.has(name) ? -1 : lower.indexOf(`</${name}`, match.index);
+    if (close === -1) {
+      missingClose.add(name);
+      const tagEnd = html.indexOf(">", match.index);
+      cursor = tagEnd === -1 ? html.length : tagEnd + 1;
+    } else {
+      const closeEnd = html.indexOf(">", close);
+      cursor = closeEnd === -1 ? html.length : closeEnd + 1;
+    }
+    SPECIAL_OPEN.lastIndex = cursor;
+  }
+  parts.push(html.slice(cursor));
+  return parts.join("");
+}
+
 /** Plain text from HTML for the rare message that arrives without a text part. */
 export function htmlToText(html: string): string {
-  return html
-    .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, "")
+  return stripSpecialTagBlocks(html.slice(0, MAX_HTML_CHARS))
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
+    .replace(/<[^<>]+>/g, "")
     .replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity: string) => {
       if (entity.startsWith("#")) {
         const code =
@@ -138,8 +174,10 @@ export function parseReceivedEmail(raw: unknown, resendEmailId: string): ParsedI
     -MAX_REFERENCES,
   );
 
-  const text =
-    optionalString(raw.text) ?? (typeof raw.html === "string" ? htmlToText(raw.html) : "");
+  // Capped here, not only when stored: the whole text is a mutation argument.
+  const text = (
+    optionalString(raw.text) ?? (typeof raw.html === "string" ? htmlToText(raw.html) : "")
+  ).slice(0, MAX_FULL_TEXT_CHARS);
 
   const attachments = (Array.isArray(raw.attachments) ? raw.attachments : [])
     .filter(isRecord)
