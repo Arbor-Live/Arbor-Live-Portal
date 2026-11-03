@@ -9,7 +9,7 @@ async function arborAdmin() {
   const arbor = await createOrg(t, { type: "arbor_internal" });
   await addMembership(t, admin._id, arbor.organizationId, "org_admin", true);
   await setActiveOrg(t, admin._id, arbor.organizationId);
-  return { t, as: asUser(t, admin) };
+  return { t, as: asUser(t, admin), arborId: arbor.organizationId };
 }
 
 async function activeNames(as: Awaited<ReturnType<typeof arborAdmin>>["as"]) {
@@ -121,4 +121,78 @@ test("the merge preview counts every contact that moves, archived ones included"
 
   const preview = await as.query(api.invoiceGroups.getMergePreview, { survivorId, victimIds: [victimId] });
   expect(preview.victims.map((row) => row.contactCount)).toEqual([2]);
+});
+
+test("a merge can take an alias that only an archived host held", async () => {
+  const { as } = await arborAdmin();
+  const oldId = await as.mutation(api.invoiceGroups.create, { name: "Stanford Concert Network", type: "vso" });
+  await as.mutation(api.invoiceGroups.addAlias, { groupId: oldId, alias: "SCN" });
+  await as.mutation(api.invoiceGroups.archive, { id: oldId });
+  const victimId = await as.mutation(api.invoiceGroups.create, { name: "SCN", type: "vso" });
+  const survivorId = await as.mutation(api.invoiceGroups.create, { name: "Concert Network", type: "vso" });
+
+  await as.mutation(api.invoiceGroups.merge, { survivorId, victimIds: [victimId] });
+
+  const aliases = await as.query(api.invoiceGroups.listAliases, { groupId: survivorId });
+  expect(aliases.map((row) => row.alias)).toEqual(["SCN"]);
+});
+
+test("a merge keeps one alias when the survivor already has it", async () => {
+  const { as } = await arborAdmin();
+  const survivorId = await as.mutation(api.invoiceGroups.create, { name: "Office of Student Engagement", type: "department" });
+  await as.mutation(api.invoiceGroups.addAlias, { groupId: survivorId, alias: "OSE" });
+  const victimId = await as.mutation(api.invoiceGroups.create, { name: "Student Engagement", type: "department" });
+  await as.mutation(api.invoiceGroups.addAlias, { groupId: victimId, alias: "Engagement Office" });
+
+  await as.mutation(api.invoiceGroups.merge, { survivorId, victimIds: [victimId] });
+
+  const aliases = await as.query(api.invoiceGroups.listAliases, { groupId: survivorId });
+  expect(aliases.map((row) => [row.alias, row.source])).toEqual([
+    ["Engagement Office", "manual"],
+    ["OSE", "manual"],
+    ["Student Engagement", "merge"],
+  ]);
+});
+
+test("renaming a host keeps its old name as an alias", async () => {
+  const { as } = await arborAdmin();
+  const id = await as.mutation(api.invoiceGroups.create, { name: "Foo Club", type: "vso" });
+
+  await as.mutation(api.invoiceGroups.update, { id, name: "Bar Club" });
+
+  const aliases = await as.query(api.invoiceGroups.listAliases, { groupId: id });
+  expect(aliases.map((row) => [row.alias, row.source])).toEqual([["Foo Club", "rename"]]);
+});
+
+test("an active host saved before name indexing still blocks a duplicate", async () => {
+  const { t, as } = await arborAdmin();
+  const archivedId = await as.mutation(api.invoiceGroups.create, { name: "Music Department", type: "department" });
+  await as.mutation(api.invoiceGroups.archive, { id: archivedId });
+  await t.run(async (ctx) => {
+    const now = Date.now();
+    await ctx.db.insert("invoiceGroups", {
+      name: "Music Department",
+      type: "department",
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+  });
+
+  await expect(
+    as.mutation(api.invoiceGroups.create, { name: "Music Department", type: "department" }),
+  ).rejects.toThrow(/already exists as "Music Department"/);
+});
+
+test("staff without admin or operations access can't rename a host", async () => {
+  const { t, as, arborId } = await arborAdmin();
+  const id = await as.mutation(api.invoiceGroups.create, { name: "Dance Marathon", type: "vso" });
+  const crew = await createUser(t, { role: "member" });
+  await addMembership(t, crew._id, arborId, "org_member", true);
+  await setActiveOrg(t, crew._id, arborId);
+
+  await expect(asUser(t, crew).mutation(api.invoiceGroups.update, { id, name: "Renamed" })).rejects.toThrow(
+    /Operations team access required/,
+  );
+  expect(await activeNames(as)).toEqual(["Dance Marathon"]);
 });

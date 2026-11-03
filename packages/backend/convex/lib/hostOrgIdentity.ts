@@ -20,8 +20,8 @@ export async function findGroupByNormalizedName(
     .query("invoiceGroups")
     .withIndex("by_normalizedName", (q) => q.eq("normalizedName", normalized))
     .take(20);
-  // Once the index finds the name, skip the legacy scan; it reads the whole table.
-  if (byIndex.length > 0) return byIndex.find((group) => group.active) ?? null;
+  const match = byIndex.find((group) => group.active);
+  if (match) return match;
 
   // Legacy rows may lack normalizedName until backfill.
   const legacy = await ctx.db.query("invoiceGroups").take(500);
@@ -80,7 +80,12 @@ export async function ensureAlias(
     .withIndex("by_normalizedAlias", (q) => q.eq("normalizedAlias", normalizedAlias))
     .first();
   if (claimed && claimed.groupId !== groupId) {
-    throw new Error(`Alias "${alias}" is already used by another host organization.`);
+    const owner = await ctx.db.get(claimed.groupId);
+    if (owner?.active) {
+      throw new Error(`Alias "${alias}" is already used by another host organization.`);
+    }
+    // An archived host's alias is free to take; restoring that host checks its aliases again.
+    await ctx.db.delete(claimed._id);
   }
 
   const otherGroup = await findGroupByNormalizedName(ctx, normalizedAlias);

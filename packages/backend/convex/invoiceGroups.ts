@@ -277,7 +277,6 @@ export const update = mutation({
           `Another host organization already uses "${conflict.name}". Merge or pick a different name.`,
         );
       }
-      await ensureAlias(ctx, args.id, existing.name, "rename");
     }
     await ctx.db.patch(args.id, {
       name: nextName,
@@ -286,6 +285,8 @@ export const update = mutation({
       equipmentPricingMode: args.equipmentPricingMode ?? existing.equipmentPricingMode,
       updatedAt: Date.now(),
     });
+    // After the patch, or ensureAlias sees the old name as the host's own and skips it.
+    if (nextName !== existing.name) await ensureAlias(ctx, args.id, existing.name, "rename");
     return null;
   },
 });
@@ -497,11 +498,17 @@ export const merge = mutation({
       await ctx.db.patch(victim._id, { active: false, updatedAt: now });
 
       await ensureAlias(ctx, args.survivorId, victim.name, "merge");
-      const victimAliases = await listAliasesForGroup(ctx, victim._id);
-      for (const alias of victimAliases) {
-        // Free the victim's claim first, or ensureAlias sees the alias as taken by another host.
-        await ctx.db.delete(alias._id);
-        await ensureAlias(ctx, args.survivorId, alias.alias, "merge");
+      const survivorAliases = new Set(
+        (await listAliasesForGroup(ctx, args.survivorId)).map((row) => row.normalizedAlias),
+      );
+      for (const alias of await listAliasesForGroup(ctx, victim._id)) {
+        // Move the row, keeping its source and date; drop it if the survivor already answers to it.
+        if (survivorAliases.has(alias.normalizedAlias) || alias.normalizedAlias === normalizeHostOrgName(survivor.name)) {
+          await ctx.db.delete(alias._id);
+        } else {
+          await ctx.db.patch(alias._id, { groupId: args.survivorId });
+          survivorAliases.add(alias.normalizedAlias);
+        }
       }
     }
 
