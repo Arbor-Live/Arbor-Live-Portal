@@ -73,35 +73,39 @@ const ENTITIES: Record<string, string> = {
 /** HTML is only a fallback for a missing text part; parse no more than this. */
 export const MAX_HTML_CHARS = 200_000;
 
-const SPECIAL_OPEN = /<(script|style|head)\b/gi;
+/** A tag name ends at whitespace, `/` or `>`, so `<header>` and `<head-nav>` are not `<head>`. */
+const TAG_NAME_END = "(?=[\\s/>])";
 
 /**
- * Drops `<script>`, `<style>` and `<head>` blocks in one forward pass. A lazy
- * regex rescans the rest of the input for every unclosed opening tag, which
- * untrusted mail can turn quadratic. Once a closing tag is known to be absent,
- * later openings of that name only lose their own tag, so an HTML email that
- * omits `</head>` keeps its body.
+ * Drops `<script>`, `<style>`, `<head>` and `<title>` blocks in one forward pass over the
+ * original string (a lowercased copy can change length, e.g. "İ", and shift
+ * every index). A lazy regex rescans the rest of the input for every unclosed
+ * opening tag, which untrusted mail can turn quadratic. Once a closing tag is
+ * known to be absent, later openings of that name lose only their own tag, so
+ * an email that omits `</head>` keeps its body.
  */
 function stripSpecialTagBlocks(html: string): string {
-  const lower = html.toLowerCase();
+  const open = new RegExp(`<(script|style|head|title)${TAG_NAME_END}`, "gi");
   const missingClose = new Set<string>();
   const parts: string[] = [];
   let cursor = 0;
-  SPECIAL_OPEN.lastIndex = 0;
-  for (let match = SPECIAL_OPEN.exec(html); match; match = SPECIAL_OPEN.exec(html)) {
-    if (match.index < cursor) continue;
+  for (let match = open.exec(html); match; match = open.exec(html)) {
     const name = match[1]!.toLowerCase();
     parts.push(html.slice(cursor, match.index));
-    const close = missingClose.has(name) ? -1 : lower.indexOf(`</${name}`, match.index);
-    if (close === -1) {
-      missingClose.add(name);
-      const tagEnd = html.indexOf(">", match.index);
-      cursor = tagEnd === -1 ? html.length : tagEnd + 1;
-    } else {
-      const closeEnd = html.indexOf(">", close);
-      cursor = closeEnd === -1 ? html.length : closeEnd + 1;
+    let blockEnd: number | null = null;
+    if (!missingClose.has(name)) {
+      const close = new RegExp(`</${name}${TAG_NAME_END}[^<>]*>?`, "gi");
+      close.lastIndex = match.index;
+      const found = close.exec(html);
+      if (found) blockEnd = found.index + found[0].length;
+      else missingClose.add(name);
     }
-    SPECIAL_OPEN.lastIndex = cursor;
+    if (blockEnd === null) {
+      const tag = /^<[^<>]*>/.exec(html.slice(match.index, match.index + 1_000));
+      blockEnd = match.index + (tag ? tag[0].length : match[0].length);
+    }
+    cursor = blockEnd;
+    open.lastIndex = cursor;
   }
   parts.push(html.slice(cursor));
   return parts.join("");
@@ -109,7 +113,7 @@ function stripSpecialTagBlocks(html: string): string {
 
 /** Plain text from HTML for the rare message that arrives without a text part. */
 export function htmlToText(html: string): string {
-  return stripSpecialTagBlocks(html.slice(0, MAX_HTML_CHARS))
+  const text = stripSpecialTagBlocks(html.slice(0, MAX_HTML_CHARS))
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n")
     .replace(/<[^<>]+>/g, "")
@@ -124,8 +128,12 @@ export function htmlToText(html: string): string {
           : match;
       }
       return ENTITIES[entity.toLowerCase()] ?? match;
-    })
-    .replace(/[ \t]+\n/g, "\n")
+    });
+  // Trimmed per line: `/[ \t]+\n/` backtracks quadratically on a long run of spaces.
+  return text
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

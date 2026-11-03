@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { htmlToText, normalizeMessageId, parseReceivedEmail } from "./inboundEmail";
+import {
+  htmlToText,
+  MAX_FULL_TEXT_CHARS,
+  MAX_HTML_CHARS,
+  normalizeMessageId,
+  parseReceivedEmail,
+} from "./inboundEmail";
 
 describe("normalizeMessageId", () => {
   it("strips angle brackets and whitespace", () => {
@@ -28,11 +34,44 @@ describe("htmlToText", () => {
     );
   });
 
-  it("stays fast on many unclosed special tags", () => {
-    const hostile = "<script>".repeat(13_000) + "<style>".repeat(13_000) + "<p>end</p>";
-    const started = performance.now();
-    expect(htmlToText(hostile)).toBe("end");
-    expect(performance.now() - started).toBeLessThan(1_000);
+  it("keeps body text when a closing tag looks like a longer tag name", () => {
+    expect(
+      htmlToText("<head><title>T</title><body><header><p>Hi Maya</p></header><p>Body</p>"),
+    ).toBe("Hi Maya\nBody");
+    expect(htmlToText("<head-nav><p>SETUP</p></head-nav><p>Show</p>")).toBe("SETUP\nShow");
+  });
+
+  it("keeps the body when text before a closing tag changes length when lowercased", () => {
+    const turkish = "<p>İSTANBUL İZMİR İSKENDERUN İNEBOLU</p>".repeat(8);
+    expect(
+      htmlToText(`${turkish}<style>p{}</style><p>Load-in at 4pm, crew call 3pm</p><p>tail</p>`),
+    ).toBe(`${"İSTANBUL İZMİR İSKENDERUN İNEBOLU\n".repeat(8)}Load-in at 4pm, crew call 3pm\ntail`);
+    const title = `${"İ".repeat(16)}stanbul`;
+    expect(
+      htmlToText(`<html><head><title>${title}</title></head><body><p>Load-in at 4pm</p></body>`),
+    ).toBe("Load-in at 4pm");
+  });
+
+  it("drops only a special tag that never closes its angle bracket", () => {
+    expect(htmlToText("<head Load-in at 4pm, bring the van")).toBe(
+      "Load-in at 4pm, bring the van",
+    );
+  });
+
+  it("stays fast on hostile input at the HTML cap", () => {
+    const tagCount = Math.floor(MAX_HTML_CHARS / 16);
+    const hostile = [
+      "<script>".repeat(tagCount) + "<style>".repeat(tagCount) + "<p>end</p>",
+      " ".repeat(MAX_HTML_CHARS),
+      "\t".repeat(MAX_HTML_CHARS),
+      "<".repeat(MAX_HTML_CHARS),
+    ];
+    for (const html of hostile) {
+      const started = performance.now();
+      htmlToText(html);
+      expect(performance.now() - started).toBeLessThan(500);
+    }
+    expect(htmlToText(hostile[0]!)).toBe("end");
   });
 });
 
@@ -83,6 +122,18 @@ describe("parseReceivedEmail", () => {
   it("derives text from html when the text part is missing", () => {
     const parsed = parseReceivedEmail({ ...base, text: null, html: "<p>Hello</p>" }, "re_1");
     expect(parsed.text).toBe("Hello");
+  });
+
+  it("caps the text before it becomes a mutation argument", () => {
+    const fromText = parseReceivedEmail({ ...base, text: "x".repeat(150_000) }, "re_1");
+    const fromHtml = parseReceivedEmail(
+      { ...base, text: null, html: `<p>${"y".repeat(250_000)}</p>` },
+      "re_1",
+    );
+    expect([fromText.text.length, fromHtml.text.length]).toEqual([
+      MAX_FULL_TEXT_CHARS,
+      MAX_FULL_TEXT_CHARS,
+    ]);
   });
 
   it("caps references at the most recent 50", () => {
