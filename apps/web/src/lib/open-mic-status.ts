@@ -1,0 +1,38 @@
+import type { Tone } from "@/components/page-header";
+import { dateTimeFormat, formatTime, PORTAL_TIMEZONE } from "@/lib/format";
+
+export type OpenMicStatus = "scheduled" | "live" | "completed" | "cancelled";
+
+export const OPEN_MIC_STATUS: Record<OpenMicStatus, { label: string; tone: Tone }> = {
+  scheduled: { label: "Scheduled", tone: "blue" },
+  live: { label: "Live", tone: "emerald" },
+  completed: { label: "Completed", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "rose" },
+};
+
+/** What each status can do next. The runner header and the list menu both read this. */
+export const OPEN_MIC_MOVES: Record<
+  OpenMicStatus,
+  { next: "live" | "completed" | null; canCancel: boolean; canRun: boolean }
+> = {
+  scheduled: { next: "live", canCancel: true, canRun: true },
+  live: { next: "completed", canCancel: true, canRun: true },
+  completed: { next: null, canCancel: false, canRun: false },
+  cancelled: { next: null, canCancel: false, canRun: false },
+};
+
+/** "Tue, Nov 3 · 7:00 PM" */
+export function formatNightStart(ms: number) {
+  const day = dateTimeFormat("en-US", {
+    timeZone: PORTAL_TIMEZONE,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(ms));
+  return `${day} · ${formatTime(ms)}`;
+}
+
+/** The public sign-up form, pinned to one night. */
+export function openMicSignupPath(eventId: string) {
+  return `/open-mic?event=${eventId}`;
+}
