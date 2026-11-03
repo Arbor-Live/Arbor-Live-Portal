@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
 import { DevUtilityMenu } from "@/components/dev/dev-utility-menu";
 import { NotificationAutoRead } from "@/components/notifications/notification-auto-read";
@@ -93,6 +94,7 @@ export default async function RootLayout({
           </ConvexClientProvider>
         </ThemeProvider>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
