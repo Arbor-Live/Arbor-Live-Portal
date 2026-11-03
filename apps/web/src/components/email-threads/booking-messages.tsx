@@ -1,14 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { CopyIcon, EnvelopeSimpleIcon, PaperclipIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { EmptyState } from "@/components/list-page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatDateTime } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -65,7 +71,44 @@ function MessageBody({ text }: { text: string }) {
   );
 }
 
-function MessageRow({ message }: { message: Message }) {
+function MakeChangeRequestButton({ messageId }: { messageId: Message["_id"] }) {
+  const makeChangeRequest = useMutation(api.emailThreads.makeChangeRequest);
+  const { confirm } = useAppDialog();
+  const [busy, setBusy] = useState(false);
+
+  async function onClick() {
+    const confirmed = await confirm({
+      title: "Make this a change request?",
+      description: "The quote goes back to changes requested, with this message as the note.",
+      confirmLabel: "Make change request",
+    });
+    if (!confirmed) return;
+    setBusy(true);
+    try {
+      await makeChangeRequest({ messageId });
+      notify.success("Change request created.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Could not create the change request."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={busy}
+      onClick={() => void onClick()}
+      data-testid="make-change-request"
+    >
+      Make this a change request
+    </Button>
+  );
+}
+
+function MessageRow({ message, readOnly }: { message: Message; readOnly: boolean }) {
   const named = Boolean(message.fromName);
   const outbound = message.direction === "outbound";
   return (
@@ -87,6 +130,7 @@ function MessageRow({ message }: { message: Message }) {
           {!outbound && message.matchedBy === "address" && !message.fromClient ? (
             <Badge variant="secondary">CC-linked</Badge>
           ) : null}
+          {message.changeRequestedAt ? <Badge variant="secondary">Change request</Badge> : null}
         </div>
         <span className="text-xs text-muted-foreground tabular-nums">
           {formatDateTime(message.receivedAt)}
@@ -104,15 +148,114 @@ function MessageRow({ message }: { message: Message }) {
           </span>
         </p>
       ) : null}
+      {message.canMakeChangeRequest && !readOnly ? (
+        <MakeChangeRequestButton messageId={message._id} />
+      ) : null}
     </li>
   );
 }
 
+/** Addresses typed into the CC box: commas, semicolons or spaces between them. */
+function parseCc(value: string) {
+  return value
+    .split(/[,;\s]+/)
+    .map((address) => address.trim())
+    .filter(Boolean);
+}
+
+function ReplyComposer(props: {
+  record: BookingMessagesRecord;
+  clientEmail: string;
+  canAttachQuote: boolean;
+}) {
+  const sendReply = useMutation(api.emailThreads.sendReply);
+  const [body, setBody] = useState("");
+  const [cc, setCc] = useState("");
+  const [attachQuote, setAttachQuote] = useState(false);
+  const [sending, setSending] = useState(false);
+  // One id per attempt: a double click or a retry after a dropped connection queues one email.
+  const [clientRequestId, setClientRequestId] = useState(() => crypto.randomUUID());
+
+  async function onSend() {
+    if (sending || !body.trim()) return;
+    setSending(true);
+    try {
+      await sendReply({
+        ...props.record,
+        body,
+        attachQuote: props.canAttachQuote && attachQuote,
+        cc: parseCc(cc),
+        clientRequestId,
+      });
+      setClientRequestId(crypto.randomUUID());
+      setBody("");
+      notify.success("Reply queued.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Could not send the reply."));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <form
+      className="mt-4 space-y-3"
+      data-testid="booking-reply"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void onSend();
+      }}
+    >
+      <p className="text-sm" data-testid="booking-reply-to">
+        <span className="text-muted-foreground">To</span> {props.clientEmail}
+      </p>
+      <div className="space-y-2">
+        <Label htmlFor="booking-reply-cc">CC</Label>
+        <Input
+          id="booking-reply-cc"
+          value={cc}
+          onChange={(event) => setCc(event.target.value)}
+          placeholder="name@example.com"
+          autoComplete="off"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="booking-reply-body">Message</Label>
+        <Textarea
+          id="booking-reply-body"
+          value={body}
+          onChange={(event) => setBody(event.target.value)}
+          className="min-h-28"
+        />
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {props.canAttachQuote ? (
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="booking-reply-attach-quote"
+              checked={attachQuote}
+              onCheckedChange={(value) => setAttachQuote(value === true)}
+            />
+            <Label htmlFor="booking-reply-attach-quote">Attach current quote</Label>
+          </div>
+        ) : (
+          <span />
+        )}
+        <Button type="submit" size="sm" disabled={sending || !body.trim()}>
+          Send
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 /**
- * The booking's email conversation, read-only. The request, its invoice and its
- * event all show the same thread (see `emailThreads.getForRecord`).
+ * The booking's email conversation and the reply box. The request, its invoice
+ * and its event all show the same thread (see `emailThreads.getForRecord`).
+ * `readOnly` hides everything that sends or changes the booking.
  */
-export function BookingMessages(props: { record: BookingMessagesRecord }) {
+export function BookingMessages(props: { record: BookingMessagesRecord; readOnly?: boolean }) {
+  const readOnly = props.readOnly ?? false;
   const data = useBookingThread(props.record);
 
   return (
@@ -155,10 +298,17 @@ export function BookingMessages(props: { record: BookingMessagesRecord }) {
         ) : (
           <ul className="divide-y border">
             {data.messages.map((message) => (
-              <MessageRow key={message._id} message={message} />
+              <MessageRow key={message._id} message={message} readOnly={readOnly} />
             ))}
           </ul>
         )}
+        {data && data.clientEmail && !readOnly ? (
+          <ReplyComposer
+            record={props.record}
+            clientEmail={data.clientEmail}
+            canAttachQuote={data.canAttachQuote}
+          />
+        ) : null}
       </CardContent>
     </Card>
   );

@@ -177,7 +177,7 @@ export function OverviewTab() {
         </Card>
 
         <EventContactsSection eventId={eventId} canEdit={canEdit} />
-        <BookingMessages record={{ eventId }} />
+        <BookingMessages record={{ eventId }} readOnly={readOnly} />
         <EventFilesCard eventId={eventId} artifacts={eventData?.artifacts ?? []} canEdit={canEdit} />
         {isHash ? null : <EventPostMortemSection eventId={eventId} />}
         {canEdit && !isHash ? <EventPostMortemSummary eventId={eventId} /> : null}
