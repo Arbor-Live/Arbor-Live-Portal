@@ -15,11 +15,13 @@ export async function findGroupByNormalizedName(
   normalized: string,
 ): Promise<Doc<"invoiceGroups"> | null> {
   if (!normalized) return null;
+  // An archived host can share its name with a newer active one; the active one wins.
   const byIndex = await ctx.db
     .query("invoiceGroups")
     .withIndex("by_normalizedName", (q) => q.eq("normalizedName", normalized))
-    .first();
-  if (byIndex) return byIndex;
+    .take(20);
+  const match = byIndex.find((group) => group.active) ?? byIndex[0];
+  if (match) return match;
 
   // Legacy rows may lack normalizedName until backfill.
   const legacy = await ctx.db.query("invoiceGroups").take(500);

@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { ChatCircleIcon, PhoneOutgoingIcon, UserCircleIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, ChatCircleIcon, PhoneOutgoingIcon, UserCircleIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
@@ -346,12 +346,7 @@ export function OpenPositionsBoard() {
                 <ListRow
                   key={position.needId}
                   data-testid={`open-position-${position.needId}`}
-                  onOpen={openOutreach}
-                  actions={
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={`${lineupPath}?position=${position.needId}`}>Fill</Link>
-                    </Button>
-                  }
+                  href={`${lineupPath}?position=${position.needId}`}
                 >
                   <RowCell align="left" className="w-28 text-muted-foreground">
                     {position.setStartsAt != null
@@ -371,6 +366,8 @@ export function OpenPositionsBoard() {
                       {position.inquiryCount} inquir{position.inquiryCount === 1 ? "y" : "ies"}
                     </RowFlag>
                   ) : null}
+                  <span className="shrink-0 text-xs font-medium">Fill</span>
+                  <CaretRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                 </ListRow>
               ))}
             </RowGroup>

@@ -202,10 +202,11 @@ export function useOrgFilter(filters: FilterState, setFilters: (next: FilterStat
   const onChange = useCallback(
     (next: FilterState) => {
       const { [ORG_FILTER_ID]: org, ...rest } = next;
-      setOrgFilter(org ?? null);
+      // Touching another chip must not pin the org before its Arbor Live default loads.
+      if ((org ?? null) !== orgFilter) setOrgFilter(org ?? null);
       setFilters(rest);
     },
-    [setOrgFilter, setFilters],
+    [orgFilter, setOrgFilter, setFilters],
   );
   return { definition, value, onChange, organizationId: filterOrgId };
 }

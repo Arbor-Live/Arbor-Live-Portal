@@ -139,9 +139,14 @@ function MergeHostsForm({
   const [victimIds, setVictimIds] = useState<Id<"invoiceGroups">[]>([]);
   const [busy, setBusy] = useState(false);
 
+  // A host archived elsewhere while the dialog is open drops out of the merge.
+  const selectedIds = useMemo(
+    () => victimIds.filter((id) => hosts.some((host) => host._id === id && host.active)),
+    [hosts, victimIds],
+  );
   const preview = useQuery(
     api.invoiceGroups.getMergePreview,
-    victimIds.length > 0 ? { survivorId: survivor._id, victimIds } : "skip",
+    selectedIds.length > 0 ? { survivorId: survivor._id, victimIds: selectedIds } : "skip",
   );
 
   const candidates = useMemo(
@@ -175,8 +180,8 @@ function MergeHostsForm({
   async function merge() {
     setBusy(true);
     const ok = await attempt(
-      () => mergeGroups({ survivorId: survivor._id, victimIds }),
-      `Merged ${plural(victimIds.length, "host")} into ${survivor.name}`,
+      () => mergeGroups({ survivorId: survivor._id, victimIds: selectedIds }),
+      `Merged ${plural(selectedIds.length, "host")} into ${survivor.name}`,
     );
     setBusy(false);
     if (ok) onDone();
@@ -220,7 +225,7 @@ function MergeHostsForm({
           ))}
         </ul>
       )}
-      {victimIds.length > 0 ? (
+      {selectedIds.length > 0 ? (
         <p className="text-sm" data-testid="host-merge-preview">
           {moving ? `Moves ${moving} to ${survivor.name}.` : "Counting what moves…"}
         </p>
@@ -232,11 +237,11 @@ function MergeHostsForm({
         <Button
           type="button"
           variant="destructive"
-          disabled={victimIds.length === 0 || busy}
+          disabled={selectedIds.length === 0 || moving === null || busy}
           onClick={() => void merge()}
           data-testid="host-merge-confirm"
         >
-          {busy ? "Merging…" : victimIds.length > 0 ? `Merge ${plural(victimIds.length, "host")}` : "Merge"}
+          {busy ? "Merging…" : selectedIds.length > 0 ? `Merge ${plural(selectedIds.length, "host")}` : "Merge"}
         </Button>
       </DialogFooter>
     </div>

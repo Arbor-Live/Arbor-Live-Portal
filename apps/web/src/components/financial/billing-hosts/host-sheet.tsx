@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { PlusIcon, XIcon } from "@phosphor-icons/react";
 import { TextFormField } from "@/components/forms/text-form-field";
@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { api, type Id } from "@/lib/convex-api";
 import { formatRelativeTime } from "@/lib/format";
+import { notify } from "@/lib/notify";
 import { EQUIPMENT_PRICING_MODE_LABELS, INVOICE_GROUP_TYPE_LABELS } from "@/lib/invoice-group-labels";
 import { cn } from "@/lib/utils";
 import {
@@ -41,6 +42,16 @@ import {
 
 const EMPTY_CONTACT: InvoiceContactFormValues = { firstName: "", lastName: "", email: "", phone: "" };
 
+/** Reports whether one of the panel's forms holds unsaved input, keyed by form. */
+type MarkDirty = (form: string, dirty: boolean) => void;
+
+function useReportDirty(markDirty: MarkDirty, form: string, dirty: boolean) {
+  useEffect(() => {
+    markDirty(form, dirty);
+    return () => markDirty(form, false);
+  }, [dirty, form, markDirty]);
+}
+
 /** The host editor: details, contacts and aliases. Edits save straight through their mutation. */
 export function HostSheet({
   host,
@@ -55,10 +66,33 @@ export function HostSheet({
   onRestore: (host: HostRow) => void;
   onMerge: (host: HostRow) => void;
 }) {
+  const { confirm } = useAppDialog();
+  const dirtyForms = useRef(new Set<string>());
+  const markDirty = useCallback<MarkDirty>((form, dirty) => {
+    if (dirty) dirtyForms.current.add(form);
+    else dirtyForms.current.delete(form);
+  }, []);
+
+  async function requestClose() {
+    if (host && dirtyForms.current.size > 0) {
+      const discard = await confirm({
+        title: `Discard your changes to ${host.name}?`,
+        description: "What you've typed in the panel will be lost. The saved host stays as it was.",
+        destructive: true,
+        confirmLabel: "Discard changes",
+      });
+      if (!discard) return;
+    }
+    onOpenChange(false);
+  }
+
   return (
     <DetailSheet
       open={host !== null}
-      onOpenChange={onOpenChange}
+      onOpenChange={(open) => {
+        if (open) onOpenChange(true);
+        else void requestClose();
+      }}
       testId="host-sheet"
       // Focusing the name field on open selects it, and one stray key would rename the host.
       onOpenAutoFocus={(event) => event.preventDefault()}
@@ -67,6 +101,7 @@ export function HostSheet({
         <HostSheetBody
           key={host._id}
           host={host}
+          markDirty={markDirty}
           onArchive={() => onArchive(host)}
           onRestore={() => onRestore(host)}
           onMerge={() => onMerge(host)}
@@ -78,11 +113,13 @@ export function HostSheet({
 
 function HostSheetBody({
   host,
+  markDirty,
   onArchive,
   onRestore,
   onMerge,
 }: {
   host: HostRow;
+  markDirty: MarkDirty;
   onArchive: () => void;
   onRestore: () => void;
   onMerge: () => void;
@@ -103,8 +140,8 @@ function HostSheetBody({
           host.lastUsedAt ? `Last billed ${formatRelativeTime(host.lastUsedAt)}` : "Never billed",
         ].join(" · ")}
       />
-      <HostDetailsSection host={host} />
-      <ContactsSection groupId={host._id} />
+      <HostDetailsSection host={host} markDirty={markDirty} />
+      <ContactsSection groupId={host._id} markDirty={markDirty} />
       <AliasesSection groupId={host._id} />
       <DetailSheetFooter
         start={
@@ -129,7 +166,7 @@ function HostSheetBody({
   );
 }
 
-function HostDetailsSection({ host }: { host: HostRow }) {
+function HostDetailsSection({ host, markDirty }: { host: HostRow; markDirty: MarkDirty }) {
   const updateGroup = useMutation(api.invoiceGroups.update);
   const initial = useMemo<InvoiceGroupFormValues>(
     () => ({ name: host.name, type: host.type, equipmentPricingMode: host.equipmentPricingMode }),
@@ -142,6 +179,7 @@ function HostDetailsSection({ host }: { host: HostRow }) {
   });
   const { isDirty } = form.formState;
   const { reset } = form;
+  useReportDirty(markDirty, "details", isDirty);
 
   // Pick up edits made elsewhere, unless there's a draft here.
   useEffect(() => {
@@ -158,7 +196,12 @@ function HostDetailsSection({ host }: { host: HostRow }) {
       });
       return values;
     },
-    { onSuccess: (values) => reset(values) },
+    {
+      onSuccess: (values) => {
+        reset(values);
+        notify.success(`Saved ${values.name.trim()}`);
+      },
+    },
   );
 
   return (
@@ -169,7 +212,15 @@ function HostDetailsSection({ host }: { host: HostRow }) {
           {form.saveError ? <p className="text-sm text-destructive">{form.saveError}</p> : null}
           {isDirty ? (
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => reset(initial)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  reset(initial);
+                  form.resetSaveState();
+                }}
+              >
                 Discard
               </Button>
               <Button type="submit" size="sm" disabled={form.saveStatus === "saving"}>
@@ -183,7 +234,7 @@ function HostDetailsSection({ host }: { host: HostRow }) {
   );
 }
 
-function ContactsSection({ groupId }: { groupId: Id<"invoiceGroups"> }) {
+function ContactsSection({ groupId, markDirty }: { groupId: Id<"invoiceGroups">; markDirty: MarkDirty }) {
   const { confirm } = useAppDialog();
   const contacts = useQuery(api.invoiceContacts.listForAdmin, { groupId, includeInactive: true });
   const updateContact = useMutation(api.invoiceContacts.update);
@@ -220,7 +271,7 @@ function ContactsSection({ groupId }: { groupId: Id<"invoiceGroups"> }) {
       }
     >
       {adding ? (
-        <ContactForm groupId={groupId} onDone={() => setAdding(false)} />
+        <ContactForm groupId={groupId} markDirty={markDirty} onDone={() => setAdding(false)} />
       ) : null}
       {contacts === undefined ? (
         <p className="text-sm text-muted-foreground">Loading contacts…</p>
@@ -235,7 +286,12 @@ function ContactsSection({ groupId }: { groupId: Id<"invoiceGroups"> }) {
           {rows.map((contact) =>
             editingId === contact._id ? (
               <li key={contact._id} className="p-3">
-                <ContactForm groupId={groupId} contact={contact} onDone={() => setEditingId(null)} />
+                <ContactForm
+                  groupId={groupId}
+                  contact={contact}
+                  markDirty={markDirty}
+                  onDone={() => setEditingId(null)}
+                />
               </li>
             ) : (
               <li
@@ -283,10 +339,12 @@ function ContactsSection({ groupId }: { groupId: Id<"invoiceGroups"> }) {
 function ContactForm({
   groupId,
   contact,
+  markDirty,
   onDone,
 }: {
   groupId: Id<"invoiceGroups">;
   contact?: HostContact;
+  markDirty: MarkDirty;
   onDone: () => void;
 }) {
   const createContact = useMutation(api.invoiceContacts.create);
@@ -303,19 +361,34 @@ function ContactForm({
       : EMPTY_CONTACT,
     mode: "onTouched",
   });
+  useReportDirty(markDirty, contact ? `contact-${contact._id}` : "contact-new", form.formState.isDirty);
 
   const onSubmit = form.submitMutation(
     async (values) => {
       const fields = {
         firstName: values.firstName.trim(),
         lastName: values.lastName.trim(),
-        email: values.email.trim() || undefined,
-        phone: values.phone?.trim() || undefined,
+        email: values.email.trim(),
+        phone: values.phone?.trim() ?? "",
       };
+      // `update` keeps a field it doesn't receive, so a cleared email or phone has to be sent as "".
       if (contact) await updateContact({ id: contact._id, ...fields });
-      else await createContact({ groupId, ...fields, active: true });
+      else
+        await createContact({
+          groupId,
+          ...fields,
+          email: fields.email || undefined,
+          phone: fields.phone || undefined,
+          active: true,
+        });
+      return contactName(fields);
     },
-    { onSuccess: onDone },
+    {
+      onSuccess: (name) => {
+        notify.success(contact ? `Saved ${name}` : `Added ${name}`);
+        onDone();
+      },
+    },
   );
 
   return (

@@ -59,7 +59,7 @@ export const listForAdmin = query({
     const aliases = await ctx.db.query("invoiceGroupAliases").take(2000);
     const contactCountByGroup = new Map<string, number>();
     for (const contact of contacts) {
-      if (!contact.groupId) continue;
+      if (!contact.groupId || !contact.active) continue;
       contactCountByGroup.set(
         contact.groupId,
         (contactCountByGroup.get(contact.groupId) ?? 0) + 1,
@@ -539,6 +539,30 @@ export const merge = mutation({
       survivorId: args.survivorId,
       archivedVictimIds: victimIds as Id<"invoiceGroups">[],
     };
+  },
+});
+
+/**
+ * Reactivates an archived host, unless its name now resolves to another active
+ * host: a merge kept it as the survivor's alias, or a new host took the name.
+ */
+export const restore = mutation({
+  args: { id: v.id("invoiceGroups") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireAdminOrOperations(ctx);
+    await requireArborInternalContext(ctx);
+    const existing = await ctx.db.get(args.id);
+    if (!existing) throw new Error("Host organization not found.");
+    if (existing.active) return null;
+    const owner = await findGroupByNameOrAlias(ctx, existing.name);
+    if (owner && owner._id !== args.id) {
+      throw new Error(
+        `"${existing.name}" now points to the active host "${owner.name}". Use that host instead of restoring this one.`,
+      );
+    }
+    await ctx.db.patch(args.id, { active: true, updatedAt: Date.now() });
+    return null;
   },
 });
 

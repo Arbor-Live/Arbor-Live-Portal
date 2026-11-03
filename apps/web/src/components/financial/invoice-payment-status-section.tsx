@@ -374,6 +374,7 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
                     key={option.value}
                     id={`manual-payment-method-${option.value}`}
                     value={option.value}
+                    title={option.description}
                   >
                     {option.label}
                   </ToggleGroupItem>

@@ -47,7 +47,7 @@ export function BillingHostsManager() {
   const { confirm } = useAppDialog();
   const hosts = useQuery(api.invoiceGroups.listForAdmin, { includeInactive: true });
   const archiveGroup = useMutation(api.invoiceGroups.archive);
-  const updateGroup = useMutation(api.invoiceGroups.update);
+  const restoreGroup = useMutation(api.invoiceGroups.restore);
   const [openId, setOpenId] = useSheetParam("host");
   const [creating, setCreating] = useState(false);
   const [mergeInto, setMergeInto] = useState<HostRow | null>(null);
@@ -91,7 +91,7 @@ export function BillingHostsManager() {
   }
 
   function restore(host: HostRow) {
-    void attempt(() => updateGroup({ id: host._id, active: true }), `Restored ${host.name}`);
+    void attempt(() => restoreGroup({ id: host._id }), `Restored ${host.name}`);
   }
 
   return (
@@ -129,7 +129,7 @@ export function BillingHostsManager() {
             {[
               plural(rows.length, "host"),
               withoutContact > 0 ? `${withoutContact} without a contact` : null,
-              `${nonSubsidized} non-subsidized`,
+              nonSubsidized > 0 ? `${nonSubsidized} non-subsidized` : null,
               archived > 0 ? `${archived} archived` : null,
             ]
               .filter(Boolean)
