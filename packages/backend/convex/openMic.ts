@@ -3,6 +3,7 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireArborInternalContext } from "./lib/auth";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
+import { eventStatusValue } from "./lib/eventStatus";
 import { runnerWindowFor, runnerWindowOpenAt } from "./lib/openMicAddon";
 
 export const OPEN_MIC_EQUIPMENT_OPTIONS = [
@@ -196,7 +197,7 @@ const adminEventSummaryValue = v.object({
   status: openMicStatusValue,
   notes: v.optional(v.string()),
   /** Underlying event lifecycle status, surfaced for the inbox UI. */
-  eventStatus: v.string(),
+  eventStatus: eventStatusValue,
   runnerOpensAt: v.number(),
   runnerClosesAt: v.number(),
   queuedCount: v.number(),
@@ -223,7 +224,7 @@ export const listEvents = query({
       endAt?: number;
       status: "scheduled" | "live" | "completed" | "cancelled";
       notes?: string;
-      eventStatus: string;
+      eventStatus: Doc<"events">["status"];
       runnerOpensAt: number;
       runnerClosesAt: number;
       queuedCount: number;
@@ -287,7 +288,7 @@ const runnerEventValue = v.object({
   endAt: v.optional(v.number()),
   status: openMicStatusValue,
   notes: v.optional(v.string()),
-  eventStatus: v.string(),
+  eventStatus: eventStatusValue,
   runnerOpensAt: v.number(),
   runnerClosesAt: v.number(),
 });
@@ -412,6 +413,8 @@ export const setOpenMicStatus = mutation({
     if (!event.openMicEnabled) {
       throw new Error("Enable the Open Mic add-on on this event first.");
     }
+    // Only going live is refused: a cancelled event's queue and public form keep
+    // following openMicStatus, which stays independent of the event lifecycle.
     if (args.status === "live" && event.status === "cancelled") {
       throw new Error("This event is cancelled, so its Open Mic can't go live.");
     }

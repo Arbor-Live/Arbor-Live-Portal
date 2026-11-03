@@ -35,6 +35,7 @@ import {
   OPEN_MIC_MOVES,
   OPEN_MIC_STATUS,
   canGoLive,
+  eventCancelled,
   openMicSignupPath,
   runnerWindowAt,
 } from "@/lib/open-mic-status";
@@ -296,7 +297,12 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
     <div className="space-y-4" data-testid="open-mic-runner">
       <PageHeader
         back={{ href: "/dashboard/events/open-mic", label: "Open Mic" }}
-        pills={<StatusPill tone={status.tone}>{status.label}</StatusPill>}
+        pills={
+          <>
+            <StatusPill tone={status.tone}>{status.label}</StatusPill>
+            {eventCancelled(event) ? <StatusPill tone="rose">Event cancelled</StatusPill> : null}
+          </>
+        }
         title={event.title}
         meta={
           <>

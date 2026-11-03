@@ -1,4 +1,5 @@
 import type { Tone } from "@/components/page-header";
+import { normalizeEventStatus } from "@/lib/event-status";
 import { dateTimeFormat, formatTime, PORTAL_TIMEZONE } from "@/lib/format";
 
 export type OpenMicStatus = "scheduled" | "live" | "completed" | "cancelled";
@@ -44,9 +45,16 @@ export function runnerWindowAt(night: { runnerOpensAt: number; runnerClosesAt: n
   return now <= night.runnerClosesAt ? "open" : "after";
 }
 
-/** Whether Go live is offered at all; the runner window then decides if it's enabled. */
+/**
+ * Whether Go live is offered at all; callers apply the runner window. The server
+ * enforces the cancelled-event rule; the night-status rule is the UI's.
+ */
 export function canGoLive(night: { status: OpenMicStatus; eventStatus: string }) {
-  return OPEN_MIC_MOVES[night.status].next === "live" && night.eventStatus !== "cancelled";
+  return OPEN_MIC_MOVES[night.status].next === "live" && !eventCancelled(night);
+}
+
+export function eventCancelled(night: { eventStatus: string }) {
+  return normalizeEventStatus(night.eventStatus) === "cancelled";
 }
 
 /** The public sign-up form, pinned to one night. */

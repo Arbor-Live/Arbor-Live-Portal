@@ -19,6 +19,7 @@ import {
   OPEN_MIC_MOVES,
   OPEN_MIC_STATUS,
   canGoLive,
+  eventCancelled,
   runnerWindowAt,
   type RunnerWindow,
 } from "@/lib/open-mic-status";
@@ -117,7 +118,7 @@ export function OpenMicEventsInbox() {
         }
       >
         <RowText eyebrow={formatNightStart(night.startAt)} title={night.title} detail={nightDetail(night, runnerWindow)} />
-        {night.eventStatus === "cancelled" ? <RowFlag tone="rose">Event cancelled</RowFlag> : null}
+        {eventCancelled(night) ? <RowFlag tone="rose">Event cancelled</RowFlag> : null}
         <RowCell hideBelow="md" className="w-28" muted>
           {nightCount(night)}
         </RowCell>
