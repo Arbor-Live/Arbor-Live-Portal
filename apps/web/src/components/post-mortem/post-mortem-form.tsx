@@ -12,6 +12,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { cn } from "@/lib/utils";
@@ -31,20 +32,20 @@ export function PostMortemForm({
 
   const form = useConvexForm<PostMortemFeedbackFormValues>({
     schema: postMortemFeedbackSchema,
-    defaultValues: { rating: 0, whatWentWell: "", whatCouldImprove: "" },
+    defaultValues: { rating: 0, peakTurnout: undefined, whatWentWell: "", whatCouldImprove: "" },
     mode: "onTouched",
   });
 
   const submit = form.submitMutation(async (values) => {
     await onSubmit(values);
-    form.reset({ rating: 0, whatWentWell: "", whatCouldImprove: "" });
+    form.reset({ rating: 0, peakTurnout: undefined, whatWentWell: "", whatCouldImprove: "" });
   });
 
   const rating = form.watch("rating") ?? 0;
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(submit)} className="space-y-4">
+      <form noValidate onSubmit={form.handleSubmit(submit)} className="space-y-4">
         <FormField
           name="rating"
           render={({ field }) => (
@@ -80,6 +81,28 @@ export function PostMortemForm({
                     );
                   })}
                 </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          name="peakTurnout"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Approximate peak turnout</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  className="rounded-md bg-background shadow-xs"
+                  {...field}
+                  value={Number.isNaN(field.value) ? "" : (field.value ?? "")}
+                  onChange={(e) => {
+                    const { value, validity } = e.target;
+                    field.onChange(validity.badInput ? Number.NaN : value === "" ? "" : Number(value));
+                  }}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>

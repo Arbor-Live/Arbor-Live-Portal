@@ -115,7 +115,11 @@ export function InsightsPostMortemPanel({ startMs, endMs }: InsightsPostMortemPa
             <p className="text-sm text-muted-foreground">No post-mortems in this range.</p>
           ) : (
             data.entries.map((entry) => (
-              <div key={entry.id} className="space-y-2 border p-3 text-sm">
+              <div
+                key={entry.id}
+                data-testid="insights-postmortem-entry"
+                className="space-y-2 border p-3 text-sm"
+              >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <RatingStars rating={entry.rating} />
                   <span className="font-medium">{entry.eventTitle ?? "Untitled event"}</span>
@@ -127,6 +131,12 @@ export function InsightsPostMortemPanel({ startMs, endMs }: InsightsPostMortemPa
                   </span>
                 </div>
                 <div className="space-y-2 text-muted-foreground">
+                  {entry.peakTurnout != null ? (
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-medium text-foreground/70">Peak turnout</p>
+                      <p>~{entry.peakTurnout.toLocaleString("en-US")}</p>
+                    </div>
+                  ) : null}
                   <div className="space-y-0.5">
                     <p className="text-xs font-medium text-foreground/70">What went well</p>
                     <p className="whitespace-pre-wrap">{entry.whatWentWell}</p>

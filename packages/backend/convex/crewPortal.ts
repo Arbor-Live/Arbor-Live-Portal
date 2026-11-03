@@ -49,6 +49,7 @@ const postEventWorkValue = v.object({
   endAt: v.number(),
   feedbackSubmitted: v.boolean(),
   rating: v.optional(v.number()),
+  peakTurnout: v.optional(v.number()),
   whatWentWell: v.optional(v.string()),
   whatCouldImprove: v.optional(v.string()),
   mediaResolved: v.boolean(),

@@ -151,6 +151,8 @@ test.describe("insights dashboard", () => {
     const seeded = runConvex("e2eHelpers:seedPostMortemForInsights", {}) as {
       eventTitle: string;
       leadName: string;
+      rating: number;
+      peakTurnout: number;
       whatWentWell: string;
       whatCouldImprove: string;
     };
@@ -166,9 +168,15 @@ test.describe("insights dashboard", () => {
     await expect(page.getByText("Post-mortems").first()).toBeVisible({ timeout: 30_000 });
 
     // Post-mortem answers are readable verbatim (unique per seed run).
-    await expect(page.getByText(seeded.eventTitle).first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(seeded.leadName).first()).toBeVisible();
-    await expect(page.getByText(seeded.whatWentWell, { exact: true })).toBeVisible();
-    await expect(page.getByText(seeded.whatCouldImprove, { exact: true })).toBeVisible();
+    const seededEntry = page
+      .getByTestId("insights-postmortem-entry")
+      .filter({ hasText: seeded.whatWentWell });
+    await expect(seededEntry).toBeVisible({ timeout: 30_000 });
+    await expect(seededEntry.getByText(seeded.eventTitle)).toBeVisible();
+    await expect(seededEntry.getByText(seeded.leadName)).toBeVisible();
+    await expect(seededEntry.locator(`[aria-label="${seeded.rating} out of 5 stars"]`)).toBeVisible();
+    await expect(seededEntry.getByText(seeded.whatWentWell, { exact: true })).toBeVisible();
+    await expect(seededEntry.getByText(seeded.whatCouldImprove, { exact: true })).toBeVisible();
+    await expect(seededEntry.getByText(`~${seeded.peakTurnout.toLocaleString("en-US")}`, { exact: true })).toBeVisible();
   });
 });
