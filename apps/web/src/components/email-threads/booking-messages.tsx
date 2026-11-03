@@ -67,8 +67,16 @@ function MessageBody({ text }: { text: string }) {
 
 function MessageRow({ message }: { message: Message }) {
   const named = Boolean(message.fromName);
+  const outbound = message.direction === "outbound";
   return (
-    <li className="space-y-1.5 px-3 py-3" data-testid="booking-message">
+    <li
+      className={cn(
+        "space-y-1.5 px-3 py-3",
+        outbound && "border-l-2 border-l-primary/50 bg-muted/40",
+      )}
+      data-testid="booking-message"
+      data-direction={message.direction}
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <span className="truncate text-sm font-medium">
@@ -77,7 +85,7 @@ function MessageRow({ message }: { message: Message }) {
           {named ? (
             <span className="truncate text-xs text-muted-foreground">{message.fromEmail}</span>
           ) : null}
-          {message.matchedBy === "address" && !message.fromClient ? (
+          {!outbound && message.matchedBy === "address" && !message.fromClient ? (
             <Badge variant="secondary">CC-linked</Badge>
           ) : null}
         </div>
