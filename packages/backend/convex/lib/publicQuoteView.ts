@@ -1,3 +1,4 @@
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { syncBookingRequestStatusFromInvoice } from "./bookingRequestStatus";
@@ -379,6 +380,16 @@ export async function approveInvoiceQuote(
   }
 
   await scheduleQuoteApprovedEmail(ctx, { invoice: updatedInvoice ?? invoice, approvedAt: now });
+
+  // Every approval path ends here. The summary is a courtesy to the event team,
+  // so a scheduling problem must not undo the client's approval.
+  try {
+    await ctx.scheduler.runAfter(0, internal.bookingSummary.summarizeForInvoice, {
+      invoiceId: invoice._id,
+    });
+  } catch (error) {
+    console.error(`[bookingSummary] could not schedule for invoice ${invoice._id}: ${String(error)}`);
+  }
 }
 
 export async function updateInvoicePaymentContacts(

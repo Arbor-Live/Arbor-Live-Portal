@@ -275,6 +275,91 @@ result and we store none, so the header can be spoofed. The confirm dialog and
 the staff member's judgment of the message are the safeguard; nothing automatic
 acts on an emailed message.
 
+### Email summary in event notes
+
+When a client approves a quote, the crew gets the logistics from the email
+thread in one place. `approveInvoiceQuote` (the one function every approval path
+ends in) schedules
+[`bookingSummary.summarizeForInvoice`](../packages/backend/convex/bookingSummary.ts);
+a scheduling error is logged and never fails the approval.
+
+- **Input.** The newest 60 messages on the booking thread, inbound and outbound,
+  oldest first, sent as a JSON array of `{ direction, sender, body }` (`body` is
+  `bodyText`), capped at about 30k characters of JSON by dropping the oldest. A
+  client cannot forge a staff message: only `direction`, which comes from our
+  database, says who wrote it, and the system prompt calls every body untrusted
+  client-written text to treat as data. No inbound message means no model call.
+- **Model.** Vercel AI Gateway, OpenAI-compatible
+  `POST https://ai-gateway.vercel.sh/v1/chat/completions`, model
+  `zai/glm-5.3-flash`, pinned to Baseten with
+  `providerOptions: { gateway: { only: ["baseten"] } }` (US-hosted, zero data
+  retention, no training). `BOOKING_SUMMARY_MODEL` and the comma-separated
+  `BOOKING_SUMMARY_PROVIDERS` override both. An unset or empty providers value
+  keeps the Baseten pin; only the explicit value `none` sends no `only` filter,
+  and every such call logs a warning
+  ([environment-variables.md](environment-variables.md)). They are read in one
+  place, [`lib/bookingSummary.ts`](../packages/backend/convex/lib/bookingSummary.ts).
+  It needs `AI_GATEWAY_API_KEY` on the deployment, and a Vercel account with
+  paid credits: a free-tier key gets HTTP 403 for the default model.
+- **Content rule.** The product owner's rule is in the system prompt verbatim
+  ("The note should not include any pricing specific discussion, discounts,
+  etc. It should only be operational notes such as venue location or details
+  like those.") and enforced again after the model answers. The filter
+  (`PRICING_PATTERNS`) runs on the model's raw bullets first, then the count is
+  capped at 8 and each bullet cut at 200 characters, so a price late in a long
+  bullet is still caught and pricing bullets cannot crowd out operational ones.
+  It drops currency symbols and codes, money words (dollars, bucks, price,
+  paid, billed, refund, waived, comped, complimentary, for free, tax,
+  surcharge, deposit, discount, budget, cost, fee, quote, payment, invoice,
+  purchase order or PO, net 30, half off, 3k for the day, and so on). Words
+  with a crew meaning only count in a money sense: "rated for 20A", "frame
+  rate", "in charge", "charging station", "pay attention", "100% capacity" and
+  "total headcount" stay. The table-driven tests list both sides.
+- **Who said it.** The crew reads each bullet as something the client said in
+  email; the system prompt tells the model the same. That instruction is not
+  repeated in the notes.
+- **Notes block.** Every event linked to the invoice gets one block per
+  invoice, keyed by the invoice number and closed by an end line:
+
+  ```
+  Client email summary · ALINV-0042 · quote approved Nov 3, 2026
+  - Load-in through the Lagunita lot after 3pm
+  (end of client email summary)
+  ```
+
+  The portal never deletes or changes staff text. `events.emailSummaryBlocks`
+  keeps, per invoice, the exact block text the portal last wrote and the time
+  of the transcript it came from (at most 13 entries: an event links at most
+  13 invoices). A later run replaces the keyed block only while it still reads
+  exactly that text. If staff edited or deleted it, or typed a lookalike
+  header, or a header has no end line, the new block is appended after a blank
+  line and every existing line stays as it was
+  ([`@arbor/format`](../packages/format/src/emailSummaryBlock.ts)). A run whose
+  transcript is older than the stored one is skipped, so overlapping runs
+  cannot go back in time. No surviving bullets means nothing is written. An
+  event linked after approval is not chased: staff use **Add summary to
+  notes** on the event page's Email card (`bookingSummary.addSummaryToEventNotes`,
+  for Arbor internal users who can edit the event; it is not the Operations
+  check that gates replying, because it writes event notes and emails no one).
+  The button is awaited, labels the block "as of" the day when the quote is not
+  approved, and its toast reports what happened: "Summary added", "Nothing
+  operational to add", "No linked event to update" (zero events written) or
+  "No quote to key the summary to".
+- **Workspace.** The event workspace saves notes as one string and does not
+  carry the block into an edited draft. If staff save a draft started before
+  the summary landed, the block is lost and their text is intact; the next run
+  or the button appends it again. `events.update` never re-inserts it, so
+  staff can delete the block.
+- **Failures.** A missing key, a gateway error or an unusable reply is logged
+  (`[bookingSummary] …`) with no partial write. Logs and toasts carry a status
+  and a short error code at most, never model output or a gateway response
+  body ("Model reply was not valid JSON"). A 429, 5xx or network error is
+  retried once after 60 seconds; the call is aborted after 60 seconds. A 401 or
+  403 is never retried: it logs `gateway refused model <model> (<status>):
+  <gateway error message> — add paid AI Gateway credits or set
+  BOOKING_SUMMARY_MODEL`, and the button shows the model and that message in
+  its toast.
+
 ## This Week at Arbor (newsletter)
 
 The weekly newsletter is the one Arbor send that goes through Resend

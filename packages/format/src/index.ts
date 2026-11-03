@@ -585,3 +585,5 @@ export {
 } from "./borrowAgreement";
 
 export * from "./cartCrew";
+
+export * from "./emailSummaryBlock";
