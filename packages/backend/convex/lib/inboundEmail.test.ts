@@ -58,20 +58,60 @@ describe("htmlToText", () => {
     );
   });
 
+  it("ends an unclosed head at the body, not at a quoted document's </head>", () => {
+    const html =
+      "<html><head><meta charset=utf-8><body><p>Load-in at 4pm, crew call 3pm</p>" +
+      "<blockquote><html><head><style>p{}</style></head><body><p>Original</p></body></html></blockquote>";
+    expect(htmlToText(html)).toBe("Load-in at 4pm, crew call 3pm\nOriginal");
+  });
+
+  it("drops only a self-closing special tag", () => {
+    expect(htmlToText("<div>A</div><title/><div>B</div><title>t</title><div>C</div>")).toBe(
+      "A\nB\nC",
+    );
+    expect(
+      htmlToText('<body><script src="x.js"/><p>Load-in at 4pm</p><script>t()</script><p>after</p>'),
+    ).toBe("Load-in at 4pm\nafter");
+  });
+
+  it("keeps the text after a closing tag that has no '>'", () => {
+    expect(htmlToText("<head><meta x></head Load-in is still 4pm<p>Tail</p>")).toContain(
+      "Load-in is still 4pm",
+    );
+  });
+
+  it("drops a stylesheet cut off by the HTML cap instead of keeping it as text", () => {
+    const html = `<html><head><style>${"p{color:red}".repeat(17_000)}</style></head><body><p>x</p>`;
+    expect(html.length).toBeGreaterThan(MAX_HTML_CHARS);
+    expect(htmlToText(html)).toBe("");
+  });
+
+  it("keeps the reply in a Gmail-shaped message", () => {
+    const html =
+      '<div dir="ltr">Thanks! Can the truck park in the Lagunita lot?<div><br></div><div>Maya</div></div>' +
+      '<br><div class="gmail_quote"><div dir="ltr" class="gmail_attr">On Mon, Nov 2, 2026 at 9:00 AM ' +
+      "Arbor Live &lt;bookings@arbor.st&gt; wrote:<br></div><blockquote>Your quote is ready.</blockquote></div>";
+    expect(htmlToText(html)).toBe(
+      "Thanks! Can the truck park in the Lagunita lot?\n\nMaya\n\nOn Mon, Nov 2, 2026 at 9:00 AM Arbor Live <bookings@arbor.st> wrote:\n\nYour quote is ready.",
+    );
+  });
+
   it("stays fast on hostile input at the HTML cap", () => {
-    const tagCount = Math.floor(MAX_HTML_CHARS / 16);
+    const fill = (unit: string) => unit.repeat(Math.ceil(MAX_HTML_CHARS / unit.length)).slice(0, MAX_HTML_CHARS);
     const hostile = [
-      "<script>".repeat(tagCount) + "<style>".repeat(tagCount) + "<p>end</p>",
-      " ".repeat(MAX_HTML_CHARS),
-      "\t".repeat(MAX_HTML_CHARS),
-      "<".repeat(MAX_HTML_CHARS),
+      fill("<script>"),
+      fill("<head "),
+      fill("<script>x</script>"),
+      fill("<title>"),
+      fill(" "),
+      fill("\t"),
+      fill("<"),
     ];
     for (const html of hostile) {
       const started = performance.now();
       htmlToText(html);
       expect(performance.now() - started).toBeLessThan(500);
     }
-    expect(htmlToText(hostile[0]!)).toBe("end");
   });
 });
 

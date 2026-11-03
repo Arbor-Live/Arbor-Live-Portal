@@ -73,36 +73,69 @@ const ENTITIES: Record<string, string> = {
 /** HTML is only a fallback for a missing text part; parse no more than this. */
 export const MAX_HTML_CHARS = 200_000;
 
-/** A tag name ends at whitespace, `/` or `>`, so `<header>` and `<head-nav>` are not `<head>`. */
-const TAG_NAME_END = "(?=[\\s/>])";
+type SpecialTag = "script" | "style" | "head" | "title";
 
 /**
- * Drops `<script>`, `<style>`, `<head>` and `<title>` blocks in one forward pass over the
- * original string (a lowercased copy can change length, e.g. "İ", and shift
- * every index). A lazy regex rescans the rest of the input for every unclosed
- * opening tag, which untrusted mail can turn quadratic. Once a closing tag is
- * known to be absent, later openings of that name lose only their own tag, so
- * an email that omits `</head>` keeps its body.
+ * Where each block ends. `lastIndex` must be set before every `exec`. A head
+ * also ends where the body starts, since `</head>` is optional and a later one
+ * may belong to quoted HTML.
+ */
+const BLOCK_END: Record<SpecialTag, RegExp> = {
+  script: /<\/script(?=[\s/>])[^<>]*>/gi,
+  style: /<\/style(?=[\s/>])[^<>]*>/gi,
+  title: /<\/title(?=[\s/>])[^<>]*>/gi,
+  head: /<\/head(?=[\s/>])[^<>]*>|<body(?=[\s/>])/gi,
+};
+
+/**
+ * The rest of an opening tag: a `>` within 1000 chars and before any `<`.
+ * Further than that reads as prose, and the bound keeps each probe O(1).
+ */
+const OPENING_TAG_REST = /[^<>]{0,1000}>/y;
+
+/** End of the opening tag at `start`, or null when it has no `>`. */
+function openingTagEnd(html: string, start: number): number | null {
+  OPENING_TAG_REST.lastIndex = start + 1;
+  const rest = OPENING_TAG_REST.exec(html);
+  return rest ? start + 1 + rest[0].length : null;
+}
+
+/**
+ * Drops `<script>`, `<style>`, `<head>` and `<title>` blocks in one forward
+ * pass over the original string (a lowercased copy can change length, e.g.
+ * "İ", and shift every index). A lazy regex rescans the rest of the input for
+ * every unclosed opening tag, which untrusted mail can turn quadratic; here a
+ * missing end is searched for once per name.
+ *
+ * - A self-closing tag (`<script src=x />`) drops only itself.
+ * - An unclosed `<head>` or `<title>` drops only its opening tag, so the body
+ *   survives.
+ * - An unclosed `<script>` or `<style>` drops the rest of the input: what
+ *   follows is code, usually a block cut off by `MAX_HTML_CHARS`.
  */
 function stripSpecialTagBlocks(html: string): string {
-  const open = new RegExp(`<(script|style|head|title)${TAG_NAME_END}`, "gi");
-  const missingClose = new Set<string>();
+  // `(?=[\s/>])` ends a tag name, so `<header>` and `<head-nav>` are not `<head>`.
+  const open = /<(script|style|head|title)(?=[\s/>])/gi;
+  const missingEnd = new Set<SpecialTag>();
   const parts: string[] = [];
   let cursor = 0;
   for (let match = open.exec(html); match; match = open.exec(html)) {
-    const name = match[1]!.toLowerCase();
+    const name = match[1]!.toLowerCase() as SpecialTag;
     parts.push(html.slice(cursor, match.index));
+    const tagEnd = openingTagEnd(html, match.index);
+    const selfClosing = tagEnd !== null && html[tagEnd - 2] === "/";
+
     let blockEnd: number | null = null;
-    if (!missingClose.has(name)) {
-      const close = new RegExp(`</${name}${TAG_NAME_END}[^<>]*>?`, "gi");
-      close.lastIndex = match.index;
-      const found = close.exec(html);
-      if (found) blockEnd = found.index + found[0].length;
-      else missingClose.add(name);
+    if (tagEnd !== null && !selfClosing && !missingEnd.has(name)) {
+      const end = BLOCK_END[name];
+      end.lastIndex = tagEnd;
+      const found = end.exec(html);
+      if (found) blockEnd = found[0].startsWith("</") ? found.index + found[0].length : found.index;
+      else missingEnd.add(name);
     }
     if (blockEnd === null) {
-      const tag = /^<[^<>]*>/.exec(html.slice(match.index, match.index + 1_000));
-      blockEnd = match.index + (tag ? tag[0].length : match[0].length);
+      const unclosedCode = !selfClosing && (name === "script" || name === "style");
+      blockEnd = unclosedCode && tagEnd !== null ? html.length : (tagEnd ?? match.index + match[0].length);
     }
     cursor = blockEnd;
     open.lastIndex = cursor;
