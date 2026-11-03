@@ -1861,6 +1861,56 @@ export default defineSchema({
     .index("by_dedupeKey", ["dedupeKey"])
     .index("by_createdAt", ["createdAt"]),
 
+  /**
+   * One conversation per booking: the request, its invoice and its events share
+   * a thread (`lib/emailThreads.ts` resolves the links). Ids are filled in as
+   * they become known.
+   */
+  emailThreads: defineTable({
+    requestId: v.optional(v.id("eventRequests")),
+    invoiceId: v.optional(v.id("invoices")),
+    eventId: v.optional(v.id("events")),
+    lastMessageAt: v.number(),
+    messageCount: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_requestId", ["requestId"])
+    .index("by_invoiceId", ["invoiceId"])
+    .index("by_eventId", ["eventId"]),
+
+  /** Mail received on the inbound domain (Resend Receiving), see docs/resend-email.md. */
+  emailMessages: defineTable({
+    /** Unset = unmatched: arbor.st mail that names no booking and replies to none. */
+    threadId: v.optional(v.id("emailThreads")),
+    direction: v.union(v.literal("inbound"), v.literal("outbound")),
+    resendEmailId: v.string(),
+    /** RFC 5322 Message-ID, normalized without the angle brackets. */
+    messageId: v.optional(v.string()),
+    inReplyTo: v.optional(v.string()),
+    references: v.array(v.string()),
+    fromEmail: v.string(),
+    fromName: v.optional(v.string()),
+    to: v.array(v.string()),
+    cc: v.array(v.string()),
+    subject: v.string(),
+    /** Reply text with the quoted history stripped. */
+    bodyText: v.string(),
+    fullText: v.optional(v.string()),
+    /** Metadata only; the files themselves are not stored. */
+    attachments: v.array(
+      v.object({
+        filename: v.string(),
+        contentType: v.optional(v.string()),
+        size: v.optional(v.number()),
+      }),
+    ),
+    matchedBy: v.optional(v.union(v.literal("address"), v.literal("header"))),
+    receivedAt: v.number(),
+  })
+    .index("by_threadId_and_receivedAt", ["threadId", "receivedAt"])
+    .index("by_resendEmailId", ["resendEmailId"])
+    .index("by_messageId", ["messageId"]),
+
   /** Web Push endpoints, one per browser/device the user turned push on for. */
   pushSubscriptions: defineTable({
     userId: v.string(),
