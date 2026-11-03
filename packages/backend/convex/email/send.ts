@@ -111,7 +111,8 @@ async function sendEmailWithAttachments(
 ) {
   const resendSdk = getResendSdk();
   const { from, html, attachments } = options;
-  return await resendClient.sendEmailManually(
+  let resendEmailId = "";
+  const emailId = await resendClient.sendEmailManually(
     ctx,
     {
       from,
@@ -142,9 +143,12 @@ async function sendEmailWithAttachments(
       if (!result.data?.id) {
         throw new Error("Resend did not return an email id.");
       }
-      return result.data.id;
+      resendEmailId = result.data.id;
+      return resendEmailId;
     },
   );
+  // `sendEmailManually` returns the component's id; Resend's own id is what `GET /emails/{id}` takes.
+  return { emailId, resendEmailId };
 }
 
 async function quoteAttachment(
@@ -268,7 +272,7 @@ export const sendQueuedEmail = internalAction({
 
       // Booking emails go through the raw SDK too: it returns the Resend id at once and takes headers.
       if (bookingThread || attachments.length > 0) {
-        const resendId = await sendEmailWithAttachments(ctx, notification, {
+        const sent = await sendEmailWithAttachments(ctx, notification, {
           from: notification.from ?? EMAIL_FROM,
           html,
           attachments,
@@ -277,10 +281,15 @@ export const sendQueuedEmail = internalAction({
 
         await ctx.runMutation(internal.email.enqueue.markSent, {
           notificationId: args.notificationId,
-          resendId,
+          resendId: sent.emailId,
         });
         if (bookingThread) {
-          await recordOutbound(ctx, bookingThread, { resendEmailId: resendId, html, attachments, thread });
+          await recordOutbound(ctx, bookingThread, {
+            resendEmailId: sent.resendEmailId,
+            html,
+            attachments,
+            thread,
+          });
         }
         return null;
       }
