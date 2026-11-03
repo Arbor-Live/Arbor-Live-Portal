@@ -77,7 +77,7 @@ function validatePostMortemInput(args: {
     args.peakTurnout < 0 ||
     args.peakTurnout > 100000
   ) {
-    throw new Error("Please estimate the peak turnout.");
+    throw new Error("Peak turnout must be a whole number from 0 to 100,000.");
   }
   const whatWentWell = args.whatWentWell.trim();
   const whatCouldImprove = args.whatCouldImprove.trim();

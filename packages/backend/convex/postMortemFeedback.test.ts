@@ -65,7 +65,7 @@ test("rejects a negative peak turnout", async () => {
       whatWentWell: "Quick load-in.",
       whatCouldImprove: "Bring more gaff tape.",
     }),
-  ).rejects.toThrow("Please estimate the peak turnout.");
+  ).rejects.toThrow("Peak turnout must be a whole number from 0 to 100,000.");
 });
 
 test("rejects a fractional peak turnout", async () => {
@@ -80,5 +80,20 @@ test("rejects a fractional peak turnout", async () => {
       whatWentWell: "Quick load-in.",
       whatCouldImprove: "Bring more gaff tape.",
     }),
-  ).rejects.toThrow("Please estimate the peak turnout.");
+  ).rejects.toThrow("Peak turnout must be a whole number from 0 to 100,000.");
+});
+
+test("rejects a peak turnout over 100,000", async () => {
+  const t = makeTest();
+  await seedForm(t, "pm_over_limit");
+
+  await expect(
+    t.mutation(api.postMortemFeedback.submitByToken, {
+      token: "pm_over_limit",
+      rating: 4,
+      peakTurnout: 100_001,
+      whatWentWell: "Quick load-in.",
+      whatCouldImprove: "Bring more gaff tape.",
+    }),
+  ).rejects.toThrow("Peak turnout must be a whole number from 0 to 100,000.");
 });
