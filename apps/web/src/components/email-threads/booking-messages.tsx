@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { emailSummaryToast } from "@/lib/email-summary-toast";
 import { formatDateTime } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -167,9 +168,9 @@ function AddSummaryButton({ eventId }: { eventId: Id<"events"> }) {
   async function onClick() {
     setBusy(true);
     try {
-      const { result } = await addSummary({ eventId });
-      if (result === "added") notify.success("Summary added");
-      else notify.info("Nothing operational to add");
+      const toast = emailSummaryToast(await addSummary({ eventId }));
+      if (toast.kind === "success") notify.success(toast.message);
+      else notify.info(toast.message);
     } catch (error) {
       notify.error(getConvexErrorMessage(error, "Could not add the summary."));
     } finally {

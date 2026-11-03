@@ -1258,6 +1258,7 @@ export const duplicate = mutation({
       // Same venue, same way of moving gear.
       needsCart: existing.needsCart,
       notes: existing.notes,
+      emailSummaryBlocks: existing.emailSummaryBlocks,
       openMicEnabled: existing.openMicEnabled,
       openMicStatus: existing.openMicEnabled ? "scheduled" : undefined,
       openMicNotes: existing.openMicNotes,

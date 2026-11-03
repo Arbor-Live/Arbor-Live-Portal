@@ -1128,6 +1128,17 @@ export default defineSchema({
     otherCostUsd: v.optional(v.number()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     notes: v.optional(v.string()),
+    /**
+     * The exact client-email summary block the portal last wrote into `notes`,
+     * per invoice (`bookingSummary.ts`). A later summary replaces a block only
+     * while it still reads exactly this; anything staff changed is left alone.
+     * One entry per linked invoice, at most 13.
+     */
+    emailSummaryBlocks: v.optional(
+      v.array(
+        v.object({ invoiceId: v.id("invoices"), text: v.string(), generatedAt: v.number() }),
+      ),
+    ),
     sourceEventRequestId: v.optional(v.id("eventRequests")),
 
     /** Event add-ons (per-event feature toggles). Open Mic is the first add-on. */
@@ -1918,13 +1929,6 @@ export default defineSchema({
     subject: v.optional(v.string()),
     lastMessageAt: v.number(),
     messageCount: v.number(),
-    /**
-     * Operational notes the model drew from this thread when the quote was
-     * approved (`bookingSummary.ts`), kept so a later reader does not need
-     * another model call. The text itself lives in each event's notes.
-     */
-    summaryBullets: v.optional(v.array(v.string())),
-    summaryUpdatedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_requestId", ["requestId"])
