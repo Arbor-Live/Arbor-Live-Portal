@@ -86,19 +86,23 @@ function FormLabel({ className, ...props }: React.ComponentProps<typeof Label>) 
   );
 }
 
-function FormControl({ ...props }: React.ComponentProps<typeof Slot.Root>) {
-  const { error, formItemId, formDescriptionId, formMessageId } = useFormField();
+function FormControl({
+  children,
+  ...props
+}: Omit<React.ComponentProps<typeof Slot.Root>, "children" | "ref"> & {
+  children: React.ReactElement;
+}) {
+  const { error, formItemId, formMessageId } = useFormField();
 
   return (
     <Slot.Root
-      data-slot="form-control"
       id={formItemId}
-      aria-describedby={
-        !error ? formDescriptionId : `${formDescriptionId} ${formMessageId}`
-      }
+      aria-describedby={error ? formMessageId : undefined}
       aria-invalid={!!error}
       {...props}
-    />
+    >
+      {children}
+    </Slot.Root>
   );
 }
 

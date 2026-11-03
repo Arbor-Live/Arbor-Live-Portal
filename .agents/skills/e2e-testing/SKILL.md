@@ -35,8 +35,8 @@ so the new test lands in the right file.
 
 ## Writing tests
 
-- Prefer role/text locators over CSS. FormLabel here is not htmlFor-wired, so
-  use `getByRole` over `getByLabel`.
+- Prefer role, label and text locators over CSS. `FormLabel` is wired to its
+  input, so `getByLabel` works on `FormField` controls.
 - First page hit may catch Turbopack compiling: wait for stable UI text, not
   `networkidle` alone. See `e2e/helpers/auth.ts` `signInWithCredentials`.
 - Right after `page.goto`, scope page-content locators to `page.getByRole("main")`.
