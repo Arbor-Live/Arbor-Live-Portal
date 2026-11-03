@@ -217,9 +217,7 @@ function MergeHostsForm({
               <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-muted/30">
                 <Checkbox checked={victimIds.includes(host._id)} onCheckedChange={() => toggle(host._id)} />
                 <span className="min-w-0 flex-1 truncate">{host.name}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {INVOICE_GROUP_TYPE_LABELS[host.type]} · {plural(host.contactCount, "contact")}
-                </span>
+                <span className="shrink-0 text-xs text-muted-foreground">{INVOICE_GROUP_TYPE_LABELS[host.type]}</span>
               </label>
             </li>
           ))}

@@ -159,7 +159,7 @@ export const getMergePreview = query({
       victims.push({
         _id: victim._id,
         name: victim.name,
-        contactCount: contacts.filter((contact) => contact.active).length,
+        contactCount: contacts.length,
         eventCount: events.length,
         seriesCount: series.length,
         invoiceCount: invoices.length,
@@ -264,7 +264,7 @@ export const update = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminOrOperations(ctx);
     await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Group not found.");
@@ -499,8 +499,9 @@ export const merge = mutation({
       await ensureAlias(ctx, args.survivorId, victim.name, "merge");
       const victimAliases = await listAliasesForGroup(ctx, victim._id);
       for (const alias of victimAliases) {
-        await ensureAlias(ctx, args.survivorId, alias.alias, "merge");
+        // Free the victim's claim first, or ensureAlias sees the alias as taken by another host.
         await ctx.db.delete(alias._id);
+        await ensureAlias(ctx, args.survivorId, alias.alias, "merge");
       }
     }
 

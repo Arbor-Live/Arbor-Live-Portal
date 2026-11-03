@@ -9,16 +9,16 @@ async function arborAdmin() {
   const arbor = await createOrg(t, { type: "arbor_internal" });
   await addMembership(t, admin._id, arbor.organizationId, "org_admin", true);
   await setActiveOrg(t, admin._id, arbor.organizationId);
-  return asUser(t, admin);
+  return { t, as: asUser(t, admin) };
 }
 
-async function activeNames(as: Awaited<ReturnType<typeof arborAdmin>>) {
+async function activeNames(as: Awaited<ReturnType<typeof arborAdmin>>["as"]) {
   const hosts = await as.query(api.invoiceGroups.listForAdmin, { includeInactive: true });
   return hosts.filter((host) => host.active).map((host) => host.name);
 }
 
 test("restores an archived host whose name is still free", async () => {
-  const as = await arborAdmin();
+  const { as } = await arborAdmin();
   const id = await as.mutation(api.invoiceGroups.create, { name: "Old Union Board", type: "vso" });
   await as.mutation(api.invoiceGroups.archive, { id });
 
@@ -28,7 +28,7 @@ test("restores an archived host whose name is still free", async () => {
 });
 
 test("refuses to restore a host that was merged away", async () => {
-  const as = await arborAdmin();
+  const { as } = await arborAdmin();
   const survivorId = await as.mutation(api.invoiceGroups.create, { name: "Stanford Concert Network", type: "vso" });
   const victimId = await as.mutation(api.invoiceGroups.create, { name: "SCN Duplicate", type: "vso" });
   await as.mutation(api.invoiceGroups.merge, { survivorId, victimIds: [victimId] });
@@ -40,7 +40,7 @@ test("refuses to restore a host that was merged away", async () => {
 });
 
 test("refuses to restore a host whose name a new host took", async () => {
-  const as = await arborAdmin();
+  const { as } = await arborAdmin();
   const oldId = await as.mutation(api.invoiceGroups.create, { name: "Music Department", type: "department" });
   await as.mutation(api.invoiceGroups.archive, { id: oldId });
   await as.mutation(api.invoiceGroups.create, { name: "Music Department", type: "department" });
@@ -49,7 +49,7 @@ test("refuses to restore a host whose name a new host took", async () => {
 });
 
 test("refuses to restore a host whose alias a new host took", async () => {
-  const as = await arborAdmin();
+  const { as } = await arborAdmin();
   const oldId = await as.mutation(api.invoiceGroups.create, { name: "Stanford Concert Network", type: "vso" });
   await as.mutation(api.invoiceGroups.addAlias, { groupId: oldId, alias: "SCN" });
   await as.mutation(api.invoiceGroups.archive, { id: oldId });
@@ -61,7 +61,7 @@ test("refuses to restore a host whose alias a new host took", async () => {
 });
 
 test("counts only active contacts", async () => {
-  const as = await arborAdmin();
+  const { as } = await arborAdmin();
   const groupId = await as.mutation(api.invoiceGroups.create, { name: "Dance Marathon", type: "vso" });
   const contactId = await as.mutation(api.invoiceContacts.create, { groupId, firstName: "Ana", lastName: "Ruiz" });
   await as.mutation(api.invoiceContacts.create, { groupId, firstName: "Ben", lastName: "Cho" });
@@ -72,12 +72,7 @@ test("counts only active contacts", async () => {
 });
 
 test("clears a contact's email and phone and drops its person link", async () => {
-  const t = makeTest();
-  const admin = await createUser(t, { role: "admin" });
-  const arbor = await createOrg(t, { type: "arbor_internal" });
-  await addMembership(t, admin._id, arbor.organizationId, "org_admin", true);
-  await setActiveOrg(t, admin._id, arbor.organizationId);
-  const as = asUser(t, admin);
+  const { t, as } = await arborAdmin();
   const groupId = await as.mutation(api.invoiceGroups.create, { name: "Cardinal Ballet", type: "vso" });
   const id = await as.mutation(api.invoiceContacts.create, {
     groupId,
@@ -94,12 +89,36 @@ test("clears a contact's email and phone and drops its person link", async () =>
 });
 
 test("only restore can reactivate a host", async () => {
-  const as = await arborAdmin();
+  const { as } = await arborAdmin();
   const id = await as.mutation(api.invoiceGroups.create, { name: "Old Union Board", type: "vso" });
   await as.mutation(api.invoiceGroups.archive, { id });
 
   await expect(
     as.mutation(api.invoiceGroups.update, { id, active: true } as never),
-  ).rejects.toThrow(/active/);
+  ).rejects.toThrow(/Unexpected field `active`/);
   expect(await activeNames(as)).toEqual([]);
+});
+
+test("merging a host carries its aliases over to the survivor", async () => {
+  const { as } = await arborAdmin();
+  const survivorId = await as.mutation(api.invoiceGroups.create, { name: "Office of Student Engagement", type: "department" });
+  const victimId = await as.mutation(api.invoiceGroups.create, { name: "Student Engagement", type: "department" });
+  await as.mutation(api.invoiceGroups.addAlias, { groupId: victimId, alias: "OSE" });
+
+  await as.mutation(api.invoiceGroups.merge, { survivorId, victimIds: [victimId] });
+
+  const aliases = await as.query(api.invoiceGroups.listAliases, { groupId: survivorId });
+  expect(aliases.map((row) => row.alias).sort()).toEqual(["OSE", "Student Engagement"]);
+});
+
+test("the merge preview counts every contact that moves, archived ones included", async () => {
+  const { as } = await arborAdmin();
+  const survivorId = await as.mutation(api.invoiceGroups.create, { name: "Dance Marathon", type: "vso" });
+  const victimId = await as.mutation(api.invoiceGroups.create, { name: "Dance Marathon Board", type: "vso" });
+  const archived = await as.mutation(api.invoiceContacts.create, { groupId: victimId, firstName: "Ana", lastName: "Ruiz" });
+  await as.mutation(api.invoiceContacts.create, { groupId: victimId, firstName: "Ben", lastName: "Cho" });
+  await as.mutation(api.invoiceContacts.archive, { id: archived });
+
+  const preview = await as.query(api.invoiceGroups.getMergePreview, { survivorId, victimIds: [victimId] });
+  expect(preview.victims.map((row) => row.contactCount)).toEqual([2]);
 });

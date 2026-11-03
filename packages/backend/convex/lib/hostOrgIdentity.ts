@@ -20,8 +20,8 @@ export async function findGroupByNormalizedName(
     .query("invoiceGroups")
     .withIndex("by_normalizedName", (q) => q.eq("normalizedName", normalized))
     .take(20);
-  const match = byIndex.find((group) => group.active);
-  if (match) return match;
+  // Once the index finds the name, skip the legacy scan; it reads the whole table.
+  if (byIndex.length > 0) return byIndex.find((group) => group.active) ?? null;
 
   // Legacy rows may lack normalizedName until backfill.
   const legacy = await ctx.db.query("invoiceGroups").take(500);
