@@ -71,7 +71,7 @@ export const postMortemFeedbackSchema = z.object({
       .number({ error: "Please estimate the peak turnout" })
       .int("Please estimate the peak turnout")
       .min(0, "Please estimate the peak turnout")
-      .max(100000, "Please estimate the peak turnout"),
+      .max(100000, "Peak turnout must be 100,000 or less"),
   ),
   whatWentWell: z.string().trim().min(1, "Please share what went well"),
   whatCouldImprove: z.string().trim().min(1, "Please share what could improve"),

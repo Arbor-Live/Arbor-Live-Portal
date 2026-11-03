@@ -171,8 +171,11 @@ test.describe("insights dashboard", () => {
     await expect(page.getByText(seeded.leadName).first()).toBeVisible();
     await expect(page.getByText(seeded.whatWentWell, { exact: true })).toBeVisible();
     await expect(page.getByText(seeded.whatCouldImprove, { exact: true })).toBeVisible();
+    const seededEntry = page
+      .getByTestId("insights-postmortem-entry")
+      .filter({ hasText: seeded.whatWentWell });
     await expect(
-      page.getByText(`~${seeded.peakTurnout.toLocaleString()}`, { exact: true }).first(),
+      seededEntry.getByText(`~${seeded.peakTurnout.toLocaleString()}`, { exact: true }),
     ).toBeVisible();
   });
 });

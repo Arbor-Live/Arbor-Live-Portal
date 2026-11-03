@@ -115,7 +115,11 @@ export function InsightsPostMortemPanel({ startMs, endMs }: InsightsPostMortemPa
             <p className="text-sm text-muted-foreground">No post-mortems in this range.</p>
           ) : (
             data.entries.map((entry) => (
-              <div key={entry.id} className="space-y-2 border p-3 text-sm">
+              <div
+                key={entry.id}
+                data-testid="insights-postmortem-entry"
+                className="space-y-2 border p-3 text-sm"
+              >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <RatingStars rating={entry.rating} />
                   <span className="font-medium">{entry.eventTitle ?? "Untitled event"}</span>
