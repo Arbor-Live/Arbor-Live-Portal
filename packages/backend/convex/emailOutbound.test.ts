@@ -6,6 +6,19 @@ import { scheduleBookingRequestReceivedEmail } from "./email/bookingRequestEmail
 import { seedInvoice, seedRequest } from "./test/bookingSeeds.helpers";
 import { createUser, makeTest, type Test } from "./test/setup.helpers";
 
+/** The component's view of each email, keyed by component id, for `resendClient.get`. */
+const componentEmails = vi.hoisted(
+  () => new Map<string, { status: string; resendId?: string; errorMessage?: string }>(),
+);
+
+vi.mock("@convex-dev/resend", () => ({
+  Resend: class {
+    async get(_ctx: unknown, emailId: string) {
+      return componentEmails.get(emailId) ?? null;
+    }
+  },
+}));
+
 /** Renders React Email (and a PDF for quotes); a loaded CI runner needs more than the 5s default. */
 const SEND_TEST_TIMEOUT_MS = 15_000;
 
@@ -60,11 +73,55 @@ function outbound(threadId: Id<"emailThreads">, overrides = {}) {
   };
 }
 
+let notificationSeq = 0;
+
+/** Queue a booking notification and report it sent with `message`, as `sendQueuedEmail` does. */
+async function markSent(t: Test, message: ReturnType<typeof outbound>) {
+  notificationSeq += 1;
+  const notificationId = await t.run(async (ctx) =>
+    ctx.db.insert("emailNotifications", {
+      template: "quote_updated",
+      status: "queued",
+      to: "maya@client.test",
+      subject: message.subject,
+      booking: { threadId: message.threadId, from: '"Arbor Live" <bookings@arbor.st>' },
+      idempotencyKey: `quote_updated:${notificationSeq}`,
+      payload: {},
+      createdAt: SENT_AT,
+    }),
+  );
+  const outcome = await t.mutation(internal.emailOutbound.markBookingEmailSent, {
+    notificationId,
+    resendId: "component-email-1",
+    message,
+  });
+  return { notificationId, outcome };
+}
+
+async function insertMessage(t: Test, threadId: Id<"emailThreads">, n: number, messageId?: string) {
+  await t.run(async (ctx) =>
+    ctx.db.insert("emailMessages", {
+      threadId,
+      direction: n % 2 === 0 ? "outbound" : "inbound",
+      resendEmailId: `re_${n}`,
+      messageId,
+      references: [],
+      fromEmail: "maya@client.test",
+      to: ["alreq-aaaaaaa@arbor.st"],
+      cc: [],
+      subject: "Re: Winter Gala",
+      bodyText: "Hi",
+      attachments: [],
+      receivedAt: SENT_AT + n * 60_000,
+    }),
+  );
+}
+
 describe("getThreadHeaders", () => {
   it("lists inbound and outbound message ids in order, skipping messages with no id yet", async () => {
     const t = makeTest();
     const { threadId } = await seedThread(t);
-    await t.mutation(internal.emailOutbound.recordOutboundEmail, outbound(threadId, { messageId: "out1@resend.dev" }));
+    await markSent(t, outbound(threadId, { messageId: "out1@resend.dev" }));
     await t.mutation(internal.emailInbound.recordInboundEmail, {
       resendEmailId: "re_in_1",
       messageId: "reply1@client.test",
@@ -79,14 +136,34 @@ describe("getThreadHeaders", () => {
       attachments: [],
       receivedAt: SENT_AT + 60_000,
     });
-    await t.mutation(
-      internal.emailOutbound.recordOutboundEmail,
-      outbound(threadId, { resendEmailId: "re_out_2", sentAt: SENT_AT + 120_000 }),
-    );
+    await markSent(t, outbound(threadId, { resendEmailId: "re_out_2", sentAt: SENT_AT + 120_000 }));
 
     expect(await t.query(internal.emailOutbound.getThreadHeaders, { threadId })).toEqual({
       inReplyTo: "reply1@client.test",
       references: ["out1@resend.dev", "reply1@client.test"],
+    });
+  });
+
+  it("keeps the thread's first id plus the last 9 on a long thread", async () => {
+    const t = makeTest();
+    const { threadId } = await seedThread(t);
+    await insertMessage(t, threadId, 0);
+    for (let n = 1; n <= 20; n += 1) await insertMessage(t, threadId, n, `m${n}@x.test`);
+
+    expect(await t.query(internal.emailOutbound.getThreadHeaders, { threadId })).toEqual({
+      inReplyTo: "m20@x.test",
+      references: [
+        "m1@x.test",
+        "m12@x.test",
+        "m13@x.test",
+        "m14@x.test",
+        "m15@x.test",
+        "m16@x.test",
+        "m17@x.test",
+        "m18@x.test",
+        "m19@x.test",
+        "m20@x.test",
+      ],
     });
   });
 
@@ -100,18 +177,22 @@ describe("getThreadHeaders", () => {
   });
 });
 
-describe("recordOutboundEmail", () => {
-  it("stores an outbound row, counts it on the thread and notifies nobody", async () => {
+describe("markBookingEmailSent", () => {
+  it("marks the notification sent and records the outbound row in one call, notifying nobody", async () => {
     const t = makeTest();
     const manager = await createUser(t, { name: "Alex Manager", email: "alex@arbor.test" });
     const { threadId } = await seedThread(t, { assignee: manager._id, manager: manager._id });
 
-    const result = await t.mutation(
-      internal.emailOutbound.recordOutboundEmail,
+    const { notificationId, outcome } = await markSent(
+      t,
       outbound(threadId, { messageId: "out1@resend.dev" }),
     );
 
-    expect(result).toBe("recorded");
+    expect(outcome).toBe("recorded");
+    expect(await t.run(async (ctx) => ctx.db.get(notificationId))).toMatchObject({
+      status: "sent",
+      resendId: "component-email-1",
+    });
     const messages = await t.run(async (ctx) => ctx.db.query("emailMessages").collect());
     expect(messages).toHaveLength(1);
     expect(messages[0]).toMatchObject({
@@ -136,21 +217,31 @@ describe("recordOutboundEmail", () => {
   it("is idempotent by Resend email id", async () => {
     const t = makeTest();
     const { threadId } = await seedThread(t);
-    await t.mutation(internal.emailOutbound.recordOutboundEmail, outbound(threadId, { messageId: "a@b.test" }));
-    expect(
-      await t.mutation(internal.emailOutbound.recordOutboundEmail, outbound(threadId, { messageId: "a@b.test" })),
-    ).toBe("duplicate");
+    await markSent(t, outbound(threadId, { messageId: "a@b.test" }));
+    expect((await markSent(t, outbound(threadId, { messageId: "a@b.test" }))).outcome).toBe(
+      "duplicate",
+    );
     const thread = await t.run(async (ctx) => ctx.db.get(threadId));
     expect(thread!.messageCount).toBe(1);
+  });
+
+  it("reports a deleted thread as thread_missing and still marks the email sent", async () => {
+    const t = makeTest();
+    const { threadId } = await seedThread(t);
+    const message = outbound(threadId, { messageId: "a@b.test" });
+    await t.run(async (ctx) => ctx.db.delete(threadId));
+
+    const { notificationId, outcome } = await markSent(t, message);
+
+    expect(outcome).toBe("thread_missing");
+    expect((await t.run(async (ctx) => ctx.db.get(notificationId)))!.status).toBe("sent");
+    expect(await t.run(async (ctx) => ctx.db.query("emailMessages").collect())).toHaveLength(0);
   });
 
   it("caps the stored body at 20,000 characters", async () => {
     const t = makeTest();
     const { threadId } = await seedThread(t);
-    await t.mutation(
-      internal.emailOutbound.recordOutboundEmail,
-      outbound(threadId, { messageId: "a@b.test", bodyText: "x".repeat(25_000) }),
-    );
+    await markSent(t, outbound(threadId, { messageId: "a@b.test", bodyText: "x".repeat(25_000) }));
     const [message] = await t.run(async (ctx) => ctx.db.query("emailMessages").collect());
     expect(message!.bodyText).toHaveLength(20_000);
   });
@@ -161,14 +252,21 @@ async function scheduledCaptures(t: Test) {
     const rows = await ctx.db.system.query("_scheduled_functions").collect();
     return rows
       .filter((row) => row.name.endsWith("captureMessageId"))
-      .map((row) => ({ args: row.args[0] as { attempt: number }, scheduledTime: row.scheduledTime }));
+      .map((row) => ({
+        args: row.args[0] as {
+          messageRowId: Id<"emailMessages">;
+          attempt: number;
+          componentEmailId?: string;
+        },
+        scheduledTime: row.scheduledTime,
+      }));
   });
 }
 
 describe("captureMessageId", () => {
-  async function recordPending(t: Test) {
+  async function recordPending(t: Test, overrides = {}) {
     const { threadId } = await seedThread(t);
-    await t.mutation(internal.emailOutbound.recordOutboundEmail, outbound(threadId));
+    await markSent(t, outbound(threadId, overrides));
     const [message] = await t.run(async (ctx) => ctx.db.query("emailMessages").collect());
     return message!._id;
   }
@@ -199,21 +297,25 @@ describe("captureMessageId", () => {
     expect(message!.messageId).toBe("abc123@email.resend.com");
   });
 
-  it("retries after 60s and then 5min while message_id is missing, then gives up", async () => {
+  it("retries on the backoff while message_id is missing, then gives up", async () => {
     vi.stubEnv("RESEND_API_KEY", "re_test");
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ id: "re_out_1", message_id: null })));
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const t = makeTest();
     const messageRowId = await recordPending(t);
 
-    await t.action(internal.emailOutbound.captureMessageId, { messageRowId, attempt: 0 });
-    await t.action(internal.emailOutbound.captureMessageId, { messageRowId, attempt: 1 });
-    await t.action(internal.emailOutbound.captureMessageId, { messageRowId, attempt: 2 });
+    for (let attempt = 0; attempt <= 4; attempt += 1) {
+      await t.action(internal.emailOutbound.captureMessageId, { messageRowId, attempt });
+    }
 
     const captures = await scheduledCaptures(t);
-    expect(captures.map((c) => c.args.attempt)).toEqual([0, 1, 2]);
-    expect(captures[1]!.scheduledTime - Date.now()).toBe(60_000);
-    expect(captures[2]!.scheduledTime - Date.now()).toBe(5 * 60_000);
+    expect(captures.map((c) => c.args.attempt)).toEqual([0, 1, 2, 3, 4]);
+    expect(captures.slice(1).map((c) => c.scheduledTime - Date.now())).toEqual([
+      60_000,
+      5 * 60_000,
+      10 * 60_000,
+      15 * 60_000,
+    ]);
     expect(errorSpy).toHaveBeenCalledTimes(1);
     const message = await t.run(async (ctx) => ctx.db.get(messageRowId));
     expect(message!.messageId).toBeUndefined();
@@ -236,12 +338,98 @@ describe("captureMessageId", () => {
     vi.stubGlobal("fetch", fetchMock);
     const t = makeTest();
     const { threadId } = await seedThread(t);
-    await t.mutation(internal.emailOutbound.recordOutboundEmail, outbound(threadId, { messageId: "a@b.test" }));
+    await markSent(t, outbound(threadId, { messageId: "a@b.test" }));
     const [message] = await t.run(async (ctx) => ctx.db.query("emailMessages").collect());
 
     await t.action(internal.emailOutbound.captureMessageId, { messageRowId: message!._id, attempt: 0 });
 
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  describe("for a component send", () => {
+    afterEach(() => {
+      componentEmails.clear();
+    });
+
+    it("waits for the component to send, then resolves Resend's id and the message id", async () => {
+      vi.stubEnv("RESEND_API_KEY", "re_test");
+      const fetchMock = vi.fn(async () =>
+        Response.json({ id: "re_live_9", message_id: "<live9@email.resend.com>" }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const t = makeTest();
+      const messageRowId = await recordPending(t, {
+        resendEmailId: "component-email-9",
+        componentEmailId: "component-email-9",
+      });
+      const [first] = await scheduledCaptures(t);
+      expect(first!.args).toEqual({ messageRowId, attempt: 0, componentEmailId: "component-email-9" });
+
+      componentEmails.set("component-email-9", { status: "queued" });
+      await t.action(internal.emailOutbound.captureMessageId, first!.args);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect((await scheduledCaptures(t)).map((c) => c.args.attempt)).toEqual([0, 1]);
+
+      componentEmails.set("component-email-9", { status: "sent", resendId: "re_live_9" });
+      await t.action(internal.emailOutbound.captureMessageId, {
+        messageRowId,
+        attempt: 1,
+        componentEmailId: "component-email-9",
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith("https://api.resend.com/emails/re_live_9", {
+        headers: { Authorization: "Bearer re_test" },
+      });
+      const message = await t.run(async (ctx) => ctx.db.get(messageRowId));
+      expect(message).toMatchObject({
+        resendEmailId: "re_live_9",
+        messageId: "live9@email.resend.com",
+      });
+    });
+
+    it("keeps Resend's id and retries when message_id is still missing", async () => {
+      vi.stubEnv("RESEND_API_KEY", "re_test");
+      vi.stubGlobal("fetch", vi.fn(async () => Response.json({ id: "re_live_9", message_id: null })));
+      const t = makeTest();
+      const messageRowId = await recordPending(t, {
+        resendEmailId: "component-email-9",
+        componentEmailId: "component-email-9",
+      });
+      componentEmails.set("component-email-9", { status: "sent", resendId: "re_live_9" });
+
+      await t.action(internal.emailOutbound.captureMessageId, {
+        messageRowId,
+        attempt: 0,
+        componentEmailId: "component-email-9",
+      });
+
+      const message = await t.run(async (ctx) => ctx.db.get(messageRowId));
+      expect(message!.resendEmailId).toBe("re_live_9");
+      expect(message!.messageId).toBeUndefined();
+      expect((await scheduledCaptures(t)).map((c) => c.args.attempt)).toEqual([0, 1]);
+    });
+
+    it("stops loudly when the component failed the email", async () => {
+      vi.stubEnv("RESEND_API_KEY", "re_test");
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const t = makeTest();
+      const messageRowId = await recordPending(t, {
+        resendEmailId: "component-email-9",
+        componentEmailId: "component-email-9",
+      });
+      componentEmails.set("component-email-9", { status: "failed", errorMessage: "422 invalid" });
+
+      await t.action(internal.emailOutbound.captureMessageId, {
+        messageRowId,
+        attempt: 0,
+        componentEmailId: "component-email-9",
+      });
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        "Booking email component-email-9 has no Message-ID: failed in the Resend component: 422 invalid",
+      );
+      expect((await scheduledCaptures(t)).map((c) => c.args.attempt)).toEqual([0]);
+    });
   });
 });
 
@@ -269,7 +457,7 @@ describe("sendQueuedEmail with the e2e mock", () => {
     const [message] = await t.run(async (ctx) => ctx.db.query("emailMessages").collect());
     expect(message).toMatchObject({
       direction: "outbound",
-      threadId: notification!.emailThreadId,
+      threadId: notification!.booking!.threadId,
       resendEmailId: `e2e-mock:${notificationId}`,
       messageId: `e2e-mock-${notificationId}@arbor.st`,
       fromEmail: "bookings@arbor.st",

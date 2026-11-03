@@ -7,6 +7,7 @@ import {
   isConfigurableEmailTemplate,
   isTemplateEnabledForChannel,
 } from "../lib/emailPreferences";
+import { type BookingEmailSource, resolveBookingEmail } from "../lib/bookingEmail";
 import type { EmailTemplate } from "./constants";
 import { emailTemplateValue } from "../lib/emailTemplateValue";
 import {
@@ -24,15 +25,10 @@ const emailStatusValue = v.union(
   v.literal("failed"),
 );
 
-type EnqueueEmailArgs = {
+type EnqueueEmailBase = {
   template: EmailTemplate;
   to: string;
   cc?: string[];
-  replyTo?: string[];
-  subject: string;
-  /** From `resolveBookingEmail`: sends from `from` on the booking's thread and records the message. */
-  emailThreadId?: Id<"emailThreads">;
-  from?: string;
   eventId?: Id<"events">;
   idempotencyKey: string;
   payload: unknown;
@@ -41,7 +37,23 @@ type EnqueueEmailArgs = {
    * invite override), so their notification preferences still apply.
    */
   recipientUserId?: string;
+  /** Bell title when it should differ from the email subject; defaults to the subject. */
+  inAppTitle?: string;
 };
+
+type EnqueueEmailArgs = EnqueueEmailBase &
+  (
+    | { subject: string; replyTo?: string[]; booking?: undefined }
+    | {
+        /**
+         * A client booking email: sent from the booking sender on the booking's
+         * thread, with its Reply-To and subject (`lib/bookingEmail.ts`).
+         */
+        booking: BookingEmailSource;
+        subject?: undefined;
+        replyTo?: undefined;
+      }
+  );
 
 /**
  * The recipient's account id: explicit `recipientUserId`, else looked up by
@@ -49,7 +61,7 @@ type EnqueueEmailArgs = {
  */
 async function resolveRecipientUserId(
   ctx: MutationCtx,
-  args: EnqueueEmailArgs,
+  args: EnqueueEmailBase,
 ): Promise<string | null> {
   const explicit = args.recipientUserId?.trim();
   if (explicit) return explicit;
@@ -64,7 +76,7 @@ async function resolveRecipientUserId(
  */
 async function prepareRecipient(
   ctx: MutationCtx,
-  args: EnqueueEmailArgs,
+  args: EnqueueEmailBase & { subject?: string },
   debounce?: { key: string; delayMs: number },
 ): Promise<boolean> {
   const configurable = isConfigurableEmailTemplate(args.template);
@@ -79,10 +91,14 @@ async function prepareRecipient(
         .unique()
     : null;
   if (inApp && isTemplateEnabledForChannel(profile, args.template, "inApp")) {
+    const title = args.inAppTitle ?? args.subject;
+    if (!title) {
+      throw new Error(`${args.template} mirrors into the bell but has no inAppTitle or subject`);
+    }
     await recordInAppNotification(ctx, {
       userId,
       template: args.template,
-      subject: args.subject,
+      subject: title,
       payload: args.payload,
       eventId: args.eventId,
       idempotencyKey: args.idempotencyKey,
@@ -98,26 +114,31 @@ export async function enqueueEmail(ctx: MutationCtx, args: EnqueueEmailArgs) {
     .query("emailNotifications")
     .withIndex("by_idempotencyKey", (q) => q.eq("idempotencyKey", args.idempotencyKey))
     .unique();
+  if (existing && existing.status !== "failed") return existing._id;
+
+  // Resolved only for an email that is actually queued, so a no-op replay never claims the thread's subject.
+  const envelope = args.booking
+    ? await resolveBookingEmail(ctx, args.booking)
+    : { booking: undefined, replyTo: args.replyTo, subject: args.subject };
+
   if (existing) {
-    if (existing.status === "failed") {
-      await ctx.db.patch(existing._id, {
-        status: "queued",
-        error: undefined,
-        to: args.to,
-        cc: args.cc?.length ? args.cc : undefined,
-        replyTo: args.replyTo?.length ? args.replyTo : undefined,
-        subject: args.subject,
-        emailThreadId: args.emailThreadId,
-        from: args.from,
-        payload: args.payload,
-        readyAt: undefined,
-        sendGeneration: undefined,
-        debounceKey: undefined,
-      });
-      await ctx.scheduler.runAfter(0, internal.email.send.sendQueuedEmail, {
-        notificationId: existing._id,
-      });
-    }
+    await ctx.db.patch(existing._id, {
+      status: "queued",
+      error: undefined,
+      to: args.to,
+      cc: args.cc?.length ? args.cc : undefined,
+      replyTo: envelope.replyTo?.length ? envelope.replyTo : undefined,
+      // A retried booking email keeps the subject it was first queued with.
+      subject: existing.booking && envelope.booking ? existing.subject : envelope.subject,
+      booking: envelope.booking,
+      payload: args.payload,
+      readyAt: undefined,
+      sendGeneration: undefined,
+      debounceKey: undefined,
+    });
+    await ctx.scheduler.runAfter(0, internal.email.send.sendQueuedEmail, {
+      notificationId: existing._id,
+    });
     return existing._id;
   }
 
@@ -126,10 +147,9 @@ export async function enqueueEmail(ctx: MutationCtx, args: EnqueueEmailArgs) {
     status: "queued",
     to: args.to,
     cc: args.cc?.length ? args.cc : undefined,
-    replyTo: args.replyTo?.length ? args.replyTo : undefined,
-    subject: args.subject,
-    emailThreadId: args.emailThreadId,
-    from: args.from,
+    replyTo: envelope.replyTo?.length ? envelope.replyTo : undefined,
+    subject: envelope.subject,
+    booking: envelope.booking,
     eventId: args.eventId,
     idempotencyKey: args.idempotencyKey,
     payload: args.payload,
@@ -150,7 +170,9 @@ export async function enqueueEmail(ctx: MutationCtx, args: EnqueueEmailArgs) {
  */
 export async function enqueueDebouncedEmail(
   ctx: MutationCtx,
-  args: Omit<EnqueueEmailArgs, "emailThreadId" | "from"> & {
+  args: EnqueueEmailBase & {
+    subject: string;
+    replyTo?: string[];
     debounceKey: string;
     debounceMs?: number;
   },
@@ -306,8 +328,7 @@ export const getNotification = internalQuery({
       cc: v.optional(v.array(v.string())),
       replyTo: v.optional(v.array(v.string())),
       subject: v.string(),
-      emailThreadId: v.optional(v.id("emailThreads")),
-      from: v.optional(v.string()),
+      booking: v.optional(v.object({ threadId: v.id("emailThreads"), from: v.string() })),
       payload: v.any(),
     }),
     v.null(),
@@ -323,8 +344,7 @@ export const getNotification = internalQuery({
       cc: row.cc,
       replyTo: row.replyTo,
       subject: row.subject,
-      emailThreadId: row.emailThreadId,
-      from: row.from,
+      booking: row.booking,
       payload: row.payload,
     };
   },

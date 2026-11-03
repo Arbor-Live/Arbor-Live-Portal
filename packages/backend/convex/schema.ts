@@ -1843,10 +1843,17 @@ export default defineSchema({
     cc: v.optional(v.array(v.string())),
     replyTo: v.optional(v.array(v.string())),
     subject: v.string(),
-    /** Booking thread this email belongs to; set means it sends from `from` with thread headers and is recorded as an outbound message. */
-    emailThreadId: v.optional(v.id("emailThreads")),
-    /** Full From header for booking emails; unset uses the template's default sender. */
-    from: v.optional(v.string()),
+    /**
+     * Set on client booking emails (`lib/bookingEmail.ts`): sent from `from`
+     * with the thread's headers and recorded as an outbound message on it.
+     */
+    booking: v.optional(
+      v.object({
+        threadId: v.id("emailThreads"),
+        /** Full From header: `"<Manager> at Arbor Live" <bookings@arbor.st>`. */
+        from: v.string(),
+      }),
+    ),
     eventId: v.optional(v.id("events")),
     idempotencyKey: v.string(),
     /** Stable key for coalescing rapid schedule/crew updates into one send. */
@@ -1862,7 +1869,6 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_idempotencyKey", ["idempotencyKey"])
     .index("by_eventId", ["eventId"])
-    .index("by_emailThreadId", ["emailThreadId"])
     .index("by_debounceKey_and_status", ["debounceKey", "status"]),
 
   /**
@@ -1903,6 +1909,12 @@ export default defineSchema({
     requestId: v.optional(v.id("eventRequests")),
     invoiceId: v.optional(v.id("invoices")),
     eventId: v.optional(v.id("events")),
+    /**
+     * The booking subject without `Re: `, set by the first booking email we
+     * queue. Every later email is `Re: ` plus this, so renaming the event never
+     * splits the conversation.
+     */
+    subject: v.optional(v.string()),
     lastMessageAt: v.number(),
     messageCount: v.number(),
     createdAt: v.number(),

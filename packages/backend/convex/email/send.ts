@@ -1,22 +1,26 @@
 "use node";
 
 import { Resend as ResendSdk } from "resend";
-import { Resend } from "@convex-dev/resend";
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
-import { components, internal } from "../_generated/api";
+import { internal } from "../_generated/api";
 import { type ActionCtx, internalAction } from "../_generated/server";
 import { renderInvoicePdfBuffer } from "@arbor/invoice-document/pdf";
 import { buildScheduleIcs } from "@arbor/email/ics";
 import type { CalendarInvitePayload, ScheduleIcsEventPayload } from "@arbor/email/types";
-import { threadHeaderFields } from "../lib/bookingEmail";
+import { threadHeaders } from "../lib/bookingEmail";
 import { extractDisplayName, extractEmailAddress } from "../lib/emailAddresses";
+import { MAX_BODY_CHARS } from "../lib/inboundEmail";
 import { EMAIL_FROM, ORGANIZER_EMAIL, PAYMENTS_EMAIL_FROM } from "./constants";
+import { isResendTestAddress, resendClient } from "./resendClient";
 import { renderEmailHtml, renderEmailText } from "./templates";
 
-export const resendClient = new Resend(components.resend, {
-  testMode: process.env.EMAIL_TEST_MODE === "true",
-});
+/**
+ * Raw-SDK sends (attachments) retry a 429, 5xx or network error after these
+ * delays while the notification stays queued, then fail. The component path
+ * has its own retries; this mirrors them for the one path it can't carry.
+ */
+const RAW_SEND_RETRY_DELAYS_MS = [30_000, 2 * 60_000, 10 * 60_000];
 
 /**
  * Local e2e only: render + queue, never call Resend (saves quota).
@@ -93,8 +97,42 @@ type EmailAttachment = {
   contentType?: string;
 };
 
-async function sendEmailWithAttachments(
-  ctx: Parameters<typeof resendClient.sendEmailManually>[0],
+/** A failed Resend API call; `retryable` for rate limits, server errors and network failures. */
+class ResendSendError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+  }
+}
+
+/** Same stable key for every attempt at one notification, so Resend sends it once. */
+function notificationIdempotencyKey(notificationId: Id<"emailNotifications">) {
+  return `emailNotifications:${notificationId}`;
+}
+
+/**
+ * `EMAIL_TEST_MODE` for the raw SDK, which the component's check never sees.
+ * Throws before anything is sent, like the component does.
+ */
+function assertTestModeRecipients(recipients: readonly string[]) {
+  if (process.env.EMAIL_TEST_MODE !== "true") return;
+  const blocked = recipients.filter((recipient) => !isResendTestAddress(recipient));
+  if (blocked.length > 0) {
+    throw new Error(
+      `EMAIL_TEST_MODE is on and these recipients are not Resend test addresses: ${blocked.join(", ")}. Send to delivered@resend.dev (or bounced@ / complained@resend.dev), or unset EMAIL_TEST_MODE to send real mail.`,
+    );
+  }
+}
+
+/**
+ * Send through the raw Resend SDK, for emails with attachments the component
+ * can't carry. Still tracked as a manual component email. The HTTP
+ * `Idempotency-Key` comes from `idempotencyKey`, stable per notification.
+ */
+async function sendWithResendSdk(
+  ctx: ActionCtx,
   notification: {
     to: string;
     cc?: string[];
@@ -105,12 +143,13 @@ async function sendEmailWithAttachments(
     from: string;
     html: string;
     attachments: EmailAttachment[];
-    /** Extra headers, such as `In-Reply-To`; the idempotency key is always added. */
-    headers?: Record<string, string>;
+    headers: { name: string; value: string }[];
+    idempotencyKey: string;
   },
 ) {
+  assertTestModeRecipients([notification.to, ...(notification.cc ?? [])]);
   const resendSdk = getResendSdk();
-  const { from, html, attachments } = options;
+  const { from, html, attachments, headers } = options;
   let resendEmailId = "";
   const emailId = await resendClient.sendEmailManually(
     ctx,
@@ -121,23 +160,28 @@ async function sendEmailWithAttachments(
       replyTo: notification.replyTo,
       subject: notification.subject,
     },
-    async (emailId) => {
-      const result = await resendSdk.emails.send({
-        from,
-        to: notification.to,
-        cc: notification.cc,
-        replyTo: notification.replyTo,
-        subject: notification.subject,
-        html,
-        attachments: attachments.length > 0 ? attachments : undefined,
-        headers: {
-          ...options.headers,
-          "Idempotency-Key": emailId,
+    async () => {
+      const result = await resendSdk.emails.send(
+        {
+          from,
+          to: notification.to,
+          cc: notification.cc,
+          replyTo: notification.replyTo,
+          subject: notification.subject,
+          html,
+          attachments,
+          headers:
+            headers.length > 0
+              ? Object.fromEntries(headers.map(({ name, value }) => [name, value]))
+              : undefined,
         },
-      });
+        { idempotencyKey: options.idempotencyKey },
+      );
       if (result.error) {
-        throw new Error(
-          `[Resend] ${result.error.name ?? "send_failed"}: ${result.error.message}`,
+        const status = result.error.statusCode;
+        throw new ResendSendError(
+          `[Resend] ${result.error.name ?? "send_failed"} (HTTP ${status ?? "network"}): ${result.error.message}`,
+          status === null || status === 429 || status >= 500,
         );
       }
       if (!result.data?.id) {
@@ -181,59 +225,85 @@ async function buildAttachments(
   return calendarInvite ? [calendarInvite] : [];
 }
 
-/**
- * Store a booking email on its thread. The email already went out, so a failure
- * here is logged rather than marking the notification failed (a retry would
- * send it twice).
- */
-async function recordOutbound(
-  ctx: ActionCtx,
-  notification: {
-    _id: Id<"emailNotifications">;
-    to: string;
-    cc?: string[];
-    subject: string;
-  } & { emailThreadId: Id<"emailThreads">; from: string },
+type QueuedNotification = {
+  _id: Id<"emailNotifications">;
+  to: string;
+  cc?: string[];
+  subject: string;
+  booking?: { threadId: Id<"emailThreads">; from: string };
+};
+
+/** The outbound row a booking email leaves on its thread; null for every other email. */
+function outboundMessage(
+  notification: QueuedNotification,
   sent: {
-    resendEmailId: string;
     html: string;
     attachments: EmailAttachment[];
-    messageId?: string;
     thread: { inReplyTo?: string; references: string[] };
   },
 ) {
-  try {
-    await ctx.runMutation(internal.emailOutbound.recordOutboundEmail, {
-      threadId: notification.emailThreadId,
-      resendEmailId: sent.resendEmailId,
-      messageId: sent.messageId,
-      fromEmail: extractEmailAddress(notification.from) ?? notification.from,
-      fromName: extractDisplayName(notification.from),
-      to: [notification.to],
-      cc: notification.cc ?? [],
-      subject: notification.subject,
-      bodyText: renderEmailText(sent.html),
-      attachments: sent.attachments.map(({ filename, contentType }) => ({ filename, contentType })),
-      inReplyTo: sent.thread.inReplyTo,
-      references: sent.thread.references,
-      sentAt: Date.now(),
-    });
-  } catch (error) {
-    console.error("Failed to record outbound email on its thread", {
+  const { booking } = notification;
+  if (!booking) return null;
+  return {
+    threadId: booking.threadId,
+    fromEmail: extractEmailAddress(booking.from) ?? booking.from,
+    fromName: extractDisplayName(booking.from),
+    to: [notification.to],
+    cc: notification.cc ?? [],
+    subject: notification.subject,
+    bodyText: renderEmailText(sent.html).slice(0, MAX_BODY_CHARS),
+    attachments: sent.attachments.map(({ filename, contentType }) => ({ filename, contentType })),
+    inReplyTo: sent.thread.inReplyTo,
+    references: sent.thread.references,
+  };
+}
+
+/** Marks the notification sent and, for a booking email, records it on its thread in the same transaction. */
+async function markSent(
+  ctx: ActionCtx,
+  notification: QueuedNotification,
+  resendId: string,
+  message:
+    | (NonNullable<ReturnType<typeof outboundMessage>> & {
+        resendEmailId: string;
+        componentEmailId?: string;
+        messageId?: string;
+      })
+    | null,
+) {
+  if (!message) {
+    await ctx.runMutation(internal.email.enqueue.markSent, {
       notificationId: notification._id,
-      error: formatSendError(error),
+      resendId,
+    });
+    return;
+  }
+  const outcome = await ctx.runMutation(internal.emailOutbound.markBookingEmailSent, {
+    notificationId: notification._id,
+    resendId,
+    message: { ...message, sentAt: Date.now() },
+  });
+  if (outcome === "thread_missing") {
+    console.error("Booking email sent, but its thread is gone; nothing recorded", {
+      notificationId: notification._id,
+      threadId: message.threadId,
     });
   }
 }
 
 export const sendQueuedEmail = internalAction({
-  args: { notificationId: v.id("emailNotifications") },
+  args: {
+    notificationId: v.id("emailNotifications"),
+    /** Raw-SDK retry count; unset on the first try. */
+    attempt: v.optional(v.number()),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const notification = await ctx.runQuery(internal.email.enqueue.getNotification, {
       notificationId: args.notificationId,
     });
     if (!notification || notification.status !== "queued") return null;
+    const attempt = args.attempt ?? 0;
 
     try {
       const html = await renderEmailHtml(notification.template, notification.payload);
@@ -242,78 +312,90 @@ export const sendQueuedEmail = internalAction({
       }
 
       const attachments = await buildAttachments(ctx, notification);
-      const { emailThreadId } = notification;
-      const bookingThread =
-        emailThreadId && notification.from
-          ? { ...notification, emailThreadId, from: notification.from }
-          : null;
-      const thread = emailThreadId
-        ? await ctx.runQuery(internal.emailOutbound.getThreadHeaders, { threadId: emailThreadId })
+      const { booking } = notification;
+      const thread = booking
+        ? await ctx.runQuery(internal.emailOutbound.getThreadHeaders, { threadId: booking.threadId })
         : { references: [] };
+      const message = outboundMessage(notification, { html, attachments, thread });
 
       // E2E mock: exercise render (+ attachments) without spending Resend quota.
       if (isE2eEmailMockEnabled()) {
-        const resendEmailId = `e2e-mock:${args.notificationId}`;
-        await ctx.runMutation(internal.email.enqueue.markSent, {
-          notificationId: args.notificationId,
-          resendId: resendEmailId,
-        });
-        if (bookingThread) {
-          await recordOutbound(ctx, bookingThread, {
-            resendEmailId,
-            html,
-            attachments,
+        const resendId = `e2e-mock:${args.notificationId}`;
+        await markSent(
+          ctx,
+          notification,
+          resendId,
+          message && {
+            ...message,
+            resendEmailId: resendId,
             messageId: `e2e-mock-${args.notificationId}@arbor.st`,
-            thread,
-          });
-        }
+          },
+        );
         return null;
       }
 
-      // Booking emails go through the raw SDK too: it returns the Resend id at once and takes headers.
-      if (bookingThread || attachments.length > 0) {
-        const sent = await sendEmailWithAttachments(ctx, notification, {
-          from: notification.from ?? EMAIL_FROM,
-          html,
-          attachments,
-          headers: threadHeaderFields(thread),
-        });
-
-        await ctx.runMutation(internal.email.enqueue.markSent, {
-          notificationId: args.notificationId,
-          resendId: sent.emailId,
-        });
-        if (bookingThread) {
-          await recordOutbound(ctx, bookingThread, {
-            resendEmailId: sent.resendEmailId,
-            html,
-            attachments,
-            thread,
-          });
-        }
-        return null;
-      }
-
-      const fromAddress =
-        notification.template === "band_payment_confirmation" ||
+      const from =
+        booking?.from ??
+        (notification.template === "band_payment_confirmation" ||
         notification.template === "band_payment_completed"
           ? PAYMENTS_EMAIL_FROM
-          : EMAIL_FROM;
+          : EMAIL_FROM);
+      const headers = threadHeaders(thread);
+      const idempotencyKey = notificationIdempotencyKey(args.notificationId);
 
-      const resendId = await resendClient.sendEmail(ctx, {
-        from: fromAddress,
+      if (attachments.length > 0) {
+        const sent = await sendWithResendSdk(ctx, notification, {
+          from,
+          html,
+          attachments,
+          headers,
+          idempotencyKey,
+        });
+        await markSent(
+          ctx,
+          notification,
+          sent.emailId,
+          message && { ...message, resendEmailId: sent.resendEmailId },
+        );
+        return null;
+      }
+
+      const emailId = await resendClient.sendEmail(ctx, {
+        from,
         to: notification.to,
         cc: notification.cc,
         replyTo: notification.replyTo,
         subject: notification.subject,
         html,
+        headers: headers.length > 0 ? headers : undefined,
+        idempotencyKey,
       });
-      await ctx.runMutation(internal.email.enqueue.markSent, {
-        notificationId: args.notificationId,
-        resendId,
-      });
+      // The component sends later; the capture swaps in Resend's id once it has one.
+      await markSent(
+        ctx,
+        notification,
+        emailId,
+        message && { ...message, resendEmailId: emailId, componentEmailId: emailId },
+      );
     } catch (error) {
-      const message = formatSendError(error);
+      let message = formatSendError(error);
+      if (error instanceof ResendSendError && error.retryable) {
+        const delay = RAW_SEND_RETRY_DELAYS_MS[attempt];
+        if (delay !== undefined) {
+          console.warn("Resend send failed; retrying", {
+            notificationId: args.notificationId,
+            attempt: attempt + 1,
+            retryInMs: delay,
+            error: message,
+          });
+          await ctx.scheduler.runAfter(delay, internal.email.send.sendQueuedEmail, {
+            notificationId: args.notificationId,
+            attempt: attempt + 1,
+          });
+          return null;
+        }
+        message = `${message} (gave up after ${attempt + 1} attempts)`;
+      }
       console.error("Failed to send queued email", {
         notificationId: args.notificationId,
         template: notification.template,

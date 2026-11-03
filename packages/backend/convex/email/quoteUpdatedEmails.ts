@@ -1,6 +1,5 @@
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import { resolveBookingEmail } from "../lib/bookingEmail";
 import { listEventsLinkedToInvoice } from "../lib/invoiceEvents";
 import { resolvePortalTokenForInvoice } from "../lib/paymentProof";
 import {
@@ -46,13 +45,12 @@ export async function scheduleQuoteUpdatedEmail(
     ? formatEventDateRange(event.startAt, event.endAt, event.timezone || EVENT_TIMEZONE)
     : "—";
 
-  const idempotencyKey = `quote_updated:${args.invoice._id}:${args.revisionNumber}`;
   await enqueueEmail(ctx, {
     template: "quote_updated",
     to: clientEmail,
-    ...(await resolveBookingEmail(ctx, { ref: { invoiceId: args.invoice._id }, idempotencyKey })),
+    booking: { ref: { invoiceId: args.invoice._id }, loaded: { invoice: args.invoice, event } },
     eventId: event?._id,
-    idempotencyKey,
+    idempotencyKey: `quote_updated:${args.invoice._id}:${args.revisionNumber}`,
     payload: {
       recipientName: args.invoice.clientContactName,
       eventTitle,

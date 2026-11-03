@@ -2,7 +2,6 @@ import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import type { PaymentProofMethod } from "../lib/paymentProof";
 import { paymentMethodLabel } from "../lib/paymentProof";
-import { resolveBookingEmail } from "../lib/bookingEmail";
 import {
   EVENT_TIMEZONE,
   formatEventDateRange,
@@ -152,13 +151,15 @@ export async function schedulePaymentProofRejectedEmails(
 
   const context = paymentProofEventContext(args.invoice, args.event);
   for (const to of recipients) {
-    const idempotencyKey = `payment_proof_rejected:${context.eventId ?? args.invoice._id}:${to}:${args.invalidatedAt}`;
     await enqueueEmail(ctx, {
       template: "payment_proof_rejected",
       to,
-      ...(await resolveBookingEmail(ctx, { ref: { invoiceId: args.invoice._id }, idempotencyKey })),
+      booking: {
+        ref: { invoiceId: args.invoice._id },
+        loaded: { invoice: args.invoice, event: args.event },
+      },
       eventId: context.eventId,
-      idempotencyKey,
+      idempotencyKey: `payment_proof_rejected:${context.eventId ?? args.invoice._id}:${to}:${args.invalidatedAt}`,
       payload: {
         recipientName:
           to === payingPartyEmail
@@ -191,13 +192,15 @@ export async function schedulePaymentProofReminderEmail(
   },
 ) {
   const context = paymentProofEventContext(args.invoice, args.event);
-  const idempotencyKey = `payment_proof_reminder:${context.eventId ?? args.invoice._id}:${args.reminderKey}:${args.recipient.email}`;
   await enqueueEmail(ctx, {
     template: "payment_proof_reminder",
     to: args.recipient.email,
-    ...(await resolveBookingEmail(ctx, { ref: { invoiceId: args.invoice._id }, idempotencyKey })),
+    booking: {
+      ref: { invoiceId: args.invoice._id },
+      loaded: { invoice: args.invoice, event: args.event },
+    },
     eventId: context.eventId,
-    idempotencyKey,
+    idempotencyKey: `payment_proof_reminder:${context.eventId ?? args.invoice._id}:${args.reminderKey}:${args.recipient.email}`,
     payload: {
       eventTitle: context.eventTitle,
       venueName: context.venueName,

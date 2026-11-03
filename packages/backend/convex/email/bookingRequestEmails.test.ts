@@ -45,10 +45,10 @@ test("the received email names the round-robin assignee as the client's manager"
     managerName: "Rory Manager",
     managerEmail: "rory@arbor.test",
   });
-  expect(email.from).toBe('"Rory Manager at Arbor Live" <bookings@arbor.st>');
+  expect(email.booking?.from).toBe('"Rory Manager at Arbor Live" <bookings@arbor.st>');
   expect(email.replyTo).toEqual(["alreq-test@arbor.st"]);
   expect(email.subject).toBe("Arbor Live booking: Fall Showcase (ALREQ-TEST)");
-  expect(email.emailThreadId).toBeDefined();
+  expect(email.booking?.threadId).toBeDefined();
 });
 
 test("without an assignee the received email names no manager", async () => {
@@ -58,6 +58,6 @@ test("without an assignee the received email names no manager", async () => {
 
   expect(email.payload.managerName).toBeUndefined();
   expect(email.payload.managerEmail).toBeUndefined();
-  expect(email.from).toBe('"Arbor Live" <bookings@arbor.st>');
+  expect(email.booking?.from).toBe('"Arbor Live" <bookings@arbor.st>');
   expect(email.replyTo).toEqual(["alreq-test@arbor.st"]);
 });

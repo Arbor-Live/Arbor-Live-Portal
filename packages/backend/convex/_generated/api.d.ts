@@ -70,6 +70,7 @@ import type * as email_quoteChangesRequestedEmails from "../email/quoteChangesRe
 import type * as email_quoteUpdatedEmails from "../email/quoteUpdatedEmails.js";
 import type * as email_recipients from "../email/recipients.js";
 import type * as email_reminders from "../email/reminders.js";
+import type * as email_resendClient from "../email/resendClient.js";
 import type * as email_scheduleEmailData from "../email/scheduleEmailData.js";
 import type * as email_send from "../email/send.js";
 import type * as email_templates from "../email/templates.js";
@@ -404,6 +405,7 @@ declare const fullApi: ApiFromModules<{
   "email/quoteUpdatedEmails": typeof email_quoteUpdatedEmails;
   "email/recipients": typeof email_recipients;
   "email/reminders": typeof email_reminders;
+  "email/resendClient": typeof email_resendClient;
   "email/scheduleEmailData": typeof email_scheduleEmailData;
   "email/send": typeof email_send;
   "email/templates": typeof email_templates;

@@ -2,7 +2,6 @@ import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { bookingDeclineReasonLabel } from "@arbor/format";
 import { findAuthUsersByIds, listAdminEmailsForVertical } from "../lib/auth";
-import { resolveBookingEmail } from "../lib/bookingEmail";
 import {
   ARBOR_CONTACT_EMAIL,
   bookingRequestsAdminUrl,
@@ -44,13 +43,11 @@ export async function scheduleBookingRequestReceivedEmail(
   const recipientName = request.firstName.trim() || undefined;
   const eventName = request.eventName?.trim() || "Your event";
   const manager = await resolveRequestManager(ctx, request.assigneeUserId);
-  const idempotencyKey = `booking_request_received:${request._id}:${request.submittedAt}`;
-
   await enqueueEmail(ctx, {
     template: "booking_request_received",
     to: request.email,
-    ...(await resolveBookingEmail(ctx, { ref: { requestId: request._id }, idempotencyKey })),
-    idempotencyKey,
+    booking: { ref: { requestId: request._id } },
+    idempotencyKey: `booking_request_received:${request._id}:${request.submittedAt}`,
     payload: {
       recipientName,
       requestNumber,
@@ -107,13 +104,11 @@ export async function scheduleBookingRequestDeclinedEmail(
   const publicToken = request.publicToken;
   if (!publicToken) return;
   const requestNumber = request.requestNumber ?? `LEGACY-${request._id}`;
-  const idempotencyKey = `booking_request_declined:${request._id}:${request.declinedAt ?? "na"}`;
-
   await enqueueEmail(ctx, {
     template: "booking_request_declined",
     to: request.email,
-    ...(await resolveBookingEmail(ctx, { ref: { requestId: request._id }, idempotencyKey })),
-    idempotencyKey,
+    booking: { ref: { requestId: request._id } },
+    idempotencyKey: `booking_request_declined:${request._id}:${request.declinedAt ?? "na"}`,
     payload: {
       recipientName: request.firstName.trim() || undefined,
       requestNumber,
@@ -157,7 +152,6 @@ export async function scheduleBookingQuoteReadyEmail(
   const recipientName = request.firstName.trim() || undefined;
   const eventName = request.eventName?.trim() || undefined;
   const managerEmail = invoice.managerEmail?.trim();
-  const idempotencyKey = `booking_quote_ready:${invoice._id}:${readyAt}`;
   const cc = Array.from(
     new Set(
       [managerEmail, ARBOR_CONTACT_EMAIL]
@@ -170,8 +164,8 @@ export async function scheduleBookingQuoteReadyEmail(
     template: "booking_quote_ready",
     to: request.email,
     cc: cc.length > 0 ? cc : undefined,
-    ...(await resolveBookingEmail(ctx, { ref: { requestId: request._id }, idempotencyKey })),
-    idempotencyKey,
+    booking: { ref: { requestId: request._id } },
+    idempotencyKey: `booking_quote_ready:${invoice._id}:${readyAt}`,
     payload: {
       recipientName,
       requestNumber,
