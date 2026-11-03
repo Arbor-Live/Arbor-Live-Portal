@@ -159,7 +159,7 @@ export const getMergePreview = query({
       victims.push({
         _id: victim._id,
         name: victim.name,
-        contactCount: contacts.length,
+        contactCount: contacts.filter((contact) => contact.active).length,
         eventCount: events.length,
         seriesCount: series.length,
         invoiceCount: invoices.length,
@@ -261,7 +261,6 @@ export const update = mutation({
     name: v.optional(v.string()),
     type: v.optional(groupTypeValue),
     equipmentPricingMode: v.optional(equipmentPricingModeValue),
-    active: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -285,7 +284,6 @@ export const update = mutation({
       normalizedName,
       type: args.type ?? existing.type,
       equipmentPricingMode: args.equipmentPricingMode ?? existing.equipmentPricingMode,
-      active: args.active ?? existing.active,
       updatedAt: Date.now(),
     });
     return null;
@@ -543,8 +541,9 @@ export const merge = mutation({
 });
 
 /**
- * Reactivates an archived host, unless its name now resolves to another active
- * host: a merge kept it as the survivor's alias, or a new host took the name.
+ * Reactivates an archived host, unless its name or one of its aliases now
+ * resolves to another active host: a merge kept it as the survivor's alias, or
+ * a new host took the name.
  */
 export const restore = mutation({
   args: { id: v.id("invoiceGroups") },
@@ -555,11 +554,14 @@ export const restore = mutation({
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Host organization not found.");
     if (existing.active) return null;
-    const owner = await findGroupByNameOrAlias(ctx, existing.name);
-    if (owner && owner._id !== args.id) {
-      throw new Error(
-        `"${existing.name}" now points to the active host "${owner.name}". Use that host instead of restoring this one.`,
-      );
+    const aliases = await listAliasesForGroup(ctx, args.id);
+    for (const name of [existing.name, ...aliases.map((row) => row.alias)]) {
+      const owner = await findGroupByNameOrAlias(ctx, name);
+      if (owner && owner._id !== args.id) {
+        throw new Error(
+          `"${name}" now points to the active host "${owner.name}". Use that host instead of restoring this one.`,
+        );
+      }
     }
     await ctx.db.patch(args.id, { active: true, updatedAt: Date.now() });
     return null;
@@ -570,7 +572,7 @@ export const archive = mutation({
   args: { id: v.id("invoiceGroups") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminOrOperations(ctx);
     await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Group not found.");

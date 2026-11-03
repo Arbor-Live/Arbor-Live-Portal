@@ -178,6 +178,10 @@ export function UsersDirectoryShell({ children }: { children: React.ReactNode })
 
 const ORG_FILTER_ID = "organization";
 
+function filterKey(value: FilterValue | null | undefined) {
+  return value ? `${value.operator}:${value.values.join(",")}` : "";
+}
+
 /**
  * The Organization chip for the People and Invitations filter bars. Its value
  * lives in the shell so both tabs (and Add person's default org) share it;
@@ -203,7 +207,7 @@ export function useOrgFilter(filters: FilterState, setFilters: (next: FilterStat
     (next: FilterState) => {
       const { [ORG_FILTER_ID]: org, ...rest } = next;
       // Touching another chip must not pin the org before its Arbor Live default loads.
-      if ((org ?? null) !== orgFilter) setOrgFilter(org ?? null);
+      if (filterKey(org) !== filterKey(orgFilter)) setOrgFilter(org ?? null);
       setFilters(rest);
     },
     [orgFilter, setOrgFilter, setFilters],

@@ -142,7 +142,7 @@ function HostSheetBody({
       />
       <HostDetailsSection host={host} markDirty={markDirty} />
       <ContactsSection groupId={host._id} markDirty={markDirty} />
-      <AliasesSection groupId={host._id} />
+      <AliasesSection groupId={host._id} markDirty={markDirty} />
       <DetailSheetFooter
         start={
           host.active ? (
@@ -371,16 +371,9 @@ function ContactForm({
         email: values.email.trim(),
         phone: values.phone?.trim() ?? "",
       };
-      // `update` keeps a field it doesn't receive, so a cleared email or phone has to be sent as "".
+      // Sent as "" rather than dropped, so clearing a field on edit clears it.
       if (contact) await updateContact({ id: contact._id, ...fields });
-      else
-        await createContact({
-          groupId,
-          ...fields,
-          email: fields.email || undefined,
-          phone: fields.phone || undefined,
-          active: true,
-        });
+      else await createContact({ groupId, ...fields, active: true });
       return contactName(fields);
     },
     {
@@ -418,12 +411,13 @@ function ContactForm({
   );
 }
 
-function AliasesSection({ groupId }: { groupId: Id<"invoiceGroups"> }) {
+function AliasesSection({ groupId, markDirty }: { groupId: Id<"invoiceGroups">; markDirty: MarkDirty }) {
   const aliases = useQuery(api.invoiceGroups.listAliases, { groupId });
   const addAlias = useMutation(api.invoiceGroups.addAlias);
   const removeAlias = useMutation(api.invoiceGroups.removeAlias);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  useReportDirty(markDirty, "alias", draft.trim() !== "");
 
   async function add() {
     const alias = draft.trim();

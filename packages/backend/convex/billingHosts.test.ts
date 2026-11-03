@@ -48,6 +48,18 @@ test("refuses to restore a host whose name a new host took", async () => {
   await expect(as.mutation(api.invoiceGroups.restore, { id: oldId })).rejects.toThrow(/now points to the active host/);
 });
 
+test("refuses to restore a host whose alias a new host took", async () => {
+  const as = await arborAdmin();
+  const oldId = await as.mutation(api.invoiceGroups.create, { name: "Stanford Concert Network", type: "vso" });
+  await as.mutation(api.invoiceGroups.addAlias, { groupId: oldId, alias: "SCN" });
+  await as.mutation(api.invoiceGroups.archive, { id: oldId });
+  await as.mutation(api.invoiceGroups.create, { name: "SCN", type: "vso" });
+
+  await expect(as.mutation(api.invoiceGroups.restore, { id: oldId })).rejects.toThrow(
+    /"SCN" now points to the active host "SCN"/,
+  );
+});
+
 test("counts only active contacts", async () => {
   const as = await arborAdmin();
   const groupId = await as.mutation(api.invoiceGroups.create, { name: "Dance Marathon", type: "vso" });
@@ -59,8 +71,13 @@ test("counts only active contacts", async () => {
   expect(host.contactCount).toBe(1);
 });
 
-test("clears a contact's email and phone when sent empty", async () => {
-  const as = await arborAdmin();
+test("clears a contact's email and phone and drops its person link", async () => {
+  const t = makeTest();
+  const admin = await createUser(t, { role: "admin" });
+  const arbor = await createOrg(t, { type: "arbor_internal" });
+  await addMembership(t, admin._id, arbor.organizationId, "org_admin", true);
+  await setActiveOrg(t, admin._id, arbor.organizationId);
+  const as = asUser(t, admin);
   const groupId = await as.mutation(api.invoiceGroups.create, { name: "Cardinal Ballet", type: "vso" });
   const id = await as.mutation(api.invoiceContacts.create, {
     groupId,
@@ -72,6 +89,17 @@ test("clears a contact's email and phone when sent empty", async () => {
 
   await as.mutation(api.invoiceContacts.update, { id, email: "", phone: "" });
 
-  const [contact] = await as.query(api.invoiceContacts.listForAdmin, { groupId });
-  expect([contact.email ?? "", contact.phone ?? ""]).toEqual(["", ""]);
+  const stored = await t.run(async (ctx) => await ctx.db.get(id));
+  expect([stored?.email, stored?.phone, stored?.personId]).toEqual([undefined, undefined, undefined]);
+});
+
+test("only restore can reactivate a host", async () => {
+  const as = await arborAdmin();
+  const id = await as.mutation(api.invoiceGroups.create, { name: "Old Union Board", type: "vso" });
+  await as.mutation(api.invoiceGroups.archive, { id });
+
+  await expect(
+    as.mutation(api.invoiceGroups.update, { id, active: true } as never),
+  ).rejects.toThrow(/active/);
+  expect(await activeNames(as)).toEqual([]);
 });
