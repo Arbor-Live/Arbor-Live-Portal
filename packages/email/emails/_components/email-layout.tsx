@@ -30,7 +30,8 @@ type EmailTone = "default" | "muted";
 
 type EmailLayoutProps = {
   preview: string;
-  heading: string;
+  /** Omit for mail a person wrote, so its first line is not set (and plain-texted) as a title. */
+  heading?: string;
   children: ReactNode;
   tone?: EmailTone;
 };
@@ -53,7 +54,7 @@ export function EmailLayout({
           <BrandMasthead accentColor={accentColor} />
 
           <Section tdClassName={GUTTER_CLASS} style={contentSectionStyle}>
-            <Heading className={DARK.text} style={headingStyle}>{heading}</Heading>
+            {heading ? <Heading className={DARK.text} style={headingStyle}>{heading}</Heading> : null}
             {children}
           </Section>
         </Container>

@@ -189,6 +189,7 @@ function ReplyComposer(props: {
       });
       setClientRequestId(crypto.randomUUID());
       setBody("");
+      setAttachQuote(false);
       notify.success("Reply queued.");
     } catch (error) {
       notify.error(getConvexErrorMessage(error, "Could not send the reply."));

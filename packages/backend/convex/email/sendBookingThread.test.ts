@@ -306,6 +306,8 @@ describe("sendQueuedEmail for a staff reply", () => {
     expect(outbound.map((m) => [m.direction, m.fromName, m.attachments])).toEqual([
       ["outbound", "Jamie Park at Arbor Live", [{ filename: "ALINV-BBBBBBB.pdf" }]],
     ]);
+    expect(outbound[0]!.bodyText).toContain("Message from Jamie Park");
+    expect(outbound[0]!.bodyText).not.toContain("MESSAGE FROM");
   }, SEND_TEST_TIMEOUT_MS);
 
   it("goes through the component without an attachment when the reply does not ask for the quote", async () => {

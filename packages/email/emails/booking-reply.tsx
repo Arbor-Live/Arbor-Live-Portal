@@ -9,7 +9,8 @@ export function BookingReplyEmail({ body, senderName, portalUrl, portalLabel }: 
     .filter(Boolean);
 
   return (
-    <EmailLayout preview={paragraphs[0]?.split("\n")[0] ?? `A message from ${senderName}`} heading={`Message from ${senderName}`}>
+    <EmailLayout preview={paragraphs[0]?.split("\n")[0] ?? `A message from ${senderName}`}>
+      <BodyCopy>{`Message from ${senderName}`}</BodyCopy>
       {paragraphs.map((paragraph, index) => (
         <BodyCopy key={index}>
           {paragraph.split("\n").map((line, lineIndex) => (
