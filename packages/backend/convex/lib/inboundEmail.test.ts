@@ -96,6 +96,32 @@ describe("htmlToText", () => {
     );
   });
 
+  it("ignores tags inside comments and keeps text after an unclosed style", () => {
+    expect(
+      htmlToText(
+        "<html><body><!--[if mso]><style> .mso{color:red} <![endif]--><p>Load-in at 4pm, crew call 3pm</p></body></html>",
+      ),
+    ).toBe("Load-in at 4pm, crew call 3pm");
+    expect(
+      htmlToText("<html><body><!-- <script> var a = 1; --> <p>Load-in at 4pm</p></body></html>"),
+    ).toBe("Load-in at 4pm");
+    expect(htmlToText("<body><style>.a{} <p>Load-in 4pm</p>")).toBe("Load-in 4pm");
+  });
+
+  it("ends an unclosed head at the first body element when there is no <body>", () => {
+    expect(
+      htmlToText(
+        "<html><head><meta charset=utf-8><p>Reply: load-in at 4pm</p><blockquote><html><head><title>q</title></head><body><p>quoted</p></body></html></blockquote>",
+      ),
+    ).toBe("Reply: load-in at 4pm\nquoted");
+  });
+
+  it("breaks lines at a <br> that has attributes", () => {
+    expect(htmlToText('see you at 4.<br id="lineBreakAtBeginningOfSignature">Sent from my iPhone')).toBe(
+      "see you at 4.\nSent from my iPhone",
+    );
+  });
+
   it("stays fast on hostile input at the HTML cap", () => {
     const fill = (unit: string) => unit.repeat(Math.ceil(MAX_HTML_CHARS / unit.length)).slice(0, MAX_HTML_CHARS);
     const hostile = [
@@ -106,6 +132,8 @@ describe("htmlToText", () => {
       fill(" "),
       fill("\t"),
       fill("<"),
+      fill("<!--"),
+      fill("<style>"),
     ];
     for (const html of hostile) {
       const started = performance.now();

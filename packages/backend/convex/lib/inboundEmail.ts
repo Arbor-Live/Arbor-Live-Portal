@@ -76,16 +76,36 @@ export const MAX_HTML_CHARS = 200_000;
 type SpecialTag = "script" | "style" | "head" | "title";
 
 /**
- * Where each block ends. `lastIndex` must be set before every `exec`. A head
+ * Where each block ends. A closing tag missing its `>` still counts, and then
+ * only the tag name is consumed. `lastIndex` must be set before every `exec`. A head
  * also ends where the body starts, since `</head>` is optional and a later one
  * may belong to quoted HTML.
  */
 const BLOCK_END: Record<SpecialTag, RegExp> = {
-  script: /<\/script(?=[\s/>])[^<>]*>/gi,
-  style: /<\/style(?=[\s/>])[^<>]*>/gi,
-  title: /<\/title(?=[\s/>])[^<>]*>/gi,
-  head: /<\/head(?=[\s/>])[^<>]*>|<body(?=[\s/>])/gi,
+  script: /<\/script(?=[\s/>])(?:[^<>]*>)?/gi,
+  style: /<\/style(?=[\s/>])(?:[^<>]*>)?/gi,
+  title: /<\/title(?=[\s/>])(?:[^<>]*>)?/gi,
+  head: /<\/head(?=[\s/>])(?:[^<>]*>)?|<(?:body|div|p|table|blockquote|h[1-6]|ul|ol|tr)(?=[\s/>])/gi,
 };
+
+/**
+ * Removes `<!-- … -->` comments, including Outlook's `<!--[if mso]> … <![endif]-->`
+ * blocks: mail clients never show them, so a tag inside one must not decide
+ * what text is kept. An unterminated `<!--` is left alone rather than eating
+ * the rest of the message.
+ */
+function stripComments(html: string): string {
+  const parts: string[] = [];
+  let cursor = 0;
+  for (let start = html.indexOf("<!--"); start !== -1; start = html.indexOf("<!--", cursor)) {
+    const end = html.indexOf("-->", start + 4);
+    if (end === -1) break;
+    parts.push(html.slice(cursor, start));
+    cursor = end + 3;
+  }
+  parts.push(html.slice(cursor));
+  return parts.join("");
+}
 
 /**
  * The rest of an opening tag: a `>` within 1000 chars and before any `<`.
@@ -108,10 +128,12 @@ function openingTagEnd(html: string, start: number): number | null {
  * missing end is searched for once per name.
  *
  * - A self-closing tag (`<script src=x />`) drops only itself.
- * - An unclosed `<head>` or `<title>` drops only its opening tag, so the body
- *   survives.
- * - An unclosed `<script>` or `<style>` drops the rest of the input: what
- *   follows is code, usually a block cut off by `MAX_HTML_CHARS`.
+ * - A `<head>` also ends at `<body>` or the first body element, since
+ *   `</head>` is optional and a later one may belong to quoted HTML.
+ * - An unclosed `<title>` drops only its opening tag, so the body survives.
+ * - An unclosed `<style>` drops up to the next `<` (CSS has none, markup
+ *   follows); an unclosed `<script>` drops the rest of the input, since
+ *   script text can contain `<`. Both usually come from `MAX_HTML_CHARS`.
  */
 function stripSpecialTagBlocks(html: string): string {
   // `(?=[\s/>])` ends a tag name, so `<header>` and `<head-nav>` are not `<head>`.
@@ -134,8 +156,16 @@ function stripSpecialTagBlocks(html: string): string {
       else missingEnd.add(name);
     }
     if (blockEnd === null) {
-      const unclosedCode = !selfClosing && (name === "script" || name === "style");
-      blockEnd = unclosedCode && tagEnd !== null ? html.length : (tagEnd ?? match.index + match[0].length);
+      if (tagEnd === null || selfClosing) {
+        blockEnd = tagEnd ?? match.index + match[0].length;
+      } else if (name === "style") {
+        const nextTag = html.indexOf("<", tagEnd);
+        blockEnd = nextTag === -1 ? html.length : nextTag;
+      } else if (name === "script") {
+        blockEnd = html.length;
+      } else {
+        blockEnd = tagEnd;
+      }
     }
     cursor = blockEnd;
     open.lastIndex = cursor;
@@ -146,8 +176,8 @@ function stripSpecialTagBlocks(html: string): string {
 
 /** Plain text from HTML for the rare message that arrives without a text part. */
 export function htmlToText(html: string): string {
-  const text = stripSpecialTagBlocks(html.slice(0, MAX_HTML_CHARS))
-    .replace(/<br\s*\/?>/gi, "\n")
+  const text = stripSpecialTagBlocks(stripComments(html.slice(0, MAX_HTML_CHARS)))
+    .replace(/<br\b[^<>]*>/gi, "\n")
     .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n")
     .replace(/<[^<>]+>/g, "")
     .replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity: string) => {
