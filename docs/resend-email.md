@@ -223,28 +223,57 @@ notification stores `booking: { threadId, from }`.
 
 ### Staff replies
 
-The Email card on a booking has a reply box. `emailThreads.sendReply` (staff
-only, like `getForRecord`) queues a `booking_reply` email:
+The Email card on a booking has a reply box.
 
-- **To** is the request's email, else the invoice's `clientEmail`. Optional CC
-  (bare addresses, max 10); duplicates and the client are dropped.
+**Who.** Portal admins and the Operations team (in Arbor Live's context) may
+email clients and make change requests: `sendReply`, `makeChangeRequest` and
+`retryReply` use `requireAdminOrOperations`. Any other Arbor-internal user can
+read the thread; `getForRecord` returns `canReply` (`hasOperationsAccess`, so
+`isStaffAdmin` applies) and the card hides the composer, the change-request
+button and "Try again" when it is false. A band-org admin (Better Auth
+`role: "admin"`) is not staff and is refused.
+
+`emailThreads.sendReply` queues a `booking_reply` email:
+
+- **To** is the request's email, else the invoice's `clientEmail`, whichever
+  parses as a plain address (`clientReplyAddress`; `getForRecord.clientEmail` is
+  the same address). Optional CC (bare addresses, max 10); duplicates and the
+  client are dropped.
 - **From** is the booking sender named after the signed-in staff member
-  (`booking.senderName` on `enqueueEmail`), never taken from arguments. Subject,
-  thread, Reply-To and recording are the ones every booking email uses, so the
-  reply shows on the thread once it goes out.
+  (`booking.senderName` on `enqueueEmail`), never taken from arguments. A staff
+  member with no name sends from plain `"Arbor Live"` (`senderName: null`), not
+  the invoice manager's name, and the email drops its "Message from" line.
+  Subject, thread, Reply-To and recording are the ones every booking email uses,
+  so the reply shows on the thread once it goes out.
 - **Body** is the message (max 10k chars) as paragraphs, the sender's name and a
-  link to the request tracker or public quote. `attachQuote` adds the current
+  link to the request tracker, else the public quote. A void quote or an expired
+  quote link is never sent. `attachQuote` adds the current
   quote PDF (`payload.invoiceId` plus `payload.attachQuote`, sent through the raw SDK like every attachment; `booking_quote_ready`
   always carries it).
 - **Idempotency.** `booking_reply:<threadId>:<clientRequestId>`; the composer
   mints one id per attempt, so a double click queues one email.
+- **Failures.** A reply that fails to send stays on `emailNotifications` as
+  `failed`; `getForRecord` returns it in `failedReplies` (index
+  `by_booking_threadId_and_status`), the card shows it as "Not sent" with the
+  error, and `retryReply` queues the same notification again (same idempotency
+  key).
 
 `emailThreads.makeChangeRequest` turns a client's emailed message into the formal
 quote change request through `requestInvoiceQuoteChanges`, with the message text
+(cut to 2,000 characters on a word boundary; the full email stays on the thread)
 as the note, and stamps `changeRequestedAt` on the message. It requires an
-inbound message from the booking's client while the invoice is not void, was sent
-for review and is still pending. `getForRecord` returns `canMakeChangeRequest` per
-message with the same rules.
+inbound message from the booking's client that arrived after the current quote
+went out for review (`clientReviewReadyAt`; an earlier email is stale), while the
+invoice is not void and is still pending. The invoice is the thread's own
+(`thread.invoiceId`), else the request's `linkedInvoiceId`, for the button and the
+action alike. `getForRecord` returns `canMakeChangeRequest` per message with the
+same rules.
+
+**Trust.** "From the client" means the inbound `From` header matches the
+request's or invoice's email. Resend Receiving does not give us an SPF or DKIM
+result and we store none, so the header can be spoofed. The confirm dialog and
+the staff member's judgment of the message are the safeguard; nothing automatic
+acts on an emailed message.
 
 ## This Week at Arbor (newsletter)
 
