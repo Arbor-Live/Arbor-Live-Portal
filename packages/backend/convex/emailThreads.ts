@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { appError } from "./lib/errors";
+import { previewBookingEmail } from "./lib/bookingEmail";
 import { bookingAddressFor } from "./lib/emailAddresses";
 import {
   type BookingRef,
@@ -17,6 +18,8 @@ const messageValue = v.object({
   direction: v.union(v.literal("inbound"), v.literal("outbound")),
   fromEmail: v.string(),
   fromName: v.optional(v.string()),
+  /** Recipients of an email we sent; inbound mail always went to the booking address. */
+  to: v.optional(v.array(v.string())),
   subject: v.string(),
   bodyText: v.string(),
   attachments: v.array(v.object({ filename: v.string() })),
@@ -29,7 +32,8 @@ const messageValue = v.object({
 /**
  * The booking conversation for a request, invoice or event page. A request, its
  * invoice and its event all resolve to the same thread. Read-only: the thread is
- * created by the first inbound email, not by looking at the page.
+ * created by the first email on the booking, inbound or outbound, never by
+ * looking at the page.
  */
 export const getForRecord = query({
   args: {
@@ -94,6 +98,7 @@ export const getForRecord = query({
         direction: message.direction,
         fromEmail: message.fromEmail,
         fromName: message.fromName,
+        to: message.direction === "outbound" ? message.to : undefined,
         subject: message.subject,
         bodyText: message.bodyText,
         attachments: message.attachments.map((attachment) => ({ filename: attachment.filename })),
@@ -102,5 +107,20 @@ export const getForRecord = query({
         receivedAt: message.receivedAt,
       })),
     };
+  },
+});
+
+/**
+ * The Reply-To and subject the next client email about this invoice's booking
+ * will use, for the quote sheets. Read-only: computes the subject a new thread
+ * would get without creating one.
+ */
+export const bookingEmailPreview = query({
+  args: { invoiceId: v.id("invoices") },
+  returns: v.object({ from: v.string(), replyTo: v.string(), subject: v.string() }),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    return await previewBookingEmail(ctx, { invoiceId: args.invoiceId });
   },
 });

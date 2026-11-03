@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { QuoteChangeList } from "@/components/financial/quote-change-list";
-import { ARBOR_CONTACT_EMAIL } from "@/components/financial/send-quote-to-client-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,7 +31,6 @@ export function RevisedQuoteSheet({
   invoiceId,
   isReply: isReplyWhenOpened,
   toEmail,
-  managerEmail,
   isRequestLinked,
   hasUnsavedEdits,
   sending,
@@ -44,7 +42,6 @@ export function RevisedQuoteSheet({
   /** Answering the client's open change request, rather than revising on our own. */
   isReply: boolean;
   toEmail: string;
-  managerEmail?: string;
   isRequestLinked: boolean;
   hasUnsavedEdits: boolean;
   sending: boolean;
@@ -54,6 +51,7 @@ export function RevisedQuoteSheet({
   // Sending changes what the preview compares against; keep showing what was sent while the sheet closes.
   const [sentPreview, setSentPreview] = useState<typeof livePreview>(undefined);
   const preview = sentPreview ?? livePreview;
+  const email = useQuery(api.emailThreads.bookingEmailPreview, open ? { invoiceId } : "skip");
   const [message, setMessage] = useState("");
   // The parent remounts the sheet on each open (its `key`), so this is the state when it opened.
   const [isReply] = useState(isReplyWhenOpened);
@@ -65,11 +63,6 @@ export function RevisedQuoteSheet({
   const changes = basis?.lines && current ? diffQuoteLines(basis.lines, current.lines) : null;
   const delta = basis?.totalUsd != null && current ? current.totalUsd - basis.totalUsd : null;
   const unchanged = changes !== null && changes.length === 0 && (delta === null || Math.abs(delta) < 0.005);
-
-  const replyTo = [managerEmail?.trim() || null, ARBOR_CONTACT_EMAIL].filter(
-    (value, index, all): value is string =>
-      Boolean(value) && all.findIndex((entry) => entry?.toLowerCase() === value?.toLowerCase()) === index,
-  );
 
   async function handleSend() {
     if (!trimmed) {
@@ -158,7 +151,7 @@ export function RevisedQuoteSheet({
           <div className="space-y-1.5">
             <Label htmlFor="revised-quote-to">To</Label>
             <Input id="revised-quote-to" readOnly value={toEmail || "No client email on file"} />
-            <p className="text-xs text-muted-foreground">Reply-To: {replyTo.join(" · ")}</p>
+            <p className="text-xs text-muted-foreground">Reply-To: {email?.replyTo ?? "…"}</p>
           </div>
 
           <div className="space-y-1.5">

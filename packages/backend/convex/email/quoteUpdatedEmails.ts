@@ -7,7 +7,6 @@ import {
   formatEventDateRange,
   publicQuoteUrl,
   requestTrackingUrl,
-  subjectForTemplate,
 } from "./constants";
 import { enqueueEmail } from "./enqueue";
 
@@ -49,13 +48,9 @@ export async function scheduleQuoteUpdatedEmail(
   await enqueueEmail(ctx, {
     template: "quote_updated",
     to: clientEmail,
-    subject:
-      args.previousTotalUsd === undefined
-        ? `Your quote: ${eventTitle}`
-        : subjectForTemplate("quote_updated", eventTitle),
+    booking: { ref: { invoiceId: args.invoice._id }, loaded: { invoice: args.invoice, event } },
     eventId: event?._id,
     idempotencyKey: `quote_updated:${args.invoice._id}:${args.revisionNumber}`,
-    replyTo: args.invoice.managerEmail ? [args.invoice.managerEmail] : undefined,
     payload: {
       recipientName: args.invoice.clientContactName,
       eventTitle,

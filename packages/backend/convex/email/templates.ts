@@ -103,6 +103,7 @@ import type {
   WeeklyDigestEmailProps,
   ThisWeekAtArborEmailProps,
 } from "@arbor/email/types";
+import { toPlainText } from "@react-email/render";
 import type { EmailTemplate } from "./constants";
 
 export async function renderEmailHtml(template: EmailTemplate, payload: unknown) {
@@ -220,4 +221,9 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
     case "this_week_at_arbor":
       return renderThisWeekAtArborEmail(payload as ThisWeekAtArborEmailProps);
   }
+}
+
+/** Plain-text twin of a rendered email, stored as the message body on a booking thread. */
+export function renderEmailText(html: string) {
+  return toPlainText(html);
 }

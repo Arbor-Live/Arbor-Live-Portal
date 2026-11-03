@@ -21,6 +21,33 @@ export type BookingRef =
 /** Two passes reach event → invoice → request; more would only repeat reads. */
 const RESOLVE_PASSES = 2;
 
+/** Booking docs a caller already holds, so resolving the booking does not read them again. */
+export type LoadedBookingDocs = {
+  request?: Doc<"eventRequests"> | null;
+  invoice?: Doc<"invoices"> | null;
+  event?: Doc<"events"> | null;
+};
+
+type BookingTable = "eventRequests" | "invoices" | "events";
+
+/** Reads each request, invoice and event at most once per resolution. */
+export function bookingDocCache(ctx: QueryCtx | MutationCtx, loaded: LoadedBookingDocs = {}) {
+  const docs = new Map<string, Doc<BookingTable> | null>();
+  for (const doc of [loaded.request, loaded.invoice, loaded.event]) {
+    if (doc) docs.set(doc._id, doc);
+  }
+  return {
+    async get<T extends BookingTable>(id: Id<T>): Promise<Doc<T> | null> {
+      if (docs.has(id)) return docs.get(id) as Doc<T> | null;
+      const doc = await ctx.db.get(id);
+      docs.set(id, doc as Doc<BookingTable> | null);
+      return doc;
+    },
+  };
+}
+
+export type BookingDocCache = ReturnType<typeof bookingDocCache>;
+
 /**
  * Every known `{requestId, invoiceId, eventId}` for the booking `ref` belongs
  * to. A booking can have several events; the thread tracks the first one found,
@@ -29,6 +56,7 @@ const RESOLVE_PASSES = 2;
 export async function resolveBookingRefs(
   ctx: QueryCtx | MutationCtx,
   ref: BookingRef,
+  cache: BookingDocCache = bookingDocCache(ctx),
 ): Promise<BookingRefs> {
   const refs: BookingRefs = {
     requestId: "requestId" in ref ? ref.requestId : undefined,
@@ -40,7 +68,7 @@ export async function resolveBookingRefs(
     const before = `${refs.requestId}|${refs.invoiceId}|${refs.eventId}`;
 
     if (refs.requestId) {
-      const request = await ctx.db.get(refs.requestId);
+      const request = await cache.get(refs.requestId);
       refs.invoiceId ??= request?.linkedInvoiceId;
       if (!refs.invoiceId) {
         const invoice = await ctx.db
@@ -64,7 +92,7 @@ export async function resolveBookingRefs(
 
     if (refs.invoiceId) {
       if (!refs.requestId) {
-        const invoice = await ctx.db.get(refs.invoiceId);
+        const invoice = await cache.get(refs.invoiceId);
         refs.requestId = invoice?.sourceEventRequestId;
         if (!refs.requestId) {
           const request = await ctx.db
@@ -84,7 +112,7 @@ export async function resolveBookingRefs(
     }
 
     if (refs.eventId) {
-      const event = await ctx.db.get(refs.eventId);
+      const event = await cache.get(refs.eventId);
       refs.invoiceId ??= event?.invoiceId;
       refs.requestId ??= event?.sourceEventRequestId;
     }
@@ -133,8 +161,9 @@ export async function findThreadForBooking(
 export async function getOrCreateThreadForBooking(
   ctx: MutationCtx,
   ref: BookingRef,
+  cache?: BookingDocCache,
 ): Promise<Doc<"emailThreads">> {
-  const refs = await resolveBookingRefs(ctx, ref);
+  const refs = await resolveBookingRefs(ctx, ref, cache);
   const existing = await findThreadForBooking(ctx, refs);
   if (!existing) {
     const now = Date.now();

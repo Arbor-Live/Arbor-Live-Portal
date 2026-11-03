@@ -154,10 +154,12 @@ export async function schedulePaymentProofRejectedEmails(
     await enqueueEmail(ctx, {
       template: "payment_proof_rejected",
       to,
-      subject: subjectForTemplate("payment_proof_rejected", context.subjectContext),
+      booking: {
+        ref: { invoiceId: args.invoice._id },
+        loaded: { invoice: args.invoice, event: args.event },
+      },
       eventId: context.eventId,
       idempotencyKey: `payment_proof_rejected:${context.eventId ?? args.invoice._id}:${to}:${args.invalidatedAt}`,
-      replyTo: args.invoice.managerEmail ? [args.invoice.managerEmail] : undefined,
       payload: {
         recipientName:
           to === payingPartyEmail
@@ -193,7 +195,10 @@ export async function schedulePaymentProofReminderEmail(
   await enqueueEmail(ctx, {
     template: "payment_proof_reminder",
     to: args.recipient.email,
-    subject: subjectForTemplate("payment_proof_reminder", context.subjectContext),
+    booking: {
+      ref: { invoiceId: args.invoice._id },
+      loaded: { invoice: args.invoice, event: args.event },
+    },
     eventId: context.eventId,
     idempotencyKey: `payment_proof_reminder:${context.eventId ?? args.invoice._id}:${args.reminderKey}:${args.recipient.email}`,
     payload: {

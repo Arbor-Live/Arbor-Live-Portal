@@ -24,8 +24,9 @@ Where variables live:
 | `ARBOR_ENV` | prod only | Set to `production` **only** on the prod Convex deployment; gates production behavior (`lib/trustedOrigins.ts`) |
 | `RESEND_API_KEY` | yes | Outbound email via Resend (`email/send.ts`) — see [resend-email.md](resend-email.md) |
 | `EMAIL_FROM` | yes | Default From address (`email/constants.ts`) |
-| `EMAIL_TEST_MODE` | no | `"true"` routes email sending into test mode (`email/send.ts`) |
+| `EMAIL_TEST_MODE` | no | `"true"` only sends to Resend test addresses (`delivered@resend.dev`, …): the component refuses others, and attachment sends fail loudly before calling Resend (`email/resendClient.ts`, `email/send.ts`) |
 | `RESEND_WEBHOOK_SECRET` | yes (inbound) | `whsec_…` signing secret of the Resend `email.received` webhook; without it `/email-webhook` answers 500 — see [resend-email.md](resend-email.md#inbound-email) |
+| `BOOKINGS_EMAIL_FROM` | no | Address client booking emails send from; defaults to `bookings@arbor.st`. The display name (`<Manager> at Arbor Live`) is added per booking (`email/constants.ts`) |
 | `INBOUND_EMAIL_DOMAIN` | no | Domain of the per-booking addresses; defaults to `arbor.st` |
 | `ORGANIZER_EMAIL` | no | Organizer contact in emails; defaults to `EMAIL_FROM`'s address (`email/constants.ts`) |
 | `PAYMENTS_EMAIL_FROM` | no | From address for band-payment emails; has a default (`email/constants.ts`) |

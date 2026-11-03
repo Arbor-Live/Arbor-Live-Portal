@@ -180,8 +180,8 @@ test("staff send a revised quote without a change request", async () => {
     [2, "sent", "Same quote, new dates.", 400, "Sam Staff"],
   ]);
   expect(await quoteUpdatedEmails(t)).toEqual([
-    ["Your quote: ALINV-TESTCR1", "revised", undefined, 400],
-    ["Your quote was updated: ALINV-TESTCR1", "revised", 400, 400],
+    ["Arbor Live booking: Your event (ALINV-TESTCR1)", "revised", undefined, 400],
+    ["Re: Arbor Live booking: Your event (ALINV-TESTCR1)", "revised", 400, 400],
   ]);
 });
 

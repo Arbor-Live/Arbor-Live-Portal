@@ -48,8 +48,8 @@ export async function schedulePayingPartyAddedEmail(
   await enqueueEmail(ctx, {
     template: "paying_party_added",
     to,
-    replyTo: managerEmail ? [managerEmail] : undefined,
-    subject: subjectForTemplate("paying_party_added", eventTitle),
+    booking: { ref: { invoiceId: args.invoice._id }, loaded: { invoice: args.invoice, event } },
+    inAppTitle: subjectForTemplate("paying_party_added", eventTitle),
     eventId: event?._id,
     idempotencyKey: `paying_party_added:${args.invoice._id}:${to}:${args.idempotencySuffix}`,
     payload: {

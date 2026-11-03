@@ -1843,6 +1843,17 @@ export default defineSchema({
     cc: v.optional(v.array(v.string())),
     replyTo: v.optional(v.array(v.string())),
     subject: v.string(),
+    /**
+     * Set on client booking emails (`lib/bookingEmail.ts`): sent from `from`
+     * with the thread's headers and recorded as an outbound message on it.
+     */
+    booking: v.optional(
+      v.object({
+        threadId: v.id("emailThreads"),
+        /** Full From header: `"<Manager> at Arbor Live" <bookings@arbor.st>`. */
+        from: v.string(),
+      }),
+    ),
     eventId: v.optional(v.id("events")),
     idempotencyKey: v.string(),
     /** Stable key for coalescing rapid schedule/crew updates into one send. */
@@ -1898,6 +1909,12 @@ export default defineSchema({
     requestId: v.optional(v.id("eventRequests")),
     invoiceId: v.optional(v.id("invoices")),
     eventId: v.optional(v.id("events")),
+    /**
+     * The booking subject without `Re: `, set by the first booking email we
+     * queue. Every later email is `Re: ` plus this, so renaming the event never
+     * splits the conversation.
+     */
+    subject: v.optional(v.string()),
     lastMessageAt: v.number(),
     messageCount: v.number(),
     createdAt: v.number(),

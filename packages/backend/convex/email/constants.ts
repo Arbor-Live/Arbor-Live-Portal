@@ -8,6 +8,13 @@ import {
 export const EMAIL_FROM =
   process.env.EMAIL_FROM ?? "Arbor Notifications <noreply@arbor.st>";
 
+/**
+ * Address client booking emails come from and are replied to. The display name
+ * is added per booking (`lib/bookingEmail.ts`). Replies reach the portal because
+ * the booking's own address sits on the receiving domain.
+ */
+export const BOOKINGS_EMAIL_FROM = process.env.BOOKINGS_EMAIL_FROM ?? "bookings@arbor.st";
+
 export const PAYMENTS_EMAIL_FROM =
   process.env.PAYMENTS_EMAIL_FROM ?? "Arbor Live — Financial Manager <payments@arbor.st>";
 
