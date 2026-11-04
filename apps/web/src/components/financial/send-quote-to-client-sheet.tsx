@@ -39,7 +39,7 @@ export function SendQuoteToClientSheet({
 }: SendQuoteToClientSheetProps) {
   const preview = useQuery(
     api.emailThreads.bookingEmailPreview,
-    open && invoiceId ? { invoiceId } : "skip",
+    open && invoiceId ? { invoiceId, to: toEmail } : "skip",
   );
   const [message, setMessage] = useState(DEFAULT_QUOTE_READY_CLIENT_MESSAGE);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +81,13 @@ export function SendQuoteToClientSheet({
           <div className="space-y-1.5">
             <p className="text-sm font-medium">Reply-To</p>
             <p className="text-sm text-muted-foreground">{preview?.replyTo ?? "…"}</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">CC</p>
+            <p data-testid="quote-ready-cc" className="text-sm text-muted-foreground break-words">
+              {preview ? preview.cc.join(", ") || "—" : "…"}
+            </p>
           </div>
 
           <div className="space-y-1.5">

@@ -75,6 +75,8 @@ test.describe("invoice send for client review", () => {
       timeout: 25_000,
     });
     await expect(page.locator("#quote-ready-to")).toHaveValue(clientEmail);
+    const standingCc = ["arborlive@stanford.edu", "e2e-admin@arborlive.test"];
+    await expect(page.getByTestId("quote-ready-cc")).toHaveText(standingCc.join(", "));
 
     // The message is required: blanking it disables Send.
     const messageField = page.locator("#quote-ready-message");
@@ -99,6 +101,7 @@ test.describe("invoice send for client review", () => {
       afterCreatedAt: beforeFirstSend,
     });
     expect(firstEmail.subject).toContain("E2E Send Review");
+    expect(firstEmail.cc).toEqual(standingCc);
 
     // The card flips to Withdraw once the quote is out for review.
     await expect(page.getByTestId("invoice-withdraw-review")).toBeVisible({ timeout: 25_000 });
