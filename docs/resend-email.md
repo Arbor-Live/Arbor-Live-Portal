@@ -74,6 +74,7 @@ verified domain, e.g. `noreply@arbor.st`.
 | `BOOKINGS_EMAIL_FROM` | No | Address client booking emails send from; defaults to `bookings@arbor.st` |
 | `PAYMENTS_EMAIL_FROM` | No | From address for band-payment emails; has a default |
 | `BAND_PAYMENTS_CC_EMAIL` | No | CC on band-payment emails; has a default |
+| `BOOKING_CC_EMAIL` | No | Shared inbox CC'd on client booking emails; defaults to `arborlive@stanford.edu` |
 
 ```bash
 npx convex env set RESEND_API_KEY "re_xxxxxxxx"
@@ -161,7 +162,7 @@ Client-facing emails about one booking go out as one conversation instead of
 separate "Request received", "Your quote is ready" and "Your quote was updated"
 threads. An enqueue site passes `booking: { ref }` to `enqueueEmail`, which
 calls [`lib/bookingEmail.ts`](../packages/backend/convex/lib/bookingEmail.ts)
-`resolveBookingEmail` for the thread, sender, Reply-To and subject. The
+`resolveBookingEmail` for the thread, sender, Reply-To, CC and subject. The
 notification stores `booking: { threadId, from }`.
 
 - **Templates.** `booking_request_received`, `booking_request_declined`,
@@ -176,8 +177,14 @@ notification stores `booking: { threadId, from }`.
 - **Reply-To.** The booking's own address: the request's, else the invoice's,
   else the event's, skipping any whose number the inbound parser can't read back
   (an old number with other characters). `bookings@arbor.st` is the last resort.
-  Existing CCs (the manager and the shared inbox on quote emails) are unchanged,
-  so a manager's Reply All also lands in the portal.
+- **CC.** Every booking email copies `BOOKING_CC_EMAIL` (default
+  `arborlive@stanford.edu`). Once the booking has a quote, it also copies the
+  quote's manager (`invoices.managerEmail`, else the manager's account email).
+  The request's assignee is never copied: it can still change before the quote,
+  and a CC stays in the client's Reply All for the rest of the conversation. CCs
+  the caller passes (a staff reply's CC box) are kept; the recipient is never
+  copied. `EMAIL_TEST_MODE` copies no one, since it refuses real inboxes. A
+  manager's Reply All lands in the portal like the client's.
 - **Subject.** One per booking: `Arbor Live booking: <event name> (<ALREQ-… or
   ALINV-…>)`, stored on the thread (`emailThreads.subject`) by the first booking
   email queued. That email uses it as-is; every later one is `Re: ` plus the
@@ -188,8 +195,8 @@ notification stores `booking: { threadId, from }`.
 - **Bell title.** `paying_party_added` also lands in the payer's notification
   center. Its title stays the sentence ("You've been added as the paying party:
   …") through `enqueueEmail`'s `inAppTitle`, not the booking subject.
-- **Previews.** The send-quote and revised-quote sheets show the Reply-To and
-  subject from `emailThreads.bookingEmailPreview`, which runs the same logic
+- **Previews.** The send-quote and revised-quote sheets show the Reply-To, CC
+  and subject from `emailThreads.bookingEmailPreview`, which runs the same logic
   read-only and creates no thread.
 - **Sending.** Booking emails without attachments go through the component
   with `In-Reply-To` / `References` headers. The quote PDF (`booking_quote_ready`)
