@@ -327,7 +327,7 @@ describe("emailThreads.sendReply", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       to: "maya@client.test",
-      cc: ["colleague@arbor.st"],
+      cc: ["colleague@arbor.st", "arborlive@stanford.edu"],
       subject: "Re: Arbor Live booking: Winter Gala (ALREQ-AAAAAAA)",
       replyTo: ["alreq-aaaaaaa@arbor.st"],
       booking: { threadId: thread._id, from: '"Jamie Park at Arbor Live" <bookings@arbor.st>' },
@@ -938,7 +938,7 @@ describe("failed replies", () => {
       {
         _id: notification._id,
         to: "maya@client.test",
-        cc: [],
+        cc: ["arborlive@stanford.edu"],
         bodyPreview: "Wired mics work.",
         error: "[Resend] invalid_to_address",
         createdAt: notification.createdAt,

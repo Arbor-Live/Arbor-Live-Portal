@@ -1,6 +1,7 @@
 // @vitest-environment edge-runtime
 import { describe, expect, it } from "vitest";
 import { enqueueEmail } from "../email/enqueue";
+import { deleteInvoiceRecord } from "./bookingChainDelete";
 import { schedulePayingPartyAddedEmail } from "../email/payingPartyEmails";
 import { scheduleQuoteApprovedEmail } from "../email/quoteApprovedEmails";
 import { seedEvent, seedInvoice, seedRequest } from "../test/bookingSeeds.helpers";
@@ -77,7 +78,9 @@ describe("sender and subject helpers", () => {
 });
 
 async function resolve(t: Test, ref: BookingRef) {
-  return await t.run(async (ctx) => resolveBookingEmail(ctx, { ref }));
+  return await t.run(async (ctx) =>
+    resolveBookingEmail(ctx, { ref }, { to: "maya@client.test" }),
+  );
 }
 
 async function enqueueBookingEmail(t: Test, ref: BookingRef, idempotencyKey: string) {
@@ -210,6 +213,176 @@ describe("resolveBookingEmail", () => {
   });
 });
 
+describe("booking email CC", () => {
+  it("copies only Arbor Live before the booking has a quote", async () => {
+    const t = makeTest();
+    const assignee = await createUser(t, { name: "Rory Assignee", email: "rory@arbor.test" });
+    const requestId = await seedRequest(t, {
+      requestNumber: "ALREQ-AAAAAAA",
+      assigneeUserId: assignee._id,
+    });
+
+    const email = await enqueueBookingEmail(t, { requestId }, "before-quote");
+
+    expect(email.cc).toEqual(["arborlive@stanford.edu"]);
+  });
+
+  it("copies the quote's manager as well once the booking has a quote", async () => {
+    const t = makeTest();
+    const requestId = await seedRequest(t, { requestNumber: "ALREQ-AAAAAAA" });
+    const invoiceId = await seedInvoice(t, {
+      invoiceNumber: "ALINV-BBBBBBB",
+      sourceEventRequestId: requestId,
+    });
+    await t.run(async (ctx) =>
+      ctx.db.patch(invoiceId, { managerEmail: "Alex.Manager@arbor.test" }),
+    );
+
+    const email = await enqueueBookingEmail(t, { requestId }, "after-quote");
+
+    expect(email.cc).toEqual(["arborlive@stanford.edu", "alex.manager@arbor.test"]);
+  });
+
+  it("finds the manager's email from their account when the quote has none", async () => {
+    const t = makeTest();
+    const manager = await createUser(t, { name: "Sam Manager", email: "sam@arbor.test" });
+    const invoiceId = await seedInvoice(t, {
+      invoiceNumber: "ALINV-BBBBBBB",
+      managerUserId: manager._id,
+    });
+
+    const email = await enqueueBookingEmail(t, { invoiceId }, "account-email");
+
+    expect(email.cc).toEqual(["arborlive@stanford.edu", "sam@arbor.test"]);
+  });
+
+  it("follows a re-created quote's manager after the first quote is deleted", async () => {
+    const t = makeTest();
+    const requestId = await seedRequest(t, { requestNumber: "ALREQ-AAAAAAA" });
+    const firstQuote = await seedInvoice(t, {
+      invoiceNumber: "ALINV-BBBBBBB",
+      sourceEventRequestId: requestId,
+    });
+    await t.run(async (ctx) => ctx.db.patch(firstQuote, { managerEmail: "first@arbor.test" }));
+    await enqueueBookingEmail(t, { requestId }, "first-quote");
+
+    await t.run(async (ctx) => deleteInvoiceRecord(ctx, firstQuote));
+    const secondQuote = await seedInvoice(t, {
+      invoiceNumber: "ALINV-CCCCCCC",
+      sourceEventRequestId: requestId,
+    });
+    await t.run(async (ctx) => ctx.db.patch(secondQuote, { managerEmail: "second@arbor.test" }));
+
+    expect(
+      (await t.run(async (ctx) => previewBookingEmail(ctx, { requestId }, "maya@client.test"))).cc,
+    ).toEqual(["arborlive@stanford.edu", "second@arbor.test"]);
+    const email = await enqueueBookingEmail(t, { requestId }, "second-quote");
+    expect(email.cc).toEqual(["arborlive@stanford.edu", "second@arbor.test"]);
+    const [thread] = await t.run(async (ctx) => ctx.db.query("emailThreads").collect());
+    expect(thread!.invoiceId).toBe(secondQuote);
+  });
+
+  it("follows a replacement quote while the old one is still stored", async () => {
+    const t = makeTest();
+    const requestId = await seedRequest(t, { requestNumber: "ALREQ-AAAAAAA" });
+    const oldQuote = await seedInvoice(t, {
+      invoiceNumber: "ALINV-BBBBBBB",
+      sourceEventRequestId: requestId,
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(oldQuote, { managerEmail: "old@arbor.test" });
+      await ctx.db.patch(requestId, { linkedInvoiceId: oldQuote });
+    });
+    await enqueueBookingEmail(t, { requestId }, "old-quote");
+
+    const newQuote = await seedInvoice(t, {
+      invoiceNumber: "ALINV-CCCCCCC",
+      sourceEventRequestId: requestId,
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(newQuote, { managerEmail: "new@arbor.test", managerName: "Nia New" });
+      await ctx.db.patch(requestId, { linkedInvoiceId: newQuote });
+    });
+
+    expect(
+      (await t.run(async (ctx) => previewBookingEmail(ctx, { requestId }, "maya@client.test"))).cc,
+    ).toEqual(["arborlive@stanford.edu", "new@arbor.test"]);
+    const email = await enqueueBookingEmail(t, { requestId }, "new-quote");
+
+    expect(email.cc).toEqual(["arborlive@stanford.edu", "new@arbor.test"]);
+    expect(email.booking?.from).toBe('"Nia New at Arbor Live" <bookings@arbor.st>');
+    const [thread] = await t.run(async (ctx) => ctx.db.query("emailThreads").collect());
+    expect(thread!.invoiceId).toBe(oldQuote);
+
+    const fromOldQuote = await enqueueBookingEmail(t, { invoiceId: oldQuote }, "from-old-quote");
+    expect(fromOldQuote.cc).toEqual(["arborlive@stanford.edu", "new@arbor.test"]);
+  });
+
+  it("keeps a live stored event and moves off a deleted one", async () => {
+    const t = makeTest();
+    const requestId = await seedRequest(t, { requestNumber: "ALREQ-AAAAAAA" });
+    const firstEvent = await seedEvent(t, { sourceEventRequestId: requestId });
+    await enqueueBookingEmail(t, { requestId }, "first-event");
+    const threadEvent = async () =>
+      (await t.run(async (ctx) => ctx.db.query("emailThreads").collect()))[0]!.eventId;
+
+    const secondEvent = await seedEvent(t, { sourceEventRequestId: requestId });
+    await t.run(async (ctx) => ctx.db.delete(firstEvent));
+    await enqueueBookingEmail(t, { eventId: secondEvent }, "second-event");
+    expect(await threadEvent()).toBe(secondEvent);
+
+    const thirdEvent = await seedEvent(t, { sourceEventRequestId: requestId });
+    await enqueueBookingEmail(t, { eventId: thirdEvent }, "third-event");
+    expect(await threadEvent()).toBe(secondEvent);
+  });
+
+  it("copies the manager's account email when the quote's address is not one", async () => {
+    const t = makeTest();
+    const manager = await createUser(t, { name: "Sam Manager", email: "sam@arbor.test" });
+    const invoiceId = await seedInvoice(t, {
+      invoiceNumber: "ALINV-BBBBBBB",
+      managerUserId: manager._id,
+    });
+    await t.run(async (ctx) => ctx.db.patch(invoiceId, { managerEmail: "Sam <sam@arbor" }));
+
+    const email = await enqueueBookingEmail(t, { invoiceId }, "bad-manager-email");
+
+    expect(email.cc).toEqual(["arborlive@stanford.edu", "sam@arbor.test"]);
+  });
+
+  it("previews the CC without the recipient", async () => {
+    const t = makeTest();
+    const invoiceId = await seedInvoice(t, { invoiceNumber: "ALINV-BBBBBBB" });
+    await t.run(async (ctx) => ctx.db.patch(invoiceId, { managerEmail: "Maya@client.test" }));
+
+    const preview = await t.run(async (ctx) =>
+      previewBookingEmail(ctx, { invoiceId }, "maya@client.test"),
+    );
+
+    expect(preview.cc).toEqual(["arborlive@stanford.edu"]);
+  });
+
+  it("keeps the caller's CCs and never copies the recipient", async () => {
+    const t = makeTest();
+    const invoiceId = await seedInvoice(t, { invoiceNumber: "ALINV-BBBBBBB" });
+    await t.run(async (ctx) => ctx.db.patch(invoiceId, { managerEmail: "maya@client.test" }));
+
+    const email = await t.run(async (ctx) => {
+      const id = await enqueueEmail(ctx, {
+        template: "booking_request_received",
+        to: "maya@client.test",
+        cc: ["Colleague@client.test", "arborlive@stanford.edu"],
+        booking: { ref: { invoiceId } },
+        idempotencyKey: "caller-cc",
+        payload: {},
+      });
+      return (await ctx.db.get(id!))!;
+    });
+
+    expect(email.cc).toEqual(["colleague@client.test", "arborlive@stanford.edu"]);
+  });
+});
+
 describe("previewBookingEmail", () => {
   it("shows the first subject without creating a thread, then Re: once one exists", async () => {
     const t = makeTest();
@@ -222,15 +395,18 @@ describe("previewBookingEmail", () => {
       ctx.db.patch(requestId, { linkedInvoiceId: invoiceId, eventName: "Winter Gala" }),
     );
 
-    expect(await t.run(async (ctx) => previewBookingEmail(ctx, { invoiceId }))).toEqual({
+    const preview = () =>
+      t.run(async (ctx) => previewBookingEmail(ctx, { invoiceId }, "maya@client.test"));
+    expect(await preview()).toEqual({
       from: '"Alex Manager at Arbor Live" <bookings@arbor.st>',
       replyTo: "alreq-aaaaaaa@arbor.st",
+      cc: ["arborlive@stanford.edu"],
       subject: "Arbor Live booking: Winter Gala (ALREQ-AAAAAAA)",
     });
     expect(await t.run(async (ctx) => ctx.db.query("emailThreads").collect())).toHaveLength(0);
 
     await enqueueBookingEmail(t, { requestId }, "first");
-    expect((await t.run(async (ctx) => previewBookingEmail(ctx, { invoiceId }))).subject).toBe(
+    expect((await preview()).subject).toBe(
       "Re: Arbor Live booking: Winter Gala (ALREQ-AAAAAAA)",
     );
   });

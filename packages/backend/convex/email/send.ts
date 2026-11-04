@@ -134,6 +134,16 @@ function assertTestModeRecipients(recipients: readonly string[]) {
 }
 
 /**
+ * Test mode never mails a real inbox. A real To still fails the send, but a
+ * real CC (the booking's standing ones included) is left off instead.
+ */
+function sendableCc(cc: string[] | undefined) {
+  if (process.env.EMAIL_TEST_MODE !== "true" || !cc) return cc;
+  const kept = cc.filter((address) => isResendTestAddress(address));
+  return kept.length > 0 ? kept : undefined;
+}
+
+/**
  * Send through the raw Resend SDK, for emails with attachments the component
  * can't carry. Still tracked as a manual component email. The HTTP
  * `Idempotency-Key` comes from `idempotencyKey`, stable per notification.
@@ -349,9 +359,11 @@ export const sendQueuedEmail = internalAction({
           : EMAIL_FROM);
       const headers = threadHeaders(thread);
       const idempotencyKey = notificationIdempotencyKey(args.notificationId);
+      const cc = sendableCc(notification.cc);
+      const sentMessage = message && { ...message, cc: cc ?? [] };
 
       if (attachments.length > 0) {
-        const sent = await sendWithResendSdk(ctx, notification, {
+        const sent = await sendWithResendSdk(ctx, { ...notification, cc }, {
           from,
           html,
           attachments,
@@ -362,7 +374,7 @@ export const sendQueuedEmail = internalAction({
           ctx,
           notification,
           sent.emailId,
-          message && { ...message, resendEmailId: sent.resendEmailId },
+          sentMessage && { ...sentMessage, resendEmailId: sent.resendEmailId },
         );
         return null;
       }
@@ -370,7 +382,7 @@ export const sendQueuedEmail = internalAction({
       const emailId = await resendClient.sendEmail(ctx, {
         from,
         to: notification.to,
-        cc: notification.cc,
+        cc,
         replyTo: notification.replyTo,
         subject: notification.subject,
         html,
@@ -382,7 +394,7 @@ export const sendQueuedEmail = internalAction({
         ctx,
         notification,
         emailId,
-        message && { ...message, resendEmailId: emailId, componentEmailId: emailId },
+        sentMessage && { ...sentMessage, resendEmailId: emailId, componentEmailId: emailId },
       );
     } catch (error) {
       let message = formatSendError(error);

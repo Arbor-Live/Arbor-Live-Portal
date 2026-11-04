@@ -118,15 +118,15 @@ export async function enqueueEmail(ctx: MutationCtx, args: EnqueueEmailArgs) {
 
   // Resolved only for an email that is actually queued, so a no-op replay never claims the thread's subject.
   const envelope = args.booking
-    ? await resolveBookingEmail(ctx, args.booking)
-    : { booking: undefined, replyTo: args.replyTo, subject: args.subject };
+    ? await resolveBookingEmail(ctx, args.booking, { to: args.to, cc: args.cc })
+    : { booking: undefined, replyTo: args.replyTo, cc: args.cc, subject: args.subject };
 
   if (existing) {
     await ctx.db.patch(existing._id, {
       status: "queued",
       error: undefined,
       to: args.to,
-      cc: args.cc?.length ? args.cc : undefined,
+      cc: envelope.cc?.length ? envelope.cc : undefined,
       replyTo: envelope.replyTo?.length ? envelope.replyTo : undefined,
       // A retried booking email keeps the subject it was first queued with.
       subject: existing.booking && envelope.booking ? existing.subject : envelope.subject,
@@ -146,7 +146,7 @@ export async function enqueueEmail(ctx: MutationCtx, args: EnqueueEmailArgs) {
     template: args.template,
     status: "queued",
     to: args.to,
-    cc: args.cc?.length ? args.cc : undefined,
+    cc: envelope.cc?.length ? envelope.cc : undefined,
     replyTo: envelope.replyTo?.length ? envelope.replyTo : undefined,
     subject: envelope.subject,
     booking: envelope.booking,

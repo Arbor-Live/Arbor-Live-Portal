@@ -1915,7 +1915,7 @@ export default defineSchema({
   /**
    * One conversation per booking: the request, its invoice and its events share
    * a thread (`lib/emailThreads.ts` resolves the links). Ids are filled in as
-   * they become known.
+   * they become known; a stored invoice or event is replaced only once deleted.
    */
   emailThreads: defineTable({
     requestId: v.optional(v.id("eventRequests")),

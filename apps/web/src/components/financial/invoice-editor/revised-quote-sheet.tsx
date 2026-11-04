@@ -51,7 +51,10 @@ export function RevisedQuoteSheet({
   // Sending changes what the preview compares against; keep showing what was sent while the sheet closes.
   const [sentPreview, setSentPreview] = useState<typeof livePreview>(undefined);
   const preview = sentPreview ?? livePreview;
-  const email = useQuery(api.emailThreads.bookingEmailPreview, open ? { invoiceId } : "skip");
+  const email = useQuery(
+    api.emailThreads.bookingEmailPreview,
+    open ? { invoiceId, to: toEmail } : "skip",
+  );
   const [message, setMessage] = useState("");
   // The parent remounts the sheet on each open (its `key`), so this is the state when it opened.
   const [isReply] = useState(isReplyWhenOpened);
@@ -152,6 +155,9 @@ export function RevisedQuoteSheet({
             <Label htmlFor="revised-quote-to">To</Label>
             <Input id="revised-quote-to" readOnly value={toEmail || "No client email on file"} />
             <p className="text-xs text-muted-foreground">Reply-To: {email?.replyTo ?? "…"}</p>
+            <p className="text-xs text-muted-foreground break-words">
+              CC: {email ? email.cc.join(", ") || "—" : "…"}
+            </p>
           </div>
 
           <div className="space-y-1.5">

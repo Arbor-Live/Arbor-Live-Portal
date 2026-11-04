@@ -156,6 +156,28 @@ export async function findThreadForBooking(
 }
 
 /**
+ * The thread's ids, with the gaps filled from `refs`. A stored invoice or event
+ * is replaced only when it was deleted and the booking resolves to another one.
+ * A live one stays, since change requests from the thread file against the
+ * thread's quote.
+ */
+async function currentThreadRefs(
+  thread: BookingRefs | null,
+  refs: BookingRefs,
+  cache: BookingDocCache,
+): Promise<BookingRefs> {
+  async function pick<T extends "invoices" | "events">(stored?: Id<T>, resolved?: Id<T>) {
+    if (!stored || !resolved || stored === resolved) return stored ?? resolved;
+    return (await cache.get(stored)) ? stored : resolved;
+  }
+  return {
+    requestId: thread?.requestId ?? refs.requestId,
+    invoiceId: await pick(thread?.invoiceId, refs.invoiceId),
+    eventId: await pick(thread?.eventId, refs.eventId),
+  };
+}
+
+/**
  * The booking's thread, created on first use. Ids learned since the thread was
  * made (an invoice created after the request) are patched in, so the same
  * booking always converges on one row.
@@ -163,9 +185,17 @@ export async function findThreadForBooking(
 export async function getOrCreateThreadForBooking(
   ctx: MutationCtx,
   ref: BookingRef,
-  cache?: BookingDocCache,
+  cache: BookingDocCache = bookingDocCache(ctx),
 ): Promise<Doc<"emailThreads">> {
-  const refs = await resolveBookingRefs(ctx, ref, cache);
+  return await getOrCreateThreadForRefs(ctx, await resolveBookingRefs(ctx, ref, cache), cache);
+}
+
+/** `getOrCreateThreadForBooking` for ids the caller already resolved. */
+export async function getOrCreateThreadForRefs(
+  ctx: MutationCtx,
+  refs: BookingRefs,
+  cache: BookingDocCache,
+): Promise<Doc<"emailThreads">> {
   const existing = await findThreadForBooking(ctx, refs);
   if (!existing) {
     const now = Date.now();
@@ -180,10 +210,11 @@ export async function getOrCreateThreadForBooking(
     return created;
   }
 
+  const current = await currentThreadRefs(existing, refs, cache);
   const patch: BookingRefs = {};
-  if (refs.requestId && !existing.requestId) patch.requestId = refs.requestId;
-  if (refs.invoiceId && !existing.invoiceId) patch.invoiceId = refs.invoiceId;
-  if (refs.eventId && !existing.eventId) patch.eventId = refs.eventId;
+  if (current.requestId !== existing.requestId) patch.requestId = current.requestId;
+  if (current.invoiceId !== existing.invoiceId) patch.invoiceId = current.invoiceId;
+  if (current.eventId !== existing.eventId) patch.eventId = current.eventId;
   if (Object.keys(patch).length === 0) return existing;
   await ctx.db.patch(existing._id, patch);
   return { ...existing, ...patch };

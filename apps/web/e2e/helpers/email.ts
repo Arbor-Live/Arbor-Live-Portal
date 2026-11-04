@@ -5,6 +5,7 @@ export type EmailNotificationRow = {
   template: string;
   status: "queued" | "sent" | "failed";
   to: string;
+  cc: string[];
   subject: string;
   resendId?: string;
   error?: string;

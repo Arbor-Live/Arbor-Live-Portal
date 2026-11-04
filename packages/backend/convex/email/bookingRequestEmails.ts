@@ -3,7 +3,6 @@ import type { MutationCtx } from "../_generated/server";
 import { bookingDeclineReasonLabel } from "@arbor/format";
 import { findAuthUsersByIds, listAdminEmailsForVertical } from "../lib/auth";
 import {
-  ARBOR_CONTACT_EMAIL,
   bookingRequestsAdminUrl,
   requestTrackingUrl,
   subjectForTemplate,
@@ -152,18 +151,10 @@ export async function scheduleBookingQuoteReadyEmail(
   const recipientName = request.firstName.trim() || undefined;
   const eventName = request.eventName?.trim() || undefined;
   const managerEmail = invoice.managerEmail?.trim();
-  const cc = Array.from(
-    new Set(
-      [managerEmail, ARBOR_CONTACT_EMAIL]
-        .map((email) => email?.trim().toLowerCase())
-        .filter((email): email is string => Boolean(email)),
-    ),
-  );
 
   await enqueueEmail(ctx, {
     template: "booking_quote_ready",
     to: request.email,
-    cc: cc.length > 0 ? cc : undefined,
     booking: { ref: { requestId: request._id } },
     idempotencyKey: `booking_quote_ready:${invoice._id}:${readyAt}`,
     payload: {
