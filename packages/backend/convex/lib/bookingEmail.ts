@@ -1,13 +1,19 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { BOOKINGS_EMAIL_FROM } from "../email/constants";
+import { BOOKING_CC_EMAIL, BOOKINGS_EMAIL_FROM } from "../email/constants";
 import { findAuthUsersByIds } from "./auth";
-import { bookingAddressFor, extractEmailAddress, parseBookingAddress } from "./emailAddresses";
+import {
+  bookingAddressFor,
+  extractEmailAddress,
+  normalizePlainAddress,
+  parseBookingAddress,
+} from "./emailAddresses";
 import {
   type BookingDocCache,
   type BookingRef,
   type BookingRefs,
   bookingDocCache,
+  currentThreadRefs,
   findThreadForBooking,
   getOrCreateThreadForBooking,
   type LoadedBookingDocs,
@@ -41,6 +47,8 @@ export type BookingEmailEnvelope = {
   booking: { threadId: Id<"emailThreads">; from: string };
   /** The booking's own address, so a reply lands on its thread. */
   replyTo: string[];
+  /** The caller's CCs plus the booking's standing ones, never the recipient. */
+  cc: string[];
   subject: string;
 };
 
@@ -111,7 +119,32 @@ function routableReplyTo(docs: {
 }
 
 /**
- * Sender, Reply-To and subject for the booking `refs` names. Read-only, so the
+ * Arbor Live is always copied. The manager joins once the booking has a quote.
+ * Before that the round-robin assignee can still change, and a CC stays in the
+ * client's reply-all for the rest of the conversation.
+ */
+async function standingCc(ctx: QueryCtx | MutationCtx, invoice: Doc<"invoices"> | null) {
+  if (!invoice) return [BOOKING_CC_EMAIL];
+  // A typo on the quote would fail every booking email, so the account's address wins then.
+  const managerEmail =
+    normalizePlainAddress(invoice.managerEmail ?? "") ??
+    (await findAuthUsersByIds(ctx, [invoice.managerUserId])).get(invoice.managerUserId)?.email;
+  return [BOOKING_CC_EMAIL, managerEmail];
+}
+
+/** Lowercased and deduped, without the recipient. */
+function mergeCc(to: string, ...lists: (readonly (string | null | undefined)[] | undefined)[]) {
+  const recipient = to.trim().toLowerCase();
+  const cc = new Set<string>();
+  for (const email of lists.flat()) {
+    const address = email?.trim().toLowerCase();
+    if (address && address !== recipient) cc.add(address);
+  }
+  return [...cc];
+}
+
+/**
+ * Sender, Reply-To, CC and subject for the booking `refs` names. Read-only, so the
  * quote sheets can preview exactly what the next email will use.
  */
 async function computeBookingEnvelope(
@@ -150,6 +183,7 @@ async function computeBookingEnvelope(
   return {
     from: bookingSenderFrom(managerName),
     replyTo: routableReplyTo({ request, invoice, eventId: refs.eventId }),
+    standingCc: await standingCc(ctx, invoice),
     subject: isReply ? replySubject(baseSubject) : baseSubject,
     baseSubject,
   };
@@ -164,6 +198,7 @@ async function computeBookingEnvelope(
 export async function resolveBookingEmail(
   ctx: MutationCtx,
   source: BookingEmailSource,
+  recipient: { to: string; cc?: string[] },
 ): Promise<BookingEmailEnvelope> {
   const cache = bookingDocCache(ctx, source.loaded);
   const thread = await getOrCreateThreadForBooking(ctx, source.ref, cache);
@@ -174,20 +209,22 @@ export async function resolveBookingEmail(
   return {
     booking: { threadId: thread._id, from: envelope.from },
     replyTo: [envelope.replyTo],
+    cc: mergeCc(recipient.to, recipient.cc, envelope.standingCc),
     subject: envelope.subject,
   };
 }
 
-/** What `resolveBookingEmail` would give the next email, without creating a thread. */
-export async function previewBookingEmail(ctx: QueryCtx, ref: BookingRef) {
+/** What `resolveBookingEmail` would give the next email to `to`, without creating a thread. */
+export async function previewBookingEmail(ctx: QueryCtx, ref: BookingRef, to: string) {
   const cache = bookingDocCache(ctx);
   const refs = await resolveBookingRefs(ctx, ref, cache);
   const thread = await findThreadForBooking(ctx, refs);
-  const merged: BookingRefs = {
-    requestId: thread?.requestId ?? refs.requestId,
-    invoiceId: thread?.invoiceId ?? refs.invoiceId,
-    eventId: thread?.eventId ?? refs.eventId,
-  };
-  const { from, replyTo, subject } = await computeBookingEnvelope(ctx, thread, merged, cache);
-  return { from, replyTo, subject };
+  const current = await currentThreadRefs(thread, refs, cache);
+  const { from, replyTo, standingCc, subject } = await computeBookingEnvelope(
+    ctx,
+    thread,
+    current,
+    cache,
+  );
+  return { from, replyTo, cc: mergeCc(to, standingCc), subject };
 }

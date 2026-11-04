@@ -205,17 +205,22 @@ export const getForRecord = query({
 });
 
 /**
- * The Reply-To and subject the next client email about this invoice's booking
+ * The Reply-To, CC and subject the next client email about this invoice's booking
  * will use, for the quote sheets. Read-only: computes the subject a new thread
  * would get without creating one.
  */
 export const bookingEmailPreview = query({
-  args: { invoiceId: v.id("invoices") },
-  returns: v.object({ from: v.string(), replyTo: v.string(), subject: v.string() }),
+  args: { invoiceId: v.id("invoices"), to: v.string() },
+  returns: v.object({
+    from: v.string(),
+    replyTo: v.string(),
+    cc: v.array(v.string()),
+    subject: v.string(),
+  }),
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    return await previewBookingEmail(ctx, { invoiceId: args.invoiceId });
+    return await previewBookingEmail(ctx, { invoiceId: args.invoiceId }, args.to);
   },
 });
 

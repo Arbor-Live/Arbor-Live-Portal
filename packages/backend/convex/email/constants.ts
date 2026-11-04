@@ -21,8 +21,11 @@ export const PAYMENTS_EMAIL_FROM =
 export const BAND_PAYMENTS_CC_EMAIL =
   process.env.BAND_PAYMENTS_CC_EMAIL ?? "arborlive@stanford.edu";
 
-/** Shared inbox included on client quote Reply-To (and public contact). */
+/** Arbor Live's shared inbox, the public contact address. */
 export const ARBOR_CONTACT_EMAIL = "arborlive@stanford.edu";
+
+/** Copied on every client booking email; empty copies no shared inbox. */
+export const BOOKING_CC_EMAIL = process.env.BOOKING_CC_EMAIL ?? ARBOR_CONTACT_EMAIL;
 
 function parseEmailAddress(from: string) {
   const match = from.match(/<([^>]+)>/);

@@ -463,7 +463,7 @@ describe("sendQueuedEmail with the e2e mock", () => {
       fromEmail: "bookings@arbor.st",
       fromName: "Rory Manager at Arbor Live",
       to: ["maya@client.test"],
-      cc: [],
+      cc: ["arborlive@stanford.edu"],
       subject: "Arbor Live booking: Winter Gala (ALREQ-AAAAAAA)",
       attachments: [],
     });

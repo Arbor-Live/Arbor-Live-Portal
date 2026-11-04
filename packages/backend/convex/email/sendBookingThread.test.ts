@@ -112,12 +112,14 @@ async function addClientMessage(t: Test, threadId: Id<"emailThreads">) {
   );
 }
 
-async function enqueueQuoteReady(t: Test) {
+async function enqueueQuoteReady(t: Test, people: { client?: string; manager?: string } = {}) {
   const { requestId, invoiceId } = await seedBooking(t);
   await t.run(async (ctx) => {
+    if (people.client) await ctx.db.patch(requestId, { email: people.client });
     await ctx.db.patch(invoiceId, {
       clientReviewReadyAt: Date.UTC(2026, 10, 3, 18),
       clientReadyMessage: "Here is your quote.",
+      managerEmail: people.manager,
     });
     await scheduleBookingQuoteReadyEmail(ctx, {
       request: (await ctx.db.get(requestId))!,
@@ -224,6 +226,32 @@ describe("sendQueuedEmail for the quote PDF", () => {
     });
   }, SEND_TEST_TIMEOUT_MS);
 
+  it("copies Arbor Live and the quote's manager on the quote email", async () => {
+    const t = makeTest();
+
+    const notification = await enqueueQuoteReady(t, { manager: "alex@arbor.test" });
+    await t.action(internal.email.send.sendQueuedEmail, { notificationId: notification._id });
+
+    expect(notification.cc).toEqual(["arborlive@stanford.edu", "alex@arbor.test"]);
+    expect(resend.sdkSends[0]!.payload.cc).toEqual(["arborlive@stanford.edu", "alex@arbor.test"]);
+  }, SEND_TEST_TIMEOUT_MS);
+
+  it("leaves real CCs off in EMAIL_TEST_MODE and sends to a test inbox", async () => {
+    vi.stubEnv("EMAIL_TEST_MODE", "true");
+    const t = makeTest();
+
+    const notification = await enqueueQuoteReady(t, {
+      client: "delivered@resend.dev",
+      manager: "alex@arbor.test",
+    });
+    await t.action(internal.email.send.sendQueuedEmail, { notificationId: notification._id });
+
+    expect(notification.cc).toEqual(["arborlive@stanford.edu", "alex@arbor.test"]);
+    expect(resend.sdkSends[0]!.payload.cc).toBeUndefined();
+    const [message] = await t.run(async (ctx) => ctx.db.query("emailMessages").collect());
+    expect(message!.cc).toEqual([]);
+  }, SEND_TEST_TIMEOUT_MS);
+
   it("refuses a real address in EMAIL_TEST_MODE before sending", async () => {
     vi.stubEnv("EMAIL_TEST_MODE", "true");
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -236,7 +264,7 @@ describe("sendQueuedEmail for the quote PDF", () => {
     expect(await t.run(async (ctx) => ctx.db.get(notification._id))).toMatchObject({
       status: "failed",
       error:
-        "EMAIL_TEST_MODE is on and these recipients are not Resend test addresses: maya@client.test, arborlive@stanford.edu. Send to delivered@resend.dev (or bounced@ / complained@resend.dev), or unset EMAIL_TEST_MODE to send real mail.",
+        "EMAIL_TEST_MODE is on and these recipients are not Resend test addresses: maya@client.test. Send to delivered@resend.dev (or bounced@ / complained@resend.dev), or unset EMAIL_TEST_MODE to send real mail.",
     });
   }, SEND_TEST_TIMEOUT_MS);
 

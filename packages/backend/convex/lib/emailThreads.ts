@@ -156,6 +156,27 @@ export async function findThreadForBooking(
 }
 
 /**
+ * The thread's ids, with the gaps filled from `refs`. A stored invoice or event
+ * that was deleted gives way to the one the booking resolves to now, so a
+ * re-created quote takes over the thread.
+ */
+export async function currentThreadRefs(
+  thread: BookingRefs | null,
+  refs: BookingRefs,
+  cache: BookingDocCache,
+): Promise<BookingRefs> {
+  async function pick<T extends "invoices" | "events">(stored?: Id<T>, resolved?: Id<T>) {
+    if (!stored || !resolved || stored === resolved) return stored ?? resolved;
+    return (await cache.get(stored)) ? stored : resolved;
+  }
+  return {
+    requestId: thread?.requestId ?? refs.requestId,
+    invoiceId: await pick(thread?.invoiceId, refs.invoiceId),
+    eventId: await pick(thread?.eventId, refs.eventId),
+  };
+}
+
+/**
  * The booking's thread, created on first use. Ids learned since the thread was
  * made (an invoice created after the request) are patched in, so the same
  * booking always converges on one row.
@@ -163,7 +184,7 @@ export async function findThreadForBooking(
 export async function getOrCreateThreadForBooking(
   ctx: MutationCtx,
   ref: BookingRef,
-  cache?: BookingDocCache,
+  cache: BookingDocCache = bookingDocCache(ctx),
 ): Promise<Doc<"emailThreads">> {
   const refs = await resolveBookingRefs(ctx, ref, cache);
   const existing = await findThreadForBooking(ctx, refs);
@@ -180,10 +201,11 @@ export async function getOrCreateThreadForBooking(
     return created;
   }
 
+  const current = await currentThreadRefs(existing, refs, cache);
   const patch: BookingRefs = {};
-  if (refs.requestId && !existing.requestId) patch.requestId = refs.requestId;
-  if (refs.invoiceId && !existing.invoiceId) patch.invoiceId = refs.invoiceId;
-  if (refs.eventId && !existing.eventId) patch.eventId = refs.eventId;
+  if (current.requestId !== existing.requestId) patch.requestId = current.requestId;
+  if (current.invoiceId !== existing.invoiceId) patch.invoiceId = current.invoiceId;
+  if (current.eventId !== existing.eventId) patch.eventId = current.eventId;
   if (Object.keys(patch).length === 0) return existing;
   await ctx.db.patch(existing._id, patch);
   return { ...existing, ...patch };
