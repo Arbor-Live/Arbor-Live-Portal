@@ -157,9 +157,8 @@ export async function findThreadForBooking(
 
 /**
  * The thread's ids, with the gaps filled from `refs`. A stored invoice or event
- * that was deleted gives way to the one the booking resolves to now. A live
- * one stays: change requests from the thread file against the quote the
- * client was emailed about.
+ * that was deleted gives way to the one the booking resolves to now. A live one
+ * stays, since change requests from the thread file against the thread's quote.
  */
 export async function currentThreadRefs(
   thread: BookingRefs | null,
@@ -187,7 +186,15 @@ export async function getOrCreateThreadForBooking(
   ref: BookingRef,
   cache: BookingDocCache = bookingDocCache(ctx),
 ): Promise<Doc<"emailThreads">> {
-  const refs = await resolveBookingRefs(ctx, ref, cache);
+  return await getOrCreateThreadForRefs(ctx, await resolveBookingRefs(ctx, ref, cache), cache);
+}
+
+/** `getOrCreateThreadForBooking` for ids the caller already resolved. */
+export async function getOrCreateThreadForRefs(
+  ctx: MutationCtx,
+  refs: BookingRefs,
+  cache: BookingDocCache,
+): Promise<Doc<"emailThreads">> {
   const existing = await findThreadForBooking(ctx, refs);
   if (!existing) {
     const now = Date.now();

@@ -295,17 +295,27 @@ describe("booking email CC", () => {
     });
     await enqueueBookingEmail(t, { requestId }, "old-quote");
 
-    const newQuote = await seedInvoice(t, { invoiceNumber: "ALINV-CCCCCCC" });
+    const newQuote = await seedInvoice(t, {
+      invoiceNumber: "ALINV-CCCCCCC",
+      sourceEventRequestId: requestId,
+    });
     await t.run(async (ctx) => {
-      await ctx.db.patch(newQuote, { managerEmail: "new@arbor.test" });
+      await ctx.db.patch(newQuote, { managerEmail: "new@arbor.test", managerName: "Nia New" });
       await ctx.db.patch(requestId, { linkedInvoiceId: newQuote });
     });
 
+    expect(
+      (await t.run(async (ctx) => previewBookingEmail(ctx, { requestId }, "maya@client.test"))).cc,
+    ).toEqual(["arborlive@stanford.edu", "new@arbor.test"]);
     const email = await enqueueBookingEmail(t, { requestId }, "new-quote");
 
     expect(email.cc).toEqual(["arborlive@stanford.edu", "new@arbor.test"]);
+    expect(email.booking?.from).toBe('"Nia New at Arbor Live" <bookings@arbor.st>');
     const [thread] = await t.run(async (ctx) => ctx.db.query("emailThreads").collect());
     expect(thread!.invoiceId).toBe(oldQuote);
+
+    const aboutOldQuote = await enqueueBookingEmail(t, { invoiceId: oldQuote }, "about-old-quote");
+    expect(aboutOldQuote.cc).toEqual(["arborlive@stanford.edu", "old@arbor.test"]);
   });
 
   it("copies the manager's account email when the quote's address is not one", async () => {

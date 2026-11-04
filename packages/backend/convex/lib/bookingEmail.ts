@@ -15,7 +15,7 @@ import {
   bookingDocCache,
   currentThreadRefs,
   findThreadForBooking,
-  getOrCreateThreadForBooking,
+  getOrCreateThreadForRefs,
   type LoadedBookingDocs,
   resolveBookingRefs,
 } from "./emailThreads";
@@ -190,16 +190,12 @@ async function computeBookingEnvelope(
 }
 
 /**
- * The thread's records, except the quote: a replacement quote's manager signs
- * and is copied, even while the thread still points at the quote it replaced.
+ * The thread's records, except the quote. An email the caller ties to a quote
+ * (`{ invoiceId }`) uses that quote's manager; a request-level email uses the
+ * request's current quote, even while the thread points at one it replaced.
  */
-async function envelopeRefs(
-  thread: BookingRefs | null,
-  refs: BookingRefs,
-  cache: BookingDocCache,
-): Promise<BookingRefs> {
-  const current = await currentThreadRefs(thread, refs, cache);
-  return { ...current, invoiceId: refs.invoiceId ?? current.invoiceId };
+function envelopeRefs(thread: BookingRefs, refs: BookingRefs): BookingRefs {
+  return { ...thread, invoiceId: refs.invoiceId ?? thread.invoiceId };
 }
 
 /**
@@ -214,12 +210,12 @@ export async function resolveBookingEmail(
   recipient: { to: string; cc?: string[] },
 ): Promise<BookingEmailEnvelope> {
   const cache = bookingDocCache(ctx, source.loaded);
-  const thread = await getOrCreateThreadForBooking(ctx, source.ref, cache);
   const refs = await resolveBookingRefs(ctx, source.ref, cache);
+  const thread = await getOrCreateThreadForRefs(ctx, refs, cache);
   const envelope = await computeBookingEnvelope(
     ctx,
     thread,
-    await envelopeRefs(thread, refs, cache),
+    envelopeRefs(thread, refs),
     cache,
     source.senderName,
   );
@@ -242,7 +238,7 @@ export async function previewBookingEmail(ctx: QueryCtx, ref: BookingRef, to: st
   const { from, replyTo, standingCc, subject } = await computeBookingEnvelope(
     ctx,
     thread,
-    await envelopeRefs(thread, refs, cache),
+    envelopeRefs(await currentThreadRefs(thread, refs, cache), refs),
     cache,
   );
   return { from, replyTo, cc: mergeCc(to, standingCc), subject };
