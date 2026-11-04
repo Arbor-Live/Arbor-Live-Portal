@@ -157,8 +157,9 @@ export async function findThreadForBooking(
 
 /**
  * The thread's ids, with the gaps filled from `refs`. A stored invoice or event
- * that was deleted gives way to the one the booking resolves to now, so a
- * re-created quote takes over the thread.
+ * that was deleted gives way to the one the booking resolves to now. A live
+ * one stays: change requests from the thread file against the quote the
+ * client was emailed about.
  */
 export async function currentThreadRefs(
   thread: BookingRefs | null,

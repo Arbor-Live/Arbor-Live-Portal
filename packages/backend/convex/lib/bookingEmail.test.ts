@@ -282,6 +282,32 @@ describe("booking email CC", () => {
     expect(thread!.invoiceId).toBe(secondQuote);
   });
 
+  it("follows a replacement quote while the old one is still stored", async () => {
+    const t = makeTest();
+    const requestId = await seedRequest(t, { requestNumber: "ALREQ-AAAAAAA" });
+    const oldQuote = await seedInvoice(t, {
+      invoiceNumber: "ALINV-BBBBBBB",
+      sourceEventRequestId: requestId,
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(oldQuote, { managerEmail: "old@arbor.test" });
+      await ctx.db.patch(requestId, { linkedInvoiceId: oldQuote });
+    });
+    await enqueueBookingEmail(t, { requestId }, "old-quote");
+
+    const newQuote = await seedInvoice(t, { invoiceNumber: "ALINV-CCCCCCC" });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(newQuote, { managerEmail: "new@arbor.test" });
+      await ctx.db.patch(requestId, { linkedInvoiceId: newQuote });
+    });
+
+    const email = await enqueueBookingEmail(t, { requestId }, "new-quote");
+
+    expect(email.cc).toEqual(["arborlive@stanford.edu", "new@arbor.test"]);
+    const [thread] = await t.run(async (ctx) => ctx.db.query("emailThreads").collect());
+    expect(thread!.invoiceId).toBe(oldQuote);
+  });
+
   it("copies the manager's account email when the quote's address is not one", async () => {
     const t = makeTest();
     const manager = await createUser(t, { name: "Sam Manager", email: "sam@arbor.test" });
