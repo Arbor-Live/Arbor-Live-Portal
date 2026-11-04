@@ -314,8 +314,26 @@ describe("booking email CC", () => {
     const [thread] = await t.run(async (ctx) => ctx.db.query("emailThreads").collect());
     expect(thread!.invoiceId).toBe(oldQuote);
 
-    const aboutOldQuote = await enqueueBookingEmail(t, { invoiceId: oldQuote }, "about-old-quote");
-    expect(aboutOldQuote.cc).toEqual(["arborlive@stanford.edu", "old@arbor.test"]);
+    const fromOldQuote = await enqueueBookingEmail(t, { invoiceId: oldQuote }, "from-old-quote");
+    expect(fromOldQuote.cc).toEqual(["arborlive@stanford.edu", "new@arbor.test"]);
+  });
+
+  it("keeps a live stored event and moves off a deleted one", async () => {
+    const t = makeTest();
+    const requestId = await seedRequest(t, { requestNumber: "ALREQ-AAAAAAA" });
+    const firstEvent = await seedEvent(t, { sourceEventRequestId: requestId });
+    await enqueueBookingEmail(t, { requestId }, "first-event");
+    const threadEvent = async () =>
+      (await t.run(async (ctx) => ctx.db.query("emailThreads").collect()))[0]!.eventId;
+
+    const secondEvent = await seedEvent(t, { sourceEventRequestId: requestId });
+    await t.run(async (ctx) => ctx.db.delete(firstEvent));
+    await enqueueBookingEmail(t, { eventId: secondEvent }, "second-event");
+    expect(await threadEvent()).toBe(secondEvent);
+
+    const thirdEvent = await seedEvent(t, { sourceEventRequestId: requestId });
+    await enqueueBookingEmail(t, { eventId: thirdEvent }, "third-event");
+    expect(await threadEvent()).toBe(secondEvent);
   });
 
   it("copies the manager's account email when the quote's address is not one", async () => {

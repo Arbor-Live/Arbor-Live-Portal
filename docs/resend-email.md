@@ -180,8 +180,8 @@ notification stores `booking: { threadId, from }`.
 - **CC.** Every booking email copies `BOOKING_CC_EMAIL` (default
   `arborlive@stanford.edu`). Once the booking has a quote, it also copies the
   quote's manager (`invoices.managerEmail`, else the manager's account email).
-  An email about a specific quote copies that quote's manager; a request-level
-  email copies the manager of the request's current quote.
+  The quote is the request's current one (`linkedInvoiceId`), whichever record
+  the email was sent from, so one conversation never copies two managers.
   The request's assignee is never copied: it can still change before the quote,
   and a CC stays in the client's Reply All for the rest of the conversation. CCs
   the caller passes (a staff reply's CC box) are kept; the recipient is never

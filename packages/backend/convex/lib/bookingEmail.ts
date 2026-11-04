@@ -13,7 +13,6 @@ import {
   type BookingRef,
   type BookingRefs,
   bookingDocCache,
-  currentThreadRefs,
   findThreadForBooking,
   getOrCreateThreadForRefs,
   type LoadedBookingDocs,
@@ -145,7 +144,9 @@ function mergeCc(to: string, ...lists: (readonly (string | null | undefined)[] |
 
 /**
  * Sender, Reply-To, CC and subject for the booking `refs` names. Read-only, so the
- * quote sheets can preview exactly what the next email will use.
+ * quote sheets can preview exactly what the next email will use. The quote is the
+ * request's current one, so every email on the booking signs and copies the same
+ * manager whichever record it was sent from.
  */
 async function computeBookingEnvelope(
   ctx: QueryCtx | MutationCtx,
@@ -154,9 +155,10 @@ async function computeBookingEnvelope(
   cache: BookingDocCache,
   senderName?: string | null,
 ) {
-  const [request, invoice, event] = await Promise.all([
-    refs.requestId ? cache.get(refs.requestId) : null,
-    refs.invoiceId ? cache.get(refs.invoiceId) : null,
+  const request = refs.requestId ? await cache.get(refs.requestId) : null;
+  const quoteId = request?.linkedInvoiceId ?? refs.invoiceId;
+  const [invoice, event] = await Promise.all([
+    quoteId ? cache.get(quoteId) : null,
     refs.eventId ? cache.get(refs.eventId) : null,
   ]);
 
@@ -190,15 +192,6 @@ async function computeBookingEnvelope(
 }
 
 /**
- * The thread's records, except the quote. An email the caller ties to a quote
- * (`{ invoiceId }`) uses that quote's manager; a request-level email uses the
- * request's current quote, even while the thread points at one it replaced.
- */
-function envelopeRefs(thread: BookingRefs, refs: BookingRefs): BookingRefs {
-  return { ...thread, invoiceId: refs.invoiceId ?? thread.invoiceId };
-}
-
-/**
  * Everything that makes a client booking email part of one conversation: the
  * booking thread, the booking sender, the booking address to reply to, and the
  * one subject the booking keeps. The first call stores the subject on the
@@ -212,13 +205,7 @@ export async function resolveBookingEmail(
   const cache = bookingDocCache(ctx, source.loaded);
   const refs = await resolveBookingRefs(ctx, source.ref, cache);
   const thread = await getOrCreateThreadForRefs(ctx, refs, cache);
-  const envelope = await computeBookingEnvelope(
-    ctx,
-    thread,
-    envelopeRefs(thread, refs),
-    cache,
-    source.senderName,
-  );
+  const envelope = await computeBookingEnvelope(ctx, thread, refs, cache, source.senderName);
   if (!thread.subject) {
     await ctx.db.patch(thread._id, { subject: envelope.baseSubject });
   }
@@ -238,7 +225,7 @@ export async function previewBookingEmail(ctx: QueryCtx, ref: BookingRef, to: st
   const { from, replyTo, standingCc, subject } = await computeBookingEnvelope(
     ctx,
     thread,
-    envelopeRefs(await currentThreadRefs(thread, refs, cache), refs),
+    refs,
     cache,
   );
   return { from, replyTo, cc: mergeCc(to, standingCc), subject };
