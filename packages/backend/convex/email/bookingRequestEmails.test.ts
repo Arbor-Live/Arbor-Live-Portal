@@ -35,17 +35,15 @@ async function receivedEmailFor(t: Test, assigneeUserId?: string) {
   });
 }
 
-test("the received email names the round-robin assignee as the client's manager", async () => {
+test("the received email names no manager, even with a round-robin assignee", async () => {
   const t = makeTest();
-  const manager = await createUser(t, { name: "Rory Manager", email: "rory@arbor.test" });
+  const assignee = await createUser(t, { name: "Rory Assignee", email: "rory@arbor.test" });
 
-  const email = await receivedEmailFor(t, manager._id);
+  const email = await receivedEmailFor(t, assignee._id);
 
-  expect(email.payload).toMatchObject({
-    managerName: "Rory Manager",
-    managerEmail: "rory@arbor.test",
-  });
-  expect(email.booking?.from).toBe('"Rory Manager at Arbor Live" <bookings@arbor.st>');
+  expect(email.payload.managerName).toBeUndefined();
+  expect(email.payload.managerEmail).toBeUndefined();
+  expect(email.booking?.from).toBe('"Arbor Live" <bookings@arbor.st>');
   expect(email.replyTo).toEqual(["alreq-test@arbor.st"]);
   expect(email.subject).toBe("Arbor Live booking: Fall Showcase (ALREQ-TEST)");
   expect(email.booking?.threadId).toBeDefined();
