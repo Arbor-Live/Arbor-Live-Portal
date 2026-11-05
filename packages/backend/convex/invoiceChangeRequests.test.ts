@@ -185,6 +185,37 @@ test("staff send a revised quote without a change request", async () => {
   ]);
 });
 
+test("a change request is about the version the client was sent, not unsent edits", async () => {
+  const t = makeTest();
+  const invoiceId = await seedQuote(t);
+  const staff = await arborStaff(t);
+
+  await staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Here's your quote." });
+
+  // Staff save a new price but don't send it yet; then the client's request arrives.
+  await t.run(async (ctx) => {
+    const line = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", invoiceId))
+      .first();
+    await ctx.db.patch(line!._id, { rateUsd: 800, amountUsd: 800 });
+  });
+  await t.mutation(api.invoices.requestChangesByToken, { token: TOKEN, note: "Can we lower the price?" });
+
+  expect(await staff.query(api.invoices.revisedQuotePreview, { id: invoiceId })).toMatchObject({
+    basis: { kind: "changes_requested", number: 2, totalUsd: 500 },
+    current: { totalUsd: 800 },
+  });
+
+  await staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Updated pricing." });
+  const revisions = await revisionsOf(t, invoiceId);
+  expect(revisions.map((r) => [r.number, r.kind, r.totalUsd, r.lines[0]?.rateUsd])).toEqual([
+    [1, "sent", 500, 500],
+    [2, "changes_requested", 500, 500],
+    [3, "sent", 800, 800],
+  ]);
+});
+
 test("a standalone quote needs the client's email to send", async () => {
   const t = makeTest();
   const invoiceId = await seedQuote(t, { clientEmail: undefined });
