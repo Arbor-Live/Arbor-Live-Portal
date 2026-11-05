@@ -245,6 +245,47 @@ test("a change request after staff reopen an approval is about the approved vers
   ]);
 });
 
+test("a change request skips an approved-quote edit the client was never sent", async () => {
+  const t = makeTest();
+  const invoiceId = await seedQuote(t);
+  const staff = await arborStaff(t);
+
+  await staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Here's your quote." });
+  await t.mutation(api.invoices.approveByToken, {
+    token: TOKEN,
+    signedName: "Jordan Client",
+    clientIsPaymentSubmitter: true,
+  });
+  await staff.mutation(api.invoices.updateDraft, {
+    id: invoiceId,
+    issueDate: "2026-10-01",
+    managerUserId: "manager",
+    managerName: "Alex Manager",
+    clientContactName: "Jordan Client",
+    clientEmail: "jordan@client.test",
+    equipmentPricingMode: "subsidized",
+    crewRateMode: "normal",
+    discountType: "amount",
+    discountValue: 0,
+    lineItems: [{ section: "fee", order: 0, label: "Photographer", quantity: 1, rateUsd: 800 }],
+    approvedChange: { decision: "keep_approval", note: "Internal rate correction" },
+  });
+  await staff.mutation(api.invoices.resetApprovalToPending, { id: invoiceId });
+  await t.mutation(api.invoices.requestChangesByToken, { token: TOKEN, note: "Can we lower the price?" });
+
+  const revisions = await revisionsOf(t, invoiceId);
+  expect(revisions.map((r) => [r.number, r.kind, r.totalUsd])).toEqual([
+    [1, "sent", 500],
+    [2, "approved", 500],
+    [3, "change_kept_approval", 800],
+    [4, "changes_requested", 500],
+  ]);
+  expect(await staff.query(api.invoices.revisedQuotePreview, { id: invoiceId })).toMatchObject({
+    basis: { kind: "changes_requested", number: 4, totalUsd: 500 },
+    current: { totalUsd: 800 },
+  });
+});
+
 test("a standalone quote needs the client's email to send", async () => {
   const t = makeTest();
   const invoiceId = await seedQuote(t, { clientEmail: undefined });
