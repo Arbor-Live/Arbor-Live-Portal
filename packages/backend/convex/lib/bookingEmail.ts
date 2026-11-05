@@ -162,14 +162,8 @@ async function computeBookingEnvelope(
     refs.eventId ? cache.get(refs.eventId) : null,
   ]);
 
-  let managerName =
+  const managerName =
     senderName === null ? undefined : senderName?.trim() || invoice?.managerName?.trim() || undefined;
-  if (!managerName && senderName !== null && request?.assigneeUserId) {
-    const assignee = (await findAuthUsersByIds(ctx, [request.assigneeUserId])).get(
-      request.assigneeUserId,
-    );
-    managerName = assignee?.name?.trim() || undefined;
-  }
 
   const eventName =
     request?.eventName?.trim() ||

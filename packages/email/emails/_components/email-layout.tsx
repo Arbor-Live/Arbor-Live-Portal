@@ -354,15 +354,15 @@ export function ContactNote({
   managerName,
   managerEmail,
 }: {
-  managerName: string;
+  managerName?: string;
   managerEmail?: string;
 }) {
   return (
     <Section className={DARK.note} style={contactNoteStyle}>
       <Text className={DARK.accent} style={contactNoteLabelStyle}>Questions?</Text>
       <Text className={DARK.body} style={contactNoteTextStyle}>
-        Reply to this email or contact {managerName}
-        {managerEmail ? (
+        {managerName ? `Reply to this email or contact ${managerName}` : "Reply to this email"}
+        {managerName && managerEmail ? (
           <>
             {" at "}
             <InlineLink href={`mailto:${managerEmail}`}>{managerEmail}</InlineLink>
