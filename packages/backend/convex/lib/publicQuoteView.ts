@@ -22,7 +22,7 @@ import {
 } from "../email/payingPartyEmails";
 import { scheduleQuoteChangesRequestedEmail } from "../email/quoteChangesRequestedEmails";
 import {
-  lastSentSnapshot,
+  latestRevisionSnapshot,
   listInvoiceRevisions,
   recordInvoiceRevision,
   snapshotInvoice,
@@ -504,7 +504,7 @@ export async function requestInvoiceQuoteChanges(
   });
   // Keep the request with the version it was about, so replying never erases it.
   const requestedSnapshot =
-    (await lastSentSnapshot(ctx, invoice._id)) ?? (await snapshotInvoice(ctx, invoice));
+    (await latestRevisionSnapshot(ctx, invoice._id)) ?? (await snapshotInvoice(ctx, invoice));
   await recordInvoiceRevision(ctx, invoice._id, requestedSnapshot, {
     kind: "changes_requested",
     at: now,

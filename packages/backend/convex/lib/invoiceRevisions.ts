@@ -136,12 +136,12 @@ export async function latestInvoiceRevision(ctx: QueryCtx | MutationCtx, invoice
     .first();
 }
 
-export async function lastSentSnapshot(
+export async function latestRevisionSnapshot(
   ctx: QueryCtx | MutationCtx,
   invoiceId: Id<"invoices">,
 ): Promise<InvoiceSnapshot | null> {
   const latest = await latestInvoiceRevision(ctx, invoiceId);
-  if (latest?.kind !== "sent" && latest?.kind !== "reapproval_requested") return null;
+  if (!latest) return null;
   return {
     totalUsd: latest.totalUsd,
     subtotalUsd: latest.subtotalUsd,
