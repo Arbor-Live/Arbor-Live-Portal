@@ -167,7 +167,8 @@ export async function ensureChangeRequestRevision(ctx: MutationCtx, invoice: Doc
   if (invoice.clientApprovalStatus !== "changes_requested") return null;
   const latest = await latestInvoiceRevision(ctx, invoice._id);
   if (latest?.kind === "changes_requested") return latest;
-  const snapshot = await snapshotInvoice(ctx, invoice);
+  const snapshot =
+    (await latestClientFacingSnapshot(ctx, invoice._id)) ?? (await snapshotInvoice(ctx, invoice));
   const { revisionId } = await recordInvoiceRevision(ctx, invoice._id, snapshot, {
     kind: "changes_requested",
     at: invoice.changesRequestedAt ?? Date.now(),
