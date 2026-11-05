@@ -136,6 +136,20 @@ export async function latestInvoiceRevision(ctx: QueryCtx | MutationCtx, invoice
     .first();
 }
 
+export async function lastSentSnapshot(
+  ctx: QueryCtx | MutationCtx,
+  invoiceId: Id<"invoices">,
+): Promise<InvoiceSnapshot | null> {
+  const latest = await latestInvoiceRevision(ctx, invoiceId);
+  if (latest?.kind !== "sent" && latest?.kind !== "reapproval_requested") return null;
+  return {
+    totalUsd: latest.totalUsd,
+    subtotalUsd: latest.subtotalUsd,
+    discountAmountUsd: latest.discountAmountUsd,
+    lines: latest.lines,
+  };
+}
+
 /**
  * The client's open change request, as a revision. Requests made before
  * revisions recorded them only live on the invoice; snapshot one the first

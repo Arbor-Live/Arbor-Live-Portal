@@ -192,7 +192,6 @@ test("a change request is about the version the client was sent, not unsent edit
 
   await staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Here's your quote." });
 
-  // Staff save a new price but don't send it yet; then the client's request arrives.
   await t.run(async (ctx) => {
     const line = await ctx.db
       .query("invoiceLineItems")

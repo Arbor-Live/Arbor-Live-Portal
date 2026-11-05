@@ -21,7 +21,12 @@ import {
   shouldNotifyPayingParty,
 } from "../email/payingPartyEmails";
 import { scheduleQuoteChangesRequestedEmail } from "../email/quoteChangesRequestedEmails";
-import { listInvoiceRevisions, recordInvoiceRevision, snapshotInvoice } from "./invoiceRevisions";
+import {
+  lastSentSnapshot,
+  listInvoiceRevisions,
+  recordInvoiceRevision,
+  snapshotInvoice,
+} from "./invoiceRevisions";
 import { scheduleQuoteApprovedEmail } from "../email/quoteApprovedEmails";
 import { loadEventHostDisplay } from "./hostOrgs";
 import { findAuthUsersByIds } from "./auth";
@@ -498,7 +503,9 @@ export async function requestInvoiceQuoteChanges(
     updatedAt: now,
   });
   // Keep the request with the version it was about, so replying never erases it.
-  await recordInvoiceRevision(ctx, invoice._id, await snapshotInvoice(ctx, invoice), {
+  const requestedSnapshot =
+    (await lastSentSnapshot(ctx, invoice._id)) ?? (await snapshotInvoice(ctx, invoice));
+  await recordInvoiceRevision(ctx, invoice._id, requestedSnapshot, {
     kind: "changes_requested",
     at: now,
     note: trimmed,
