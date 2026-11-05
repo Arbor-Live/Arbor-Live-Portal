@@ -136,11 +136,19 @@ export async function latestInvoiceRevision(ctx: QueryCtx | MutationCtx, invoice
     .first();
 }
 
-export async function latestRevisionSnapshot(
+const CLIENT_FACING_REVISION_KINDS: ReadonlySet<InvoiceRevisionKind> = new Set([
+  "sent",
+  "reapproval_requested",
+  "approved",
+  "final",
+]);
+
+export async function latestClientFacingSnapshot(
   ctx: QueryCtx | MutationCtx,
   invoiceId: Id<"invoices">,
 ): Promise<InvoiceSnapshot | null> {
-  const latest = await latestInvoiceRevision(ctx, invoiceId);
+  const revisions = await listInvoiceRevisions(ctx, invoiceId);
+  const latest = revisions.find((revision) => CLIENT_FACING_REVISION_KINDS.has(revision.kind));
   if (!latest) return null;
   return {
     totalUsd: latest.totalUsd,
