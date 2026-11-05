@@ -427,3 +427,40 @@ test("a request recorded late is about the version the client was sent, not late
     [2, "changes_requested", 500],
   ]);
 });
+
+test("a change request finds the client's version behind many staff-only saves", async () => {
+  const t = makeTest();
+  const invoiceId = await seedQuote(t);
+  const line = { section: "fee" as const, label: "Photographer", quantity: 1 };
+
+  await t.run(async (ctx) => {
+    const revision = (number: number, kind: "approved" | "change_kept_approval", totalUsd: number) =>
+      ctx.db.insert("invoiceRevisions", {
+        invoiceId,
+        number,
+        kind,
+        totalUsd,
+        subtotalUsd: totalUsd,
+        discountAmountUsd: 0,
+        lines: [{ ...line, rateUsd: totalUsd, amountUsd: totalUsd }],
+        createdAt: number,
+      });
+    await revision(1, "approved", 500);
+    for (let number = 2; number <= 61; number++) await revision(number, "change_kept_approval", 600);
+    const saved = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", invoiceId))
+      .first();
+    await ctx.db.patch(saved!._id, { rateUsd: 800, amountUsd: 800 });
+  });
+  await t.mutation(api.invoices.requestChangesByToken, { token: TOKEN, note: "Can we lower the price?" });
+
+  const latest = await t.run(async (ctx) =>
+    ctx.db
+      .query("invoiceRevisions")
+      .withIndex("by_invoiceId_and_number", (q) => q.eq("invoiceId", invoiceId))
+      .order("desc")
+      .first(),
+  );
+  expect([latest?.number, latest?.kind, latest?.totalUsd]).toEqual([62, "changes_requested", 500]);
+});
