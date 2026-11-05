@@ -439,8 +439,8 @@ describe("sendQueuedEmail with the e2e mock", () => {
     vi.stubEnv("E2E_HELPERS", "true");
     vi.stubEnv("SITE_URL", "http://localhost:3000");
     const t = makeTest();
-    const manager = await createUser(t, { name: "Rory Manager", email: "rory@arbor.test" });
-    const requestId = await seedRequest(t, { requestNumber: "ALREQ-AAAAAAA", assigneeUserId: manager._id });
+    const assignee = await createUser(t, { name: "Rory Assignee", email: "rory@arbor.test" });
+    const requestId = await seedRequest(t, { requestNumber: "ALREQ-AAAAAAA", assigneeUserId: assignee._id });
     await t.run(async (ctx) =>
       ctx.db.patch(requestId, { eventName: "Winter Gala", publicToken: "tok" }),
     );
@@ -461,7 +461,7 @@ describe("sendQueuedEmail with the e2e mock", () => {
       resendEmailId: `e2e-mock:${notificationId}`,
       messageId: `e2e-mock-${notificationId}@arbor.st`,
       fromEmail: "bookings@arbor.st",
-      fromName: "Rory Manager at Arbor Live",
+      fromName: "Arbor Live",
       to: ["maya@client.test"],
       cc: ["arborlive@stanford.edu"],
       subject: "Arbor Live booking: Winter Gala (ALREQ-AAAAAAA)",

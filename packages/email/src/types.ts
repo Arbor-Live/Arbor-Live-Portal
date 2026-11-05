@@ -113,9 +113,6 @@ export type BookingRequestReceivedEmailProps = {
   eventName: string;
   eventDateText: string;
   trackingUrl: string;
-  /** The round-robin assignee who manages the request, when one is set. */
-  managerName?: string;
-  managerEmail?: string;
 };
 
 export type BookingRequestAdminEmailProps = {

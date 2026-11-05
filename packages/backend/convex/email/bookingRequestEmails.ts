@@ -1,22 +1,13 @@
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { bookingDeclineReasonLabel } from "@arbor/format";
-import { findAuthUsersByIds, listAdminEmailsForVertical } from "../lib/auth";
+import { listAdminEmailsForVertical } from "../lib/auth";
 import {
   bookingRequestsAdminUrl,
   requestTrackingUrl,
   subjectForTemplate,
 } from "./constants";
 import { enqueueEmail } from "./enqueue";
-
-/** The request's round-robin assignee, introduced to the client as their manager. */
-async function resolveRequestManager(ctx: MutationCtx, assigneeUserId: string | undefined) {
-  if (!assigneeUserId) return null;
-  const user = (await findAuthUsersByIds(ctx, [assigneeUserId])).get(assigneeUserId);
-  const email = user?.email?.trim() || undefined;
-  const name = user?.name?.trim() || email;
-  return name ? { name, email } : null;
-}
 
 export async function scheduleBookingRequestReceivedEmail(
   ctx: MutationCtx,
@@ -32,7 +23,6 @@ export async function scheduleBookingRequestReceivedEmail(
     | "organization"
     | "publicToken"
     | "submittedAt"
-    | "assigneeUserId"
   >,
 ) {
   const requestNumber = request.requestNumber ?? `LEGACY-${request._id}`;
@@ -41,7 +31,6 @@ export async function scheduleBookingRequestReceivedEmail(
 
   const recipientName = request.firstName.trim() || undefined;
   const eventName = request.eventName?.trim() || "Your event";
-  const manager = await resolveRequestManager(ctx, request.assigneeUserId);
   await enqueueEmail(ctx, {
     template: "booking_request_received",
     to: request.email,
@@ -53,8 +42,6 @@ export async function scheduleBookingRequestReceivedEmail(
       eventName,
       eventDateText: request.eventDateText,
       trackingUrl: requestTrackingUrl(publicToken),
-      managerName: manager?.name,
-      managerEmail: manager?.email,
     },
   });
 
