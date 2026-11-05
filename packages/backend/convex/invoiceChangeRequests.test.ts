@@ -393,3 +393,37 @@ test("a request made before requests were versions is recorded late, once", asyn
     createdAt: 1_700_000_000_000,
   });
 });
+
+test("a request recorded late is about the version the client was sent, not later edits", async () => {
+  const t = makeTest();
+  const invoiceId = await seedQuote(t, {
+    clientApprovalStatus: "changes_requested",
+    changesRequestedAt: 1_700_000_000_000,
+    clientApprovalNote: "Earlier load-in",
+  });
+
+  await t.run(async (ctx) => {
+    await ctx.db.insert("invoiceRevisions", {
+      invoiceId,
+      number: 1,
+      kind: "approved",
+      totalUsd: 500,
+      subtotalUsd: 500,
+      discountAmountUsd: 0,
+      lines: [{ section: "fee", label: "Photographer", quantity: 1, rateUsd: 500, amountUsd: 500 }],
+      createdAt: 1_690_000_000_000,
+    });
+    const line = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", invoiceId))
+      .first();
+    await ctx.db.patch(line!._id, { rateUsd: 800, amountUsd: 800 });
+    await ensureChangeRequestRevision(ctx, (await ctx.db.get(invoiceId))!);
+  });
+
+  const revisions = await revisionsOf(t, invoiceId);
+  expect(revisions.map((r) => [r.number, r.kind, r.totalUsd])).toEqual([
+    [1, "approved", 500],
+    [2, "changes_requested", 500],
+  ]);
+});
