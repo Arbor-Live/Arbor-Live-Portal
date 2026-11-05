@@ -147,15 +147,20 @@ export async function latestClientFacingSnapshot(
   ctx: QueryCtx | MutationCtx,
   invoiceId: Id<"invoices">,
 ): Promise<InvoiceSnapshot | null> {
-  const revisions = await listInvoiceRevisions(ctx, invoiceId);
-  const latest = revisions.find((revision) => CLIENT_FACING_REVISION_KINDS.has(revision.kind));
-  if (!latest) return null;
-  return {
-    totalUsd: latest.totalUsd,
-    subtotalUsd: latest.subtotalUsd,
-    discountAmountUsd: latest.discountAmountUsd,
-    lines: latest.lines,
-  };
+  const newestFirst = ctx.db
+    .query("invoiceRevisions")
+    .withIndex("by_invoiceId_and_number", (q) => q.eq("invoiceId", invoiceId))
+    .order("desc");
+  for await (const revision of newestFirst) {
+    if (!CLIENT_FACING_REVISION_KINDS.has(revision.kind)) continue;
+    return {
+      totalUsd: revision.totalUsd,
+      subtotalUsd: revision.subtotalUsd,
+      discountAmountUsd: revision.discountAmountUsd,
+      lines: revision.lines,
+    };
+  }
+  return null;
 }
 
 /**
