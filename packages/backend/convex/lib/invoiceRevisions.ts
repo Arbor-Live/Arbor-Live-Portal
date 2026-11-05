@@ -136,6 +136,33 @@ export async function latestInvoiceRevision(ctx: QueryCtx | MutationCtx, invoice
     .first();
 }
 
+const CLIENT_FACING_REVISION_KINDS: ReadonlySet<InvoiceRevisionKind> = new Set([
+  "sent",
+  "reapproval_requested",
+  "approved",
+  "final",
+]);
+
+export async function latestClientFacingSnapshot(
+  ctx: QueryCtx | MutationCtx,
+  invoiceId: Id<"invoices">,
+): Promise<InvoiceSnapshot | null> {
+  const newestFirst = ctx.db
+    .query("invoiceRevisions")
+    .withIndex("by_invoiceId_and_number", (q) => q.eq("invoiceId", invoiceId))
+    .order("desc");
+  for await (const revision of newestFirst) {
+    if (!CLIENT_FACING_REVISION_KINDS.has(revision.kind)) continue;
+    return {
+      totalUsd: revision.totalUsd,
+      subtotalUsd: revision.subtotalUsd,
+      discountAmountUsd: revision.discountAmountUsd,
+      lines: revision.lines,
+    };
+  }
+  return null;
+}
+
 /**
  * The client's open change request, as a revision. Requests made before
  * revisions recorded them only live on the invoice; snapshot one the first
@@ -145,7 +172,8 @@ export async function ensureChangeRequestRevision(ctx: MutationCtx, invoice: Doc
   if (invoice.clientApprovalStatus !== "changes_requested") return null;
   const latest = await latestInvoiceRevision(ctx, invoice._id);
   if (latest?.kind === "changes_requested") return latest;
-  const snapshot = await snapshotInvoice(ctx, invoice);
+  const snapshot =
+    (await latestClientFacingSnapshot(ctx, invoice._id)) ?? (await snapshotInvoice(ctx, invoice));
   const { revisionId } = await recordInvoiceRevision(ctx, invoice._id, snapshot, {
     kind: "changes_requested",
     at: invoice.changesRequestedAt ?? Date.now(),

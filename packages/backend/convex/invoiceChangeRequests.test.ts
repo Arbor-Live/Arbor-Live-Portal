@@ -185,6 +185,107 @@ test("staff send a revised quote without a change request", async () => {
   ]);
 });
 
+test("a change request is about the version the client was sent, not unsent edits", async () => {
+  const t = makeTest();
+  const invoiceId = await seedQuote(t);
+  const staff = await arborStaff(t);
+
+  await staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Here's your quote." });
+
+  await t.run(async (ctx) => {
+    const line = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", invoiceId))
+      .first();
+    await ctx.db.patch(line!._id, { rateUsd: 800, amountUsd: 800 });
+  });
+  await t.mutation(api.invoices.requestChangesByToken, { token: TOKEN, note: "Can we lower the price?" });
+
+  expect(await staff.query(api.invoices.revisedQuotePreview, { id: invoiceId })).toMatchObject({
+    basis: { kind: "changes_requested", number: 2, totalUsd: 500 },
+    current: { totalUsd: 800 },
+  });
+
+  await staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Updated pricing." });
+  const revisions = await revisionsOf(t, invoiceId);
+  expect(revisions.map((r) => [r.number, r.kind, r.totalUsd, r.lines[0]?.rateUsd])).toEqual([
+    [1, "sent", 500, 500],
+    [2, "changes_requested", 500, 500],
+    [3, "sent", 800, 800],
+  ]);
+});
+
+test("a change request after staff reopen an approval is about the approved version", async () => {
+  const t = makeTest();
+  const invoiceId = await seedQuote(t);
+  const staff = await arborStaff(t);
+
+  await staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Here's your quote." });
+  await t.mutation(api.invoices.approveByToken, {
+    token: TOKEN,
+    signedName: "Jordan Client",
+    clientIsPaymentSubmitter: true,
+  });
+  await staff.mutation(api.invoices.resetApprovalToPending, { id: invoiceId });
+
+  await t.run(async (ctx) => {
+    const line = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", invoiceId))
+      .first();
+    await ctx.db.patch(line!._id, { rateUsd: 800, amountUsd: 800 });
+  });
+  await t.mutation(api.invoices.requestChangesByToken, { token: TOKEN, note: "Can we lower the price?" });
+
+  const revisions = await revisionsOf(t, invoiceId);
+  expect(revisions.map((r) => [r.number, r.kind, r.totalUsd])).toEqual([
+    [1, "sent", 500],
+    [2, "approved", 500],
+    [3, "changes_requested", 500],
+  ]);
+});
+
+test("a change request skips an approved-quote edit the client was never sent", async () => {
+  const t = makeTest();
+  const invoiceId = await seedQuote(t);
+  const staff = await arborStaff(t);
+
+  await staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Here's your quote." });
+  await t.mutation(api.invoices.approveByToken, {
+    token: TOKEN,
+    signedName: "Jordan Client",
+    clientIsPaymentSubmitter: true,
+  });
+  await staff.mutation(api.invoices.updateDraft, {
+    id: invoiceId,
+    issueDate: "2026-10-01",
+    managerUserId: "manager",
+    managerName: "Alex Manager",
+    clientContactName: "Jordan Client",
+    clientEmail: "jordan@client.test",
+    equipmentPricingMode: "subsidized",
+    crewRateMode: "normal",
+    discountType: "amount",
+    discountValue: 0,
+    lineItems: [{ section: "fee", order: 0, label: "Photographer", quantity: 1, rateUsd: 800 }],
+    approvedChange: { decision: "keep_approval", note: "Internal rate correction" },
+  });
+  await staff.mutation(api.invoices.resetApprovalToPending, { id: invoiceId });
+  await t.mutation(api.invoices.requestChangesByToken, { token: TOKEN, note: "Can we lower the price?" });
+
+  const revisions = await revisionsOf(t, invoiceId);
+  expect(revisions.map((r) => [r.number, r.kind, r.totalUsd])).toEqual([
+    [1, "sent", 500],
+    [2, "approved", 500],
+    [3, "change_kept_approval", 800],
+    [4, "changes_requested", 500],
+  ]);
+  expect(await staff.query(api.invoices.revisedQuotePreview, { id: invoiceId })).toMatchObject({
+    basis: { kind: "changes_requested", number: 4, totalUsd: 500 },
+    current: { totalUsd: 800 },
+  });
+});
+
 test("a standalone quote needs the client's email to send", async () => {
   const t = makeTest();
   const invoiceId = await seedQuote(t, { clientEmail: undefined });
@@ -291,4 +392,75 @@ test("a request made before requests were versions is recorded late, once", asyn
     recordedLate: true,
     createdAt: 1_700_000_000_000,
   });
+});
+
+test("a request recorded late is about the version the client was sent, not later edits", async () => {
+  const t = makeTest();
+  const invoiceId = await seedQuote(t, {
+    clientApprovalStatus: "changes_requested",
+    changesRequestedAt: 1_700_000_000_000,
+    clientApprovalNote: "Earlier load-in",
+  });
+
+  await t.run(async (ctx) => {
+    await ctx.db.insert("invoiceRevisions", {
+      invoiceId,
+      number: 1,
+      kind: "approved",
+      totalUsd: 500,
+      subtotalUsd: 500,
+      discountAmountUsd: 0,
+      lines: [{ section: "fee", label: "Photographer", quantity: 1, rateUsd: 500, amountUsd: 500 }],
+      createdAt: 1_690_000_000_000,
+    });
+    const line = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", invoiceId))
+      .first();
+    await ctx.db.patch(line!._id, { rateUsd: 800, amountUsd: 800 });
+    await ensureChangeRequestRevision(ctx, (await ctx.db.get(invoiceId))!);
+  });
+
+  const revisions = await revisionsOf(t, invoiceId);
+  expect(revisions.map((r) => [r.number, r.kind, r.totalUsd])).toEqual([
+    [1, "approved", 500],
+    [2, "changes_requested", 500],
+  ]);
+});
+
+test("a change request finds the client's version behind many staff-only saves", async () => {
+  const t = makeTest();
+  const invoiceId = await seedQuote(t);
+  const line = { section: "fee" as const, label: "Photographer", quantity: 1 };
+
+  await t.run(async (ctx) => {
+    const revision = (number: number, kind: "approved" | "change_kept_approval", totalUsd: number) =>
+      ctx.db.insert("invoiceRevisions", {
+        invoiceId,
+        number,
+        kind,
+        totalUsd,
+        subtotalUsd: totalUsd,
+        discountAmountUsd: 0,
+        lines: [{ ...line, rateUsd: totalUsd, amountUsd: totalUsd }],
+        createdAt: number,
+      });
+    await revision(1, "approved", 500);
+    for (let number = 2; number <= 61; number++) await revision(number, "change_kept_approval", 600);
+    const saved = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", invoiceId))
+      .first();
+    await ctx.db.patch(saved!._id, { rateUsd: 800, amountUsd: 800 });
+  });
+  await t.mutation(api.invoices.requestChangesByToken, { token: TOKEN, note: "Can we lower the price?" });
+
+  const latest = await t.run(async (ctx) =>
+    ctx.db
+      .query("invoiceRevisions")
+      .withIndex("by_invoiceId_and_number", (q) => q.eq("invoiceId", invoiceId))
+      .order("desc")
+      .first(),
+  );
+  expect([latest?.number, latest?.kind, latest?.totalUsd]).toEqual([62, "changes_requested", 500]);
 });
