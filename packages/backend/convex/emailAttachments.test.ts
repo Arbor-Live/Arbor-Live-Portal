@@ -18,6 +18,7 @@ const stored = vi.hoisted(() => ({
   keys: [] as string[],
   types: [] as (string | undefined)[],
   deleted: [] as string[],
+  failSync: false,
 }));
 
 vi.mock("./inventoryR2", async (importOriginal) => ({
@@ -27,7 +28,9 @@ vi.mock("./inventoryR2", async (importOriginal) => ({
       stored.keys.push(opts.key);
       stored.types.push(opts.type);
     },
-    syncMetadata: async () => {},
+    syncMetadata: async () => {
+      if (stored.failSync) throw new Error("metadata sync failed");
+    },
     deleteObject: async (_ctx: unknown, key: string) => {
       stored.deleted.push(key);
     },
@@ -53,6 +56,7 @@ beforeEach(() => {
   stored.keys.length = 0;
   stored.types.length = 0;
   stored.deleted.length = 0;
+  stored.failSync = false;
   vi.stubEnv("RESEND_API_KEY", "re_test");
   fetchMock = vi.fn(async (url: string) => {
     if (url.startsWith("https://files.resend.test/")) return new Response(PDF_BYTES);
@@ -154,6 +158,22 @@ describe("emailAttachments.addToEventFiles", () => {
     ]);
     expect(calls[1]![0]).toBe("https://files.resend.test/att_1");
     expect(calls[1]![1]).toBeUndefined();
+  });
+
+  it("deletes the upload and adds no file when a step after storing it fails", async () => {
+    const t = makeTest();
+    const { eventId, messageId } = await seedBooking(t, [
+      { filename: "po.pdf", contentType: "application/pdf", size: 4, resendAttachmentId: "att_1" },
+    ]);
+    const staff = await staffViewer(t);
+    stored.failSync = true;
+
+    await expect(
+      staff.action(api.emailAttachments.addToEventFiles, { eventId, messageId, index: 0 }),
+    ).rejects.toThrow("metadata sync failed");
+    expect(stored.deleted).toEqual(stored.keys);
+    expect(stored.keys).toHaveLength(1);
+    expect(await artifactsOf(t, eventId)).toHaveLength(0);
   });
 
   it("answers already_added without fetching when the attachment was copied before", async () => {

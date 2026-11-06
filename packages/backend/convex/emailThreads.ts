@@ -173,7 +173,7 @@ export const getForRecord = query({
 
     // Only an event page can copy files to its event, so only it asks which already were.
     const copied = new Set<string>();
-    if (args.eventId) {
+    if (args.eventId && newest.some((message) => message.attachments.length > 0)) {
       const artifacts = await ctx.db
         .query("eventArtifacts")
         .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId!))

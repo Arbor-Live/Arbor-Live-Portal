@@ -200,14 +200,19 @@ export const addToEventFiles = action({
       uploadId: crypto.randomUUID(),
     });
     await inventoryR2.store(ctx, bytes, { key, type: contentType });
-    await inventoryR2.syncMetadata(ctx, key);
-
-    return await ctx.runMutation(internal.emailAttachments.recordAttachmentArtifact, {
-      eventId: args.eventId,
-      messageId: args.messageId,
-      index: args.index,
-      key,
-    });
+    try {
+      await inventoryR2.syncMetadata(ctx, key);
+      return await ctx.runMutation(internal.emailAttachments.recordAttachmentArtifact, {
+        eventId: args.eventId,
+        messageId: args.messageId,
+        index: args.index,
+        key,
+      });
+    } catch (error) {
+      // The key is new and nothing references it; a failed mutation rolls back any release it made.
+      await inventoryR2.deleteObject(ctx, key).catch(() => {});
+      throw error;
+    }
   },
 });
 
@@ -230,7 +235,6 @@ export const recordAttachmentArtifact = internalMutation({
     const message = await ctx.db.get(args.messageId);
     const attachment = message?.attachments[args.index];
     if (!message || !attachment) {
-      await releaseR2KeysIfUnreferenced(ctx, [args.key]);
       appError("EMAIL_ATTACHMENT_NOT_FOUND", "That attachment no longer exists.");
     }
     const now = Date.now();
