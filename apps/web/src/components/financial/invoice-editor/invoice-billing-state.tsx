@@ -101,7 +101,7 @@ export function InvoiceBillingState({ draft }: { draft: InvoiceDraft }) {
         className="flex flex-wrap items-center gap-2 border border-status-emerald-500/40 bg-status-emerald-500/10 px-2.5 py-1.5 text-status-emerald-700"
         data-testid="invoice-billing-state"
       >
-        <span className="min-w-0 flex-1">
+        <span className="min-w-0 flex-1 basis-64">
           Final invoice since {formatDate(invoice.billingFinalizedAt)}
           {invoice.billingFinalizedByName ? ` (${invoice.billingFinalizedByName})` : ""}. Payment is open.
         </span>
@@ -121,7 +121,7 @@ export function InvoiceBillingState({ draft }: { draft: InvoiceDraft }) {
       className="flex flex-wrap items-center gap-2 border border-status-blue-500/40 bg-status-blue-500/10 px-2.5 py-1.5 text-status-blue-700"
       data-testid="invoice-billing-state"
     >
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 basis-64">
         {invoice.paymentOpenedEarlyAt ? (
           <>
             Approved estimate. Payment opened early on {formatDate(invoice.paymentOpenedEarlyAt)}

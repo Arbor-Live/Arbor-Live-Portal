@@ -603,7 +603,7 @@ function InvoiceWorkflowStrip({
           }
           data-testid="invoice-approval-state"
         >
-          <span className="min-w-0 flex-1">
+          <span className="min-w-0 flex-1 basis-64">
             {approval === "approved" ? (
               <>
                 Approved
