@@ -26,9 +26,9 @@ export function InvoiceRequestSummary({ request }: { request: SourceRequest }) {
     <Collapsible className="border" data-testid="invoice-request-summary">
       <div className="flex flex-wrap items-center gap-2 px-3 py-2">
         <CollapsibleTrigger asChild>
-          <button type="button" className="group flex min-w-0 flex-1 items-center gap-2 text-left text-sm">
+          <button type="button" className="group flex min-w-0 flex-1 basis-64 items-center gap-2 text-left text-sm">
             <EnvelopeSimpleIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-            <span className="font-medium">Booking request {request.requestNumber}</span>
+            <span className="shrink-0 font-medium">Booking request {request.requestNumber}</span>
             <span className="truncate text-muted-foreground">
               · {request.firstName} {request.lastName} · {request.eventDateText}
             </span>
