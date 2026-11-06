@@ -308,16 +308,23 @@ a scheduling error is logged and never fails the approval.
   client-written text to treat as data. No inbound message means no model call.
 - **Model.** Vercel AI Gateway, OpenAI-compatible
   `POST https://ai-gateway.vercel.sh/v1/chat/completions`, model
-  `zai/glm-5.3-flash`, pinned to Baseten with
-  `providerOptions: { gateway: { only: ["baseten"] } }` (US-hosted, zero data
-  retention, no training). `BOOKING_SUMMARY_MODEL` and the comma-separated
-  `BOOKING_SUMMARY_PROVIDERS` override both. An unset or empty providers value
-  keeps the Baseten pin; only the explicit value `none` sends no `only` filter,
+  `meta/muse-spark-open`, pinned to Baseten, Fireworks, Modal and Together with
+  `providerOptions: { gateway: { disallowPromptTraining: true, only: ["baseten", "fireworks", "modal", "togetherai"] } }`.
+  The gateway enforces `disallowPromptTraining` on every plan. All four providers
+  list zero-data-retention agreements with the gateway, but the gateway enforces
+  zero retention per request (`zeroDataRetention: true`) only on a paid account,
+  so this request does not set it. The request sends no `temperature`, since some
+  models accept only the default. `AI_MODEL` and the comma-separated
+  `AI_PROVIDERS` override both. Set them together: the gateway
+  never fails over from the pin, so a model Baseten, Fireworks, Modal and Together do not serve needs
+  its own providers that list zero data retention (`baseten` for `deepseek/deepseek-v4.1-flash`, which needs paid credits). An
+  unset or empty providers value keeps the default pin; only the explicit value `none` sends no `only` filter,
   and every such call logs a warning
   ([environment-variables.md](environment-variables.md)). They are read in one
   place, [`lib/bookingSummary.ts`](../packages/backend/convex/lib/bookingSummary.ts).
-  It needs `AI_GATEWAY_API_KEY` on the deployment, and a Vercel account with
-  paid credits: a free-tier key gets HTTP 403 for the default model.
+  It needs `AI_GATEWAY_API_KEY` on the deployment. The default model is in the
+  gateway's free tier; a model outside it gets HTTP 403 until the account has
+  paid credits.
 - **Content rule.** The product owner's rule is in the system prompt verbatim
   ("The note should not include any pricing specific discussion, discounts,
   etc. It should only be operational notes such as venue location or details
@@ -374,7 +381,7 @@ a scheduling error is logged and never fails the approval.
   retried once after 60 seconds; the call is aborted after 60 seconds. A 401 or
   403 is never retried: it logs `gateway refused model <model> (<status>):
   <gateway error message> — add paid AI Gateway credits or set
-  BOOKING_SUMMARY_MODEL`, and the button shows the model and that message in
+  AI_MODEL`, and the button shows the model and that message in
   its toast.
 
 ## This Week at Arbor (newsletter)

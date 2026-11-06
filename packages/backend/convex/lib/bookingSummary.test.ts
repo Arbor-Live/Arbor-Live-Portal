@@ -156,8 +156,8 @@ describe("buildTranscript", () => {
 describe("buildGatewayRequest", () => {
   it("sends the transcript as a JSON array and the rules as the system prompt", () => {
     const body = buildGatewayRequest(transcript);
-    expect(body.model).toBe("zai/glm-5.3-flash");
-    expect(body.providerOptions).toEqual({ gateway: { only: ["baseten"] } });
+    expect(body.model).toBe("meta/muse-spark-open");
+    expect(body.providerOptions).toEqual({ gateway: { disallowPromptTraining: true, only: ["baseten", "fireworks", "modal", "togetherai"] } });
     expect(body.messages).toEqual([
       { role: "system", content: SUMMARY_SYSTEM_PROMPT },
       { role: "user", content: '[{"direction":"inbound","sender":"Maya","body":"Hello"}]' },
@@ -204,29 +204,31 @@ describe("summary model configuration", () => {
 
   it.each([
     ["unset", {}],
-    ["empty", { BOOKING_SUMMARY_PROVIDERS: "" }],
-    ["blank", { BOOKING_SUMMARY_PROVIDERS: " , " }],
-  ])("keeps the baseten pin when the providers variable is %s", (_, env) => {
-    expect(summaryModelConfig(env)).toEqual({ model: "zai/glm-5.3-flash", providers: ["baseten"] });
+    ["empty", { AI_PROVIDERS: "" }],
+    ["blank", { AI_PROVIDERS: " , " }],
+  ])("keeps the default provider pin when the providers variable is %s", (_, env) => {
+    expect(summaryModelConfig(env)).toEqual({ model: "meta/muse-spark-open", providers: ["baseten", "fireworks", "modal", "togetherai"] });
   });
 
   it("drops the pin only for the explicit value none", () => {
-    expect(summaryModelConfig({ BOOKING_SUMMARY_PROVIDERS: "none" }).providers).toBeNull();
-    expect(summaryModelConfig({ BOOKING_SUMMARY_PROVIDERS: " None " }).providers).toBeNull();
-    vi.stubEnv("BOOKING_SUMMARY_PROVIDERS", "none");
-    expect(buildGatewayRequest(transcript)).not.toHaveProperty("providerOptions");
+    expect(summaryModelConfig({ AI_PROVIDERS: "none" }).providers).toBeNull();
+    expect(summaryModelConfig({ AI_PROVIDERS: " None " }).providers).toBeNull();
+    vi.stubEnv("AI_PROVIDERS", "none");
+    expect(buildGatewayRequest(transcript).providerOptions).toEqual({
+      gateway: { disallowPromptTraining: true },
+    });
   });
 
-  it("takes the model from BOOKING_SUMMARY_MODEL and a blank value keeps the default", () => {
-    vi.stubEnv("BOOKING_SUMMARY_MODEL", "zai/glm-4.7-flash");
+  it("takes the model from AI_MODEL and a blank value keeps the default", () => {
+    vi.stubEnv("AI_MODEL", "zai/glm-4.7-flash");
     expect(buildGatewayRequest(transcript).model).toBe("zai/glm-4.7-flash");
-    expect(summaryModelConfig({ BOOKING_SUMMARY_MODEL: "  " }).model).toBe("zai/glm-5.3-flash");
+    expect(summaryModelConfig({ AI_MODEL: "  " }).model).toBe("meta/muse-spark-open");
   });
 
   it("takes a comma-separated provider list", () => {
-    vi.stubEnv("BOOKING_SUMMARY_PROVIDERS", "baseten, fireworks");
+    vi.stubEnv("AI_PROVIDERS", "baseten, fireworks");
     expect(buildGatewayRequest(transcript).providerOptions).toEqual({
-      gateway: { only: ["baseten", "fireworks"] },
+      gateway: { disallowPromptTraining: true, only: ["baseten", "fireworks"] },
     });
   });
 });
@@ -253,20 +255,20 @@ describe("requestOperationalNotes", () => {
     expect(url).toBe("https://ai-gateway.vercel.sh/v1/chat/completions");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer key-123");
     expect(init.signal).toBeInstanceOf(AbortSignal);
-    expect(JSON.parse(init.body as string).providerOptions).toEqual({ gateway: { only: ["baseten"] } });
+    expect(JSON.parse(init.body as string).providerOptions).toEqual({ gateway: { disallowPromptTraining: true, only: ["baseten", "fireworks", "modal", "togetherai"] } });
     expect(warn).not.toHaveBeenCalled();
   });
 
   it("warns on every unpinned call", async () => {
-    vi.stubEnv("BOOKING_SUMMARY_PROVIDERS", "none");
-    vi.stubEnv("BOOKING_SUMMARY_MODEL", "zai/glm-4.7-flash");
+    vi.stubEnv("AI_PROVIDERS", "none");
+    vi.stubEnv("AI_MODEL", "zai/glm-4.7-flash");
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ choices: [{ message: { content: '{"notes":[]}' } }] })));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     await requestOperationalNotes("k", transcript);
     await requestOperationalNotes("k", transcript);
     expect(warn).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalledWith(
-      "[bookingSummary] BOOKING_SUMMARY_PROVIDERS=none: sending client email to zai/glm-4.7-flash with no provider pin",
+      "[bookingSummary] AI_PROVIDERS=none: sending client email to zai/glm-4.7-flash with no provider pin",
     );
   });
 
@@ -336,13 +338,13 @@ describe("requestOperationalNotes", () => {
     expect(await requestOperationalNotes("k", transcript)).toEqual({
       ok: false,
       retryable: false,
-      reason: `gateway refused model zai/glm-5.3-flash (${status}): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
-      userMessage: `The AI Gateway refused zai/glm-5.3-flash (${status}): Free tier users do not have access to this model`,
+      reason: `gateway refused model meta/muse-spark-open (${status}): Free tier users do not have access to this model — add paid AI Gateway credits or set AI_MODEL and AI_PROVIDERS`,
+      userMessage: `The AI Gateway refused meta/muse-spark-open (${status}): Free tier users do not have access to this model`,
     });
   });
 
   it("shows no raw body for a refusal without a gateway error field", async () => {
-    vi.stubEnv("BOOKING_SUMMARY_MODEL", "zai/glm-4.7-flash");
+    vi.stubEnv("AI_MODEL", "zai/glm-4.7-flash");
     vi.stubGlobal("fetch", vi.fn(async () => new Response("SECRET bad key page", { status: 401 })));
     expect(await requestOperationalNotes("k", transcript)).toMatchObject({
       ok: false,

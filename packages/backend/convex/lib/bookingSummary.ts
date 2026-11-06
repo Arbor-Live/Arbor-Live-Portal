@@ -3,18 +3,22 @@ import type { Doc } from "../_generated/dataModel";
 /**
  * Vercel AI Gateway, OpenAI-compatible chat completions
  * (https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions/chat-completions).
- * By default the model is pinned to one provider (`providerOptions.gateway.only`,
- * a hard filter that never fails over): Baseten is US-hosted, zero-data-retention
- * and does not train on prompts, which matters because the input is client email.
+ * The input is client email. Every request sets `disallowPromptTraining`, which the
+ * gateway enforces on every plan. By default the model is also pinned to its
+ * providers (`providerOptions.gateway.only`, a hard filter that never fails over):
+ * Baseten, Fireworks, Modal and Together, which all list zero-data-retention
+ * agreements with the gateway and serve it with strict JSON output. The gateway only enforces zero retention per request on a paid account,
+ * so on free credits that agreement is the provider's policy, not a routing rule.
+ * The default model is in the gateway's free tier.
  */
 export const SUMMARY_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions";
-export const DEFAULT_SUMMARY_MODEL = "zai/glm-5.3-flash";
-export const DEFAULT_SUMMARY_PROVIDERS = ["baseten"];
-/** The only `BOOKING_SUMMARY_PROVIDERS` value that removes the provider pin. */
+export const DEFAULT_SUMMARY_MODEL = "meta/muse-spark-open";
+export const DEFAULT_SUMMARY_PROVIDERS = ["baseten", "fireworks", "modal", "togetherai"];
+/** The only `AI_PROVIDERS` value that removes the provider pin. */
 export const UNPINNED_PROVIDERS_VALUE = "none";
 
 /**
- * `BOOKING_SUMMARY_MODEL` and `BOOKING_SUMMARY_PROVIDERS` (comma-separated)
+ * `AI_MODEL` and `AI_PROVIDERS` (comma-separated)
  * override the defaults. Unset or blank keeps the default for both, so a
  * half-set variable can never unpin by accident; `providers: null` (no `only`
  * filter) needs the explicit value `none`.
@@ -23,8 +27,8 @@ export function summaryModelConfig(env: Record<string, string | undefined> = pro
   model: string;
   providers: string[] | null;
 } {
-  const model = env.BOOKING_SUMMARY_MODEL?.trim() || DEFAULT_SUMMARY_MODEL;
-  const raw = env.BOOKING_SUMMARY_PROVIDERS?.trim() ?? "";
+  const model = env.AI_MODEL?.trim() || DEFAULT_SUMMARY_MODEL;
+  const raw = env.AI_PROVIDERS?.trim() ?? "";
   if (raw.toLowerCase() === UNPINNED_PROVIDERS_VALUE) return { model, providers: null };
   const listed = raw
     .split(",")
@@ -125,7 +129,6 @@ export function buildGatewayRequest(transcript: readonly TranscriptEntry[]) {
       { role: "system", content: SUMMARY_SYSTEM_PROMPT },
       { role: "user", content: JSON.stringify(transcript) },
     ],
-    temperature: 0.2,
     response_format: {
       type: "json_schema",
       json_schema: {
@@ -139,7 +142,9 @@ export function buildGatewayRequest(transcript: readonly TranscriptEntry[]) {
         },
       },
     },
-    ...(providers ? { providerOptions: { gateway: { only: providers } } } : {}),
+    providerOptions: {
+      gateway: { disallowPromptTraining: true, ...(providers ? { only: providers } : {}) },
+    },
   };
 }
 
@@ -284,9 +289,9 @@ export async function requestOperationalNotes(
   transcript: readonly TranscriptEntry[],
 ): Promise<GatewayResult> {
   const request = buildGatewayRequest(transcript);
-  if (!("providerOptions" in request)) {
+  if (!("only" in request.providerOptions.gateway)) {
     console.warn(
-      `[bookingSummary] BOOKING_SUMMARY_PROVIDERS=${UNPINNED_PROVIDERS_VALUE}: sending client email to ${request.model} with no provider pin`,
+      `[bookingSummary] AI_PROVIDERS=${UNPINNED_PROVIDERS_VALUE}: sending client email to ${request.model} with no provider pin`,
     );
   }
   // `AbortSignal.timeout` is not in every Convex runtime.
@@ -316,7 +321,7 @@ export async function requestOperationalNotes(
       return {
         ok: false,
         retryable: false,
-        reason: `gateway refused model ${model} (${response.status}): ${message} — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
+        reason: `gateway refused model ${model} (${response.status}): ${message} — add paid AI Gateway credits or set AI_MODEL and AI_PROVIDERS`,
         userMessage: `The AI Gateway refused ${model} (${response.status}): ${message}`,
       };
     }

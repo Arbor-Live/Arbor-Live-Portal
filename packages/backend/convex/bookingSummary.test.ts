@@ -187,8 +187,8 @@ describe("summarizeForInvoice", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://ai-gateway.vercel.sh/v1/chat/completions");
     const body = JSON.parse(init.body as string);
-    expect(body.model).toBe("zai/glm-5.3-flash");
-    expect(body.providerOptions).toEqual({ gateway: { only: ["baseten"] } });
+    expect(body.model).toBe("meta/muse-spark-open");
+    expect(body.providerOptions).toEqual({ gateway: { disallowPromptTraining: true, only: ["baseten", "fireworks", "modal", "togetherai"] } });
     expect(body.messages[0].content).toContain(
       "The note should not include any pricing specific discussion, discounts, etc. It should only be operational notes such as venue location or details like those.",
     );
@@ -364,7 +364,7 @@ describe("summarizeForInvoice", () => {
     expect(warn).not.toHaveBeenCalled();
     expect(error).toHaveBeenCalledTimes(1);
     expect(error).toHaveBeenCalledWith(
-      `[bookingSummary] invoice ${invoiceId}: gave up after 1 attempt(s): gateway refused model zai/glm-5.3-flash (403): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
+      `[bookingSummary] invoice ${invoiceId}: gave up after 1 attempt(s): gateway refused model meta/muse-spark-open (403): Free tier users do not have access to this model — add paid AI Gateway credits or set AI_MODEL and AI_PROVIDERS`,
     );
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
@@ -521,7 +521,7 @@ describe("addSummaryToEventNotes (the Email card button)", () => {
     fetchMock.mockImplementation(async () => new Response("SECRET bad key", { status: 401 }));
     await expect(
       as.action(api.bookingSummary.addSummaryToEventNotes, { eventId: eventIds[0]! }),
-    ).rejects.toThrow("The AI Gateway refused zai/glm-5.3-flash (401): no message");
+    ).rejects.toThrow("The AI Gateway refused meta/muse-spark-open (401): no message");
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
 
@@ -558,25 +558,25 @@ describe("addSummaryToEventNotes (the Email card button)", () => {
     await expect(
       as.action(api.bookingSummary.addSummaryToEventNotes, { eventId: eventIds[0]! }),
     ).rejects.toThrow(
-      "The AI Gateway refused zai/glm-5.3-flash (403): Free tier users do not have access to this model",
+      "The AI Gateway refused meta/muse-spark-open (403): Free tier users do not have access to this model",
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(error).toHaveBeenCalledWith(
-      `[bookingSummary] event ${eventIds[0]}: gateway refused model zai/glm-5.3-flash (403): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
+      `[bookingSummary] event ${eventIds[0]}: gateway refused model meta/muse-spark-open (403): Free tier users do not have access to this model — add paid AI Gateway credits or set AI_MODEL and AI_PROVIDERS`,
     );
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
 
   it.each([
-    ["unset", undefined, { gateway: { only: ["baseten"] } }],
-    ["empty", "", { gateway: { only: ["baseten"] } }],
-    ["none", "none", undefined],
+    ["unset", undefined, { gateway: { disallowPromptTraining: true, only: ["baseten", "fireworks", "modal", "togetherai"] } }],
+    ["empty", "", { gateway: { disallowPromptTraining: true, only: ["baseten", "fireworks", "modal", "togetherai"] } }],
+    ["none", "none", { gateway: { disallowPromptTraining: true } }],
   ])("sends the provider pin through the whole path when the variable is %s", async (_, value, expected) => {
     const t = makeTest();
     const { eventIds } = await seedBooking(t);
     const as = await staff(t);
-    vi.stubEnv("BOOKING_SUMMARY_MODEL", "zai/glm-4.7-flash");
-    if (value !== undefined) vi.stubEnv("BOOKING_SUMMARY_PROVIDERS", value);
+    vi.stubEnv("AI_MODEL", "zai/glm-4.7-flash");
+    if (value !== undefined) vi.stubEnv("AI_PROVIDERS", value);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     await as.action(api.bookingSummary.addSummaryToEventNotes, { eventId: eventIds[0]! });
     const body = JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string);
