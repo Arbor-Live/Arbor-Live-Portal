@@ -3,10 +3,13 @@ import type { Doc } from "../_generated/dataModel";
 /**
  * Vercel AI Gateway, OpenAI-compatible chat completions
  * (https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions/chat-completions).
- * By default the model is pinned to its providers (`providerOptions.gateway.only`,
- * a hard filter that never fails over): OpenAI and Azure serve it with zero data
- * retention and no training on prompts, which matters because the input is client
- * email. It is also in the gateway's free tier, so a key without paid credits works.
+ * The input is client email. Every request sets `disallowPromptTraining`, which the
+ * gateway enforces on every plan. By default the model is also pinned to its
+ * providers (`providerOptions.gateway.only`, a hard filter that never fails over),
+ * OpenAI and Azure, which both list zero-data-retention agreements with the
+ * gateway. The gateway only enforces zero retention per request on a paid account,
+ * so on free credits that agreement is the provider's policy, not a routing rule.
+ * The default model is in the gateway's free tier.
  */
 export const SUMMARY_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions";
 export const DEFAULT_SUMMARY_MODEL = "openai/gpt-5-nano";
@@ -139,7 +142,9 @@ export function buildGatewayRequest(transcript: readonly TranscriptEntry[]) {
         },
       },
     },
-    ...(providers ? { providerOptions: { gateway: { only: providers } } } : {}),
+    providerOptions: {
+      gateway: { disallowPromptTraining: true, ...(providers ? { only: providers } : {}) },
+    },
   };
 }
 
@@ -284,7 +289,7 @@ export async function requestOperationalNotes(
   transcript: readonly TranscriptEntry[],
 ): Promise<GatewayResult> {
   const request = buildGatewayRequest(transcript);
-  if (!("providerOptions" in request)) {
+  if (!("only" in request.providerOptions.gateway)) {
     console.warn(
       `[bookingSummary] BOOKING_SUMMARY_PROVIDERS=${UNPINNED_PROVIDERS_VALUE}: sending client email to ${request.model} with no provider pin`,
     );

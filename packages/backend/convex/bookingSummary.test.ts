@@ -188,7 +188,7 @@ describe("summarizeForInvoice", () => {
     expect(url).toBe("https://ai-gateway.vercel.sh/v1/chat/completions");
     const body = JSON.parse(init.body as string);
     expect(body.model).toBe("openai/gpt-5-nano");
-    expect(body.providerOptions).toEqual({ gateway: { only: ["openai", "azure"] } });
+    expect(body.providerOptions).toEqual({ gateway: { disallowPromptTraining: true, only: ["openai", "azure"] } });
     expect(body.messages[0].content).toContain(
       "The note should not include any pricing specific discussion, discounts, etc. It should only be operational notes such as venue location or details like those.",
     );
@@ -568,9 +568,9 @@ describe("addSummaryToEventNotes (the Email card button)", () => {
   });
 
   it.each([
-    ["unset", undefined, { gateway: { only: ["openai", "azure"] } }],
-    ["empty", "", { gateway: { only: ["openai", "azure"] } }],
-    ["none", "none", undefined],
+    ["unset", undefined, { gateway: { disallowPromptTraining: true, only: ["openai", "azure"] } }],
+    ["empty", "", { gateway: { disallowPromptTraining: true, only: ["openai", "azure"] } }],
+    ["none", "none", { gateway: { disallowPromptTraining: true } }],
   ])("sends the provider pin through the whole path when the variable is %s", async (_, value, expected) => {
     const t = makeTest();
     const { eventIds } = await seedBooking(t);

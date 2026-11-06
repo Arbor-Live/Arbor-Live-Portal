@@ -157,7 +157,7 @@ describe("buildGatewayRequest", () => {
   it("sends the transcript as a JSON array and the rules as the system prompt", () => {
     const body = buildGatewayRequest(transcript);
     expect(body.model).toBe("openai/gpt-5-nano");
-    expect(body.providerOptions).toEqual({ gateway: { only: ["openai", "azure"] } });
+    expect(body.providerOptions).toEqual({ gateway: { disallowPromptTraining: true, only: ["openai", "azure"] } });
     expect(body.messages).toEqual([
       { role: "system", content: SUMMARY_SYSTEM_PROMPT },
       { role: "user", content: '[{"direction":"inbound","sender":"Maya","body":"Hello"}]' },
@@ -214,7 +214,9 @@ describe("summary model configuration", () => {
     expect(summaryModelConfig({ BOOKING_SUMMARY_PROVIDERS: "none" }).providers).toBeNull();
     expect(summaryModelConfig({ BOOKING_SUMMARY_PROVIDERS: " None " }).providers).toBeNull();
     vi.stubEnv("BOOKING_SUMMARY_PROVIDERS", "none");
-    expect(buildGatewayRequest(transcript)).not.toHaveProperty("providerOptions");
+    expect(buildGatewayRequest(transcript).providerOptions).toEqual({
+      gateway: { disallowPromptTraining: true },
+    });
   });
 
   it("takes the model from BOOKING_SUMMARY_MODEL and a blank value keeps the default", () => {
@@ -226,7 +228,7 @@ describe("summary model configuration", () => {
   it("takes a comma-separated provider list", () => {
     vi.stubEnv("BOOKING_SUMMARY_PROVIDERS", "baseten, fireworks");
     expect(buildGatewayRequest(transcript).providerOptions).toEqual({
-      gateway: { only: ["baseten", "fireworks"] },
+      gateway: { disallowPromptTraining: true, only: ["baseten", "fireworks"] },
     });
   });
 });
@@ -253,7 +255,7 @@ describe("requestOperationalNotes", () => {
     expect(url).toBe("https://ai-gateway.vercel.sh/v1/chat/completions");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer key-123");
     expect(init.signal).toBeInstanceOf(AbortSignal);
-    expect(JSON.parse(init.body as string).providerOptions).toEqual({ gateway: { only: ["openai", "azure"] } });
+    expect(JSON.parse(init.body as string).providerOptions).toEqual({ gateway: { disallowPromptTraining: true, only: ["openai", "azure"] } });
     expect(warn).not.toHaveBeenCalled();
   });
 
