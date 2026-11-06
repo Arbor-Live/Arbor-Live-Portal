@@ -156,7 +156,7 @@ describe("buildTranscript", () => {
 describe("buildGatewayRequest", () => {
   it("sends the transcript as a JSON array and the rules as the system prompt", () => {
     const body = buildGatewayRequest(transcript);
-    expect(body.model).toBe("openai/gpt-5-nano");
+    expect(body.model).toBe("openai/gpt-5.4-nano");
     expect(body.providerOptions).toEqual({ gateway: { disallowPromptTraining: true, only: ["openai", "azure"] } });
     expect(body.messages).toEqual([
       { role: "system", content: SUMMARY_SYSTEM_PROMPT },
@@ -204,29 +204,29 @@ describe("summary model configuration", () => {
 
   it.each([
     ["unset", {}],
-    ["empty", { BOOKING_SUMMARY_PROVIDERS: "" }],
-    ["blank", { BOOKING_SUMMARY_PROVIDERS: " , " }],
+    ["empty", { AI_PROVIDERS: "" }],
+    ["blank", { AI_PROVIDERS: " , " }],
   ])("keeps the default provider pin when the providers variable is %s", (_, env) => {
-    expect(summaryModelConfig(env)).toEqual({ model: "openai/gpt-5-nano", providers: ["openai", "azure"] });
+    expect(summaryModelConfig(env)).toEqual({ model: "openai/gpt-5.4-nano", providers: ["openai", "azure"] });
   });
 
   it("drops the pin only for the explicit value none", () => {
-    expect(summaryModelConfig({ BOOKING_SUMMARY_PROVIDERS: "none" }).providers).toBeNull();
-    expect(summaryModelConfig({ BOOKING_SUMMARY_PROVIDERS: " None " }).providers).toBeNull();
-    vi.stubEnv("BOOKING_SUMMARY_PROVIDERS", "none");
+    expect(summaryModelConfig({ AI_PROVIDERS: "none" }).providers).toBeNull();
+    expect(summaryModelConfig({ AI_PROVIDERS: " None " }).providers).toBeNull();
+    vi.stubEnv("AI_PROVIDERS", "none");
     expect(buildGatewayRequest(transcript).providerOptions).toEqual({
       gateway: { disallowPromptTraining: true },
     });
   });
 
-  it("takes the model from BOOKING_SUMMARY_MODEL and a blank value keeps the default", () => {
-    vi.stubEnv("BOOKING_SUMMARY_MODEL", "zai/glm-4.7-flash");
+  it("takes the model from AI_MODEL and a blank value keeps the default", () => {
+    vi.stubEnv("AI_MODEL", "zai/glm-4.7-flash");
     expect(buildGatewayRequest(transcript).model).toBe("zai/glm-4.7-flash");
-    expect(summaryModelConfig({ BOOKING_SUMMARY_MODEL: "  " }).model).toBe("openai/gpt-5-nano");
+    expect(summaryModelConfig({ AI_MODEL: "  " }).model).toBe("openai/gpt-5.4-nano");
   });
 
   it("takes a comma-separated provider list", () => {
-    vi.stubEnv("BOOKING_SUMMARY_PROVIDERS", "baseten, fireworks");
+    vi.stubEnv("AI_PROVIDERS", "baseten, fireworks");
     expect(buildGatewayRequest(transcript).providerOptions).toEqual({
       gateway: { disallowPromptTraining: true, only: ["baseten", "fireworks"] },
     });
@@ -260,15 +260,15 @@ describe("requestOperationalNotes", () => {
   });
 
   it("warns on every unpinned call", async () => {
-    vi.stubEnv("BOOKING_SUMMARY_PROVIDERS", "none");
-    vi.stubEnv("BOOKING_SUMMARY_MODEL", "zai/glm-4.7-flash");
+    vi.stubEnv("AI_PROVIDERS", "none");
+    vi.stubEnv("AI_MODEL", "zai/glm-4.7-flash");
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ choices: [{ message: { content: '{"notes":[]}' } }] })));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     await requestOperationalNotes("k", transcript);
     await requestOperationalNotes("k", transcript);
     expect(warn).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalledWith(
-      "[bookingSummary] BOOKING_SUMMARY_PROVIDERS=none: sending client email to zai/glm-4.7-flash with no provider pin",
+      "[bookingSummary] AI_PROVIDERS=none: sending client email to zai/glm-4.7-flash with no provider pin",
     );
   });
 
@@ -338,13 +338,13 @@ describe("requestOperationalNotes", () => {
     expect(await requestOperationalNotes("k", transcript)).toEqual({
       ok: false,
       retryable: false,
-      reason: `gateway refused model openai/gpt-5-nano (${status}): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL and BOOKING_SUMMARY_PROVIDERS`,
-      userMessage: `The AI Gateway refused openai/gpt-5-nano (${status}): Free tier users do not have access to this model`,
+      reason: `gateway refused model openai/gpt-5.4-nano (${status}): Free tier users do not have access to this model — add paid AI Gateway credits or set AI_MODEL and AI_PROVIDERS`,
+      userMessage: `The AI Gateway refused openai/gpt-5.4-nano (${status}): Free tier users do not have access to this model`,
     });
   });
 
   it("shows no raw body for a refusal without a gateway error field", async () => {
-    vi.stubEnv("BOOKING_SUMMARY_MODEL", "zai/glm-4.7-flash");
+    vi.stubEnv("AI_MODEL", "zai/glm-4.7-flash");
     vi.stubGlobal("fetch", vi.fn(async () => new Response("SECRET bad key page", { status: 401 })));
     expect(await requestOperationalNotes("k", transcript)).toMatchObject({
       ok: false,

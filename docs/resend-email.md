@@ -300,16 +300,16 @@ a scheduling error is logged and never fails the approval.
   client-written text to treat as data. No inbound message means no model call.
 - **Model.** Vercel AI Gateway, OpenAI-compatible
   `POST https://ai-gateway.vercel.sh/v1/chat/completions`, model
-  `openai/gpt-5-nano`, pinned to OpenAI and Azure with
+  `openai/gpt-5.4-nano`, pinned to OpenAI and Azure with
   `providerOptions: { gateway: { disallowPromptTraining: true, only: ["openai", "azure"] } }`.
   The gateway enforces `disallowPromptTraining` on every plan. Both providers
   list zero-data-retention agreements with the gateway, but the gateway enforces
   zero retention per request (`zeroDataRetention: true`) only on a paid account,
-  so this request does not set it. The request sends no `temperature`, since GPT-5
-  models accept only the default. `BOOKING_SUMMARY_MODEL` and the comma-separated
-  `BOOKING_SUMMARY_PROVIDERS` override both. Set them together: the gateway
+  so this request does not set it. The request sends no `temperature`, since some
+  models accept only the default. `AI_MODEL` and the comma-separated
+  `AI_PROVIDERS` override both. Set them together: the gateway
   never fails over from the pin, so a model OpenAI and Azure do not serve needs
-  its own providers that list zero data retention (`baseten` for `zai/glm-5.3-flash`). An
+  its own providers that list zero data retention (`baseten` for `deepseek/deepseek-v4.1-flash`, which needs paid credits). An
   unset or empty providers value keeps the default pin; only the explicit value `none` sends no `only` filter,
   and every such call logs a warning
   ([environment-variables.md](environment-variables.md)). They are read in one
@@ -373,7 +373,7 @@ a scheduling error is logged and never fails the approval.
   retried once after 60 seconds; the call is aborted after 60 seconds. A 401 or
   403 is never retried: it logs `gateway refused model <model> (<status>):
   <gateway error message> — add paid AI Gateway credits or set
-  BOOKING_SUMMARY_MODEL`, and the button shows the model and that message in
+  AI_MODEL`, and the button shows the model and that message in
   its toast.
 
 ## This Week at Arbor (newsletter)

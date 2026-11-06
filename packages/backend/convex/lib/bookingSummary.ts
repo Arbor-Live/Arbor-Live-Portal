@@ -12,13 +12,13 @@ import type { Doc } from "../_generated/dataModel";
  * The default model is in the gateway's free tier.
  */
 export const SUMMARY_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions";
-export const DEFAULT_SUMMARY_MODEL = "openai/gpt-5-nano";
+export const DEFAULT_SUMMARY_MODEL = "openai/gpt-5.4-nano";
 export const DEFAULT_SUMMARY_PROVIDERS = ["openai", "azure"];
-/** The only `BOOKING_SUMMARY_PROVIDERS` value that removes the provider pin. */
+/** The only `AI_PROVIDERS` value that removes the provider pin. */
 export const UNPINNED_PROVIDERS_VALUE = "none";
 
 /**
- * `BOOKING_SUMMARY_MODEL` and `BOOKING_SUMMARY_PROVIDERS` (comma-separated)
+ * `AI_MODEL` and `AI_PROVIDERS` (comma-separated)
  * override the defaults. Unset or blank keeps the default for both, so a
  * half-set variable can never unpin by accident; `providers: null` (no `only`
  * filter) needs the explicit value `none`.
@@ -27,8 +27,8 @@ export function summaryModelConfig(env: Record<string, string | undefined> = pro
   model: string;
   providers: string[] | null;
 } {
-  const model = env.BOOKING_SUMMARY_MODEL?.trim() || DEFAULT_SUMMARY_MODEL;
-  const raw = env.BOOKING_SUMMARY_PROVIDERS?.trim() ?? "";
+  const model = env.AI_MODEL?.trim() || DEFAULT_SUMMARY_MODEL;
+  const raw = env.AI_PROVIDERS?.trim() ?? "";
   if (raw.toLowerCase() === UNPINNED_PROVIDERS_VALUE) return { model, providers: null };
   const listed = raw
     .split(",")
@@ -291,7 +291,7 @@ export async function requestOperationalNotes(
   const request = buildGatewayRequest(transcript);
   if (!("only" in request.providerOptions.gateway)) {
     console.warn(
-      `[bookingSummary] BOOKING_SUMMARY_PROVIDERS=${UNPINNED_PROVIDERS_VALUE}: sending client email to ${request.model} with no provider pin`,
+      `[bookingSummary] AI_PROVIDERS=${UNPINNED_PROVIDERS_VALUE}: sending client email to ${request.model} with no provider pin`,
     );
   }
   // `AbortSignal.timeout` is not in every Convex runtime.
@@ -321,7 +321,7 @@ export async function requestOperationalNotes(
       return {
         ok: false,
         retryable: false,
-        reason: `gateway refused model ${model} (${response.status}): ${message} — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL and BOOKING_SUMMARY_PROVIDERS`,
+        reason: `gateway refused model ${model} (${response.status}): ${message} — add paid AI Gateway credits or set AI_MODEL and AI_PROVIDERS`,
         userMessage: `The AI Gateway refused ${model} (${response.status}): ${message}`,
       };
     }
