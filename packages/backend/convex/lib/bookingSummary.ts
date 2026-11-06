@@ -316,7 +316,7 @@ export async function requestOperationalNotes(
       return {
         ok: false,
         retryable: false,
-        reason: `gateway refused model ${model} (${response.status}): ${message} — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
+        reason: `gateway refused model ${model} (${response.status}): ${message} — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL and BOOKING_SUMMARY_PROVIDERS`,
         userMessage: `The AI Gateway refused ${model} (${response.status}): ${message}`,
       };
     }

@@ -336,7 +336,7 @@ describe("requestOperationalNotes", () => {
     expect(await requestOperationalNotes("k", transcript)).toEqual({
       ok: false,
       retryable: false,
-      reason: `gateway refused model openai/gpt-5-nano (${status}): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
+      reason: `gateway refused model openai/gpt-5-nano (${status}): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL and BOOKING_SUMMARY_PROVIDERS`,
       userMessage: `The AI Gateway refused openai/gpt-5-nano (${status}): Free tier users do not have access to this model`,
     });
   });

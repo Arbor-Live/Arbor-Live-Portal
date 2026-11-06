@@ -304,8 +304,10 @@ a scheduling error is logged and never fails the approval.
   `providerOptions: { gateway: { only: ["openai", "azure"] } }` (zero data
   retention, no training). The request sends no `temperature`, since GPT-5
   models accept only the default. `BOOKING_SUMMARY_MODEL` and the comma-separated
-  `BOOKING_SUMMARY_PROVIDERS` override both. An unset or empty providers value
-  keeps that pin; only the explicit value `none` sends no `only` filter,
+  `BOOKING_SUMMARY_PROVIDERS` override both. Set them together: the gateway
+  never fails over from the pin, so a model OpenAI and Azure do not serve needs
+  its own zero-data-retention providers (`baseten` for `zai/glm-5.3-flash`). An
+  unset or empty providers value keeps the default pin; only the explicit value `none` sends no `only` filter,
   and every such call logs a warning
   ([environment-variables.md](environment-variables.md)). They are read in one
   place, [`lib/bookingSummary.ts`](../packages/backend/convex/lib/bookingSummary.ts).

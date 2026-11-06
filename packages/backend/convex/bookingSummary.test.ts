@@ -364,7 +364,7 @@ describe("summarizeForInvoice", () => {
     expect(warn).not.toHaveBeenCalled();
     expect(error).toHaveBeenCalledTimes(1);
     expect(error).toHaveBeenCalledWith(
-      `[bookingSummary] invoice ${invoiceId}: gave up after 1 attempt(s): gateway refused model openai/gpt-5-nano (403): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
+      `[bookingSummary] invoice ${invoiceId}: gave up after 1 attempt(s): gateway refused model openai/gpt-5-nano (403): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL and BOOKING_SUMMARY_PROVIDERS`,
     );
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
@@ -562,7 +562,7 @@ describe("addSummaryToEventNotes (the Email card button)", () => {
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(error).toHaveBeenCalledWith(
-      `[bookingSummary] event ${eventIds[0]}: gateway refused model openai/gpt-5-nano (403): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
+      `[bookingSummary] event ${eventIds[0]}: gateway refused model openai/gpt-5-nano (403): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL and BOOKING_SUMMARY_PROVIDERS`,
     );
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
