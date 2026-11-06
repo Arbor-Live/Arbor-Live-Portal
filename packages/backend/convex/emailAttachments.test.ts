@@ -176,6 +176,36 @@ describe("emailAttachments.addToEventFiles", () => {
     expect(await artifactsOf(t, eventId)).toHaveLength(0);
   });
 
+  it("keeps one copy and shows it in files on an event with many other files", async () => {
+    const t = makeTest();
+    const { eventId, messageId } = await seedBooking(t, [
+      { filename: "po.pdf", contentType: "application/pdf", size: 4, resendAttachmentId: "att_1" },
+    ]);
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 600; i += 1) {
+        await ctx.db.insert("eventArtifacts", {
+          eventId,
+          artifactType: "note",
+          title: `Note ${i}`,
+          version: 1,
+          active: true,
+          createdAt: i,
+          updatedAt: i,
+        });
+      }
+    });
+    const staff = await staffViewer(t);
+    const args = { eventId, messageId, index: 0 };
+
+    const first = await staff.action(api.emailAttachments.addToEventFiles, args);
+    const second = await staff.action(api.emailAttachments.addToEventFiles, args);
+
+    expect(second).toEqual({ status: "already_added", artifactId: first.artifactId });
+    expect(stored.keys).toHaveLength(1);
+    const view = await staff.query(api.emailThreads.getForRecord, { eventId });
+    expect(view.messages[0]!.attachments).toEqual([{ filename: "po.pdf", inEventFiles: true }]);
+  });
+
   it("answers already_added without fetching when the attachment was copied before", async () => {
     const t = makeTest();
     const { eventId, messageId } = await seedBooking(t, [

@@ -26,9 +26,6 @@ import {
 } from "./lib/inventoryUpload";
 import { releaseR2KeysIfUnreferenced } from "./lib/r2Lifecycle";
 
-/** Files read per event; the event page's own file list uses the same bound. */
-const EVENT_ARTIFACT_SCAN_LIMIT = 500;
-
 const addResultValue = v.object({
   status: v.union(v.literal("added"), v.literal("already_added")),
   artifactId: v.id("eventArtifacts"),
@@ -40,17 +37,15 @@ async function findArtifactFromAttachment(
   messageId: Id<"emailMessages">,
   index: number,
 ): Promise<Doc<"eventArtifacts"> | null> {
-  const artifacts = await ctx.db
+  return await ctx.db
     .query("eventArtifacts")
-    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-    .take(EVENT_ARTIFACT_SCAN_LIMIT);
-  return (
-    artifacts.find(
-      (artifact) =>
-        artifact.sourceEmailAttachment?.messageId === messageId &&
-        artifact.sourceEmailAttachment.index === index,
-    ) ?? null
-  );
+    .withIndex("by_sourceEmailMessage_and_eventId_and_index", (q) =>
+      q
+        .eq("sourceEmailAttachment.messageId", messageId)
+        .eq("eventId", eventId)
+        .eq("sourceEmailAttachment.index", index),
+    )
+    .first();
 }
 
 /** Runs as the caller (`ctx.runQuery` from the action), so it is the staff gate too. */

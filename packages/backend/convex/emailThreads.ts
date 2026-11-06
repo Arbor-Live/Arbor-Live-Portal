@@ -31,6 +31,7 @@ import {
 import { publicQuoteUrl, requestTrackingUrl } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
 import { attachmentSourceKey } from "./lib/emailAttachments";
+import { MAX_ATTACHMENTS } from "./lib/inboundEmail";
 
 /** Newest messages shown on a booking. A thread past this is a long negotiation, not normal traffic. */
 const MESSAGE_LIMIT = 100;
@@ -40,9 +41,6 @@ export const MAX_REPLY_CHARS = 10_000;
 /** A manager copies a colleague or two; ten is a mailing list. */
 export const MAX_REPLY_CC = 10;
 const MAX_CLIENT_REQUEST_ID_CHARS = 100;
-
-/** Files read per event; the event page's own file list uses the same bound. */
-const EVENT_ARTIFACT_LIMIT = 500;
 
 /** Failed replies shown on a thread; staff retry or resend them, so a pile of them is not normal. */
 const FAILED_REPLY_LIMIT = 20;
@@ -173,14 +171,20 @@ export const getForRecord = query({
 
     // Only an event page can copy files to its event, so only it asks which already were.
     const copied = new Set<string>();
-    if (args.eventId && newest.some((message) => message.attachments.length > 0)) {
-      const artifacts = await ctx.db
-        .query("eventArtifacts")
-        .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId!))
-        .take(EVENT_ARTIFACT_LIMIT);
-      for (const artifact of artifacts) {
-        const source = artifact.sourceEmailAttachment;
-        if (source) copied.add(attachmentSourceKey(source.messageId, source.index));
+    const eventId = args.eventId;
+    if (eventId) {
+      for (const message of newest) {
+        if (message.attachments.length === 0) continue;
+        const artifacts = await ctx.db
+          .query("eventArtifacts")
+          .withIndex("by_sourceEmailMessage_and_eventId_and_index", (q) =>
+            q.eq("sourceEmailAttachment.messageId", message._id).eq("eventId", eventId),
+          )
+          .take(MAX_ATTACHMENTS);
+        for (const artifact of artifacts) {
+          const source = artifact.sourceEmailAttachment;
+          if (source) copied.add(attachmentSourceKey(source.messageId, source.index));
+        }
       }
     }
 

@@ -1607,7 +1607,12 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_eventId", ["eventId"])
-    .index("by_eventId_and_artifactType", ["eventId", "artifactType"]),
+    .index("by_eventId_and_artifactType", ["eventId", "artifactType"])
+    .index("by_sourceEmailMessage_and_eventId_and_index", [
+      "sourceEmailAttachment.messageId",
+      "eventId",
+      "sourceEmailAttachment.index",
+    ]),
 
   immichAlbumLinks: defineTable({
     entityType: immichAlbumEntityTypeValue,
