@@ -147,7 +147,15 @@ from there (see [Staff replies](#staff-replies)).
 - **Stored text.** `bodyText` is the reply with quoted history cut
   ([`lib/stripQuotedReply.ts`](../packages/backend/convex/lib/stripQuotedReply.ts),
   20k chars); `fullText` keeps the whole plain text (100k chars). Attachments are
-  stored as names, types and sizes only.
+  stored as names, types, sizes and Resend's attachment id only.
+- **Attachments to event files.** The event page's Email card has "Add to files"
+  per client attachment
+  ([`emailAttachments.ts`](../packages/backend/convex/emailAttachments.ts)
+  `addToEventFiles`). At click time it asks Resend for the attachment's
+  short-lived `download_url` (by id, or by filename for rows stored before the id
+  was kept), copies the bytes to R2 and adds an `eventArtifacts` document with
+  `sourceEmailAttachment` set, which makes a second click a no-op. If Resend no
+  longer has the attachment, the button reports it as unavailable.
 - **Staff notification.** A matched message sends an in-app notification
   (`booking_email_received`, with push) to the invoice manager, request assignee
   and event manager, except a person whose own email sent it. When none of them

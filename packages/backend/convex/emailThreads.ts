@@ -30,6 +30,8 @@ import {
 } from "./lib/emailThreads";
 import { publicQuoteUrl, requestTrackingUrl } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
+import { attachmentSourceKey } from "./lib/emailAttachments";
+import { MAX_ATTACHMENTS } from "./lib/inboundEmail";
 
 /** Newest messages shown on a booking. A thread past this is a long negotiation, not normal traffic. */
 const MESSAGE_LIMIT = 100;
@@ -59,7 +61,7 @@ const messageValue = v.object({
   to: v.optional(v.array(v.string())),
   subject: v.string(),
   bodyText: v.string(),
-  attachments: v.array(v.object({ filename: v.string() })),
+  attachments: v.array(v.object({ filename: v.string(), inEventFiles: v.boolean() })),
   matchedBy: v.optional(v.union(v.literal("address"), v.literal("header"))),
   /** Sent by the booking's client (request or invoice contact) rather than by staff or a third party. */
   fromClient: v.boolean(),
@@ -167,6 +169,25 @@ export const getForRecord = query({
       .order("desc")
       .take(MESSAGE_LIMIT);
 
+    // Only an event page can copy files to its event, so only it asks which already were.
+    const copied = new Set<string>();
+    const eventId = args.eventId;
+    if (eventId) {
+      for (const message of newest) {
+        if (message.attachments.length === 0) continue;
+        const artifacts = await ctx.db
+          .query("eventArtifacts")
+          .withIndex("by_sourceEmailMessage_and_eventId_and_index", (q) =>
+            q.eq("sourceEmailAttachment.messageId", message._id).eq("eventId", eventId),
+          )
+          .take(MAX_ATTACHMENTS);
+        for (const artifact of artifacts) {
+          const source = artifact.sourceEmailAttachment;
+          if (source) copied.add(attachmentSourceKey(source.messageId, source.index));
+        }
+      }
+    }
+
     return {
       address,
       clientEmail,
@@ -181,7 +202,10 @@ export const getForRecord = query({
         to: message.direction === "outbound" ? message.to : undefined,
         subject: message.subject,
         bodyText: message.bodyText,
-        attachments: message.attachments.map((attachment) => ({ filename: attachment.filename })),
+        attachments: message.attachments.map((attachment, index) => ({
+          filename: attachment.filename,
+          inEventFiles: copied.has(attachmentSourceKey(message._id, index)),
+        })),
         matchedBy: message.matchedBy,
         fromClient: clientEmails.has(message.fromEmail.toLowerCase()),
         receivedAt: message.receivedAt,

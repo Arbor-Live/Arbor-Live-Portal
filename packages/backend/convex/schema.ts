@@ -1597,13 +1597,22 @@ export default defineSchema({
     markdown: v.optional(v.string()),
     linkUrl: v.optional(v.string()),
     storageFileId: v.optional(v.id("_storage")),
+    /** Set when copied from a client email: the attachment's position in that message's `attachments`. */
+    sourceEmailAttachment: v.optional(
+      v.object({ messageId: v.id("emailMessages"), index: v.number() }),
+    ),
     version: v.number(),
     active: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_eventId", ["eventId"])
-    .index("by_eventId_and_artifactType", ["eventId", "artifactType"]),
+    .index("by_eventId_and_artifactType", ["eventId", "artifactType"])
+    .index("by_sourceEmailMessage_and_eventId_and_index", [
+      "sourceEmailAttachment.messageId",
+      "eventId",
+      "sourceEmailAttachment.index",
+    ]),
 
   immichAlbumLinks: defineTable({
     entityType: immichAlbumEntityTypeValue,
@@ -1953,12 +1962,14 @@ export default defineSchema({
     /** Reply text with the quoted history stripped. */
     bodyText: v.string(),
     fullText: v.optional(v.string()),
-    /** Metadata only; the files themselves are not stored. */
+    /** Metadata only; staff copy a file into the event's files on demand. */
     attachments: v.array(
       v.object({
         filename: v.string(),
         contentType: v.optional(v.string()),
         size: v.optional(v.number()),
+        /** Resend's attachment id; rows stored before it was kept lack it. */
+        resendAttachmentId: v.optional(v.string()),
       }),
     ),
     matchedBy: v.optional(v.union(v.literal("address"), v.literal("header"))),
