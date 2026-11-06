@@ -28,8 +28,8 @@ export function InvoiceRequestSummary({ request }: { request: SourceRequest }) {
         <CollapsibleTrigger asChild>
           <button type="button" className="group flex min-w-0 flex-1 basis-64 items-center gap-2 text-left text-sm">
             <EnvelopeSimpleIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-            <span className="shrink-0 font-medium">Booking request {request.requestNumber}</span>
-            <span className="truncate text-muted-foreground">
+            <span className="font-medium">Booking request {request.requestNumber}</span>
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">
               · {request.firstName} {request.lastName} · {request.eventDateText}
             </span>
             <CaretDownIcon
