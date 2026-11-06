@@ -30,6 +30,7 @@ import {
 } from "./lib/emailThreads";
 import { publicQuoteUrl, requestTrackingUrl } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
+import { attachmentSourceKey } from "./lib/emailAttachments";
 
 /** Newest messages shown on a booking. A thread past this is a long negotiation, not normal traffic. */
 const MESSAGE_LIMIT = 100;
@@ -39,6 +40,9 @@ export const MAX_REPLY_CHARS = 10_000;
 /** A manager copies a colleague or two; ten is a mailing list. */
 export const MAX_REPLY_CC = 10;
 const MAX_CLIENT_REQUEST_ID_CHARS = 100;
+
+/** Files read per event; the event page's own file list uses the same bound. */
+const EVENT_ARTIFACT_LIMIT = 500;
 
 /** Failed replies shown on a thread; staff retry or resend them, so a pile of them is not normal. */
 const FAILED_REPLY_LIMIT = 20;
@@ -59,7 +63,7 @@ const messageValue = v.object({
   to: v.optional(v.array(v.string())),
   subject: v.string(),
   bodyText: v.string(),
-  attachments: v.array(v.object({ filename: v.string() })),
+  attachments: v.array(v.object({ filename: v.string(), inEventFiles: v.boolean() })),
   matchedBy: v.optional(v.union(v.literal("address"), v.literal("header"))),
   /** Sent by the booking's client (request or invoice contact) rather than by staff or a third party. */
   fromClient: v.boolean(),
@@ -167,6 +171,19 @@ export const getForRecord = query({
       .order("desc")
       .take(MESSAGE_LIMIT);
 
+    // Only an event page can copy files to its event, so only it asks which already were.
+    const copied = new Set<string>();
+    if (args.eventId) {
+      const artifacts = await ctx.db
+        .query("eventArtifacts")
+        .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId!))
+        .take(EVENT_ARTIFACT_LIMIT);
+      for (const artifact of artifacts) {
+        const source = artifact.sourceEmailAttachment;
+        if (source) copied.add(attachmentSourceKey(source.messageId, source.index));
+      }
+    }
+
     return {
       address,
       clientEmail,
@@ -181,7 +198,10 @@ export const getForRecord = query({
         to: message.direction === "outbound" ? message.to : undefined,
         subject: message.subject,
         bodyText: message.bodyText,
-        attachments: message.attachments.map((attachment) => ({ filename: attachment.filename })),
+        attachments: message.attachments.map((attachment, index) => ({
+          filename: attachment.filename,
+          inEventFiles: copied.has(attachmentSourceKey(message._id, index)),
+        })),
         matchedBy: message.matchedBy,
         fromClient: clientEmails.has(message.fromEmail.toLowerCase()),
         receivedAt: message.receivedAt,

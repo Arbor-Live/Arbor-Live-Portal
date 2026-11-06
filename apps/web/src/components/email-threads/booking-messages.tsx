@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { CopyIcon, EnvelopeSimpleIcon, PaperclipIcon } from "@phosphor-icons/react";
+import { CheckIcon, CopyIcon, EnvelopeSimpleIcon, PaperclipIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { EmptyState } from "@/components/list-page";
 import { Badge } from "@/components/ui/badge";
@@ -192,7 +192,48 @@ function AddSummaryButton({ eventId }: { eventId: Id<"events"> }) {
   );
 }
 
-function MessageRow({ message, readOnly }: { message: Message; readOnly: boolean }) {
+function AddToFilesButton(props: {
+  eventId: Id<"events">;
+  messageId: Message["_id"];
+  index: number;
+}) {
+  const addToFiles = useAction(api.emailAttachments.addToEventFiles);
+  const [busy, setBusy] = useState(false);
+
+  async function onClick() {
+    setBusy(true);
+    try {
+      const { status } = await addToFiles(props);
+      if (status === "added") notify.success("Added to files.");
+      else notify.info("Already in files.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Could not add the file."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="xs"
+      disabled={busy}
+      onClick={() => void onClick()}
+      data-testid={`add-attachment-to-files-${props.messageId}-${props.index}`}
+    >
+      Add to files
+    </Button>
+  );
+}
+
+function MessageRow(props: {
+  message: Message;
+  readOnly: boolean;
+  /** The event the files go to; null when this page is not an event or is read-only. */
+  addFilesToEventId: Id<"events"> | null;
+}) {
+  const { message, readOnly } = props;
   const named = Boolean(message.fromName);
   const outbound = message.direction === "outbound";
   return (
@@ -225,12 +266,37 @@ function MessageRow({ message, readOnly }: { message: Message; readOnly: boolean
       ) : null}
       <MessageBody text={message.bodyText} />
       {message.attachments.length > 0 ? (
-        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-          <PaperclipIcon className="mt-0.5 size-3 shrink-0" aria-hidden />
-          <span className="min-w-0 break-words">
-            {message.attachments.map((attachment) => attachment.filename).join(", ")}
-          </span>
-        </p>
+        <ul className="space-y-1">
+          {message.attachments.map((attachment, index) => (
+            <li
+              key={index}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground"
+              data-testid="booking-attachment"
+            >
+              <PaperclipIcon className="size-3 shrink-0" aria-hidden />
+              <span className="min-w-0 flex-1 truncate" title={attachment.filename}>
+                {attachment.filename}
+              </span>
+              {props.addFilesToEventId && !outbound ? (
+                attachment.inEventFiles ? (
+                  <span
+                    className="flex shrink-0 items-center gap-1"
+                    data-testid={`attachment-in-files-${message._id}-${index}`}
+                  >
+                    <CheckIcon className="size-3" aria-hidden />
+                    In files
+                  </span>
+                ) : (
+                  <AddToFilesButton
+                    eventId={props.addFilesToEventId}
+                    messageId={message._id}
+                    index={index}
+                  />
+                )
+              ) : null}
+            </li>
+          ))}
+        </ul>
       ) : null}
       {message.canMakeChangeRequest && !readOnly ? (
         <MakeChangeRequestButton messageId={message._id} />
@@ -348,6 +414,8 @@ function ReplyComposer(props: {
 export function BookingMessages(props: { record: BookingMessagesRecord; readOnly?: boolean }) {
   const readOnly = props.readOnly ?? false;
   const data = useBookingThread(props.record);
+  // Unlike MessageRow's readOnly, this does not depend on being allowed to reply.
+  const addFilesToEventId = "eventId" in props.record && !readOnly ? props.record.eventId : null;
 
   return (
     <Card data-testid="booking-messages">
@@ -400,6 +468,7 @@ export function BookingMessages(props: { record: BookingMessagesRecord; readOnly
                 key={message._id}
                 message={message}
                 readOnly={readOnly || !data.canReply}
+                addFilesToEventId={addFilesToEventId}
               />
             ))}
             {data.failedReplies.map((reply) => (

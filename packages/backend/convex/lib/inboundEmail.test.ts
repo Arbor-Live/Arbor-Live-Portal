@@ -180,8 +180,8 @@ describe("parseReceivedEmail", () => {
       subject: "Re: Your quote",
       text: "Sounds good",
       attachments: [
-        { filename: "po.pdf", contentType: "application/pdf", size: 1200 },
-        { filename: "attachment", contentType: "image/png", size: 5 },
+        { filename: "po.pdf", contentType: "application/pdf", size: 1200, resendAttachmentId: "a1" },
+        { filename: "attachment", contentType: "image/png", size: 5, resendAttachmentId: "a2" },
       ],
       receivedAt: Date.UTC(2026, 10, 3, 18),
     });

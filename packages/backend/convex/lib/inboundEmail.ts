@@ -27,6 +27,7 @@ export const parsedInboundEmailValue = v.object({
       filename: v.string(),
       contentType: v.optional(v.string()),
       size: v.optional(v.number()),
+      resendAttachmentId: v.optional(v.string()),
     }),
   ),
   receivedAt: v.number(),
@@ -44,7 +45,12 @@ export type ParsedInboundEmail = {
   receivedFor: string[];
   subject: string;
   text: string;
-  attachments: { filename: string; contentType?: string; size?: number }[];
+  attachments: {
+    filename: string;
+    contentType?: string;
+    size?: number;
+    resendAttachmentId?: string;
+  }[];
   receivedAt: number;
 };
 
@@ -257,6 +263,7 @@ export function parseReceivedEmail(raw: unknown, resendEmailId: string): ParsedI
       filename: optionalString(attachment.filename) ?? "attachment",
       contentType: optionalString(attachment.content_type),
       size: typeof attachment.size === "number" ? attachment.size : undefined,
+      resendAttachmentId: optionalString(attachment.id),
     }));
 
   const createdAt = typeof raw.created_at === "string" ? Date.parse(raw.created_at) : Number.NaN;

@@ -174,9 +174,44 @@ describe("emailThreads.getForRecord", () => {
     expect(fromRequest.messages[0]).toMatchObject({
       fromClient: true,
       matchedBy: "address",
-      attachments: [{ filename: "po.pdf" }],
+      attachments: [{ filename: "po.pdf", inEventFiles: false }],
     });
     expect(fromRequest.messages[1]).toMatchObject({ fromClient: false, matchedBy: "address" });
+  });
+
+  it("marks an attachment as in the event's files only on that event's page", async () => {
+    const t = makeTest();
+    const ids = await seedBooking(t);
+    await t.mutation(
+      internal.emailInbound.recordInboundEmail,
+      received({
+        attachments: [
+          { filename: "po.pdf", resendAttachmentId: "att_1" },
+          { filename: "map.png", resendAttachmentId: "att_2" },
+        ],
+      }),
+    );
+    const messageId = (await t.run(async (ctx) => ctx.db.query("emailMessages").first()))!._id;
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert("eventArtifacts", {
+        eventId: ids.eventId,
+        artifactType: "document",
+        title: "map.png",
+        sourceEmailAttachment: { messageId, index: 1 },
+        version: 1,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+    const staff = await staffViewer(t);
+
+    const filesFor = async (view: Awaited<ReturnType<typeof staff.query<typeof api.emailThreads.getForRecord>>>) =>
+      view.messages[0]!.attachments.map((attachment) => attachment.inEventFiles);
+    expect(await filesFor(await staff.query(api.emailThreads.getForRecord, { eventId: ids.eventId }))).toEqual([false, true]);
+    expect(await filesFor(await staff.query(api.emailThreads.getForRecord, { requestId: ids.requestId }))).toEqual([false, false]);
+    expect(await filesFor(await staff.query(api.emailThreads.getForRecord, { invoiceId: ids.invoiceId }))).toEqual([false, false]);
   });
 
   it("returns the address and an empty conversation without creating a thread", async () => {
