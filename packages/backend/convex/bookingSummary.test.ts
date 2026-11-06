@@ -187,8 +187,8 @@ describe("summarizeForInvoice", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://ai-gateway.vercel.sh/v1/chat/completions");
     const body = JSON.parse(init.body as string);
-    expect(body.model).toBe("openai/gpt-5.4-nano");
-    expect(body.providerOptions).toEqual({ gateway: { disallowPromptTraining: true, only: ["openai", "azure"] } });
+    expect(body.model).toBe("meta/muse-spark-open");
+    expect(body.providerOptions).toEqual({ gateway: { disallowPromptTraining: true, only: ["baseten", "fireworks", "modal", "togetherai"] } });
     expect(body.messages[0].content).toContain(
       "The note should not include any pricing specific discussion, discounts, etc. It should only be operational notes such as venue location or details like those.",
     );
@@ -364,7 +364,7 @@ describe("summarizeForInvoice", () => {
     expect(warn).not.toHaveBeenCalled();
     expect(error).toHaveBeenCalledTimes(1);
     expect(error).toHaveBeenCalledWith(
-      `[bookingSummary] invoice ${invoiceId}: gave up after 1 attempt(s): gateway refused model openai/gpt-5.4-nano (403): Free tier users do not have access to this model — add paid AI Gateway credits or set AI_MODEL and AI_PROVIDERS`,
+      `[bookingSummary] invoice ${invoiceId}: gave up after 1 attempt(s): gateway refused model meta/muse-spark-open (403): Free tier users do not have access to this model — add paid AI Gateway credits or set AI_MODEL and AI_PROVIDERS`,
     );
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
@@ -521,7 +521,7 @@ describe("addSummaryToEventNotes (the Email card button)", () => {
     fetchMock.mockImplementation(async () => new Response("SECRET bad key", { status: 401 }));
     await expect(
       as.action(api.bookingSummary.addSummaryToEventNotes, { eventId: eventIds[0]! }),
-    ).rejects.toThrow("The AI Gateway refused openai/gpt-5.4-nano (401): no message");
+    ).rejects.toThrow("The AI Gateway refused meta/muse-spark-open (401): no message");
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
 
@@ -558,18 +558,18 @@ describe("addSummaryToEventNotes (the Email card button)", () => {
     await expect(
       as.action(api.bookingSummary.addSummaryToEventNotes, { eventId: eventIds[0]! }),
     ).rejects.toThrow(
-      "The AI Gateway refused openai/gpt-5.4-nano (403): Free tier users do not have access to this model",
+      "The AI Gateway refused meta/muse-spark-open (403): Free tier users do not have access to this model",
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(error).toHaveBeenCalledWith(
-      `[bookingSummary] event ${eventIds[0]}: gateway refused model openai/gpt-5.4-nano (403): Free tier users do not have access to this model — add paid AI Gateway credits or set AI_MODEL and AI_PROVIDERS`,
+      `[bookingSummary] event ${eventIds[0]}: gateway refused model meta/muse-spark-open (403): Free tier users do not have access to this model — add paid AI Gateway credits or set AI_MODEL and AI_PROVIDERS`,
     );
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
 
   it.each([
-    ["unset", undefined, { gateway: { disallowPromptTraining: true, only: ["openai", "azure"] } }],
-    ["empty", "", { gateway: { disallowPromptTraining: true, only: ["openai", "azure"] } }],
+    ["unset", undefined, { gateway: { disallowPromptTraining: true, only: ["baseten", "fireworks", "modal", "togetherai"] } }],
+    ["empty", "", { gateway: { disallowPromptTraining: true, only: ["baseten", "fireworks", "modal", "togetherai"] } }],
     ["none", "none", { gateway: { disallowPromptTraining: true } }],
   ])("sends the provider pin through the whole path when the variable is %s", async (_, value, expected) => {
     const t = makeTest();

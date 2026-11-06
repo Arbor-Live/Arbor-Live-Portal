@@ -5,15 +5,15 @@ import type { Doc } from "../_generated/dataModel";
  * (https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions/chat-completions).
  * The input is client email. Every request sets `disallowPromptTraining`, which the
  * gateway enforces on every plan. By default the model is also pinned to its
- * providers (`providerOptions.gateway.only`, a hard filter that never fails over),
- * OpenAI and Azure, which both list zero-data-retention agreements with the
- * gateway. The gateway only enforces zero retention per request on a paid account,
+ * providers (`providerOptions.gateway.only`, a hard filter that never fails over):
+ * Baseten, Fireworks, Modal and Together, which all list zero-data-retention
+ * agreements with the gateway and serve it with strict JSON output. The gateway only enforces zero retention per request on a paid account,
  * so on free credits that agreement is the provider's policy, not a routing rule.
  * The default model is in the gateway's free tier.
  */
 export const SUMMARY_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions";
-export const DEFAULT_SUMMARY_MODEL = "openai/gpt-5.4-nano";
-export const DEFAULT_SUMMARY_PROVIDERS = ["openai", "azure"];
+export const DEFAULT_SUMMARY_MODEL = "meta/muse-spark-open";
+export const DEFAULT_SUMMARY_PROVIDERS = ["baseten", "fireworks", "modal", "togetherai"];
 /** The only `AI_PROVIDERS` value that removes the provider pin. */
 export const UNPINNED_PROVIDERS_VALUE = "none";
 
