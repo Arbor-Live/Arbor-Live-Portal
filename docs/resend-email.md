@@ -300,16 +300,18 @@ a scheduling error is logged and never fails the approval.
   client-written text to treat as data. No inbound message means no model call.
 - **Model.** Vercel AI Gateway, OpenAI-compatible
   `POST https://ai-gateway.vercel.sh/v1/chat/completions`, model
-  `zai/glm-5.3-flash`, pinned to Baseten with
-  `providerOptions: { gateway: { only: ["baseten"] } }` (US-hosted, zero data
-  retention, no training). `BOOKING_SUMMARY_MODEL` and the comma-separated
+  `openai/gpt-5-nano`, pinned to OpenAI and Azure with
+  `providerOptions: { gateway: { only: ["openai", "azure"] } }` (zero data
+  retention, no training). The request sends no `temperature`, since GPT-5
+  models accept only the default. `BOOKING_SUMMARY_MODEL` and the comma-separated
   `BOOKING_SUMMARY_PROVIDERS` override both. An unset or empty providers value
-  keeps the Baseten pin; only the explicit value `none` sends no `only` filter,
+  keeps that pin; only the explicit value `none` sends no `only` filter,
   and every such call logs a warning
   ([environment-variables.md](environment-variables.md)). They are read in one
   place, [`lib/bookingSummary.ts`](../packages/backend/convex/lib/bookingSummary.ts).
-  It needs `AI_GATEWAY_API_KEY` on the deployment, and a Vercel account with
-  paid credits: a free-tier key gets HTTP 403 for the default model.
+  It needs `AI_GATEWAY_API_KEY` on the deployment. The default model is in the
+  gateway's free tier; a model outside it gets HTTP 403 until the account has
+  paid credits.
 - **Content rule.** The product owner's rule is in the system prompt verbatim
   ("The note should not include any pricing specific discussion, discounts,
   etc. It should only be operational notes such as venue location or details

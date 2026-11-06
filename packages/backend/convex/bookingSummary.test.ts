@@ -187,8 +187,8 @@ describe("summarizeForInvoice", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://ai-gateway.vercel.sh/v1/chat/completions");
     const body = JSON.parse(init.body as string);
-    expect(body.model).toBe("zai/glm-5.3-flash");
-    expect(body.providerOptions).toEqual({ gateway: { only: ["baseten"] } });
+    expect(body.model).toBe("openai/gpt-5-nano");
+    expect(body.providerOptions).toEqual({ gateway: { only: ["openai", "azure"] } });
     expect(body.messages[0].content).toContain(
       "The note should not include any pricing specific discussion, discounts, etc. It should only be operational notes such as venue location or details like those.",
     );
@@ -364,7 +364,7 @@ describe("summarizeForInvoice", () => {
     expect(warn).not.toHaveBeenCalled();
     expect(error).toHaveBeenCalledTimes(1);
     expect(error).toHaveBeenCalledWith(
-      `[bookingSummary] invoice ${invoiceId}: gave up after 1 attempt(s): gateway refused model zai/glm-5.3-flash (403): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
+      `[bookingSummary] invoice ${invoiceId}: gave up after 1 attempt(s): gateway refused model openai/gpt-5-nano (403): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
     );
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
@@ -521,7 +521,7 @@ describe("addSummaryToEventNotes (the Email card button)", () => {
     fetchMock.mockImplementation(async () => new Response("SECRET bad key", { status: 401 }));
     await expect(
       as.action(api.bookingSummary.addSummaryToEventNotes, { eventId: eventIds[0]! }),
-    ).rejects.toThrow("The AI Gateway refused zai/glm-5.3-flash (401): no message");
+    ).rejects.toThrow("The AI Gateway refused openai/gpt-5-nano (401): no message");
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
 
@@ -558,18 +558,18 @@ describe("addSummaryToEventNotes (the Email card button)", () => {
     await expect(
       as.action(api.bookingSummary.addSummaryToEventNotes, { eventId: eventIds[0]! }),
     ).rejects.toThrow(
-      "The AI Gateway refused zai/glm-5.3-flash (403): Free tier users do not have access to this model",
+      "The AI Gateway refused openai/gpt-5-nano (403): Free tier users do not have access to this model",
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(error).toHaveBeenCalledWith(
-      `[bookingSummary] event ${eventIds[0]}: gateway refused model zai/glm-5.3-flash (403): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
+      `[bookingSummary] event ${eventIds[0]}: gateway refused model openai/gpt-5-nano (403): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
     );
     expect(await notesOf(t, eventIds)).toEqual([null]);
   });
 
   it.each([
-    ["unset", undefined, { gateway: { only: ["baseten"] } }],
-    ["empty", "", { gateway: { only: ["baseten"] } }],
+    ["unset", undefined, { gateway: { only: ["openai", "azure"] } }],
+    ["empty", "", { gateway: { only: ["openai", "azure"] } }],
     ["none", "none", undefined],
   ])("sends the provider pin through the whole path when the variable is %s", async (_, value, expected) => {
     const t = makeTest();

@@ -156,8 +156,8 @@ describe("buildTranscript", () => {
 describe("buildGatewayRequest", () => {
   it("sends the transcript as a JSON array and the rules as the system prompt", () => {
     const body = buildGatewayRequest(transcript);
-    expect(body.model).toBe("zai/glm-5.3-flash");
-    expect(body.providerOptions).toEqual({ gateway: { only: ["baseten"] } });
+    expect(body.model).toBe("openai/gpt-5-nano");
+    expect(body.providerOptions).toEqual({ gateway: { only: ["openai", "azure"] } });
     expect(body.messages).toEqual([
       { role: "system", content: SUMMARY_SYSTEM_PROMPT },
       { role: "user", content: '[{"direction":"inbound","sender":"Maya","body":"Hello"}]' },
@@ -206,8 +206,8 @@ describe("summary model configuration", () => {
     ["unset", {}],
     ["empty", { BOOKING_SUMMARY_PROVIDERS: "" }],
     ["blank", { BOOKING_SUMMARY_PROVIDERS: " , " }],
-  ])("keeps the baseten pin when the providers variable is %s", (_, env) => {
-    expect(summaryModelConfig(env)).toEqual({ model: "zai/glm-5.3-flash", providers: ["baseten"] });
+  ])("keeps the default provider pin when the providers variable is %s", (_, env) => {
+    expect(summaryModelConfig(env)).toEqual({ model: "openai/gpt-5-nano", providers: ["openai", "azure"] });
   });
 
   it("drops the pin only for the explicit value none", () => {
@@ -220,7 +220,7 @@ describe("summary model configuration", () => {
   it("takes the model from BOOKING_SUMMARY_MODEL and a blank value keeps the default", () => {
     vi.stubEnv("BOOKING_SUMMARY_MODEL", "zai/glm-4.7-flash");
     expect(buildGatewayRequest(transcript).model).toBe("zai/glm-4.7-flash");
-    expect(summaryModelConfig({ BOOKING_SUMMARY_MODEL: "  " }).model).toBe("zai/glm-5.3-flash");
+    expect(summaryModelConfig({ BOOKING_SUMMARY_MODEL: "  " }).model).toBe("openai/gpt-5-nano");
   });
 
   it("takes a comma-separated provider list", () => {
@@ -253,7 +253,7 @@ describe("requestOperationalNotes", () => {
     expect(url).toBe("https://ai-gateway.vercel.sh/v1/chat/completions");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer key-123");
     expect(init.signal).toBeInstanceOf(AbortSignal);
-    expect(JSON.parse(init.body as string).providerOptions).toEqual({ gateway: { only: ["baseten"] } });
+    expect(JSON.parse(init.body as string).providerOptions).toEqual({ gateway: { only: ["openai", "azure"] } });
     expect(warn).not.toHaveBeenCalled();
   });
 
@@ -336,8 +336,8 @@ describe("requestOperationalNotes", () => {
     expect(await requestOperationalNotes("k", transcript)).toEqual({
       ok: false,
       retryable: false,
-      reason: `gateway refused model zai/glm-5.3-flash (${status}): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
-      userMessage: `The AI Gateway refused zai/glm-5.3-flash (${status}): Free tier users do not have access to this model`,
+      reason: `gateway refused model openai/gpt-5-nano (${status}): Free tier users do not have access to this model — add paid AI Gateway credits or set BOOKING_SUMMARY_MODEL`,
+      userMessage: `The AI Gateway refused openai/gpt-5-nano (${status}): Free tier users do not have access to this model`,
     });
   });
 

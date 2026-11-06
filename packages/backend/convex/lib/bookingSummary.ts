@@ -3,13 +3,14 @@ import type { Doc } from "../_generated/dataModel";
 /**
  * Vercel AI Gateway, OpenAI-compatible chat completions
  * (https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions/chat-completions).
- * By default the model is pinned to one provider (`providerOptions.gateway.only`,
- * a hard filter that never fails over): Baseten is US-hosted, zero-data-retention
- * and does not train on prompts, which matters because the input is client email.
+ * By default the model is pinned to its providers (`providerOptions.gateway.only`,
+ * a hard filter that never fails over): OpenAI and Azure serve it with zero data
+ * retention and no training on prompts, which matters because the input is client
+ * email. It is also in the gateway's free tier, so a key without paid credits works.
  */
 export const SUMMARY_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions";
-export const DEFAULT_SUMMARY_MODEL = "zai/glm-5.3-flash";
-export const DEFAULT_SUMMARY_PROVIDERS = ["baseten"];
+export const DEFAULT_SUMMARY_MODEL = "openai/gpt-5-nano";
+export const DEFAULT_SUMMARY_PROVIDERS = ["openai", "azure"];
 /** The only `BOOKING_SUMMARY_PROVIDERS` value that removes the provider pin. */
 export const UNPINNED_PROVIDERS_VALUE = "none";
 
@@ -125,7 +126,6 @@ export function buildGatewayRequest(transcript: readonly TranscriptEntry[]) {
       { role: "system", content: SUMMARY_SYSTEM_PROMPT },
       { role: "user", content: JSON.stringify(transcript) },
     ],
-    temperature: 0.2,
     response_format: {
       type: "json_schema",
       json_schema: {
