@@ -13,6 +13,7 @@ const R2_KEY_PREFIXES = [
   "marketing/",
   "organizations/",
   "venues/",
+  "hashing/",
 ] as const;
 
 /** Per-table scan caps for referenced-key collection. Hitting a cap marks the scan incomplete. */
@@ -25,6 +26,7 @@ const REFERENCE_SCAN_LIMITS = {
   eventArtifacts: 5000,
   venues: 1000,
   damageReports: 5000,
+  hashReferencePhotos: 5000,
 } as const;
 
 export type ReferencedR2KeysScan = {
@@ -231,6 +233,11 @@ export function collectKeysFromDamageReport(report: Pick<Doc<"damageReports">, "
   return key ? [key] : [];
 }
 
+export function collectKeysFromHashReferencePhoto(photo: Pick<Doc<"hashReferencePhotos">, "r2Key">) {
+  const key = r2KeyFromStoredValue(photo.r2Key);
+  return key ? [key] : [];
+}
+
 async function takeBounded<T>(
   load: (limit: number) => Promise<T[]>,
   limit: number,
@@ -322,6 +329,15 @@ export async function collectReferencedR2Keys(
   if (!damageReports.complete) complete = false;
   for (const report of damageReports.rows) {
     for (const key of collectKeysFromDamageReport(report)) keys.add(key);
+  }
+
+  const hashPhotos = await takeBounded(
+    (limit) => ctx.db.query("hashReferencePhotos").take(limit),
+    REFERENCE_SCAN_LIMITS.hashReferencePhotos,
+  );
+  if (!hashPhotos.complete) complete = false;
+  for (const photo of hashPhotos.rows) {
+    for (const key of collectKeysFromHashReferencePhoto(photo)) keys.add(key);
   }
 
   return { keys, complete };

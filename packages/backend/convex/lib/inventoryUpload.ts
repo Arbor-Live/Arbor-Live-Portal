@@ -170,6 +170,12 @@ export function buildBandHeroObjectKey(args: {
   return `organizations/bands/${orgSegment}/hero/${args.uploadId}-${safeName}`;
 }
 
+export const HASH_REFERENCE_KEY_PREFIX = "hashing/reference/";
+
+export function buildHashReferenceObjectKey(args: { fileName: string; uploadId: string }): string {
+  return `${HASH_REFERENCE_KEY_PREFIX}${args.uploadId}-${sanitizeInventoryFileName(args.fileName)}`;
+}
+
 export function validateMarketingHeroUploadRequest(args: {
   fileName: string;
   contentType: string;
@@ -183,6 +189,9 @@ export function validateMarketingHeroUploadRequest(args: {
   }
   validateImageUpload(contentType, args.contentLength);
 }
+
+/** Same rules as any image upload: a name, some bytes, an image type, 5 MB at most. */
+export const validateHashReferenceUploadRequest = validateMarketingHeroUploadRequest;
 
 function validateImageUpload(contentType: string, contentLength: number): void {
   if (contentLength > IMAGE_MAX_BYTES) {

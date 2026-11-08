@@ -6,7 +6,7 @@ import { api } from "@/lib/convex-api";
 import { formatStoredR2Asset } from "@/lib/r2-assets";
 import { compressImageToLimit } from "@/lib/image-processing";
 
-export type R2UploadScope = "inventory" | "event" | "marketing" | "organization" | "venue";
+export type R2UploadScope = "inventory" | "event" | "marketing" | "organization" | "venue" | "hashing";
 
 export type InventoryUploadEntityKind = "package" | "type" | "item";
 export type InventoryUploadPurpose = "hero" | "icon" | "promo" | "manual" | "gdtf" | "damage";
@@ -36,6 +36,9 @@ export type R2UploadArgs =
       scope: "venue";
       venueId?: string;
       purpose: "document";
+    }
+  | {
+      scope: "hashing";
     };
 
 function createUploadId() {
@@ -114,7 +117,9 @@ export function useR2FileUpload(uploadArgs: R2UploadArgs) {
                       venueId: uploadArgs.venueId as never,
                       ...common,
                     })
-                  : await generateUploadUrl({
+                  : uploadArgs.scope === "hashing"
+                    ? await generateUploadUrl({ scope: "hashing", purpose: "reference", ...common })
+                    : await generateUploadUrl({
                       scope: "inventory",
                       entityKind: uploadArgs.entityKind,
                       purpose: uploadArgs.purpose,

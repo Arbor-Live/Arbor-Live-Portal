@@ -28,6 +28,7 @@ import {
   hashDateFields,
   hashFlagReasonValue,
   hashLiveDateStatusValue,
+  hashPhotoFields,
   hashStandingValue,
 } from "./lib/hashingValues";
 
@@ -2872,4 +2873,22 @@ export default defineSchema({
     areaId: v.string(),
     userId: v.string(),
   }).index("by_hashDateId_and_areaId_and_userId", ["hashDateId", "areaId", "userId"]),
+
+  /**
+   * Reference photos of how an area, kit or item should look. Only `approved`
+   * ones are visible to everyone; a `pending` one is the submitter's and ops'.
+   */
+  hashReferencePhotos: defineTable(
+    v.union(
+      v.object({ ...hashPhotoFields, status: v.literal("pending") }),
+      v.object({
+        ...hashPhotoFields,
+        status: v.literal("approved"),
+        reviewedBy: v.string(),
+        reviewedAt: v.number(),
+      }),
+    ),
+  )
+    .index("by_status", ["status"])
+    .index("by_submittedBy_and_status", ["submittedBy", "status"]),
 });
