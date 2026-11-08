@@ -9,6 +9,13 @@ export const FLAG_REASON_LABELS = {
 
 export type FlagReason = keyof typeof FLAG_REASON_LABELS;
 
+export const PHOTO_LEVEL_LABELS = { area: "Area", kit: "Kit", item: "Item" } as const;
+
+/** `areaId:kitId:lineId` → `lineId`, the id a reference photo is attached to. */
+export function lineIdOf(itemKey: string) {
+  return itemKey.slice(itemKey.lastIndexOf(":") + 1);
+}
+
 /** Every shift on a hash has this role; the server sets it. */
 export const HASH_ROLE = "Hash";
 

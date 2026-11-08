@@ -17,6 +17,12 @@ import { api, type Id } from "@/lib/convex-api";
 import { UserAvatar } from "@/components/account/user-avatar";
 import { FinishDialog } from "@/components/hashing/live/finish-dialog";
 import { FlagSheet, type FlagTarget } from "@/components/hashing/live/flag-sheet";
+import {
+  AddPhotoButton,
+  PhotoThumbButton,
+  ReferencePhotosProvider,
+  type PhotoChoices,
+} from "@/components/hashing/live/reference-photos";
 import { EmptyState, RowCell, RowFlag, RowList } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 import { MetaItem, PageHeader, StatusPill } from "@/components/page-header";
@@ -25,7 +31,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Skeleton } from "@/components/ui/skeleton";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { pacificDateKey, plural } from "@/lib/format";
-import { FLAG_REASON_LABELS, HASH_STATUS_PILLS, hashDayLabel, hashTimeRange } from "@/lib/hashing";
+import { FLAG_REASON_LABELS, HASH_STATUS_PILLS, hashDayLabel, hashTimeRange, lineIdOf } from "@/lib/hashing";
 import { applyTick } from "@/lib/hashing-live";
 import { HASHING_BASE_PATH, hashPath } from "@/lib/hashing-tabs";
 import { notify } from "@/lib/notify";
@@ -65,12 +71,16 @@ function ItemRow({
   canTick,
   onTick,
   onFlag,
+  choices,
 }: {
   row: Row;
   canTick: boolean;
   onTick: (row: Row) => void;
   onFlag: (row: Row) => void;
+  choices: Omit<PhotoChoices, "item">;
 }) {
+  const lineId = lineIdOf(row.itemKey);
+  const itemChoices: PhotoChoices = { ...choices, item: { level: "item", targetId: lineId, label: row.text } };
   const done = row.check?.status === "done";
   const flagged = row.check?.status === "flagged";
   return (
@@ -108,6 +118,13 @@ function ItemRow({
           ) : null}
         </span>
       </button>
+      <PhotoThumbButton
+        level="item"
+        targetId={lineId}
+        title={row.text}
+        choices={itemChoices}
+        className="relative flex w-14 shrink-0 items-center justify-center border-l"
+      />
       {canTick ? (
         <button
           type="button"
@@ -125,15 +142,22 @@ function ItemRow({
 
 function KitSection({
   kit,
+  area,
   canTick,
   onTick,
   onFlag,
 }: {
   kit: Area["kits"][number];
+  area: Area;
   canTick: boolean;
   onTick: (row: Row) => void;
   onFlag: (row: Row) => void;
 }) {
+  const choices: Omit<PhotoChoices, "item"> = {
+    items: kit.rows.map((row) => ({ level: "item", targetId: lineIdOf(row.itemKey), label: row.text })),
+    kit: { level: "kit", targetId: kit.id, label: kit.name },
+    area: { level: "area", targetId: area.id, label: area.name },
+  };
   const complete = isComplete(kit.rows);
   const [opened, setOpened] = useState<boolean | null>(null);
   const open = opened ?? !complete;
@@ -147,24 +171,34 @@ function KitSection({
       data-kit={kit.id}
       data-complete={complete}
     >
-      <CollapsibleTrigger asChild>
-        <button type="button" className="flex min-h-12 w-full items-center gap-2 bg-muted/20 px-3 py-2 text-left">
-          <CaretDownIcon
-            className={cn("size-4 shrink-0 text-muted-foreground transition-transform", !open && "-rotate-90")}
-            weight="bold"
-            aria-hidden
-          />
-          <span className="min-w-0 flex-1 font-medium break-words">{kit.name}</span>
-          {complete ? <CheckIcon className="size-4 text-status-emerald-700" weight="bold" aria-hidden /> : null}
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {checked} of {kit.rows.length}
-          </span>
-        </button>
-      </CollapsibleTrigger>
+      <div className="flex items-stretch bg-muted/20">
+        <CollapsibleTrigger asChild>
+          <button type="button" className="flex min-h-12 min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left">
+            <CaretDownIcon
+              className={cn("size-4 shrink-0 text-muted-foreground transition-transform", !open && "-rotate-90")}
+              weight="bold"
+              aria-hidden
+            />
+            <span className="min-w-0 flex-1 font-medium break-words">{kit.name}</span>
+            {complete ? <CheckIcon className="size-4 text-status-emerald-700" weight="bold" aria-hidden /> : null}
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {checked} of {kit.rows.length}
+            </span>
+          </button>
+        </CollapsibleTrigger>
+        <PhotoThumbButton
+          level="kit"
+          targetId={kit.id}
+          title={kit.name}
+          choices={choices}
+          className="relative flex w-14 shrink-0 items-center justify-center border-l"
+        />
+        <AddPhotoButton level="kit" targetId={kit.id} label={kit.name} choices={choices} className="w-14 border-l" />
+      </div>
       <CollapsibleContent>
         <ul className="divide-y border-t">
           {kit.rows.map((row) => (
-            <ItemRow key={row.itemKey} row={row} canTick={canTick} onTick={onTick} onFlag={onFlag} />
+            <ItemRow key={row.itemKey} row={row} canTick={canTick} onTick={onTick} onFlag={onFlag} choices={choices} />
           ))}
         </ul>
       </CollapsibleContent>
@@ -214,6 +248,10 @@ function AreaView({ live, area }: { live: Live; area: Area }) {
   const hashDateId = live.hash._id;
   const canTick = live.hash.status === "in_progress" && live.canWork;
   const [flagging, setFlagging] = useState<FlagTarget | null>(null);
+  const areaChoices: Omit<PhotoChoices, "item"> = {
+    items: area.finalChecks.map((row) => ({ level: "item", targetId: lineIdOf(row.itemKey), label: row.text })),
+    area: { level: "area", targetId: area.id, label: area.name },
+  };
   const tick = useTick(hashDateId);
 
   const onTick = useCallback(
@@ -228,8 +266,16 @@ function AreaView({ live, area }: { live: Live; area: Area }) {
           <ArrowLeftIcon className="size-4" aria-hidden />
           All areas
         </Link>
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="min-w-0 text-lg font-semibold break-words">{area.name}</h2>
+        <div className="flex items-center justify-between gap-3">
+          <PhotoThumbButton
+            level="area"
+            targetId={area.id}
+            title={area.name}
+            choices={areaChoices}
+            className="relative shrink-0"
+          />
+          <h2 className="min-w-0 flex-1 text-lg font-semibold break-words">{area.name}</h2>
+          <AddPhotoButton level="area" targetId={area.id} label={area.name} choices={areaChoices} className="size-10" />
           <p className="shrink-0 text-sm tabular-nums" data-testid="hash-area-progress">
             {area.checked} of {area.total}
           </p>
@@ -237,7 +283,7 @@ function AreaView({ live, area }: { live: Live; area: Area }) {
       </div>
 
       {area.kits.map((kit) => (
-        <KitSection key={kit.id} kit={kit} canTick={canTick} onTick={onTick} onFlag={setFlagging} />
+        <KitSection key={kit.id} kit={kit} area={area} canTick={canTick} onTick={onTick} onFlag={setFlagging} />
       ))}
 
       {area.finalChecks.length > 0 ? (
@@ -245,7 +291,14 @@ function AreaView({ live, area }: { live: Live; area: Area }) {
           <h3 className="bg-muted/20 px-3 py-2 font-medium">Final checks</h3>
           <ul className="divide-y border-t">
             {area.finalChecks.map((row) => (
-              <ItemRow key={row.itemKey} row={row} canTick={canTick} onTick={onTick} onFlag={setFlagging} />
+              <ItemRow
+                key={row.itemKey}
+                row={row}
+                canTick={canTick}
+                onTick={onTick}
+                onFlag={setFlagging}
+                choices={areaChoices}
+              />
             ))}
           </ul>
         </section>
@@ -377,7 +430,7 @@ export function HashLive({ hashDateId }: { hashDateId: Id<"hashDates"> }) {
   const pill = HASH_STATUS_PILLS[live.hash.status];
   const running = live.hash.status === "in_progress";
 
-  return (
+  const page = (
     <div className="space-y-4 pb-24" data-testid="hash-live" data-status={live.hash.status}>
       {area ? null : (
         <PageHeader
@@ -429,5 +482,10 @@ export function HashLive({ hashDateId }: { hashDateId: Id<"hashDates"> }) {
         onFinish={(attendeeUserIds) => void finishWith(attendeeUserIds)}
       />
     </div>
+  );
+  return (
+    <ReferencePhotosProvider hashDateId={hashDateId} canWork={live.canWork}>
+      {page}
+    </ReferencePhotosProvider>
   );
 }
