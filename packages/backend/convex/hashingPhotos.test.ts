@@ -212,6 +212,14 @@ describe("what a photo can be attached to", () => {
     await expect(submit("https://example.com/photo.jpg")).rejects.toThrow(/uploaded for a hash/);
   });
 
+  test("a hash that isn't running takes no photos", async () => {
+    const context = await running();
+    const scheduled = context.dates.find((row) => row.dateKey === "2026-11-10")!._id;
+    await expect(submitKitPhoto({ ...context, anaApi: context.opsApi, hashDateId: scheduled })).rejects.toThrow(/isn't running/);
+    await context.opsApi.mutation(api.hashingLive.finish, { hashDateId: context.hashDateId, attendeeUserIds: [] });
+    await expect(submitKitPhoto(context)).rejects.toThrow(/isn't running/);
+  });
+
   test("crew who aren't on the hash can't submit", async () => {
     const context = await running();
     await expect(

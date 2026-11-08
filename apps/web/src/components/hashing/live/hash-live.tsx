@@ -484,7 +484,7 @@ export function HashLive({ hashDateId }: { hashDateId: Id<"hashDates"> }) {
     </div>
   );
   return (
-    <ReferencePhotosProvider hashDateId={hashDateId} canWork={live.canWork}>
+    <ReferencePhotosProvider hashDateId={hashDateId} canWork={running && live.canWork}>
       {page}
     </ReferencePhotosProvider>
   );

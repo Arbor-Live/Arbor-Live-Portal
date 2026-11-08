@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
-import { checklistFor, requireOnHash } from "./hashingLive";
+import { checklistFor, requireOnHash, requireRunning } from "./hashingLive";
 import { formatStoredR2Asset, resolveStoredR2AssetUrl } from "./inventoryR2";
 import { findAuthUsersByIds, getUserId, requireAdminOrOperations } from "./lib/auth";
 import { appError } from "./lib/errors";
@@ -18,11 +18,17 @@ const MAX_PENDING_PER_USER = 20;
 
 const photoStatusValue = v.union(v.literal("pending"), v.literal("approved"));
 
+/** Newest first, so past the cap it's the oldest photos that drop off, never a fresh approval. */
 async function loadApproved(ctx: QueryCtx) {
-  return await ctx.db
+  const rows = await ctx.db
     .query("hashReferencePhotos")
     .withIndex("by_status", (q) => q.eq("status", "approved"))
+    .order("desc")
     .take(APPROVED_TAKE);
+  if (rows.length === APPROVED_TAKE) {
+    console.warn(`hashReferencePhotos: ${APPROVED_TAKE} approved photos reached; older ones are not shown.`);
+  }
+  return rows;
 }
 
 function nameOf(userByKey: Awaited<ReturnType<typeof findAuthUsersByIds>>, userId: string) {
@@ -104,6 +110,7 @@ export const submit = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await loadHashDate(ctx, args.hashDateId);
+    requireRunning(row);
     const { userId } = await requireOnHash(ctx, row);
 
     const parsed = args.photo.trim().startsWith(R2_ASSET_PREFIX) ? parseStoredR2Asset(args.photo) : null;

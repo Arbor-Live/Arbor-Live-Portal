@@ -83,7 +83,7 @@ export async function requireOnHash(ctx: MutationCtx, row: Doc<"hashDates">) {
   return { ...viewer, booking };
 }
 
-function requireRunning(row: Doc<"hashDates">) {
+export function requireRunning(row: Doc<"hashDates">) {
   if (row.status !== "in_progress") appError("HASH_NOT_RUNNING", "This hash isn't running.");
 }
 
