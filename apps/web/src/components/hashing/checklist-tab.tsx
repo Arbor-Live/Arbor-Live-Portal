@@ -47,6 +47,7 @@ import {
   type ChecklistLine,
   type ChecklistPlacement,
 } from "@/lib/hashing-checklist-draft";
+import { PhotoReviewQueue } from "@/components/hashing/photo-review-queue";
 import { cn } from "@/lib/utils";
 import type { SaveStatus } from "@/hooks/use-convex-form";
 
@@ -418,6 +419,7 @@ export function ChecklistTab() {
 
   return (
     <div className="space-y-4" data-testid="hash-checklist">
+      <PhotoReviewQueue />
       <p className="text-sm text-muted-foreground" data-testid="hash-checklist-version">
         Version {current.version}. A published change applies to the next hash started.
       </p>
