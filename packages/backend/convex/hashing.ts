@@ -11,6 +11,7 @@ import {
   loadDateForEvent,
   loadHashCrew,
   loadHashDate,
+  loadPendingPhotos,
   loadQuarterDates,
   loadSettings,
   loadStanding,
@@ -83,6 +84,7 @@ export const getOverview = query({
     settings: v.union(settingsValue, v.null()),
     canManage: v.boolean(),
     openFlags: v.number(),
+    pendingPhotos: v.number(),
     staleHashes: v.array(v.object({ _id: v.id("hashDates"), dateKey: v.string(), startsAt: v.number() })),
   }),
   handler: async (ctx, args) => {
@@ -94,6 +96,7 @@ export const getOverview = query({
       settings: settings ? pickSettings(settings) : null,
       canManage: viewer.canManage,
       openFlags: viewer.canManage ? await countOpenFlags(ctx) : 0,
+      pendingPhotos: viewer.canManage ? (await loadPendingPhotos(ctx)).length : 0,
       staleHashes: viewer.canManage ? await loadStaleHashes(ctx, args.now) : [],
     };
   },

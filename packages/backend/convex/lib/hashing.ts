@@ -175,6 +175,11 @@ export function itemKeyOf(areaId: string, kitId: string, itemId: string) {
   return `${areaId}:${kitId}:${itemId}`;
 }
 
+/** The line id inside an item key. Ids are `[a-z0-9-]`, so it's whatever follows the last colon. */
+export function lineIdOf(itemKey: string) {
+  return itemKey.slice(itemKey.lastIndexOf(":") + 1);
+}
+
 export type ChecklistRow = { itemKey: string; text: string };
 export type ChecklistAreaView = {
   id: string;
