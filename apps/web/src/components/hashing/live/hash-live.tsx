@@ -9,7 +9,9 @@ import {
   ArrowLeftIcon,
   CalendarBlankIcon,
   CaretDownIcon,
+  CameraIcon,
   CheckIcon,
+  DotsThreeIcon,
   FlagIcon,
   MapPinIcon,
 } from "@phosphor-icons/react";
@@ -17,6 +19,19 @@ import { api, type Id } from "@/lib/convex-api";
 import { UserAvatar } from "@/components/account/user-avatar";
 import { FinishDialog } from "@/components/hashing/live/finish-dialog";
 import { FlagSheet, type FlagTarget } from "@/components/hashing/live/flag-sheet";
+import {
+  ItemSheet,
+  lineIdOf,
+  PhotoBadge,
+  PhotoStrip,
+  ProtoProvider,
+  RowThumb,
+  Thumb,
+  AddPhotoButton,
+  useProto,
+  useProtoVariant,
+  type TargetChoices,
+} from "@/components/hashing/live/proto-reference-photos";
 import { EmptyState, RowCell, RowFlag, RowList } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 import { MetaItem, PageHeader, StatusPill } from "@/components/page-header";
@@ -65,12 +80,20 @@ function ItemRow({
   canTick,
   onTick,
   onFlag,
+  choices,
+  onMore,
 }: {
   row: Row;
   canTick: boolean;
   onTick: (row: Row) => void;
   onFlag: (row: Row) => void;
+  choices: Omit<TargetChoices, "item">;
+  onMore: (title: string, choices: TargetChoices) => void;
 }) {
+  const proto = useProto();
+  const lineId = lineIdOf(row.itemKey);
+  const photos = proto ? proto.photosFor("item", lineId) : [];
+  const itemChoices: TargetChoices = { ...choices, item: { level: "item", targetId: lineId, label: row.text } };
   const done = row.check?.status === "done";
   const flagged = row.check?.status === "flagged";
   return (
@@ -94,7 +117,10 @@ function ItemRow({
           {flagged ? <FlagIcon className="size-3.5" weight="fill" /> : null}
         </span>
         <span className="min-w-0 flex-1">
-          <span className={cn("block text-sm break-words", done && "text-muted-foreground")}>{row.text}</span>
+          <span className={cn("block text-sm break-words", done && "text-muted-foreground")}>
+            {row.text}
+            {proto && proto.variant !== 1 ? <PhotoBadge count={photos.length} /> : null}
+          </span>
           {row.check ? (
             <span className="block text-xs break-words text-muted-foreground">
               {[
@@ -108,7 +134,17 @@ function ItemRow({
           ) : null}
         </span>
       </button>
-      {canTick ? (
+      {proto?.variant === 1 ? <RowThumb photos={photos} title={row.text} choices={itemChoices} /> : null}
+      {proto?.variant === 2 ? (
+        <button
+          type="button"
+          aria-label={`More for ${row.text}`}
+          className="flex w-14 shrink-0 items-center justify-center border-l text-muted-foreground transition-colors hover:bg-muted/30 active:bg-muted/60"
+          onClick={() => onMore(row.text, itemChoices)}
+        >
+          <DotsThreeIcon className="size-6" weight="bold" aria-hidden />
+        </button>
+      ) : canTick ? (
         <button
           type="button"
           aria-label={`Flag ${row.text}`}
@@ -125,15 +161,33 @@ function ItemRow({
 
 function KitSection({
   kit,
+  area,
   canTick,
   onTick,
   onFlag,
+  onMore,
 }: {
   kit: Area["kits"][number];
+  area: Area;
   canTick: boolean;
   onTick: (row: Row) => void;
   onFlag: (row: Row) => void;
+  onMore: (title: string, choices: TargetChoices) => void;
 }) {
+  const proto = useProto();
+  const choices: Omit<TargetChoices, "item"> = {
+    kit: { level: "kit", targetId: kit.id, label: kit.name },
+    area: { level: "area", targetId: area.id, label: area.name },
+  };
+  const kitPhotos = proto ? proto.photosFor("kit", kit.id) : [];
+  const stripEntries = proto
+    ? [
+        ...kitPhotos.map((photo) => ({ photo, caption: kit.name })),
+        ...kit.rows.flatMap((row) =>
+          proto.photosFor("item", lineIdOf(row.itemKey)).map((photo) => ({ photo, caption: row.text })),
+        ),
+      ]
+    : [];
   const complete = isComplete(kit.rows);
   const [opened, setOpened] = useState<boolean | null>(null);
   const open = opened ?? !complete;
@@ -147,8 +201,9 @@ function KitSection({
       data-kit={kit.id}
       data-complete={complete}
     >
+      <div className="flex items-stretch bg-muted/20">
       <CollapsibleTrigger asChild>
-        <button type="button" className="flex min-h-12 w-full items-center gap-2 bg-muted/20 px-3 py-2 text-left">
+        <button type="button" className="flex min-h-12 min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left">
           <CaretDownIcon
             className={cn("size-4 shrink-0 text-muted-foreground transition-transform", !open && "-rotate-90")}
             weight="bold"
@@ -161,10 +216,41 @@ function KitSection({
           </span>
         </button>
       </CollapsibleTrigger>
+      {proto?.variant === 1 ? (
+        kitPhotos.length > 0 ? (
+          <RowThumb photos={kitPhotos} title={kit.name} choices={choices} />
+        ) : (
+          <button
+            type="button"
+            aria-label={`Add a photo to ${kit.name}`}
+            className="flex w-14 shrink-0 items-center justify-center border-l text-muted-foreground hover:bg-muted/30"
+            onClick={() => proto.openAdd(choices, "kit")}
+          >
+            <CameraIcon className="size-5" aria-hidden />
+          </button>
+        )
+      ) : null}
+      {proto?.variant === 3 && stripEntries.length === 0 ? (
+        <AddPhotoButton choices={choices as TargetChoices} level="kit" label={kit.name} />
+      ) : null}
+      </div>
       <CollapsibleContent>
+        {proto?.variant === 3 && stripEntries.length > 0 ? (
+          <div className="border-t">
+            <PhotoStrip entries={stripEntries} choices={choices} addLevel="kit" title={kit.name} />
+          </div>
+        ) : null}
         <ul className="divide-y border-t">
           {kit.rows.map((row) => (
-            <ItemRow key={row.itemKey} row={row} canTick={canTick} onTick={onTick} onFlag={onFlag} />
+            <ItemRow
+              key={row.itemKey}
+              row={row}
+              canTick={canTick}
+              onTick={onTick}
+              onFlag={onFlag}
+              choices={choices}
+              onMore={onMore}
+            />
           ))}
         </ul>
       </CollapsibleContent>
@@ -214,6 +300,11 @@ function AreaView({ live, area }: { live: Live; area: Area }) {
   const hashDateId = live.hash._id;
   const canTick = live.hash.status === "in_progress" && live.canWork;
   const [flagging, setFlagging] = useState<FlagTarget | null>(null);
+  const [more, setMore] = useState<{ title: string; choices: TargetChoices } | null>(null);
+  const proto = useProto();
+  const areaChoices: Omit<TargetChoices, "item"> = { area: { level: "area", targetId: area.id, label: area.name } };
+  const areaPhotos = proto ? proto.photosFor("area", area.id) : [];
+  const onMore = useCallback((title: string, choices: TargetChoices) => setMore({ title, choices }), []);
   const tick = useTick(hashDateId);
 
   const onTick = useCallback(
@@ -228,16 +319,49 @@ function AreaView({ live, area }: { live: Live; area: Area }) {
           <ArrowLeftIcon className="size-4" aria-hidden />
           All areas
         </Link>
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="min-w-0 text-lg font-semibold break-words">{area.name}</h2>
+        <div className="flex items-center justify-between gap-3">
+          {proto?.variant === 1 && areaPhotos.length > 0 ? (
+            <button
+              type="button"
+              aria-label={`Reference photos for ${area.name}`}
+              className="shrink-0"
+              onClick={() => proto.openViewer(areaPhotos, area.name, areaChoices as TargetChoices)}
+            >
+              <Thumb photo={areaPhotos[0]} className="size-10" compact />
+            </button>
+          ) : null}
+          <h2 className="min-w-0 flex-1 text-lg font-semibold break-words">{area.name}</h2>
+          {proto && proto.variant !== 2 && areaPhotos.length === 0 ? (
+            <AddPhotoButton choices={areaChoices as TargetChoices} level="area" label={area.name} />
+          ) : null}
           <p className="shrink-0 text-sm tabular-nums" data-testid="hash-area-progress">
             {area.checked} of {area.total}
           </p>
         </div>
       </div>
 
+      {proto?.variant === 3 && areaPhotos.length > 0 ? (
+        <div className="-mx-2 border">
+          <PhotoStrip
+            entries={areaPhotos.map((photo) => ({ photo }))}
+            choices={areaChoices as TargetChoices}
+            addLevel="area"
+            title={area.name}
+            size="lg"
+          />
+        </div>
+      ) : null}
+
       {area.kits.map((kit) => (
-        <KitSection key={kit.id} kit={kit} canTick={canTick} onTick={onTick} onFlag={setFlagging} />
+        <KitSection
+          key={kit.id}
+          kit={kit}
+          area={area}
+          canTick={canTick}
+          onTick={onTick}
+          onFlag={setFlagging}
+          onMore={onMore}
+        />
       ))}
 
       {area.finalChecks.length > 0 ? (
@@ -245,7 +369,15 @@ function AreaView({ live, area }: { live: Live; area: Area }) {
           <h3 className="bg-muted/20 px-3 py-2 font-medium">Final checks</h3>
           <ul className="divide-y border-t">
             {area.finalChecks.map((row) => (
-              <ItemRow key={row.itemKey} row={row} canTick={canTick} onTick={onTick} onFlag={setFlagging} />
+              <ItemRow
+                key={row.itemKey}
+                row={row}
+                canTick={canTick}
+                onTick={onTick}
+                onFlag={setFlagging}
+                choices={areaChoices}
+                onMore={onMore}
+              />
             ))}
           </ul>
         </section>
@@ -256,6 +388,21 @@ function AreaView({ live, area }: { live: Live; area: Area }) {
       </Button>
 
       <FlagSheet hashDateId={hashDateId} target={flagging} onClose={() => setFlagging(null)} />
+      {proto?.variant === 2 ? (
+        <ItemSheet
+          state={more}
+          canFlag={canTick}
+          onClose={() => setMore(null)}
+          onFlag={() => {
+            const item = more?.choices.item;
+            const row = [...area.kits.flatMap((kit) => kit.rows), ...area.finalChecks].find(
+              (candidate) => item && lineIdOf(candidate.itemKey) === item.targetId,
+            );
+            setMore(null);
+            if (row) setFlagging(row);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -350,6 +497,7 @@ export function HashLive({ hashDateId }: { hashDateId: Id<"hashDates"> }) {
   const finish = useMutation(api.hashingLive.finish);
   const [finishing, setFinishing] = useState(false);
   const areaId = useSearchParams().get("area");
+  const variant = useProtoVariant();
   const [busy, setBusy] = useState(false);
 
   if (live === undefined) return <Skeleton className="h-96 w-full" />;
@@ -377,7 +525,7 @@ export function HashLive({ hashDateId }: { hashDateId: Id<"hashDates"> }) {
   const pill = HASH_STATUS_PILLS[live.hash.status];
   const running = live.hash.status === "in_progress";
 
-  return (
+  const page = (
     <div className="space-y-4 pb-24" data-testid="hash-live" data-status={live.hash.status}>
       {area ? null : (
         <PageHeader
@@ -430,4 +578,5 @@ export function HashLive({ hashDateId }: { hashDateId: Id<"hashDates"> }) {
       />
     </div>
   );
+  return variant ? <ProtoProvider variant={variant}>{page}</ProtoProvider> : page;
 }

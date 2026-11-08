@@ -48,6 +48,7 @@ import {
   type ChecklistPlacement,
 } from "@/lib/hashing-checklist-draft";
 import { cn } from "@/lib/utils";
+import { ProtoReviewQueue } from "@/components/hashing/live/proto-reference-photos";
 import type { SaveStatus } from "@/hooks/use-convex-form";
 
 function MoveButtons({ controls, label }: { controls: SortableRowControls; label: string }) {
@@ -418,6 +419,7 @@ export function ChecklistTab() {
 
   return (
     <div className="space-y-4" data-testid="hash-checklist">
+      <ProtoReviewQueue />
       <p className="text-sm text-muted-foreground" data-testid="hash-checklist-version">
         Version {current.version}. A published change applies to the next hash started.
       </p>
