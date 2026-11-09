@@ -30,6 +30,11 @@ export async function scheduleQuoteUpdatedEmail(
     /** Their change request, when this answers one. */
     requestNote?: string;
     revisionNumber: number;
+    /**
+     * The person sending: From and the sign-off name them. Leave it out for an
+     * email nobody wrote, which comes from the manager; `null` is a sender with no name.
+     */
+    senderName?: string | null;
   },
 ) {
   const clientEmail = args.invoice.clientEmail?.trim().toLowerCase();
@@ -48,7 +53,11 @@ export async function scheduleQuoteUpdatedEmail(
   await enqueueEmail(ctx, {
     template: "quote_updated",
     to: clientEmail,
-    booking: { ref: { invoiceId: args.invoice._id }, loaded: { invoice: args.invoice, event } },
+    booking: {
+      ref: { invoiceId: args.invoice._id },
+      loaded: { invoice: args.invoice, event },
+      senderName: args.senderName,
+    },
     eventId: event?._id,
     idempotencyKey: `quote_updated:${args.invoice._id}:${args.revisionNumber}`,
     payload: {
@@ -66,6 +75,7 @@ export async function scheduleQuoteUpdatedEmail(
         portal.portal === "request" ? requestTrackingUrl(portal.token) : publicQuoteUrl(portal.token),
       managerName: args.invoice.managerName,
       managerEmail: args.invoice.managerEmail,
+      ...(args.senderName ? { senderName: args.senderName } : {}),
     },
   });
 }

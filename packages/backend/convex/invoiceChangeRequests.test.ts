@@ -4,6 +4,7 @@ import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { ensureChangeRequestRevision } from "./lib/invoiceRevisions";
 import { REQUEST_PUBLIC_TOKEN_TTL_MS } from "./lib/requestToken";
+import { seedInvoice, seedRequest } from "./test/bookingSeeds.helpers";
 import {
   addMembership,
   asUser,
@@ -463,4 +464,122 @@ test("a change request finds the client's version behind many staff-only saves",
       .first(),
   );
   expect([latest?.number, latest?.kind, latest?.totalUsd]).toEqual([62, "changes_requested", 500]);
+});
+
+async function sentEmails(t: Test, template: "quote_updated" | "booking_quote_ready") {
+  return await t.run(async (ctx) =>
+    (await ctx.db.query("emailNotifications").collect()).filter((row) => row.template === template),
+  );
+}
+
+/** A request-portal quote managed by "Alex Manager", ready to send (or re-send) to the client. */
+async function seedRequestPortalQuote(t: Test, extra: { alreadySent?: boolean } = {}) {
+  const requestId = await seedRequest(t, { requestNumber: "ALREQ-SENDAS1" });
+  const invoiceId = await seedInvoice(t, {
+    invoiceNumber: "ALINV-SENDAS1",
+    sourceEventRequestId: requestId,
+  });
+  await t.run(async (ctx) => {
+    const now = Date.now();
+    const termsId = await ctx.db.insert("invoiceTerms", {
+      label: "Standard",
+      version: "1",
+      markdown: "Terms",
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch(requestId, { publicToken: "tok-send-as", submittedAt: now, linkedInvoiceId: invoiceId });
+    await ctx.db.patch(invoiceId, {
+      termsIds: [termsId],
+      ...(extra.alreadySent ? { status: "finalized" as const, clientReviewReadyAt: now - 1000 } : {}),
+    });
+  });
+  return invoiceId;
+}
+
+test("a quote sent to the client goes out as the person who clicked Send", async () => {
+  const t = makeTest();
+  const invoiceId = await seedRequestPortalQuote(t);
+  const staff = await arborStaff(t);
+
+  await staff.mutation(api.invoices.markReadyForClientReview, { id: invoiceId, clientMessage: "Here you go." });
+
+  const [email] = await sentEmails(t, "booking_quote_ready");
+  expect(email?.booking?.from).toBe('"Sam Staff at Arbor Live" <bookings@arbor.st>');
+  expect(email?.payload).toMatchObject({ senderName: "Sam Staff", managerName: "Alex Manager" });
+});
+
+test("a quote sent as the manager is from the manager, and the history keeps the real sender", async () => {
+  const t = makeTest();
+  const invoiceId = await seedRequestPortalQuote(t);
+  const staff = await arborStaff(t);
+
+  await staff.mutation(api.invoices.markReadyForClientReview, {
+    id: invoiceId,
+    clientMessage: "Here you go.",
+    sendAs: "manager",
+  });
+
+  const [email] = await sentEmails(t, "booking_quote_ready");
+  expect(email?.booking?.from).toBe('"Alex Manager at Arbor Live" <bookings@arbor.st>');
+  expect(email?.payload).toMatchObject({ senderName: "Alex Manager", managerName: "Alex Manager" });
+  expect((await revisionsOf(t, invoiceId)).map((r) => [r.kind, r.actorName])).toEqual([["sent", "Sam Staff"]]);
+});
+
+test("a revised request-portal quote honors who it is sent as", async () => {
+  const self = makeTest();
+  const selfInvoice = await seedRequestPortalQuote(self, { alreadySent: true });
+  await (await arborStaff(self)).mutation(api.invoices.sendRevisedQuote, { id: selfInvoice, message: "Updated." });
+  expect((await sentEmails(self, "booking_quote_ready"))[0]?.booking?.from).toBe(
+    '"Sam Staff at Arbor Live" <bookings@arbor.st>',
+  );
+
+  const asManager = makeTest();
+  const managerInvoice = await seedRequestPortalQuote(asManager, { alreadySent: true });
+  await (await arborStaff(asManager)).mutation(api.invoices.sendRevisedQuote, {
+    id: managerInvoice,
+    message: "Updated.",
+    sendAs: "manager",
+  });
+  const [email] = await sentEmails(asManager, "booking_quote_ready");
+  expect(email?.booking?.from).toBe('"Alex Manager at Arbor Live" <bookings@arbor.st>');
+  expect(email?.payload).toMatchObject({ senderName: "Alex Manager" });
+  expect((await revisionsOf(asManager, managerInvoice)).map((r) => r.actorName)).toEqual(["Sam Staff"]);
+});
+
+test("an emailed revised quote defaults to the sender and can go out as the manager", async () => {
+  const t = makeTest();
+  const staff = await arborStaff(t);
+  const own = await seedQuote(t);
+  await staff.mutation(api.invoices.sendRevisedQuote, { id: own, message: "Revised." });
+  const covered = await seedQuote(t, { invoiceNumber: "ALINV-TESTCR2", publicApprovalToken: "other-token" });
+  await staff.mutation(api.invoices.sendRevisedQuote, { id: covered, message: "Revised.", sendAs: "manager" });
+
+  const emails = await sentEmails(t, "quote_updated");
+  const byInvoice = new Map(emails.map((email) => [(email.payload as { invoiceNumber: string }).invoiceNumber, email]));
+  const ownEmail = byInvoice.get("ALINV-TESTCR1");
+  expect(ownEmail?.booking?.from).toBe('"Sam Staff at Arbor Live" <bookings@arbor.st>');
+  expect(ownEmail?.payload).toMatchObject({ senderName: "Sam Staff", managerName: "Alex Manager" });
+  const coveredEmail = byInvoice.get("ALINV-TESTCR2");
+  expect(coveredEmail?.booking?.from).toBe('"Alex Manager at Arbor Live" <bookings@arbor.st>');
+  expect(coveredEmail?.payload).toMatchObject({ senderName: "Alex Manager" });
+  expect((await revisionsOf(t, covered)).map((r) => r.actorName)).toEqual(["Sam Staff"]);
+});
+
+test("sending as the manager is refused when the quote has no manager name, and nothing is recorded", async () => {
+  const t = makeTest();
+  const invoiceId = await seedQuote(t, { managerName: "  " });
+  const staff = await arborStaff(t);
+
+  await expect(
+    staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Revised.", sendAs: "manager" }),
+  ).rejects.toThrow(/SEND_AS_NO_MANAGER/);
+  expect(await revisionsOf(t, invoiceId)).toEqual([]);
+  expect(await sentEmails(t, "quote_updated")).toEqual([]);
+
+  await staff.mutation(api.invoices.sendRevisedQuote, { id: invoiceId, message: "Revised." });
+  expect((await sentEmails(t, "quote_updated"))[0]?.booking?.from).toBe(
+    '"Sam Staff at Arbor Live" <bookings@arbor.st>',
+  );
 });

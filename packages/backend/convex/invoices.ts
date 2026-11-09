@@ -57,6 +57,7 @@ import {
   snapshotFromRows,
   snapshotInvoice,
 } from "./lib/invoiceRevisions";
+import { resolveSenderName, sendAsValidator } from "./lib/bookingEmail";
 import { scheduleQuoteUpdatedEmail } from "./email/quoteUpdatedEmails";
 import { scheduleBookingQuoteReadyEmail } from "./email/bookingRequestEmails";
 import {
@@ -2573,18 +2574,21 @@ export const createDraftForSeries = mutation({
   },
 });
 
+/** The real person who clicked Send, for the revision history. */
 type QuoteSender = { name?: string; userId?: string };
 
 /**
  * Put a booking-request quote on the request portal and email it: the first
  * send, a re-send after a withdraw, or a reply to a change request. Each send
  * is a version, with the message, so the client's history shows what they got.
+ * `emailSenderName` is who the email comes from, which `sender` need not match.
  */
 async function sendQuoteOnRequestPortal(
   ctx: MutationCtx,
   invoice: Doc<"invoices">,
   clientMessage: string,
   sender: QuoteSender,
+  emailSenderName: string | null,
 ) {
   if (!invoice.sourceEventRequestId) {
     appError(
@@ -2656,6 +2660,7 @@ async function sendQuoteOnRequestPortal(
           clientReviewReadyAt: now,
           clientReadyMessage,
         },
+        senderName: emailSenderName,
       });
     }
   }
@@ -2666,6 +2671,7 @@ export const markReadyForClientReview = mutation({
   args: {
     id: v.id("invoices"),
     clientMessage: v.string(),
+    sendAs: sendAsValidator,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -2674,10 +2680,13 @@ export const markReadyForClientReview = mutation({
     return await withReportableErrors("invoices.markReadyForClientReview", async () => {
       const invoice = await ctx.db.get(args.id);
       if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
-      await sendQuoteOnRequestPortal(ctx, invoice, args.clientMessage, {
-        name: viewer.name,
-        userId: viewer._id ?? viewer.id,
-      });
+      await sendQuoteOnRequestPortal(
+        ctx,
+        invoice,
+        args.clientMessage,
+        { name: viewer.name, userId: viewer._id ?? viewer.id },
+        resolveSenderName(viewer, invoice, args.sendAs),
+      );
       return null;
     });
   },
@@ -2729,6 +2738,7 @@ async function sendQuoteByEmail(
   invoice: Doc<"invoices">,
   message: string,
   sender: QuoteSender,
+  emailSenderName: string | null,
 ) {
   const now = Date.now();
   const request = await ensureChangeRequestRevision(ctx, invoice);
@@ -2750,6 +2760,7 @@ async function sendQuoteByEmail(
     changeNote: message,
     requestNote: request?.note,
     revisionNumber: number,
+    senderName: emailSenderName,
   });
   return number;
 }
@@ -2765,6 +2776,7 @@ export const sendRevisedQuote = mutation({
   args: {
     id: v.id("invoices"),
     message: v.string(),
+    sendAs: sendAsValidator,
   },
   returns: v.object({ number: v.number() }),
   handler: async (ctx, args) => {
@@ -2780,11 +2792,12 @@ export const sendRevisedQuote = mutation({
         appError("QUOTE_REPLY_REQUIRED", "Tell the client what changed, or why it didn't.");
       }
       const sender = { name: viewer.name, userId: viewer._id ?? viewer.id };
+      const emailSenderName = resolveSenderName(viewer, invoice, args.sendAs);
 
       if (!invoice.sourceEventRequestId) {
-        return { number: await sendQuoteByEmail(ctx, invoice, message, sender) };
+        return { number: await sendQuoteByEmail(ctx, invoice, message, sender, emailSenderName) };
       }
-      return { number: await sendQuoteOnRequestPortal(ctx, invoice, message, sender) };
+      return { number: await sendQuoteOnRequestPortal(ctx, invoice, message, sender, emailSenderName) };
     });
   },
 });
