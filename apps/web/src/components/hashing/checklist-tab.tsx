@@ -48,6 +48,7 @@ import {
   type ChecklistPlacement,
 } from "@/lib/hashing-checklist-draft";
 import { PhotoReviewQueue } from "@/components/hashing/photo-review-queue";
+import { SetupPhotoControls, SetupPhotosProvider } from "@/components/hashing/setup-photos";
 import { cn } from "@/lib/utils";
 import type { SaveStatus } from "@/hooks/use-convex-form";
 
@@ -121,6 +122,7 @@ function LineList({
                 if (event.key === "Enter") event.preventDefault();
               }}
             />
+            <SetupPhotoControls level="item" targetId={line.id} label={line.text || "item"} />
             <Button
               type="button"
               variant="ghost"
@@ -203,6 +205,7 @@ function KitBlock({
             Shared
           </RowFlag>
         ) : null}
+        <SetupPhotoControls level="kit" targetId={kit.id} label={kit.name || "kit"} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${kit.name || "kit"}`}>
@@ -328,6 +331,7 @@ function AreaEditor({
           value={area.name}
           onChange={(event) => onChange(renameArea(draft, area.id, event.target.value))}
         />
+        <SetupPhotoControls level="area" targetId={area.id} label={area.name || "area"} />
         <Button type="button" variant="outline" size="sm" onClick={() => void remove()}>
           Remove area
         </Button>
@@ -418,51 +422,53 @@ export function ChecklistTab() {
   }
 
   return (
-    <div className="space-y-4" data-testid="hash-checklist">
-      <PhotoReviewQueue />
-      <p className="text-sm text-muted-foreground" data-testid="hash-checklist-version">
-        Version {current.version}. A published change applies to the next hash started.
-      </p>
-      <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
-        <aside className="min-w-0 space-y-2">
-          <SortableList
-            items={draft.areas}
-            getId={(row) => row.id}
-            onReorder={(ordered) => change(setAreas(draft, ordered))}
-            rowClassName="mb-1.5"
-            renderItem={(row, _index, controls) => renderArea(row, controls)}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            data-testid="hash-add-area"
-            onClick={() => {
-              const id = newChecklistId();
-              change(addArea(draft, { id, name: "New area" }));
-              setSelected(id);
-            }}
-          >
-            <PlusIcon aria-hidden />
-            Add area
-          </Button>
-        </aside>
-        {area ? <AreaEditor key={area.id} draft={draft} area={area} onChange={change} /> : <EmptyState>Add an area to start.</EmptyState>}
+    <SetupPhotosProvider published={current.tree}>
+      <div className="space-y-4" data-testid="hash-checklist">
+        <PhotoReviewQueue />
+        <p className="text-sm text-muted-foreground" data-testid="hash-checklist-version">
+          Version {current.version}. A published change applies to the next hash started.
+        </p>
+        <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+          <aside className="min-w-0 space-y-2">
+            <SortableList
+              items={draft.areas}
+              getId={(row) => row.id}
+              onReorder={(ordered) => change(setAreas(draft, ordered))}
+              rowClassName="mb-1.5"
+              renderItem={(row, _index, controls) => renderArea(row, controls)}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              data-testid="hash-add-area"
+              onClick={() => {
+                const id = newChecklistId();
+                change(addArea(draft, { id, name: "New area" }));
+                setSelected(id);
+              }}
+            >
+              <PlusIcon aria-hidden />
+              Add area
+            </Button>
+          </aside>
+          {area ? <AreaEditor key={area.id} draft={draft} area={area} onChange={change} /> : <EmptyState>Add an area to start.</EmptyState>}
+        </div>
+        <FormSaveBar
+          tier="C"
+          saveStatus={status}
+          saveError={error}
+          isDirty={dirty}
+          saveLabel="Publish"
+          onSave={() => void save()}
+          onDiscard={() => {
+            setEdits(null);
+            setStatus("idle");
+            setError(null);
+          }}
+          onRetry={() => void save()}
+        />
       </div>
-      <FormSaveBar
-        tier="C"
-        saveStatus={status}
-        saveError={error}
-        isDirty={dirty}
-        saveLabel="Publish"
-        onSave={() => void save()}
-        onDiscard={() => {
-          setEdits(null);
-          setStatus("idle");
-          setError(null);
-        }}
-        onRetry={() => void save()}
-      />
-    </div>
+    </SetupPhotosProvider>
   );
 }

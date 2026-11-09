@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { CameraIcon, CaretLeftIcon, CaretRightIcon, ClockIcon } from "@phosphor-icons/react";
@@ -27,13 +27,13 @@ export type PhotoTarget = { level: PhotoLevel; targetId: string; label: string }
  */
 export type PhotoChoices = { item?: PhotoTarget; items?: PhotoTarget[]; kit?: PhotoTarget; area: PhotoTarget };
 
-type Viewing = { level: PhotoLevel; targetId: string; title: string; choices: PhotoChoices; index: number };
+type Viewing = { level: PhotoLevel; targetId: string; title: string; choices?: PhotoChoices; index: number };
 type Adding = { choices: PhotoChoices; level: PhotoLevel };
 
 type Context = {
   canWork: boolean;
   photosFor: (level: PhotoLevel, targetId: string) => Photo[];
-  openViewer: (level: PhotoLevel, targetId: string, title: string, choices: PhotoChoices) => void;
+  openViewer: (level: PhotoLevel, targetId: string, title: string, choices?: PhotoChoices) => void;
   openAdd: (choices: PhotoChoices, level: PhotoLevel) => void;
 };
 
@@ -57,28 +57,61 @@ export function ReferencePhotosProvider({
   children: React.ReactNode;
 }) {
   const data = useQuery(api.hashingPhotos.forHash, { hashDateId });
-  const [viewing, setViewing] = useState<Viewing | null>(null);
   const [adding, setAdding] = useState<Adding | null>(null);
+  const openAdd = useCallback((choices: PhotoChoices, level: PhotoLevel) => setAdding({ choices, level }), []);
+
+  return (
+    <PhotosShell photos={data?.photos} canReview={data?.canReview ?? false} canWork={canWork} onAdd={openAdd}>
+      {children}
+      <AddPhotoSheet hashDateId={hashDateId} state={adding} onClose={() => setAdding(null)} />
+    </PhotosShell>
+  );
+}
+
+/** The checklist editor's photos: approved only, with Remove, and no adding from the viewer. */
+export function SetupReferencePhotosProvider({ children }: { children: React.ReactNode }) {
+  const photos = useQuery(api.hashingPhotos.forChecklist, {});
+  return (
+    <PhotosShell photos={photos} canReview canWork={false}>
+      {children}
+    </PhotosShell>
+  );
+}
+
+function PhotosShell({
+  photos,
+  canReview,
+  canWork,
+  onAdd,
+  children,
+}: {
+  photos: Photo[] | undefined;
+  canReview: boolean;
+  canWork: boolean;
+  onAdd?: (choices: PhotoChoices, level: PhotoLevel) => void;
+  children: React.ReactNode;
+}) {
+  const [viewing, setViewing] = useState<Viewing | null>(null);
 
   const byTarget = useMemo(() => {
     const map = new Map<string, Photo[]>();
-    for (const photo of data?.photos ?? []) {
+    for (const photo of photos ?? []) {
       const key = keyOf(photo.level, photo.targetId);
       map.set(key, [...(map.get(key) ?? []), photo]);
     }
     // The photo everyone can see leads; a waiting one of yours follows.
     for (const list of map.values()) list.sort((a, b) => Number(a.status === "pending") - Number(b.status === "pending"));
     return map;
-  }, [data]);
+  }, [photos]);
 
   const context = useMemo<Context>(
     () => ({
       canWork,
       photosFor: (level, targetId) => byTarget.get(keyOf(level, targetId)) ?? [],
       openViewer: (level, targetId, title, choices) => setViewing({ level, targetId, title, choices, index: 0 }),
-      openAdd: (choices, level) => setAdding({ choices, level }),
+      openAdd: (choices, level) => onAdd?.(choices, level),
     }),
-    [byTarget, canWork],
+    [byTarget, canWork, onAdd],
   );
 
   const viewed = viewing ? (byTarget.get(keyOf(viewing.level, viewing.targetId)) ?? []) : [];
@@ -90,16 +123,15 @@ export function ReferencePhotosProvider({
         photos={viewed}
         state={viewing}
         canWork={canWork}
-        canReview={data?.canReview ?? false}
+        canReview={canReview}
         onClose={() => setViewing(null)}
         onIndex={(index) => setViewing((current) => (current ? { ...current, index } : current))}
         onAdd={() => {
-          if (!viewing) return;
-          setAdding({ choices: viewing.choices, level: viewing.level });
+          if (!viewing?.choices) return;
+          onAdd?.(viewing.choices, viewing.level);
           setViewing(null);
         }}
       />
-      <AddPhotoSheet hashDateId={hashDateId} state={adding} onClose={() => setAdding(null)} />
     </ReferencePhotosContext.Provider>
   );
 }
@@ -130,12 +162,14 @@ export function PhotoThumbButton({
   title,
   choices,
   className,
+  thumbClassName = "size-10",
 }: {
   level: PhotoLevel;
   targetId: string;
   title: string;
-  choices: PhotoChoices;
+  choices?: PhotoChoices;
   className?: string;
+  thumbClassName?: string;
 }) {
   const refs = useReferencePhotos();
   const photos = refs.photosFor(level, targetId);
@@ -148,7 +182,7 @@ export function PhotoThumbButton({
       className={className}
       onClick={() => refs.openViewer(level, targetId, title, choices)}
     >
-      <Thumb photo={first} count={photos.length} className="size-10" />
+      <Thumb photo={first} count={photos.length} className={thumbClassName} />
     </button>
   );
 }
