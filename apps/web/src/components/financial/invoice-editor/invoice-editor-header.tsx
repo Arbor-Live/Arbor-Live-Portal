@@ -1,5 +1,6 @@
 "use client";
 
+import { useProtoFollow } from "@/components/proto-follow";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -92,6 +93,7 @@ export function InvoiceEditorHeader({
 
   const { invoice, activeInvoiceId, fields } = draft;
   const pdf = useInvoicePdfDownload(activeInvoiceId, invoice?.invoiceNumber);
+  const follow = useProtoFollow(`invoice:${activeInvoiceId}`, "invoice", fields.managerName || undefined);
   const duplicateInvoice = useMutation(api.invoices.duplicate);
   const voidInvoice = useMutation(api.invoices.voidInvoice);
   const unvoidInvoice = useMutation(api.invoices.unvoidInvoice);
@@ -263,6 +265,7 @@ export function InvoiceEditorHeader({
 
   const menu = activeInvoiceId ? (
     <>
+      {follow.menuItem}
       <DropdownMenuItem
         disabled={pdf.status === "loading"}
         onSelect={() => {
@@ -340,12 +343,22 @@ export function InvoiceEditorHeader({
           href: "/dashboard/ops-center/invoices",
           label: "Invoices",
         }}
-        actions={primaryAction}
+        actions={
+          activeInvoiceId ? (
+            <>
+              {follow.action}
+              {primaryAction}
+            </>
+          ) : (
+            primaryAction
+          )
+        }
         menu={menu}
         menuLabel="More invoice actions"
         pills={
           invoice ? (
             <>
+              {follow.pill}
               <StatusPillSelect
                 value={status}
                 options={statusOptions}

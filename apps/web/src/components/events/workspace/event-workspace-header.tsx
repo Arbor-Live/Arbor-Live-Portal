@@ -1,5 +1,6 @@
 "use client";
 
+import { useProtoFollow } from "@/components/proto-follow";
 import Link from "next/link";
 import { useState, type ComponentProps } from "react";
 import { useDraftText } from "@/components/forms/draft-text-input";
@@ -104,6 +105,7 @@ export function EventWorkspaceHeader() {
   const managerName = draft.managerUserId
     ? userSelectOptions.find((option) => option.value === draft.managerUserId)?.label
     : undefined;
+  const follow = useProtoFollow(`event:${eventId}`, "event", managerName);
   const hasSiblingDays = (siblingDays?.length ?? 0) > 1;
   const multiDayGroup = seriesMeta?.kind === "multi_day";
   // A series applies its setup from its template tabs, not from one occurrence.
@@ -111,16 +113,22 @@ export function EventWorkspaceHeader() {
   const hasUnsavedEdits = workspace.dirty.size > 0;
   // Hashing owns a hash's status, so only a hash it already cancelled can be deleted here.
   const canDelete = isAdmin && (!workspace.isHash || draft.status === "cancelled");
-  const showMenu = canApplySetup || Boolean(seriesMeta) || canDelete;
+  const showMenu = canApplySetup || Boolean(seriesMeta) || canDelete || Boolean(follow.menuItem);
 
   return (
     <PageHeader
       back={{ href: "/dashboard/events", label: "Events" }}
-      actions={<EventBriefButton eventId={eventId} />}
+      actions={
+        <>
+          {follow.action}
+          <EventBriefButton eventId={eventId} />
+        </>
+      }
       menuLabel="More event actions"
       menu={
         showMenu ? (
           <>
+            {follow.menuItem}
             {canApplySetup ? (
               <DropdownMenuItem
                 disabled={readOnly || hasUnsavedEdits}
@@ -161,6 +169,7 @@ export function EventWorkspaceHeader() {
       }
       pills={
         <>
+          {follow.pill}
           <StatusPillSelect
             value={draft.status}
             options={STATUS_OPTIONS}

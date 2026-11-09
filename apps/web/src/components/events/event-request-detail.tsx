@@ -26,6 +26,7 @@ import { CommentsSection } from "@/components/comments/comments-section";
 import { BookingMessages } from "@/components/email-threads/booking-messages";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { MetaItem, PageHeader, StatusPill } from "@/components/page-header";
+import { useProtoFollow } from "@/components/proto-follow";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -147,6 +148,7 @@ function EventRequestDetail({ request }: { request: EventRequest }) {
   const setAssignee = useMutation(api.eventRequests.setAssignee);
   const setStaffNotes = useMutation(api.eventRequests.setStaffNotes);
   const deleteRequestAdmin = useMutation(api.adminDeletes.deleteRequestAdmin);
+  const follow = useProtoFollow(`request:${requestId}`, "request", request.assigneeName ?? undefined);
 
   const [staffNotes, setStaffNotesDraft] = useState(request.staffNotes ?? "");
   const [saving, setSaving] = useState(false);
@@ -266,8 +268,9 @@ function EventRequestDetail({ request }: { request: EventRequest }) {
 
   const showPortalInMenu = trackHref && status !== "pending_client";
   const menu =
-    isOpen || showPortalInMenu || isAdmin ? (
+    isOpen || showPortalInMenu || isAdmin || follow.menuItem ? (
       <>
+        {follow.menuItem}
         {showPortalInMenu ? (
           <DropdownMenuItem asChild>
             <Link href={trackHref} target="_blank">
@@ -337,11 +340,17 @@ function EventRequestDetail({ request }: { request: EventRequest }) {
     <div className="space-y-4 pb-24" data-testid="event-request-detail">
       <PageHeader
         back={{ href: "/dashboard/ops-center/requests", label: "Requests" }}
-        actions={primaryAction}
+        actions={
+          <>
+            {follow.action}
+            {primaryAction}
+          </>
+        }
         menuLabel="More request actions"
         menu={menu}
         pills={
           <>
+            {follow.pill}
             <StatusPill tone={eventRequestStatusTone(status)}>
               <span data-testid="request-status">{eventRequestStatusLabel(status)}</span>
             </StatusPill>
