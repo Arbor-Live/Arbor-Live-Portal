@@ -32,6 +32,7 @@ export function QuoteUpdatedEmail({
   portalUrl,
   managerName,
   managerEmail,
+  senderName,
 }: QuoteUpdatedEmailProps) {
   const greeting = recipientName ? `Hi ${recipientName},` : "Hi!";
   const difference =
@@ -90,7 +91,7 @@ export function QuoteUpdatedEmail({
         This is still an estimate. Your final invoice comes after the event, once hours are final,
         so please don&apos;t send payment until then.
       </MutedCopy>
-      <EmailSignOff />
+      <EmailSignOff senderName={senderName} />
     </EmailLayout>
   );
 }

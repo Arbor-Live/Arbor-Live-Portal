@@ -410,12 +410,20 @@ export function CtaButton({
   );
 }
 
-export function EmailSignOff() {
+export function EmailSignOff({ senderName }: { senderName?: string }) {
   return (
     <Text className={DARK.muted} style={signOffStyle}>
       Best regards,
       <br />
-      The Arbor Live Team
+      {senderName ? (
+        <>
+          {senderName}
+          <br />
+          Arbor Live
+        </>
+      ) : (
+        "The Arbor Live Team"
+      )}
     </Text>
   );
 }
