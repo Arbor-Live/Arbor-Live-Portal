@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, type ComponentProps } from "react";
+import { FollowButton } from "@/components/booking-follow-button";
 import { useDraftText } from "@/components/forms/draft-text-input";
 import {
   ArrowCounterClockwiseIcon,
@@ -116,7 +117,12 @@ export function EventWorkspaceHeader() {
   return (
     <PageHeader
       back={{ href: "/dashboard/events", label: "Events" }}
-      actions={<EventBriefButton eventId={eventId} />}
+      actions={
+        <>
+          <FollowButton target={{ kind: "event", eventId }} />
+          <EventBriefButton eventId={eventId} />
+        </>
+      }
       menuLabel="More event actions"
       menu={
         showMenu ? (

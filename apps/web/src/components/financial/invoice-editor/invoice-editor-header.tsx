@@ -25,6 +25,7 @@ import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delet
 import { useInvoicePdfDownload } from "@/components/financial/invoice-pdf-download-button";
 import type { SendAsArgs } from "@/components/email-threads/send-as-select";
 import { SendQuoteToClientSheet } from "@/components/financial/send-quote-to-client-sheet";
+import { FollowButton } from "@/components/booking-follow-button";
 import { MetaItem, PageHeader, StatusPill, StatusPillSelect } from "@/components/page-header";
 import { useSessionViewer } from "@/components/session-shell-provider";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -341,7 +342,14 @@ export function InvoiceEditorHeader({
           href: "/dashboard/ops-center/invoices",
           label: "Invoices",
         }}
-        actions={primaryAction}
+        actions={
+          activeInvoiceId ? (
+            <>
+              <FollowButton target={{ kind: "invoice", invoiceId: activeInvoiceId }} />
+              {primaryAction}
+            </>
+          ) : null
+        }
         menu={menu}
         menuLabel="More invoice actions"
         pills={

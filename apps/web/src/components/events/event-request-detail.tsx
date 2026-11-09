@@ -25,6 +25,7 @@ import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delet
 import { CommentsSection } from "@/components/comments/comments-section";
 import { BookingMessages } from "@/components/email-threads/booking-messages";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
+import { FollowButton } from "@/components/booking-follow-button";
 import { MetaItem, PageHeader, StatusPill } from "@/components/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -337,7 +338,12 @@ function EventRequestDetail({ request }: { request: EventRequest }) {
     <div className="space-y-4 pb-24" data-testid="event-request-detail">
       <PageHeader
         back={{ href: "/dashboard/ops-center/requests", label: "Requests" }}
-        actions={primaryAction}
+        actions={
+          <>
+            <FollowButton target={{ kind: "request", requestId }} />
+            {primaryAction}
+          </>
+        }
         menuLabel="More request actions"
         menu={menu}
         pills={
