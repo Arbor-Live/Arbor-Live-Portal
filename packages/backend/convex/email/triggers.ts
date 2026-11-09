@@ -9,8 +9,10 @@ import {
   subjectForTemplate,
 } from "./constants";
 import { cancelPendingDebouncedEmail, enqueueDebouncedEmail, enqueueEmail, hasSentDebouncedEmail } from "./enqueue";
+import { listBookingFollowers } from "../lib/bookingFollowers";
 import { isHashEvent } from "../lib/hashEvent";
 import {
+  type EmailRecipient,
   getEventLeadRecipients,
   getEventStakeholderEmails,
   getUserScheduledEmailRecipient,
@@ -83,9 +85,12 @@ export async function scheduleEventCancelledEmails(
   if (!event) return;
 
   const recipients = await getEventStakeholderEmails(ctx, eventId);
+  const followers = await listFollowersNotIn(ctx, eventId, recipients);
   const subject = subjectForTemplate("event_cancelled", event.title);
 
-  for (const recipient of recipients) {
+  // Followers never overlap the recipients, so everyone keys on their email. A follower
+  // who becomes a lead keeps the same key and is not emailed twice.
+  for (const recipient of [...recipients, ...followers]) {
     await enqueueEmail(ctx, {
       template: "event_cancelled",
       to: recipient.email,
@@ -95,6 +100,21 @@ export async function scheduleEventCancelledEmails(
       payload: buildBasePayload(event, recipient.name),
     });
   }
+}
+
+function listFollowersNotIn(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  recipients: EmailRecipient[],
+) {
+  return listBookingFollowers(
+    ctx,
+    { kind: "event", eventId },
+    {
+      userIds: recipients.flatMap((recipient) => (recipient.userId ? [recipient.userId] : [])),
+      emails: recipients.map((recipient) => recipient.email),
+    },
+  );
 }
 
 export async function scheduleSchedulePublishedEmails(
@@ -116,9 +136,10 @@ export async function scheduleSchedulePublishedEmails(
   });
 
   const recipients = await getEventLeadRecipients(ctx, eventId);
+  const followers = await listFollowersNotIn(ctx, eventId, recipients);
   const subject = subjectForTemplate("schedule_published", event.title);
 
-  for (const recipient of recipients) {
+  for (const recipient of [...recipients, ...followers]) {
     await enqueueDebouncedEmail(ctx, {
       template: "schedule_published",
       to: recipient.email,
