@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "convex/react";
+import { SendAsSelect, type SendAs, useSendAs } from "@/components/email-threads/send-as-select";
 import { QuoteChangeList } from "@/components/financial/quote-change-list";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ export function RevisedQuoteSheet({
   invoiceId,
   isReply: isReplyWhenOpened,
   toEmail,
+  manager,
   isRequestLinked,
   hasUnsavedEdits,
   sending,
@@ -42,11 +44,14 @@ export function RevisedQuoteSheet({
   /** Answering the client's open change request, rather than revising on our own. */
   isReply: boolean;
   toEmail: string;
+  /** The quote's manager, as the form has it: who the email can go out as besides you. */
+  manager: { userId: string; name: string } | null;
   isRequestLinked: boolean;
   hasUnsavedEdits: boolean;
   sending: boolean;
-  onSend: (message: string) => Promise<void>;
+  onSend: (message: string, sendAs: SendAs) => Promise<void>;
 }) {
+  const { choice, sendAs, setSendAs } = useSendAs(manager);
   const livePreview = useQuery(api.invoices.revisedQuotePreview, open ? { id: invoiceId } : "skip");
   // Sending changes what the preview compares against; keep showing what was sent while the sheet closes.
   const [sentPreview, setSentPreview] = useState<typeof livePreview>(undefined);
@@ -81,7 +86,7 @@ export function RevisedQuoteSheet({
     setError(null);
     setSentPreview(livePreview);
     try {
-      await onSend(trimmed);
+      await onSend(trimmed, sendAs);
       onOpenChange(false);
     } catch (err) {
       setSentPreview(undefined);
@@ -159,6 +164,8 @@ export function RevisedQuoteSheet({
               CC: {email ? email.cc.join(", ") || "—" : "…"}
             </p>
           </div>
+
+          <SendAsSelect id="revised-quote-send-as" choice={choice} value={sendAs} onChange={setSendAs} />
 
           <div className="space-y-1.5">
             <Label htmlFor="revised-quote-message">{isReply ? "Your reply" : "Your message"}</Label>

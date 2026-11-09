@@ -23,6 +23,7 @@ import {
 import { api, type Id } from "@/lib/convex-api";
 import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
 import { useInvoicePdfDownload } from "@/components/financial/invoice-pdf-download-button";
+import type { SendAs } from "@/components/email-threads/send-as-select";
 import { SendQuoteToClientSheet } from "@/components/financial/send-quote-to-client-sheet";
 import { MetaItem, PageHeader, StatusPill, StatusPillSelect } from "@/components/page-header";
 import { useSessionViewer } from "@/components/session-shell-provider";
@@ -189,7 +190,7 @@ export function InvoiceEditorHeader({
     tone: invoiceStatusTone(value),
   }));
 
-  async function sendQuoteToClient(clientMessage: string) {
+  async function sendQuoteToClient(clientMessage: string, sendAs: SendAs) {
     if (!activeInvoiceId) return;
     if (fields.termsIds.length === 0) {
       throw new Error("Select at least one terms template before sending.");
@@ -200,7 +201,7 @@ export function InvoiceEditorHeader({
         const saved = await draft.persistDraft();
         if (!saved) throw new Error("Save the quote before sending.");
       }
-      await markReadyForClientReview({ id: activeInvoiceId, clientMessage });
+      await markReadyForClientReview({ id: activeInvoiceId, clientMessage, sendAs });
       notify.success("Quote emailed to the client and marked ready on the request portal.");
     } catch (error) {
       throw new Error(getConvexErrorMessage(error, "Failed to send quote email."));
@@ -427,6 +428,7 @@ export function InvoiceEditorHeader({
         onOpenChange={(open) => setSendSheet((current) => ({ ...current, open }))}
         invoiceId={activeInvoiceId}
         toEmail={sourceRequest?.email ?? ""}
+        manager={formManager(fields)}
         sending={sendingQuote}
         onSend={sendQuoteToClient}
       />
@@ -482,14 +484,14 @@ function InvoiceWorkflowStrip({
   const offerRevision = approval === "pending" && canSendRevised;
   const openRevisedSheet = () => setReplySheet((current) => ({ open: true, key: current.key + 1 }));
 
-  async function sendReply(message: string) {
+  async function sendReply(message: string, sendAs: SendAs) {
     setSendingReply(true);
     try {
       if (draft.isDraftDirty) {
         const saved = await draft.persistDraft();
         if (!saved) throw new Error("Save the quote before sending.");
       }
-      const { number } = await sendRevisedQuote({ id: invoiceId, message });
+      const { number } = await sendRevisedQuote({ id: invoiceId, message, sendAs });
       notify.success(`Sent v${number} to the client for approval.`);
     } finally {
       setSendingReply(false);
@@ -643,6 +645,7 @@ function InvoiceWorkflowStrip({
           invoiceId={invoiceId}
           isReply={approval === "changes_requested"}
           toEmail={clientEmail}
+          manager={formManager(draft.fields)}
           isRequestLinked={isRequestLinked}
           hasUnsavedEdits={draft.isDraftDirty}
           sending={sendingReply}
@@ -652,6 +655,13 @@ function InvoiceWorkflowStrip({
       {approval === "approved" && invoice.status !== "void" ? <InvoiceBillingState draft={draft} /> : null}
     </div>
   );
+}
+
+/** The manager as the form has it: sending saves the form first, so that is who the server sees. */
+function formManager(fields: { managerUserId: string; managerName: string }) {
+  return fields.managerUserId && fields.managerName.trim()
+    ? { userId: fields.managerUserId, name: fields.managerName.trim() }
+    : null;
 }
 
 function SendRevisedButton({ onClick }: { onClick: () => void }) {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { CheckIcon, CopyIcon, EnvelopeSimpleIcon, PaperclipIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
+import { SendAsSelect, useSendAs } from "@/components/email-threads/send-as-select";
 import { EmptyState } from "@/components/list-page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -317,8 +318,10 @@ function ReplyComposer(props: {
   record: BookingMessagesRecord;
   clientEmail: string;
   canAttachQuote: boolean;
+  manager: { userId: string; name: string } | null;
 }) {
   const sendReply = useMutation(api.emailThreads.sendReply);
+  const { choice, sendAs, setSendAs } = useSendAs(props.manager);
   const [body, setBody] = useState("");
   const [cc, setCc] = useState("");
   const [attachQuote, setAttachQuote] = useState(false);
@@ -336,6 +339,7 @@ function ReplyComposer(props: {
         attachQuote: props.canAttachQuote && attachQuote,
         cc: parseCc(cc),
         clientRequestId,
+        sendAs,
       });
       setClientRequestId(crypto.randomUUID());
       setBody("");
@@ -361,6 +365,7 @@ function ReplyComposer(props: {
       <p className="text-sm" data-testid="booking-reply-to">
         <span className="text-muted-foreground">To</span> {props.clientEmail}
       </p>
+      <SendAsSelect id="booking-reply-send-as" choice={choice} value={sendAs} onChange={setSendAs} />
       <div className="space-y-2">
         <Label htmlFor="booking-reply-cc">CC</Label>
         <Input
@@ -485,6 +490,7 @@ export function BookingMessages(props: { record: BookingMessagesRecord; readOnly
             record={props.record}
             clientEmail={data.clientEmail}
             canAttachQuote={data.canAttachQuote}
+            manager={data.manager}
           />
         ) : null}
       </CardContent>

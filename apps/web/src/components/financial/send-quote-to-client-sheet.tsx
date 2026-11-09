@@ -3,6 +3,7 @@
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useState } from "react";
 import { useQuery } from "convex/react";
+import { SendAsSelect, type SendAs, useSendAs } from "@/components/email-threads/send-as-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,8 +26,10 @@ type SendQuoteToClientSheetProps = {
   onOpenChange: (open: boolean) => void;
   invoiceId: Id<"invoices"> | undefined;
   toEmail: string;
+  /** The quote's manager, as the form has it: who the email can go out as besides you. */
+  manager: { userId: string; name: string } | null;
   sending?: boolean;
-  onSend: (clientMessage: string) => Promise<void>;
+  onSend: (clientMessage: string, sendAs: SendAs) => Promise<void>;
 };
 
 export function SendQuoteToClientSheet({
@@ -34,9 +37,11 @@ export function SendQuoteToClientSheet({
   onOpenChange,
   invoiceId,
   toEmail,
+  manager,
   sending = false,
   onSend,
 }: SendQuoteToClientSheetProps) {
+  const { choice, sendAs, setSendAs } = useSendAs(manager);
   const preview = useQuery(
     api.emailThreads.bookingEmailPreview,
     open && invoiceId ? { invoiceId, to: toEmail } : "skip",
@@ -54,7 +59,7 @@ export function SendQuoteToClientSheet({
     }
     setError(null);
     try {
-      await onSend(trimmed);
+      await onSend(trimmed, sendAs);
       onOpenChange(false);
     } catch (err) {
       setError(getConvexErrorMessage(err, "Failed to send quote email."));
@@ -77,6 +82,8 @@ export function SendQuoteToClientSheet({
             <Label htmlFor="quote-ready-to">To</Label>
             <Input id="quote-ready-to" readOnly value={toEmail || "—"} />
           </div>
+
+          <SendAsSelect id="quote-ready-send-as" choice={choice} value={sendAs} onChange={setSendAs} />
 
           <div className="space-y-1.5">
             <p className="text-sm font-medium">Reply-To</p>
