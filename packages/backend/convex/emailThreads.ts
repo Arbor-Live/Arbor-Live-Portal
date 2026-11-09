@@ -127,6 +127,8 @@ export const getForRecord = query({
     clientEmail: v.union(v.string(), v.null()),
     /** The booking has a quote (not void) that a reply can attach as a PDF. */
     canAttachQuote: v.boolean(),
+    /** Who a reply can be sent as besides the sender; null until the booking has a quote. */
+    manager: v.union(v.object({ userId: v.string(), name: v.string() }), v.null()),
     /** The viewer may email the client and make change requests (admins and Operations). */
     canReply: v.boolean(),
     thread: v.union(v.object({ id: v.id("emailThreads"), messageCount: v.number() }), v.null()),
@@ -150,9 +152,11 @@ export const getForRecord = query({
 
     const clientEmail = clientReplyAddress(request, invoice);
     const canAttachQuote = hasAttachableQuote(invoice);
+    const managerName = invoice?.managerName.trim();
+    const manager = invoice && managerName ? { userId: invoice.managerUserId, name: managerName } : null;
 
     if (!thread) {
-      return { address, clientEmail, canAttachQuote, canReply, thread: null, messages: [], failedReplies: [] };
+      return { address, clientEmail, canAttachQuote, manager, canReply, thread: null, messages: [], failedReplies: [] };
     }
 
     const failed = await ctx.db
@@ -192,6 +196,7 @@ export const getForRecord = query({
       address,
       clientEmail,
       canAttachQuote,
+      manager,
       canReply,
       thread: { id: thread._id, messageCount: thread.messageCount },
       messages: newest.reverse().map((message) => ({

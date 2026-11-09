@@ -223,12 +223,20 @@ describe("emailThreads.getForRecord", () => {
       address: "alreq-aaaaaaa@arbor.st",
       clientEmail: "maya@client.test",
       canAttachQuote: true,
+      manager: { userId: "manager", name: "Alex Manager" },
       canReply: true,
       thread: null,
       messages: [],
       failedReplies: [],
     });
     expect(await t.run(async (ctx) => ctx.db.query("emailThreads").collect())).toHaveLength(0);
+  });
+
+  it("has no manager to send as before the booking has a quote", async () => {
+    const t = makeTest();
+    const requestId = await seedRequest(t, { requestNumber: "ALREQ-NOQUOTE" });
+    const staff = await staffViewer(t);
+    expect((await staff.query(api.emailThreads.getForRecord, { requestId })).manager).toBeNull();
   });
 
   it("falls back to the invoice, then the event, for the booking address", async () => {
