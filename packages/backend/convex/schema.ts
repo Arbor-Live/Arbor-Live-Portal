@@ -2891,4 +2891,36 @@ export default defineSchema({
   )
     .index("by_status", ["status"])
     .index("by_submittedBy_and_status", ["submittedBy", "status"]),
+
+  /**
+   * A staff member following a booking. Stores the record they clicked on;
+   * `lib/bookingChain.ts` resolves the rest of the booking when it is read, so
+   * a follow keeps working as a request becomes a quote and then an event.
+   */
+  bookingFollows: defineTable(
+    v.union(
+      v.object({
+        kind: v.literal("request"),
+        requestId: v.id("eventRequests"),
+        userId: v.string(),
+        createdAt: v.number(),
+      }),
+      v.object({
+        kind: v.literal("invoice"),
+        invoiceId: v.id("invoices"),
+        userId: v.string(),
+        createdAt: v.number(),
+      }),
+      v.object({
+        kind: v.literal("event"),
+        eventId: v.id("events"),
+        userId: v.string(),
+        createdAt: v.number(),
+      }),
+    ),
+  )
+    .index("by_requestId_and_userId", ["requestId", "userId"])
+    .index("by_invoiceId_and_userId", ["invoiceId", "userId"])
+    .index("by_eventId_and_userId", ["eventId", "userId"])
+    .index("by_userId", ["userId"]),
 });
