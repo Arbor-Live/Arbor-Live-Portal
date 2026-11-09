@@ -24,6 +24,20 @@ export const hashFlagReasonValue = v.union(
   v.literal("other"),
 );
 
+export const hashPhotoLevelValue = v.union(v.literal("area"), v.literal("kit"), v.literal("item"));
+
+/** Keyed by the checklist's stable ids, never a version, so a publish keeps every photo. */
+export const hashPhotoFields = {
+  level: hashPhotoLevelValue,
+  /** Area id, kit id, or line id (kit items, placement extras and final checks). */
+  targetId: v.string(),
+  /** Raw R2 key, no `r2:` prefix. */
+  r2Key: v.string(),
+  submittedBy: v.string(),
+  /** The hash it was taken on. */
+  hashDateId: v.id("hashDates"),
+};
+
 export const hashDateFields = {
   quarterId: v.string(),
   dateKey: v.string(),
@@ -86,6 +100,7 @@ export const checklistTreeValue = v.object(checklistTreeFields);
 
 export type HashStanding = Infer<typeof hashStandingValue>;
 export type ChecklistTree = Infer<typeof checklistTreeValue>;
-export type HashFlagReason = Infer<typeof hashFlagReasonValue>;
+export type HashPhotoLevel = Infer<typeof hashPhotoLevelValue>;
+export type HashFlagReason =Infer<typeof hashFlagReasonValue>;
 export type HashBookingStatus = Infer<typeof hashBookingStatusValue>;
 export type HashDateStatus = Infer<typeof hashDateStatusValue>;

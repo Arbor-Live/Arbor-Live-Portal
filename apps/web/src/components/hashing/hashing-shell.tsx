@@ -78,6 +78,8 @@ export function HashingShell({ children }: { children: React.ReactNode }) {
             badge:
               tab === "history" && overview && overview.openFlags > 0 ? (
                 <WarningBadge count={overview.openFlags} title={plural(overview.openFlags, "open flag")} />
+              ) : tab === "checklist" && overview && overview.pendingPhotos > 0 ? (
+                <WarningBadge count={overview.pendingPhotos} title={plural(overview.pendingPhotos, "photo") + " to review"} />
               ) : tab === "schedule" && staleHashes.length > 0 ? (
                 <WarningBadge count={staleHashes.length} title={plural(staleHashes.length, "hash", "hashes") + " still running"} />
               ) : undefined,

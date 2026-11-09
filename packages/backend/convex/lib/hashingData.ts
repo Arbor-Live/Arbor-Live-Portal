@@ -225,6 +225,17 @@ export async function ensureChecklist(ctx: MutationCtx): Promise<Doc<"hashCheckl
 }
 
 
+/** Photos waiting on ops. Well past a healthy queue; the Checklist tab count stops here. */
+export const PENDING_PHOTO_TAKE = 200;
+
+export async function loadPendingPhotos(ctx: Ctx) {
+  return await ctx.db
+    .query("hashReferencePhotos")
+    .withIndex("by_status", (q) => q.eq("status", "pending"))
+    .order("desc")
+    .take(PENDING_PHOTO_TAKE);
+}
+
 /** The roster for one quarter: everyone who owes a hash, and where each one stands. */
 export async function loadQuarterPicture(ctx: Ctx, quarterId: string, todayKey: string) {
   const [dates, crew, standings] = await Promise.all([

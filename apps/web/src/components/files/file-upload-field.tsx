@@ -76,7 +76,7 @@ function R2UploadField({
       ? uploadArgs.purpose
       : uploadArgs.scope === "venue"
         ? "manual"
-        : uploadArgs.scope === "marketing" || uploadArgs.scope === "organization"
+        : uploadArgs.scope === "marketing" || uploadArgs.scope === "organization" || uploadArgs.scope === "hashing"
           ? "hero"
           : uploadArgs.purpose;
   const resolvedAccept = accept ?? defaultAcceptForPurpose(purpose);

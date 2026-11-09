@@ -110,6 +110,7 @@ import type * as grantedLedger from "../grantedLedger.js";
 import type * as hashing from "../hashing.js";
 import type * as hashingChecklist from "../hashingChecklist.js";
 import type * as hashingLive from "../hashingLive.js";
+import type * as hashingPhotos from "../hashingPhotos.js";
 import type * as hashingSchedule from "../hashingSchedule.js";
 import type * as health from "../health.js";
 import type * as http from "../http.js";
@@ -449,6 +450,7 @@ declare const fullApi: ApiFromModules<{
   hashing: typeof hashing;
   hashingChecklist: typeof hashingChecklist;
   hashingLive: typeof hashingLive;
+  hashingPhotos: typeof hashingPhotos;
   hashingSchedule: typeof hashingSchedule;
   health: typeof health;
   http: typeof http;

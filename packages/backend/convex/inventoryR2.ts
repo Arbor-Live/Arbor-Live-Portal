@@ -4,10 +4,12 @@ import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { requireAdmin, requireArborInternalContext, requireAuth, requireBandContext, requireAnyVerticalOrAdmin, isStaffAdmin } from "./lib/auth";
+import { requireHashingViewer } from "./lib/hashingData";
 import {
   buildBandHeroObjectKey,
   buildEventArtifactObjectKey,
   buildEventPosterObjectKey,
+  buildHashReferenceObjectKey,
   buildInventoryObjectKey,
   buildMarketingPostContentObjectKey,
   buildMarketingPostHeroObjectKey,
@@ -16,6 +18,7 @@ import {
   formatStoredR2Asset,
   parseStoredR2Asset,
   validateEventArtifactUploadRequest,
+  validateHashReferenceUploadRequest,
   validateInventoryUploadRequest,
   validateMarketingHeroUploadRequest,
   validateVenueDocumentUploadRequest,
@@ -59,6 +62,7 @@ const uploadScopeValue = v.union(
   v.literal("marketing"),
   v.literal("organization"),
   v.literal("venue"),
+  v.literal("hashing"),
 );
 
 const inventoryPurposeValue = v.union(
@@ -81,6 +85,7 @@ export const generateR2UploadUrl = mutation({
       v.literal("artifact"),
       v.literal("document"),
       v.literal("poster"),
+      v.literal("reference"),
     ),
     entityId: v.optional(v.string()),
     eventId: v.optional(v.id("events")),
@@ -182,11 +187,25 @@ export const generateR2UploadUrl = mutation({
         fileName: args.fileName,
         uploadId,
       });
+    } else if (args.scope === "hashing") {
+      // `submit` is what checks the hash; any Arbor member may mint a URL for an image.
+      await requireHashingViewer(ctx);
+      validateHashReferenceUploadRequest({
+        fileName: args.fileName,
+        contentType: args.contentType,
+        contentLength: args.contentLength,
+      });
+      key = buildHashReferenceObjectKey({ fileName: args.fileName, uploadId });
     } else {
       // Inventory catalog uploads are staff work, like the catalog writes.
       await requireArborInternalContext(ctx);
       if (!args.entityKind) throw new Error("Inventory entity kind is required.");
-      if (args.purpose === "artifact" || args.purpose === "document" || args.purpose === "poster") {
+      if (
+        args.purpose === "artifact" ||
+        args.purpose === "document" ||
+        args.purpose === "poster" ||
+        args.purpose === "reference"
+      ) {
         throw new Error("Artifact/document/poster purpose is only valid for event or venue uploads.");
       }
       validateInventoryUploadRequest({

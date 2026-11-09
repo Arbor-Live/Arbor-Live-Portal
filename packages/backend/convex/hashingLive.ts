@@ -59,7 +59,7 @@ function tally(areas: ChecklistAreaView[], checks: Doc<"hashChecks">[]) {
 }
 
 /** The tree this hash runs on: pinned once started, the current one before that. */
-async function checklistFor(ctx: Ctx, row: Doc<"hashDates">) {
+export async function checklistFor(ctx: Ctx, row: Doc<"hashDates">) {
   const pinned = row.checklistVersionId ? await ctx.db.get(row.checklistVersionId) : null;
   const tree = pinned ?? (await latestChecklist(ctx)) ?? HASHING_CHECKLIST_SEED;
   return flattenChecklist(tree, row.areaIds);
@@ -74,7 +74,7 @@ function requireBookedOrManager(viewer: HashingViewer, bookings: HashBooking[]) 
 }
 
 /** Booked on it (and showing up confirms a pending booking), or ops. */
-async function requireOnHash(ctx: MutationCtx, row: Doc<"hashDates">) {
+export async function requireOnHash(ctx: MutationCtx, row: Doc<"hashDates">) {
   const viewer = await requireHashingViewer(ctx);
   const booking = requireBookedOrManager(viewer, await loadDateBookings(ctx, row));
   if (booking?.status === "needs_confirmation") {
@@ -83,7 +83,7 @@ async function requireOnHash(ctx: MutationCtx, row: Doc<"hashDates">) {
   return { ...viewer, booking };
 }
 
-function requireRunning(row: Doc<"hashDates">) {
+export function requireRunning(row: Doc<"hashDates">) {
   if (row.status !== "in_progress") appError("HASH_NOT_RUNNING", "This hash isn't running.");
 }
 
