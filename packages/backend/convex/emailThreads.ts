@@ -10,7 +10,7 @@ import {
   requireAuth,
 } from "./lib/auth";
 import { appError } from "./lib/errors";
-import { previewBookingEmail } from "./lib/bookingEmail";
+import { asManagerUserIdValidator, previewBookingEmail, resolveSenderName, sendAsValidator } from "./lib/bookingEmail";
 import { bookingAddressFor, normalizePlainAddress } from "./lib/emailAddresses";
 import { requestInvoiceQuoteChanges } from "./lib/publicQuoteView";
 import { resolvePortalTokenForInvoice } from "./lib/paymentProof";
@@ -127,6 +127,8 @@ export const getForRecord = query({
     clientEmail: v.union(v.string(), v.null()),
     /** The booking has a quote (not void) that a reply can attach as a PDF. */
     canAttachQuote: v.boolean(),
+    /** Who a reply can be sent as besides the sender; null until the booking has a quote. */
+    manager: v.union(v.object({ userId: v.string(), name: v.string() }), v.null()),
     /** The viewer may email the client and make change requests (admins and Operations). */
     canReply: v.boolean(),
     thread: v.union(v.object({ id: v.id("emailThreads"), messageCount: v.number() }), v.null()),
@@ -150,9 +152,11 @@ export const getForRecord = query({
 
     const clientEmail = clientReplyAddress(request, invoice);
     const canAttachQuote = hasAttachableQuote(invoice);
+    const managerName = invoice?.managerName.trim();
+    const manager = invoice && managerName ? { userId: invoice.managerUserId, name: managerName } : null;
 
     if (!thread) {
-      return { address, clientEmail, canAttachQuote, canReply, thread: null, messages: [], failedReplies: [] };
+      return { address, clientEmail, canAttachQuote, manager, canReply, thread: null, messages: [], failedReplies: [] };
     }
 
     const failed = await ctx.db
@@ -192,6 +196,7 @@ export const getForRecord = query({
       address,
       clientEmail,
       canAttachQuote,
+      manager,
       canReply,
       thread: { id: thread._id, messageCount: thread.messageCount },
       messages: newest.reverse().map((message) => ({
@@ -261,6 +266,8 @@ export const sendReply = mutation({
     cc: v.optional(v.array(v.string())),
     /** Minted by the composer per attempt, so a double click queues one email. */
     clientRequestId: v.string(),
+    sendAs: sendAsValidator,
+    asManagerUserId: asManagerUserIdValidator,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -320,7 +327,7 @@ export const sendReply = mutation({
     // The key names the thread, which only exists once the booking has one.
     const thread = await getOrCreateThreadForBooking(ctx, ref);
     // No name means plain "Arbor Live", never the invoice manager's name.
-    const senderName = user.name?.trim() || null;
+    const senderName = resolveSenderName(user, invoice, args.sendAs, args.asManagerUserId);
 
     await enqueueEmail(ctx, {
       template: "booking_reply",

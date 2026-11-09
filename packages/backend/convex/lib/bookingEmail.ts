@@ -1,3 +1,4 @@
+import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { BOOKING_CC_EMAIL, BOOKINGS_EMAIL_FROM } from "../email/constants";
@@ -18,6 +19,7 @@ import {
   type LoadedBookingDocs,
   resolveBookingRefs,
 } from "./emailThreads";
+import { appError } from "./errors";
 
 /**
  * The thread's first message id plus the newest ones. Ten ids stay far below
@@ -50,6 +52,32 @@ export type BookingEmailEnvelope = {
   cc: string[];
   subject: string;
 };
+
+/** Who a person's client email goes out as: themselves, or the booking's manager (covering for them). */
+export const sendAsValidator = v.optional(v.union(v.literal("self"), v.literal("manager")));
+/** The manager the sender picked, so a manager changed meanwhile is caught instead of impersonated. */
+export const asManagerUserIdValidator = v.optional(v.string());
+export type SendAs = "self" | "manager";
+
+/**
+ * The `senderName` for a client email a person sends, in the shape
+ * `BookingEmailSource.senderName` takes. A nameless viewer sends as plain
+ * "Arbor Live" rather than borrowing the manager's name.
+ */
+export function resolveSenderName(
+  viewer: { name?: string | null },
+  invoice: Pick<Doc<"invoices">, "managerName" | "managerUserId"> | null,
+  sendAs: SendAs = "self",
+  asManagerUserId?: string,
+): string | null {
+  if (sendAs === "self") return viewer.name?.trim() || null;
+  const managerName = invoice?.managerName?.trim();
+  if (!invoice || !managerName) appError("SEND_AS_NO_MANAGER", "This booking has no manager to send as yet.");
+  if (asManagerUserId !== undefined && asManagerUserId !== invoice.managerUserId) {
+    appError("SEND_AS_MANAGER_CHANGED", "The quote's manager changed. Reopen this to send as the current manager.");
+  }
+  return managerName;
+}
 
 /** Quotes and angle brackets would break the From header; names never need them. */
 function cleanDisplayName(name: string) {

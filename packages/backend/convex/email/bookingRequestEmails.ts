@@ -126,9 +126,14 @@ export async function scheduleBookingQuoteReadyEmail(
       | "billingFinalizedAt"
       | "paymentOpenedEarlyAt"
     >;
+    /**
+     * The person sending: From and the sign-off name them. Leave it out for an
+     * email nobody wrote, which comes from the manager; `null` is a sender with no name.
+     */
+    senderName?: string | null;
   },
 ) {
-  const { request, invoice } = args;
+  const { request, invoice, senderName } = args;
   const publicToken = request.publicToken;
   const readyAt = invoice.clientReviewReadyAt;
   const managerMessage = invoice.clientReadyMessage?.trim();
@@ -142,7 +147,7 @@ export async function scheduleBookingQuoteReadyEmail(
   await enqueueEmail(ctx, {
     template: "booking_quote_ready",
     to: request.email,
-    booking: { ref: { requestId: request._id } },
+    booking: { ref: { requestId: request._id }, senderName },
     idempotencyKey: `booking_quote_ready:${invoice._id}:${readyAt}`,
     payload: {
       recipientName,
@@ -155,6 +160,7 @@ export async function scheduleBookingQuoteReadyEmail(
       managerName: invoice.managerName,
       managerEmail,
       managerMessage,
+      ...(senderName ? { senderName } : {}),
       invoiceId: invoice._id,
     },
   });

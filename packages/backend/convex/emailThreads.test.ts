@@ -223,12 +223,20 @@ describe("emailThreads.getForRecord", () => {
       address: "alreq-aaaaaaa@arbor.st",
       clientEmail: "maya@client.test",
       canAttachQuote: true,
+      manager: { userId: "manager", name: "Alex Manager" },
       canReply: true,
       thread: null,
       messages: [],
       failedReplies: [],
     });
     expect(await t.run(async (ctx) => ctx.db.query("emailThreads").collect())).toHaveLength(0);
+  });
+
+  it("has no manager to send as before the booking has a quote", async () => {
+    const t = makeTest();
+    const requestId = await seedRequest(t, { requestNumber: "ALREQ-NOQUOTE" });
+    const staff = await staffViewer(t);
+    expect((await staff.query(api.emailThreads.getForRecord, { requestId })).manager).toBeNull();
   });
 
   it("falls back to the invoice, then the event, for the booking address", async () => {
@@ -846,6 +854,36 @@ describe("emailThreads.sendReply details", () => {
       portalUrl: "http://localhost:3000/request/track/tok-request",
       portalLabel: "Open your request tracker",
     });
+  });
+
+  it("sends as the manager, signed by them, when the sender picks sendAs manager", async () => {
+    const t = makeTest();
+    const ids = await seedReviewedBooking(t);
+    await t.run(async (ctx) => ctx.db.patch(ids.invoiceId, { managerName: "Rory Manager" }));
+    const { staff } = await namedStaff(t, "Jamie Park");
+    await staff.mutation(api.emailThreads.sendReply, reply(ids as never, { sendAs: "manager" }));
+
+    const [row] = (await t.run(async (ctx) => ctx.db.query("emailNotifications").collect())).filter(
+      (n) => n.template === "booking_reply",
+    );
+    expect(row!.booking?.from).toBe('"Rory Manager at Arbor Live" <bookings@arbor.st>');
+    expect(row!.payload).toMatchObject({ senderName: "Rory Manager" });
+  });
+
+  it("refuses sendAs manager when the booking has no quote, and sends as the sender by default", async () => {
+    const t = makeTest();
+    const requestId = await seedRequest(t, { requestNumber: "ALREQ-QQQQQQQ" });
+    const { staff } = await namedStaff(t, "Jamie Park");
+    const noQuote = { requestId, body: "Hello", attachQuote: false };
+
+    await expect(
+      staff.mutation(api.emailThreads.sendReply, { ...noQuote, clientRequestId: "a", sendAs: "manager" }),
+    ).rejects.toThrow(/SEND_AS_NO_MANAGER/);
+    expect(await t.run(async (ctx) => ctx.db.query("emailNotifications").collect())).toEqual([]);
+
+    await staff.mutation(api.emailThreads.sendReply, { ...noQuote, clientRequestId: "b", sendAs: "self" });
+    const [row] = await t.run(async (ctx) => ctx.db.query("emailNotifications").collect());
+    expect(row!.booking?.from).toBe('"Jamie Park at Arbor Live" <bookings@arbor.st>');
   });
 
   it("names the limit when the request id is too long", async () => {

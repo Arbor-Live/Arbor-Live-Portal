@@ -23,6 +23,7 @@ export function BookingQuoteReadyEmail({
   managerName,
   managerEmail,
   managerMessage,
+  senderName,
 }: BookingQuoteReadyEmailProps) {
   const greeting = recipientName ? `Hi ${recipientName},` : "Hi!";
   const messageParagraphs = managerMessage
@@ -61,7 +62,7 @@ export function BookingQuoteReadyEmail({
       )}
       <ContactNote managerName={managerName} managerEmail={managerEmail} />
       <MutedCopy>A PDF copy of the quote is attached to this email.</MutedCopy>
-      <EmailSignOff />
+      <EmailSignOff senderName={senderName} />
     </EmailLayout>
   );
 }

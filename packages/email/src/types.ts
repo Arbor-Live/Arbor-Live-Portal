@@ -194,6 +194,8 @@ export type BookingQuoteReadyEmailProps = {
   managerName: string;
   managerEmail?: string;
   managerMessage: string;
+  /** Who sent it, when a person did: the sign-off names them. Absent signs as the team. */
+  senderName?: string;
 };
 
 export type BookingReplyEmailProps = {
@@ -227,6 +229,8 @@ export type QuoteUpdatedEmailProps = {
   portalUrl: string;
   managerName: string;
   managerEmail?: string;
+  /** Who sent it, when a person did: the sign-off names them. Absent signs as the team. */
+  senderName?: string;
 };
 
 export type PaymentProofReminderEmailProps = {
