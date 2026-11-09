@@ -57,22 +57,26 @@ export async function listChainFollows(
 }
 
 /**
- * Staff who follow any record of `target`'s booking, once each. Someone who has
- * since lost admin or Operations access is dropped. `already` lists the
- * recipients the caller is notifying anyway, matched by user id or email.
+ * Staff who follow any record of the booking `target` belongs to, once each.
+ * Pass several targets when a record can point at more than one part of the
+ * booking (an email thread). Someone who has since lost admin or Operations
+ * access is dropped. `already` lists the recipients the caller is notifying
+ * anyway, matched by user id or email.
  */
 export async function listBookingFollowers(
   ctx: Ctx,
-  target: BookingTarget,
+  target: BookingTarget | BookingTarget[],
   already: { userIds?: Iterable<string>; emails?: Iterable<string> } = {},
 ): Promise<EmailRecipient[]> {
-  const chain = await resolveBookingChain(ctx, target);
   const skipUserIds = new Set(already.userIds);
   const skipEmails = new Set([...(already.emails ?? [])].map((email) => email.trim().toLowerCase()));
 
   const userIds = new Set<string>();
-  for (const follow of await listChainFollows(ctx, chain)) {
-    if (!skipUserIds.has(follow.userId)) userIds.add(follow.userId);
+  for (const one of Array.isArray(target) ? target : [target]) {
+    const chain = await resolveBookingChain(ctx, one);
+    for (const follow of await listChainFollows(ctx, chain)) {
+      if (!skipUserIds.has(follow.userId)) userIds.add(follow.userId);
+    }
   }
   if (userIds.size === 0) return [];
 

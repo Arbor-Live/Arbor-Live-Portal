@@ -9,6 +9,8 @@ import {
 } from "./_generated/server";
 import { bookingRequestsAdminUrl, eventDashboardUrl, invoiceDashboardUrl } from "./email/constants";
 import { findAuthUsersByIds, listAdminUsersForVertical } from "./lib/auth";
+import type { BookingTarget } from "./lib/bookingChain";
+import { listBookingFollowers } from "./lib/bookingFollowers";
 import { parseBookingAddress } from "./lib/emailAddresses";
 import {
   type BookingRef,
@@ -179,6 +181,21 @@ async function notifyBookingStaff(
   });
   // Nobody owns the booking yet: the Crew admins who triage new requests hear about it instead.
   if (recipients.length === 0) recipients = await listAdminUsersForVertical(ctx, "Crew");
+
+  const targets: BookingTarget[] = [];
+  if (thread.requestId) targets.push({ kind: "request", requestId: thread.requestId });
+  if (thread.invoiceId) targets.push({ kind: "invoice", invoiceId: thread.invoiceId });
+  if (thread.eventId) targets.push({ kind: "event", eventId: thread.eventId });
+  const followers = await listBookingFollowers(ctx, targets, {
+    userIds: recipients.map((recipient) => recipient.userId),
+    emails: recipients.flatMap((recipient) => (recipient.email ? [recipient.email] : [])),
+  });
+  recipients = [
+    ...recipients,
+    ...followers.flatMap((follower) =>
+      follower.userId ? [{ userId: follower.userId, email: follower.email }] : [],
+    ),
+  ];
 
   const sender = message.fromEmail.toLowerCase();
   for (const recipient of recipients) {

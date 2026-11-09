@@ -1,5 +1,6 @@
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { listBookingFollowers } from "../lib/bookingFollowers";
 import type { PaymentProofMethod } from "../lib/paymentProof";
 import { paymentMethodLabel } from "../lib/paymentProof";
 import {
@@ -114,21 +115,49 @@ export async function schedulePaymentProofSubmittedEmails(
     });
   }
 
-  if (args.invoice.managerEmail) {
-    const managerEmail = args.invoice.managerEmail.trim().toLowerCase();
-    if (managerEmail && managerEmail !== clientEmail && managerEmail !== args.financeContactEmail) {
-      await enqueueEmail(ctx, {
-        template: "payment_proof_submitted",
-        to: managerEmail,
-        subject: subjectForTemplate("payment_proof_submitted", `${context.subjectContext} (internal)`),
-        eventId: context.eventId,
-        idempotencyKey: `payment_proof_submitted:${fingerprint}:manager:${managerEmail}`,
-        payload: buildSubmittedPayload(args.invoice, args.event, {
-          ...args,
-          recipientName: args.invoice.managerName,
-        }),
-      });
-    }
+  const internalSubject = subjectForTemplate(
+    "payment_proof_submitted",
+    `${context.subjectContext} (internal)`,
+  );
+  const managerEmail = args.invoice.managerEmail?.trim().toLowerCase();
+  const managerGetsCopy =
+    managerEmail && managerEmail !== clientEmail && managerEmail !== args.financeContactEmail;
+  if (managerGetsCopy) {
+    await enqueueEmail(ctx, {
+      template: "payment_proof_submitted",
+      to: managerEmail,
+      subject: internalSubject,
+      eventId: context.eventId,
+      idempotencyKey: `payment_proof_submitted:${fingerprint}:manager:${managerEmail}`,
+      payload: buildSubmittedPayload(args.invoice, args.event, {
+        ...args,
+        recipientName: args.invoice.managerName,
+      }),
+    });
+  }
+
+  const followers = await listBookingFollowers(
+    ctx,
+    { kind: "invoice", invoiceId: args.invoice._id },
+    {
+      userIds: managerEmail ? [args.invoice.managerUserId] : [],
+      emails: [clientEmail, args.financeContactEmail, managerEmail].filter(
+        (email): email is string => Boolean(email),
+      ),
+    },
+  );
+  for (const follower of followers) {
+    await enqueueEmail(ctx, {
+      template: "payment_proof_submitted",
+      to: follower.email,
+      subject: internalSubject,
+      eventId: context.eventId,
+      idempotencyKey: `payment_proof_submitted:${fingerprint}:follower:${follower.userId}`,
+      payload: buildSubmittedPayload(args.invoice, args.event, {
+        ...args,
+        recipientName: follower.name,
+      }),
+    });
   }
 }
 
