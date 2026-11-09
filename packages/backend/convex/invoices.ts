@@ -57,7 +57,7 @@ import {
   snapshotFromRows,
   snapshotInvoice,
 } from "./lib/invoiceRevisions";
-import { resolveSenderName, sendAsValidator } from "./lib/bookingEmail";
+import { asManagerUserIdValidator, resolveSenderName, sendAsValidator } from "./lib/bookingEmail";
 import { scheduleQuoteUpdatedEmail } from "./email/quoteUpdatedEmails";
 import { scheduleBookingQuoteReadyEmail } from "./email/bookingRequestEmails";
 import {
@@ -2672,6 +2672,7 @@ export const markReadyForClientReview = mutation({
     id: v.id("invoices"),
     clientMessage: v.string(),
     sendAs: sendAsValidator,
+    asManagerUserId: asManagerUserIdValidator,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -2685,7 +2686,7 @@ export const markReadyForClientReview = mutation({
         invoice,
         args.clientMessage,
         { name: viewer.name, userId: viewer._id ?? viewer.id },
-        resolveSenderName(viewer, invoice, args.sendAs),
+        resolveSenderName(viewer, invoice, args.sendAs, args.asManagerUserId),
       );
       return null;
     });
@@ -2777,6 +2778,7 @@ export const sendRevisedQuote = mutation({
     id: v.id("invoices"),
     message: v.string(),
     sendAs: sendAsValidator,
+    asManagerUserId: asManagerUserIdValidator,
   },
   returns: v.object({ number: v.number() }),
   handler: async (ctx, args) => {
@@ -2792,7 +2794,7 @@ export const sendRevisedQuote = mutation({
         appError("QUOTE_REPLY_REQUIRED", "Tell the client what changed, or why it didn't.");
       }
       const sender = { name: viewer.name, userId: viewer._id ?? viewer.id };
-      const emailSenderName = resolveSenderName(viewer, invoice, args.sendAs);
+      const emailSenderName = resolveSenderName(viewer, invoice, args.sendAs, args.asManagerUserId);
 
       if (!invoice.sourceEventRequestId) {
         return { number: await sendQuoteByEmail(ctx, invoice, message, sender, emailSenderName) };

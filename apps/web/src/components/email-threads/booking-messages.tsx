@@ -321,7 +321,7 @@ function ReplyComposer(props: {
   manager: { userId: string; name: string } | null;
 }) {
   const sendReply = useMutation(api.emailThreads.sendReply);
-  const { choice, sendAs, setSendAs } = useSendAs(props.manager);
+  const { choice, picked, setPicked, sendAs } = useSendAs(props.manager);
   const [body, setBody] = useState("");
   const [cc, setCc] = useState("");
   const [attachQuote, setAttachQuote] = useState(false);
@@ -339,7 +339,7 @@ function ReplyComposer(props: {
         attachQuote: props.canAttachQuote && attachQuote,
         cc: parseCc(cc),
         clientRequestId,
-        sendAs,
+        ...sendAs,
       });
       setClientRequestId(crypto.randomUUID());
       setBody("");
@@ -365,7 +365,7 @@ function ReplyComposer(props: {
       <p className="text-sm" data-testid="booking-reply-to">
         <span className="text-muted-foreground">To</span> {props.clientEmail}
       </p>
-      <SendAsSelect id="booking-reply-send-as" choice={choice} value={sendAs} onChange={setSendAs} />
+      <SendAsSelect id="booking-reply-send-as" choice={choice} value={picked} onChange={setPicked} />
       <div className="space-y-2">
         <Label htmlFor="booking-reply-cc">CC</Label>
         <Input

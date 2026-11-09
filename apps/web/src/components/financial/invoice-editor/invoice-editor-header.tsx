@@ -23,7 +23,7 @@ import {
 import { api, type Id } from "@/lib/convex-api";
 import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
 import { useInvoicePdfDownload } from "@/components/financial/invoice-pdf-download-button";
-import type { SendAs } from "@/components/email-threads/send-as-select";
+import type { SendAsArgs } from "@/components/email-threads/send-as-select";
 import { SendQuoteToClientSheet } from "@/components/financial/send-quote-to-client-sheet";
 import { MetaItem, PageHeader, StatusPill, StatusPillSelect } from "@/components/page-header";
 import { useSessionViewer } from "@/components/session-shell-provider";
@@ -190,7 +190,7 @@ export function InvoiceEditorHeader({
     tone: invoiceStatusTone(value),
   }));
 
-  async function sendQuoteToClient(clientMessage: string, sendAs: SendAs) {
+  async function sendQuoteToClient(clientMessage: string, sendAs: SendAsArgs) {
     if (!activeInvoiceId) return;
     if (fields.termsIds.length === 0) {
       throw new Error("Select at least one terms template before sending.");
@@ -201,7 +201,7 @@ export function InvoiceEditorHeader({
         const saved = await draft.persistDraft();
         if (!saved) throw new Error("Save the quote before sending.");
       }
-      await markReadyForClientReview({ id: activeInvoiceId, clientMessage, sendAs });
+      await markReadyForClientReview({ id: activeInvoiceId, clientMessage, ...sendAs });
       notify.success("Quote emailed to the client and marked ready on the request portal.");
     } catch (error) {
       throw new Error(getConvexErrorMessage(error, "Failed to send quote email."));
@@ -484,14 +484,14 @@ function InvoiceWorkflowStrip({
   const offerRevision = approval === "pending" && canSendRevised;
   const openRevisedSheet = () => setReplySheet((current) => ({ open: true, key: current.key + 1 }));
 
-  async function sendReply(message: string, sendAs: SendAs) {
+  async function sendReply(message: string, sendAs: SendAsArgs) {
     setSendingReply(true);
     try {
       if (draft.isDraftDirty) {
         const saved = await draft.persistDraft();
         if (!saved) throw new Error("Save the quote before sending.");
       }
-      const { number } = await sendRevisedQuote({ id: invoiceId, message, sendAs });
+      const { number } = await sendRevisedQuote({ id: invoiceId, message, ...sendAs });
       notify.success(`Sent v${number} to the client for approval.`);
     } finally {
       setSendingReply(false);

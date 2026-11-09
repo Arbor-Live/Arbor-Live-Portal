@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useSessionViewer } from "@/components/session-shell-provider";
 
 export type SendAs = "self" | "manager";
+/** Mutation args: the manager's id travels with "manager" so the server can refuse if it changed. */
+export type SendAsArgs = { sendAs: SendAs; asManagerUserId?: string };
 
 type BookingManager = { userId: string; name: string };
 
@@ -18,7 +20,9 @@ export function useSendAs(manager: BookingManager | null | undefined) {
   const viewerId = useSessionViewer()?.userId;
   const [picked, setPicked] = useState<SendAs>("self");
   const choice = manager?.name.trim() && viewerId && manager.userId !== viewerId ? manager : null;
-  return { choice, sendAs: choice ? picked : "self", setSendAs: setPicked } as const;
+  const sendAs: SendAsArgs =
+    choice && picked === "manager" ? { sendAs: "manager", asManagerUserId: choice.userId } : { sendAs: "self" };
+  return { choice, picked: choice ? picked : "self", setPicked, sendAs } as const;
 }
 
 export function SendAsSelect({

@@ -10,7 +10,7 @@ import {
   requireAuth,
 } from "./lib/auth";
 import { appError } from "./lib/errors";
-import { previewBookingEmail, resolveSenderName, sendAsValidator } from "./lib/bookingEmail";
+import { asManagerUserIdValidator, previewBookingEmail, resolveSenderName, sendAsValidator } from "./lib/bookingEmail";
 import { bookingAddressFor, normalizePlainAddress } from "./lib/emailAddresses";
 import { requestInvoiceQuoteChanges } from "./lib/publicQuoteView";
 import { resolvePortalTokenForInvoice } from "./lib/paymentProof";
@@ -267,6 +267,7 @@ export const sendReply = mutation({
     /** Minted by the composer per attempt, so a double click queues one email. */
     clientRequestId: v.string(),
     sendAs: sendAsValidator,
+    asManagerUserId: asManagerUserIdValidator,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -326,7 +327,7 @@ export const sendReply = mutation({
     // The key names the thread, which only exists once the booking has one.
     const thread = await getOrCreateThreadForBooking(ctx, ref);
     // No name means plain "Arbor Live", never the invoice manager's name.
-    const senderName = resolveSenderName(user, invoice, args.sendAs);
+    const senderName = resolveSenderName(user, invoice, args.sendAs, args.asManagerUserId);
 
     await enqueueEmail(ctx, {
       template: "booking_reply",

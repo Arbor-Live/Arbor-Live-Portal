@@ -583,3 +583,31 @@ test("sending as the manager is refused when the quote has no manager name, and 
     '"Sam Staff at Arbor Live" <bookings@arbor.st>',
   );
 });
+
+test("sending as a manager who has since been replaced is refused, and nothing is recorded", async () => {
+  const t = makeTest();
+  const invoiceId = await seedQuote(t);
+  const staff = await arborStaff(t);
+  const managerUserId = (await t.run((ctx) => ctx.db.get(invoiceId)))!.managerUserId;
+
+  await expect(
+    staff.mutation(api.invoices.sendRevisedQuote, {
+      id: invoiceId,
+      message: "Revised.",
+      sendAs: "manager",
+      asManagerUserId: "previous-manager",
+    }),
+  ).rejects.toThrow(/SEND_AS_MANAGER_CHANGED/);
+  expect(await revisionsOf(t, invoiceId)).toEqual([]);
+  expect(await sentEmails(t, "quote_updated")).toEqual([]);
+
+  await staff.mutation(api.invoices.sendRevisedQuote, {
+    id: invoiceId,
+    message: "Revised.",
+    sendAs: "manager",
+    asManagerUserId: managerUserId,
+  });
+  expect((await sentEmails(t, "quote_updated"))[0]?.booking?.from).toBe(
+    '"Alex Manager at Arbor Live" <bookings@arbor.st>',
+  );
+});

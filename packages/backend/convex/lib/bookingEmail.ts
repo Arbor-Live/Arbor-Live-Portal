@@ -55,6 +55,8 @@ export type BookingEmailEnvelope = {
 
 /** Who a person's client email goes out as: themselves, or the booking's manager (covering for them). */
 export const sendAsValidator = v.optional(v.union(v.literal("self"), v.literal("manager")));
+/** The manager the sender picked, so a manager changed meanwhile is caught instead of impersonated. */
+export const asManagerUserIdValidator = v.optional(v.string());
 export type SendAs = "self" | "manager";
 
 /**
@@ -64,12 +66,16 @@ export type SendAs = "self" | "manager";
  */
 export function resolveSenderName(
   viewer: { name?: string | null },
-  invoice: Pick<Doc<"invoices">, "managerName"> | null,
+  invoice: Pick<Doc<"invoices">, "managerName" | "managerUserId"> | null,
   sendAs: SendAs = "self",
+  asManagerUserId?: string,
 ): string | null {
   if (sendAs === "self") return viewer.name?.trim() || null;
   const managerName = invoice?.managerName?.trim();
-  if (!managerName) appError("SEND_AS_NO_MANAGER", "This booking has no manager to send as yet.");
+  if (!invoice || !managerName) appError("SEND_AS_NO_MANAGER", "This booking has no manager to send as yet.");
+  if (asManagerUserId !== undefined && asManagerUserId !== invoice.managerUserId) {
+    appError("SEND_AS_MANAGER_CHANGED", "The quote's manager changed. Reopen this to send as the current manager.");
+  }
   return managerName;
 }
 

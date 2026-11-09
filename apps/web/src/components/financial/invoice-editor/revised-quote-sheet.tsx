@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "convex/react";
-import { SendAsSelect, type SendAs, useSendAs } from "@/components/email-threads/send-as-select";
+import { SendAsSelect, type SendAsArgs, useSendAs } from "@/components/email-threads/send-as-select";
 import { QuoteChangeList } from "@/components/financial/quote-change-list";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,9 +49,9 @@ export function RevisedQuoteSheet({
   isRequestLinked: boolean;
   hasUnsavedEdits: boolean;
   sending: boolean;
-  onSend: (message: string, sendAs: SendAs) => Promise<void>;
+  onSend: (message: string, sendAs: SendAsArgs) => Promise<void>;
 }) {
-  const { choice, sendAs, setSendAs } = useSendAs(manager);
+  const { choice, picked, setPicked, sendAs } = useSendAs(manager);
   const livePreview = useQuery(api.invoices.revisedQuotePreview, open ? { id: invoiceId } : "skip");
   // Sending changes what the preview compares against; keep showing what was sent while the sheet closes.
   const [sentPreview, setSentPreview] = useState<typeof livePreview>(undefined);
@@ -165,7 +165,7 @@ export function RevisedQuoteSheet({
             </p>
           </div>
 
-          <SendAsSelect id="revised-quote-send-as" choice={choice} value={sendAs} onChange={setSendAs} />
+          <SendAsSelect id="revised-quote-send-as" choice={choice} value={picked} onChange={setPicked} />
 
           <div className="space-y-1.5">
             <Label htmlFor="revised-quote-message">{isReply ? "Your reply" : "Your message"}</Label>
