@@ -2880,10 +2880,12 @@ export default defineSchema({
    */
   hashReferencePhotos: defineTable(
     v.union(
-      v.object({ ...hashPhotoFields, status: v.literal("pending") }),
+      v.object({ ...hashPhotoFields, status: v.literal("pending"), hashDateId: v.id("hashDates") }),
       v.object({
         ...hashPhotoFields,
         status: v.literal("approved"),
+        /** Absent on a photo an admin added from the checklist editor. */
+        hashDateId: v.optional(v.id("hashDates")),
         reviewedBy: v.string(),
         reviewedAt: v.number(),
       }),

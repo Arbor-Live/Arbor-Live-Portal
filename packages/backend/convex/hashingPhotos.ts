@@ -44,6 +44,37 @@ function hasTarget(areas: ChecklistAreaView[], level: HashPhotoLevel, targetId: 
   );
 }
 
+function treeHasTarget(tree: ChecklistTree, level: HashPhotoLevel, targetId: string) {
+  if (level === "area") return tree.areas.some((area) => area.id === targetId);
+  if (level === "kit") return tree.kits.some((kit) => kit.id === targetId);
+  return (
+    tree.kits.some((kit) => kit.items.some((line) => line.id === targetId)) ||
+    tree.areas.some(
+      (area) =>
+        area.finalChecks.some((line) => line.id === targetId) ||
+        area.placements.some((placement) => placement.extraItems.some((line) => line.id === targetId)),
+    )
+  );
+}
+
+function requireHashPhotoKey(photo: string) {
+  const parsed = photo.trim().startsWith(R2_ASSET_PREFIX) ? parseStoredR2Asset(photo) : null;
+  if (parsed?.kind !== "r2" || !parsed.key.startsWith(HASH_REFERENCE_KEY_PREFIX)) {
+    appError("HASH_PHOTO_INVALID", "That isn't a photo uploaded for a hash.");
+  }
+  return parsed.key;
+}
+
+const photoValue = v.object({
+  _id: v.id("hashReferencePhotos"),
+  level: hashPhotoLevelValue,
+  targetId: v.string(),
+  url: v.string(),
+  status: photoStatusValue,
+  byName: v.string(),
+  mine: v.boolean(),
+});
+
 /**
  * Approved photos for everyone, plus the viewer's own waiting ones. Kept apart from
  * `hashingLive.get` so a tick never re-resolves the image URLs.
@@ -52,17 +83,7 @@ export const forHash = query({
   args: { hashDateId: v.id("hashDates") },
   returns: v.object({
     canReview: v.boolean(),
-    photos: v.array(
-      v.object({
-        _id: v.id("hashReferencePhotos"),
-        level: hashPhotoLevelValue,
-        targetId: v.string(),
-        url: v.string(),
-        status: photoStatusValue,
-        byName: v.string(),
-        mine: v.boolean(),
-      }),
-    ),
+    photos: v.array(photoValue),
   }),
   handler: async (ctx, args) => {
     const viewer = await requireHashingViewer(ctx);
@@ -113,10 +134,7 @@ export const submit = mutation({
     requireRunning(row);
     const { userId } = await requireOnHash(ctx, row);
 
-    const parsed = args.photo.trim().startsWith(R2_ASSET_PREFIX) ? parseStoredR2Asset(args.photo) : null;
-    if (parsed?.kind !== "r2" || !parsed.key.startsWith(HASH_REFERENCE_KEY_PREFIX)) {
-      appError("HASH_PHOTO_INVALID", "That isn't a photo uploaded for a hash.");
-    }
+    const r2Key = requireHashPhotoKey(args.photo);
 
     if (!hasTarget(await checklistFor(ctx, row), args.level, args.targetId)) {
       appError("HASH_PHOTO_UNKNOWN_TARGET", "That isn't on this hash's checklist.");
@@ -137,11 +155,65 @@ export const submit = mutation({
       status: "pending",
       level: args.level,
       targetId: args.targetId,
-      r2Key: parsed.key,
+      r2Key,
       submittedBy: userId,
       hashDateId: row._id,
     });
     return null;
+  },
+});
+
+/** Admin or ops adding from the checklist editor: no hash and no review, since they are the reviewer. */
+export const addFromSetup = mutation({
+  args: { level: hashPhotoLevelValue, targetId: v.string(), photo: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await requireAdminOrOperations(ctx);
+    const r2Key = requireHashPhotoKey(args.photo);
+    const latest = await latestChecklist(ctx);
+    if (!treeHasTarget(latest ?? HASHING_CHECKLIST_SEED, args.level, args.targetId)) {
+      appError("HASH_PHOTO_UNKNOWN_TARGET", "That isn't on the published checklist yet.");
+    }
+    const userId = getUserId(user);
+    await ctx.db.insert("hashReferencePhotos", {
+      status: "approved",
+      level: args.level,
+      targetId: args.targetId,
+      r2Key,
+      submittedBy: userId,
+      reviewedBy: userId,
+      reviewedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/** Every approved photo, for the checklist editor. Same shape as `forHash` so the viewer is shared. */
+export const forChecklist = query({
+  args: {},
+  returns: v.array(photoValue),
+  handler: async (ctx) => {
+    const viewer = await requireAdminOrOperations(ctx);
+    const rows = (await loadApproved(ctx)).reverse();
+    const userByKey = await findAuthUsersByIds(ctx, [...new Set(rows.map((row) => row.submittedBy))]);
+    const photos = await Promise.all(
+      rows.map(async (row) => {
+        const url = await resolveStoredR2AssetUrl(formatStoredR2Asset(row.r2Key));
+        if (!url) return [];
+        return [
+          {
+            _id: row._id,
+            level: row.level,
+            targetId: row.targetId,
+            url,
+            status: row.status,
+            byName: nameOf(userByKey, row.submittedBy),
+            mine: row.submittedBy === getUserId(viewer),
+          },
+        ];
+      }),
+    );
+    return photos.flat();
   },
 });
 
@@ -198,7 +270,11 @@ export const listPending = query({
     }
     const [userByKey, hashes] = await Promise.all([
       findAuthUsersByIds(ctx, [...new Set(pending.map((photo) => photo.submittedBy))]),
-      Promise.all([...new Set(pending.map((photo) => photo.hashDateId))].map((id) => ctx.db.get("hashDates", id))),
+      Promise.all(
+        [...new Set(pending.flatMap((photo) => (photo.hashDateId ? [photo.hashDateId] : [])))].map((id) =>
+          ctx.db.get("hashDates", id),
+        ),
+      ),
     ]);
     const dateKeyByHash = new Map(hashes.flatMap((hash) => (hash ? [[hash._id, hash.dateKey] as const] : [])));
 
@@ -213,7 +289,7 @@ export const listPending = query({
             level: photo.level,
             ...labelOf(photo.level, photo.targetId),
             byName: nameOf(userByKey, photo.submittedBy),
-            dateKey: dateKeyByHash.get(photo.hashDateId),
+            dateKey: photo.hashDateId ? dateKeyByHash.get(photo.hashDateId) : undefined,
             approvedCount: approvedCount.get(`${photo.level}:${photo.targetId}`) ?? 0,
           },
         ];

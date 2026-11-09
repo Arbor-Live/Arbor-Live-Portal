@@ -34,8 +34,6 @@ export const hashPhotoFields = {
   /** Raw R2 key, no `r2:` prefix. */
   r2Key: v.string(),
   submittedBy: v.string(),
-  /** The hash it was taken on. */
-  hashDateId: v.id("hashDates"),
 };
 
 export const hashDateFields = {
