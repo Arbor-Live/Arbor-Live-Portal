@@ -88,13 +88,15 @@ export async function scheduleEventCancelledEmails(
   const followers = await listFollowersNotIn(ctx, eventId, recipients);
   const subject = subjectForTemplate("event_cancelled", event.title);
 
-  for (const { recipient, keySuffix } of withKeySuffixes(recipients, followers)) {
+  // Followers never overlap the recipients, so everyone keys on their email. A follower
+  // who becomes a lead keeps the same key and is not emailed twice.
+  for (const recipient of [...recipients, ...followers]) {
     await enqueueEmail(ctx, {
       template: "event_cancelled",
       to: recipient.email,
       subject,
       eventId,
-      idempotencyKey: `event_cancelled:${eventId}:${updatedAt}:${keySuffix}`,
+      idempotencyKey: `event_cancelled:${eventId}:${updatedAt}:${recipient.email}`,
       payload: buildBasePayload(event, recipient.name),
     });
   }
@@ -113,20 +115,6 @@ function listFollowersNotIn(
       emails: recipients.map((recipient) => recipient.email),
     },
   );
-}
-
-/**
- * Existing recipients keep their email in the idempotency key. Followers get
- * their user id instead, so one never collides with a recipient's key.
- */
-function withKeySuffixes(recipients: EmailRecipient[], followers: EmailRecipient[]) {
-  return [
-    ...recipients.map((recipient) => ({ recipient, keySuffix: recipient.email })),
-    ...followers.map((recipient) => ({
-      recipient,
-      keySuffix: `follower:${recipient.userId}`,
-    })),
-  ];
 }
 
 export async function scheduleSchedulePublishedEmails(
@@ -151,14 +139,14 @@ export async function scheduleSchedulePublishedEmails(
   const followers = await listFollowersNotIn(ctx, eventId, recipients);
   const subject = subjectForTemplate("schedule_published", event.title);
 
-  for (const { recipient, keySuffix } of withKeySuffixes(recipients, followers)) {
+  for (const recipient of [...recipients, ...followers]) {
     await enqueueDebouncedEmail(ctx, {
       template: "schedule_published",
       to: recipient.email,
       subject,
       eventId,
-      debounceKey: `schedule_published:${eventId}:${keySuffix}`,
-      idempotencyKey: `schedule_published:${eventId}:${fingerprint}:${keySuffix}`,
+      debounceKey: `schedule_published:${eventId}:${recipient.email}`,
+      idempotencyKey: `schedule_published:${eventId}:${fingerprint}:${recipient.email}`,
       payload: {
         ...buildBasePayload(event, recipient.name),
         blockSummaries,

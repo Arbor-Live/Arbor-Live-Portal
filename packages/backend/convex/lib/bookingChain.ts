@@ -26,16 +26,13 @@ export type BookingChain = {
 const MAX_REQUESTS = 25;
 const MAX_INVOICES = 25;
 const MAX_EVENTS = 100;
-const MAX_REQUESTS_PER_INVOICE = 5;
-
-function addCapped<T>(set: Set<T>, value: T, cap: number) {
-  if (set.size < cap) set.add(value);
-}
+const MAX_LINKS_PER_RECORD = 10;
 
 /**
- * Every request, quote and event of the booking `target` belongs to. Walks
- * target -> its quotes -> each quote's events and requests, one hop from the
- * quotes. Reads are bounded by the caps above.
+ * Every request, quote and event of the booking `target` belongs to: all records
+ * reachable through request <-> quote <-> event links, including follow-up quotes
+ * attached to an event. The walk runs until nothing new turns up, so any record
+ * of a booking resolves to the same chain. Reads are bounded by the caps above.
  */
 export async function resolveBookingChain(
   ctx: QueryCtx | MutationCtx,
@@ -44,34 +41,47 @@ export async function resolveBookingChain(
   const requestIds = new Set<Id<"eventRequests">>();
   const invoiceIds = new Set<Id<"invoices">>();
   const eventIds = new Set<Id<"events">>();
+  const queue: BookingTarget[] = [];
 
-  if (target.kind === "request") {
-    requestIds.add(target.requestId);
-    const request = await ctx.db.get(target.requestId);
-    if (request?.linkedInvoiceId) addCapped(invoiceIds, request.linkedInvoiceId, MAX_INVOICES);
-  } else if (target.kind === "invoice") {
-    invoiceIds.add(target.invoiceId);
-  } else {
-    eventIds.add(target.eventId);
-    const event = await ctx.db.get(target.eventId);
-    if (event?.invoiceId) addCapped(invoiceIds, event.invoiceId, MAX_INVOICES);
-    for (const invoiceId of await listAdditionalInvoiceIds(ctx, target.eventId)) {
-      addCapped(invoiceIds, invoiceId, MAX_INVOICES);
-    }
-  }
+  const visit = (next: BookingTarget) => {
+    const [seen, id, cap] =
+      next.kind === "request"
+        ? [requestIds as Set<string>, next.requestId, MAX_REQUESTS]
+        : next.kind === "invoice"
+          ? [invoiceIds as Set<string>, next.invoiceId, MAX_INVOICES]
+          : [eventIds as Set<string>, next.eventId, MAX_EVENTS];
+    if (seen.has(id) || seen.size >= cap) return;
+    seen.add(id);
+    queue.push(next);
+  };
 
-  for (const invoiceId of [...invoiceIds]) {
-    for (const event of await listEventsLinkedToInvoice(ctx, invoiceId)) {
-      addCapped(eventIds, event._id, MAX_EVENTS);
-    }
-    const linkedRequests = await ctx.db
-      .query("eventRequests")
-      .withIndex("by_linkedInvoiceId", (q) => q.eq("linkedInvoiceId", invoiceId))
-      .take(MAX_REQUESTS_PER_INVOICE);
-    for (const request of linkedRequests) addCapped(requestIds, request._id, MAX_REQUESTS);
-    const invoice = await ctx.db.get(invoiceId);
-    if (invoice?.sourceEventRequestId) {
-      addCapped(requestIds, invoice.sourceEventRequestId, MAX_REQUESTS);
+  visit(target);
+  for (let next = queue.shift(); next; next = queue.shift()) {
+    if (next.kind === "request") {
+      const request = await ctx.db.get(next.requestId);
+      if (request?.linkedInvoiceId) visit({ kind: "invoice", invoiceId: request.linkedInvoiceId });
+      const quotes = await ctx.db
+        .query("invoices")
+        .withIndex("by_sourceEventRequestId", (q) => q.eq("sourceEventRequestId", next.requestId))
+        .take(MAX_LINKS_PER_RECORD);
+      for (const quote of quotes) visit({ kind: "invoice", invoiceId: quote._id });
+    } else if (next.kind === "invoice") {
+      const invoice = await ctx.db.get(next.invoiceId);
+      if (invoice?.sourceEventRequestId) visit({ kind: "request", requestId: invoice.sourceEventRequestId });
+      const requests = await ctx.db
+        .query("eventRequests")
+        .withIndex("by_linkedInvoiceId", (q) => q.eq("linkedInvoiceId", next.invoiceId))
+        .take(MAX_LINKS_PER_RECORD);
+      for (const request of requests) visit({ kind: "request", requestId: request._id });
+      for (const event of await listEventsLinkedToInvoice(ctx, next.invoiceId)) {
+        visit({ kind: "event", eventId: event._id });
+      }
+    } else {
+      const event = await ctx.db.get(next.eventId);
+      if (event?.invoiceId) visit({ kind: "invoice", invoiceId: event.invoiceId });
+      for (const invoiceId of await listAdditionalInvoiceIds(ctx, next.eventId)) {
+        visit({ kind: "invoice", invoiceId });
+      }
     }
   }
 

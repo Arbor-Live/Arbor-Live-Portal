@@ -232,9 +232,8 @@ describe("what followers get", () => {
     for (const template of ["event_cancelled", "schedule_published"]) {
       const rows = await emailRows(t, template);
       expect(rows.map((row) => row.to).sort()).toEqual([admin.email, ops.email].sort());
-      expect(rows.find((row) => row.to === admin.email)!.idempotencyKey).toContain(
-        `:follower:${admin._id}`,
-      );
+      // Keyed on the email like a lead's, so becoming a lead later never sends it twice.
+      expect(rows.find((row) => row.to === admin.email)!.idempotencyKey.endsWith(`:${admin.email}`)).toBe(true);
     }
   });
 });
