@@ -245,6 +245,110 @@ describe("what a photo can be attached to", () => {
   });
 });
 
+describe("adding from the checklist editor", () => {
+  const addFromSetup = (api_: Running["opsApi"], level: "area" | "kit" | "item", targetId: string, name = "setup") =>
+    api_.mutation(api.hashingPhotos.addFromSetup, { level, targetId, photo: photoRef(name) });
+
+  test("an approved photo with no hash shows to crew on a running hash", async () => {
+    const context = await running();
+    await addFromSetup(context.opsApi, "kit", KIT);
+
+    const rows = await context.t.run(async (ctx) => ctx.db.query("hashReferencePhotos").collect());
+    expect(rows).toMatchObject([
+      { status: "approved", level: "kit", targetId: KIT, r2Key: "hashing/reference/setup.jpg", reviewedAt: NOW },
+    ]);
+    const [row] = rows;
+    expect(row!.status === "approved" && row!.submittedBy === row!.reviewedBy).toBe(true);
+    expect(row).not.toHaveProperty("hashDateId");
+
+    const seen = await context.benApi.query(api.hashingPhotos.forHash, { hashDateId: context.hashDateId });
+    expect(seen.photos).toMatchObject([
+      { level: "kit", targetId: KIT, status: "approved", mine: false, byName: "Olive Ops", url: "https://photos.test/hashing/reference/setup.jpg" },
+    ]);
+  });
+
+  test("an area, a kit and an item are accepted, and so are area extras and final checks", async () => {
+    const context = await running();
+    const { version, tree } = await context.opsApi.query(api.hashingChecklist.getCurrent, {});
+    const area = tree.areas.find((row) => row.finalChecks.length > 0 && row.placements.length > 0)!;
+    await addFromSetup(context.opsApi, "area", AREA, "a");
+    await addFromSetup(context.opsApi, "kit", KIT, "k");
+    await addFromSetup(context.opsApi, "item", ITEM_LINE, "i");
+    await addFromSetup(context.opsApi, "item", area.finalChecks[0]!.id, "f");
+
+    const extraId = "only-here-line";
+    const withExtra = {
+      ...tree,
+      areas: tree.areas.map((row) =>
+        row.id === area.id
+          ? { ...row, placements: row.placements.map((p, index) => (index === 0 ? { ...p, extraItems: [{ id: extraId, text: "Extra" }] } : p)) }
+          : row,
+      ),
+    };
+    await context.opsApi.mutation(api.hashingChecklist.publish, { baseVersion: version, ...withExtra });
+    await addFromSetup(context.opsApi, "item", extraId, "e");
+
+    expect(await context.t.run(async (ctx) => ctx.db.query("hashReferencePhotos").collect())).toHaveLength(5);
+  });
+
+  test("an unknown target is refused, and so is the right id at the wrong level", async () => {
+    const context = await running();
+    await expect(addFromSetup(context.opsApi, "kit", "no-such-kit")).rejects.toThrow(/published checklist/);
+    await expect(addFromSetup(context.opsApi, "item", "no-such-line")).rejects.toThrow(/published checklist/);
+    await expect(addFromSetup(context.opsApi, "area", KIT)).rejects.toThrow(/published checklist/);
+    await expect(addFromSetup(context.opsApi, "item", KIT)).rejects.toThrow(/published checklist/);
+    await expect(addFromSetup(context.opsApi, "kit", AREA)).rejects.toThrow(/published checklist/);
+    expect(await context.t.run(async (ctx) => ctx.db.query("hashReferencePhotos").collect())).toHaveLength(0);
+  });
+
+  test("a file that wasn't uploaded for a hash is refused", async () => {
+    const context = await running();
+    await expect(
+      context.opsApi.mutation(api.hashingPhotos.addFromSetup, {
+        level: "kit",
+        targetId: KIT,
+        photo: "r2:inventory/items/i/damage/u-photo.jpg",
+      }),
+    ).rejects.toThrow(/uploaded for a hash/);
+  });
+
+  test("crew can't add from setup", async () => {
+    const context = await running();
+    await expect(addFromSetup(context.anaApi, "kit", KIT)).rejects.toThrow(/access|Access/);
+    expect(await context.t.run(async (ctx) => ctx.db.query("hashReferencePhotos").collect())).toHaveLength(0);
+  });
+
+  test("the checklist lists approved photos for admin and ops only, never a waiting one", async () => {
+    const context = await running();
+    await addFromSetup(context.opsApi, "kit", KIT, "setup");
+    await submitKitPhoto(context, "waiting");
+
+    expect(await context.opsApi.query(api.hashingPhotos.forChecklist, {})).toMatchObject([
+      { level: "kit", targetId: KIT, status: "approved", byName: "Olive Ops", url: "https://photos.test/hashing/reference/setup.jpg" },
+    ]);
+    await expect(context.anaApi.query(api.hashingPhotos.forChecklist, {})).rejects.toThrow(/access|Access/);
+  });
+
+  test("a setup photo can be removed, and the queue still reads", async () => {
+    const context = await running();
+    await addFromSetup(context.opsApi, "kit", KIT);
+    await submitKitPhoto(context);
+    const [setup] = await context.opsApi.query(api.hashingPhotos.forChecklist, {});
+    expect(await context.opsApi.query(api.hashingPhotos.listPending, {})).toMatchObject([{ level: "kit", dateKey: "2026-11-03" }]);
+
+    await context.opsApi.mutation(api.hashingPhotos.remove, { photoId: setup!._id });
+    expect(released.keys).toEqual(["hashing/reference/setup.jpg"]);
+    expect(await context.opsApi.query(api.hashingPhotos.forChecklist, {})).toEqual([]);
+  });
+
+  test("the orphan sweep counts a setup photo as referenced", async () => {
+    const context = await running();
+    await addFromSetup(context.opsApi, "kit", KIT, "setup");
+    const scan = await context.t.run(async (ctx) => [...(await collectReferencedR2Keys(ctx)).keys]);
+    expect(scan).toContain("hashing/reference/setup.jpg");
+  });
+});
+
 describe("review", () => {
   test("rejecting deletes the photo and its file, and it never shows", async () => {
     const context = await running();
