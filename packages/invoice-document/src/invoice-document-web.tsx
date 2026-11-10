@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { currency, groupInvoiceSections } from "./format";
+import { ARBOR_PAYMENT_DETAILS } from "./payment-details";
 import { invoiceTheme } from "./theme";
 import type { InvoiceDocumentData, InvoiceLineItem } from "./types";
 
@@ -85,21 +86,24 @@ export function InvoiceDocumentWeb({ data, logoSrc = "/logo.svg" }: InvoiceDocum
         <h2 style={cardTitleStyle}>Payment Methods</h2>
         <div style={cardBodyStyle}>
           <p style={bodyTextStyle}>
-            <a href="https://assuepay.stanford.edu/" style={linkStyle}>
+            <a href={ARBOR_PAYMENT_DETAILS.assuEpayUrl} style={linkStyle}>
               ASSU ePay
             </a>{" "}
             or <strong>GrantEd Group Transfer</strong>
           </p>
           <p style={bodyTextStyle}>
-            VSO: <strong>Arbor Live (5001)</strong>
+            VSO:{" "}
+            <strong>
+              {ARBOR_PAYMENT_DETAILS.vsoName} ({ARBOR_PAYMENT_DETAILS.vsoNumber})
+            </strong>
           </p>
           <hr style={dividerStyle} />
           <p style={strongTextStyle}>iJournal PTA</p>
           <p style={bodyTextStyle}>
-            PTA: <strong>1056598-1-ZBABS</strong>
+            PTA: <strong>{ARBOR_PAYMENT_DETAILS.ijournalPta}</strong>
           </p>
           <p style={bodyTextStyle}>
-            Approver: <strong>O&apos;Neal Patrick</strong>
+            Approver: <strong>{ARBOR_PAYMENT_DETAILS.ijournalApprover}</strong>
           </p>
         </div>
       </section>

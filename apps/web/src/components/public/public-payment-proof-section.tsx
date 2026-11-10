@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TextFormField } from "@/components/forms/text-form-field";
+import { PublicPaymentDetails } from "@/components/public/public-payment-details";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   PAYMENT_PROOF_METHOD_OPTIONS,
@@ -195,6 +196,11 @@ export function PublicPaymentProofSection({
       </CardHeader>
       <CardContent className="space-y-4">
         {paymentProof.lateFee ? <PaymentDueBanner lateFee={paymentProof.lateFee} /> : null}
+
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Where to send payment</p>
+          <PublicPaymentDetails />
+        </div>
 
         <p className="text-sm text-muted-foreground">
           Submit the payment reference for your invoice once payment has been initiated.
