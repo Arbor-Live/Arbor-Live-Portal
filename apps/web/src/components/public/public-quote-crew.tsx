@@ -11,13 +11,14 @@ import {
   parseCrewLine,
   sumCrewAmountUsd,
   type CrewGroup,
-  type CrewLine,
   type CrewLineInput,
+  type CrewPersonRow,
 } from "@arbor/invoice-document/crew";
 import { formatUsd } from "@/lib/format";
 
-/** One billed line inside an opened section: who, their role, hours × rate = amount. */
-function CrewLineRow({ line }: { line: CrewLine }) {
+/** One person inside an opened section: who, their role, each hours × rate, and what they bill. */
+function CrewRow({ row }: { row: CrewPersonRow }) {
+  const line = row.lines[0]!;
   const person = crewLinePerson(line);
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 py-2 text-sm" data-testid="public-quote-crew-line">
@@ -40,8 +41,12 @@ function CrewLineRow({ line }: { line: CrewLine }) {
         {line.notes ? <p className="text-xs text-muted-foreground">{line.notes}</p> : null}
       </div>
       <div className="text-right tabular-nums">
-        <p>{formatUsd(line.amountUsd)}</p>
-        <p className="text-xs whitespace-nowrap text-muted-foreground">{describeHoursTimesRate(line)}</p>
+        <p>{formatUsd(row.amountUsd)}</p>
+        {row.lines.map((rateLine) => (
+          <p key={rateLine.id} className="text-xs whitespace-nowrap text-muted-foreground">
+            {describeHoursTimesRate(rateLine)}
+          </p>
+        ))}
       </div>
     </li>
   );
@@ -59,14 +64,14 @@ function CrewSection({ group }: { group: CrewGroup }) {
         <div className="min-w-0">
           <p className="font-medium break-words">{group.title}</p>
           <p className="text-xs text-muted-foreground" data-testid="public-quote-crew-headcount">
-            {describeHeadcount(group.lines)}
+            {describeHeadcount(group.rows)}
           </p>
         </div>
         <p className="font-medium tabular-nums">{formatUsd(group.amountUsd)}</p>
       </summary>
       <ul className="mb-3 ml-6 divide-y border-l pl-3">
-        {group.lines.map((line) => (
-          <CrewLineRow key={line.id} line={line} />
+        {group.rows.map((row) => (
+          <CrewRow key={row.key} row={row} />
         ))}
       </ul>
     </details>

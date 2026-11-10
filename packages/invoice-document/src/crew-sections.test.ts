@@ -57,14 +57,35 @@ describe("parseCrewLine", () => {
 
   it("reads hours past a full day as the same people, not more", () => {
     const lines = [
-      line("Setup → Strike — Crew (Open slot)", 8, 20),
-      line("Setup → Strike — Crew (Open slot)", 8, 20),
-      line("Setup → Strike — Crew (Open slot) · OT after 8 hrs", 2, 30),
-      line("Setup → Strike — Crew (Open slot) · OT after 8 hrs", 2, 30),
+      line("Setup → Strike — Crew (Open slot)", 8, 20, { id: "a" }),
+      line("Setup → Strike — Crew (Open slot) · OT after 8 hrs", 2, 30, { id: "a-ot" }),
+      line("Setup → Strike — Crew (Open slot)", 8, 20, { id: "b" }),
+      line("Setup → Strike — Crew (Open slot) · OT after 8 hrs", 2, 30, { id: "b-ot" }),
     ].map(parseCrewLine);
-    expect(lines[2]).toMatchObject({ section: "Setup → Strike", openSlot: true, rateTag: "OT", pastRegularDay: "after 8 hrs" });
-    expect(describeHoursTimesRate(lines[2]!)).toBe("2 hrs × $30/hr OT after 8 hrs");
-    expect(describeHeadcount(lines)).toBe("2 people × 8 hrs");
+    expect(lines[1]).toMatchObject({ section: "Setup → Strike", openSlot: true, rateTag: "OT", pastRegularDay: "after 8 hrs" });
+    expect(describeHoursTimesRate(lines[1]!)).toBe("2 hrs × $30/hr OT after 8 hrs");
+    const [group] = groupCrewBySection(lines)[0]!.groups;
+    expect(group!.rows.map((row) => row.lines.map((rowLine) => rowLine.id))).toEqual([
+      ["a", "a-ot"],
+      ["b", "b-ot"],
+    ]);
+    expect(group!.rows.map((row) => row.amountUsd)).toEqual([220, 220]);
+    expect(describeHeadcount(group!.rows)).toBe("2 people × 10 hrs");
+  });
+
+  it("lists a named person once when they bill at two rates", () => {
+    const lines = [
+      line("Show — Sound engineer (Ana (Lead))", 6, 35),
+      line("Show — Sound engineer (Ana (Lead))", 2, 40),
+      line("Show — Sound engineer (Ana (Lead)) · OT after 8 hrs", 1.5, 52.5),
+      line("Show — Stagehand (Jo)", 4, 22),
+    ].map(parseCrewLine);
+    const [group] = groupCrewBySection(lines)[0]!.groups;
+    expect(group!.rows.map((row) => [row.lines[0]!.person, row.lines.length, row.amountUsd])).toEqual([
+      ["Ana", 3, 368.75],
+      ["Jo", 1, 88],
+    ]);
+    expect(describeHeadcount(group!.rows)).toBe("1 person × 4 hrs + 1 person × 9.5 hrs");
   });
 
   it("keeps parentheses inside a role", () => {
@@ -118,8 +139,8 @@ describe("groupCrewBySection", () => {
 
   it("keeps headcount per phase instead of flattening it", () => {
     const [day1] = groupCrewBySection(lines);
-    expect(describeHeadcount(day1!.groups[0]!.lines)).toBe("2 people × 3 hrs + 1 person × 4 hrs");
-    expect(describeHeadcount(day1!.groups[1]!.lines)).toBe("1 person × 4.5 hrs");
+    expect(describeHeadcount(day1!.groups[0]!.rows)).toBe("2 people × 3 hrs + 1 person × 4 hrs");
+    expect(describeHeadcount(day1!.groups[1]!.rows)).toBe("1 person × 4.5 hrs");
   });
 
   it("adds every group up to exactly the billed lines", () => {
@@ -133,6 +154,7 @@ describe("groupCrewBySection", () => {
     expect(dayCents).toBe(billedCents);
     expect(sumCrewAmountUsd(lines)).toBe(billedCents / 100);
     expect(days.flatMap((day) => day.groups).flatMap((group) => group.lines)).toHaveLength(lines.length);
+    expect(days.flatMap((day) => day.groups).flatMap((group) => group.rows.flatMap((row) => row.lines))).toHaveLength(lines.length);
   });
 
   it("has no day headings on a single-day quote", () => {

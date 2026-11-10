@@ -155,23 +155,17 @@ export function sumCrewAmountUsd(lines: Array<Pick<CrewLine, "amountUsd">>) {
 
 /**
  * `4 people × 3 hrs`, or `2 people × 3 hrs + 1 person × 4.5 hrs` when hours
- * differ. Hours past a full day are the same people working on, so they're
- * left out of the headcount.
+ * differ. Each person counts once, at every hour they work.
  */
-export function describeHeadcount(lines: Array<Pick<CrewLine, "people" | "hoursEach" | "pastRegularDay">>) {
+export function describeHeadcount(rows: Array<Pick<CrewPersonRow, "people" | "hoursEach">>) {
   const peopleByHours = new Map<number, number>();
-  for (const line of lines) {
-    if (line.pastRegularDay) continue;
-    peopleByHours.set(line.hoursEach, (peopleByHours.get(line.hoursEach) ?? 0) + line.people);
+  for (const row of rows) {
+    peopleByHours.set(row.hoursEach, (peopleByHours.get(row.hoursEach) ?? 0) + row.people);
   }
   return [...peopleByHours.entries()]
     .sort((a, b) => b[1] - a[1] || a[0] - b[0])
     .map(([hours, people]) => `${formatPeople(people)} × ${formatHours(hours)}`)
     .join(" + ");
-}
-
-export function headcount(lines: Array<Pick<CrewLine, "people" | "pastRegularDay">>) {
-  return lines.reduce((sum, line) => sum + (line.pastRegularDay ? 0 : line.people), 0);
 }
 
 export function formatPeople(count: number) {
@@ -204,12 +198,61 @@ export function crewLinePerson(line: CrewLine) {
   return undefined;
 }
 
+/** One person in a section: every line they bill there, their regular day first. */
+export type CrewPersonRow = {
+  key: string;
+  lines: CrewLine[];
+  people: number;
+  /** Hours each person works, past a full day included. */
+  hoursEach: number;
+  amountUsd: number;
+};
+
 export type CrewGroup = {
   key: string;
   title: string;
   lines: CrewLine[];
+  rows: CrewPersonRow[];
   amountUsd: number;
 };
+
+function samePerson(a: CrewLine, b: CrewLine) {
+  return (
+    !a.manualLabel &&
+    !b.manualLabel &&
+    a.role === b.role &&
+    a.person === b.person &&
+    a.lead === b.lead &&
+    a.openSlot === b.openSlot
+  );
+}
+
+/**
+ * The editor saves each person's regular hours and their hours past a full day
+ * as separate lines, in that order. An hours-past line joins the nearest row
+ * before it for the same slot, and a named person's lines always share a row.
+ * Two open slots stay apart: nothing tells them apart but order.
+ */
+export function crewPersonRows(lines: CrewLine[]): CrewPersonRow[] {
+  const rows: CrewLine[][] = [];
+  for (const line of lines) {
+    const joins = line.pastRegularDay || line.person;
+    const row = joins ? [...rows].reverse().find((candidate) => samePerson(candidate[0]!, line)) : undefined;
+    if (row) row.push(line);
+    else rows.push([line]);
+  }
+  return rows.map((rowLines) => ({
+    key: rowLines[0]!.id,
+    lines: rowLines,
+    people: rowLines[0]!.people,
+    hoursEach: Number(rowLines.reduce((sum, line) => sum + line.hoursEach, 0).toFixed(2)),
+    amountUsd: sumCrewAmountUsd(rowLines),
+  }));
+}
+
+function toGroup(key: string, title: string, lines: CrewLine[]): CrewGroup {
+  return { key, title, lines, rows: crewPersonRows(lines), amountUsd: sumCrewAmountUsd(lines) };
+}
 
 function groupBy(lines: CrewLine[], keyOf: (line: CrewLine) => string): CrewGroup[] {
   const groups = new Map<string, CrewLine[]>();
@@ -219,12 +262,7 @@ function groupBy(lines: CrewLine[], keyOf: (line: CrewLine) => string): CrewGrou
     if (bucket) bucket.push(line);
     else groups.set(key, [line]);
   }
-  return [...groups.entries()].map(([key, bucket]) => ({
-    key,
-    title: key,
-    lines: bucket,
-    amountUsd: sumCrewAmountUsd(bucket),
-  }));
+  return [...groups.entries()].map(([key, bucket]) => toGroup(key, key, bucket));
 }
 
 export type CrewDay = { key: string; title?: string; groups: CrewGroup[]; amountUsd: number };
@@ -242,12 +280,7 @@ export function groupCrewBySection(lines: CrewLine[]): CrewDay[] {
     const manual = dayLines.filter((line) => line.manualLabel);
     const groups = [
       ...groupBy(scheduled, (line) => line.section ?? "Crew"),
-      ...manual.map((line) => ({
-        key: `manual:${line.id}`,
-        title: line.manualLabel!,
-        lines: [line],
-        amountUsd: sumCrewAmountUsd([line]),
-      })),
+      ...manual.map((line) => toGroup(`manual:${line.id}`, line.manualLabel!, [line])),
     ];
     days.push({ key, title, groups, amountUsd: sumCrewAmountUsd(dayLines) });
   };
