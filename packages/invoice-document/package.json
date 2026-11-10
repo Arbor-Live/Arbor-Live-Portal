@@ -10,7 +10,8 @@
     "./crew-hours": "./src/crew-hours.ts",
     "./pdf": "./src/render-pdf.tsx",
     "./brand": "./src/pdf-brand.ts",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./payment-details": "./src/payment-details.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

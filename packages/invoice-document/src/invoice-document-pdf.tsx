@@ -20,6 +20,7 @@ import {
   type CrewLine,
 } from "./crew-sections";
 import { currency, groupInvoiceSections } from "./format";
+import { ARBOR_PAYMENT_DETAILS } from "./payment-details";
 import { pdfEyebrow as eyebrow, pdfFonts } from "./pdf-brand";
 import { invoiceTheme } from "./theme";
 import type { InvoiceDocumentData, InvoiceLineItem } from "./types";
@@ -335,11 +336,13 @@ export function InvoiceDocumentPdf({ data, logoSrc }: InvoiceDocumentPdfProps) {
             <Text style={styles.cardTitle}>Payment Methods</Text>
             <View style={styles.cardBody}>
               <Text>ASSU ePay or GrantEd Group Transfer</Text>
-              <Text>VSO: Arbor Live (5001)</Text>
+              <Text>
+                VSO: {ARBOR_PAYMENT_DETAILS.vsoName} ({ARBOR_PAYMENT_DETAILS.vsoNumber})
+              </Text>
               <View style={styles.divider} />
               <Text style={styles.detailLabel}>iJournal PTA</Text>
-              <Text>PTA: 1056598-1-ZBABS</Text>
-              <Text>Approver: O&apos;Neal Patrick</Text>
+              <Text>PTA: {ARBOR_PAYMENT_DETAILS.ijournalPta}</Text>
+              <Text>Approver: {ARBOR_PAYMENT_DETAILS.ijournalApprover}</Text>
             </View>
           </View>
 
