@@ -1,17 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckIcon, CopyIcon } from "@phosphor-icons/react";
 import { ARBOR_PAYMENT_DETAILS } from "@arbor/invoice-document/payment-details";
 
 function CopyableValue({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
+  const resetTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(resetTimer.current), []);
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      window.clearTimeout(resetTimer.current);
+      resetTimer.current = window.setTimeout(() => setCopied(false), 1500);
     } catch {
       // Clipboard can be blocked; the value is still selectable on screen.
     }
@@ -30,6 +34,9 @@ function CopyableValue({ label, value }: { label: string; value: string }) {
         >
           {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
         </button>
+        <span className="sr-only" aria-live="polite">
+          {copied ? `${label} copied` : ""}
+        </span>
       </dd>
     </div>
   );
