@@ -17,7 +17,7 @@ import {
   parseCrewLine,
   sumCrewAmountUsd,
   type CrewGroup,
-  type CrewLine,
+  type CrewPersonRow,
 } from "./crew-sections";
 import { currency, groupInvoiceSections } from "./format";
 import { ARBOR_PAYMENT_DETAILS } from "./payment-details";
@@ -538,9 +538,10 @@ const KEEP_TOGETHER_MAX_ROWS = 30;
 const CREW_CHARS_PER_ROW = 60;
 
 function estimatedRows(group: CrewGroup) {
-  return group.lines.reduce((rows, line) => {
-    const text = [crewLinePerson(line) ?? line.role, line.role, line.notes].filter(Boolean).join(" · ");
-    return rows + Math.max(1, Math.ceil(text.length / CREW_CHARS_PER_ROW));
+  return group.rows.reduce((rows, { lines, notes }) => {
+    const line = lines[0]!;
+    const text = [crewLinePerson(line) ?? line.role, line.role, notes].filter(Boolean).join(" · ");
+    return rows + Math.max(lines.length, Math.ceil(text.length / CREW_CHARS_PER_ROW));
   }, 1);
 }
 
@@ -550,8 +551,9 @@ function keepTogether(group: CrewGroup | undefined) {
 const crewRateFlex = 1.5;
 const crewAmountFlex = 1;
 
-/** One billed crew line under its section: who, role, hours × rate, amount. */
-function CrewPersonRow({ line }: { line: CrewLine }) {
+/** One person under their section: who, role, each hours × rate, amount. */
+function CrewPersonRowView({ row }: { row: CrewPersonRow }) {
+  const line = row.lines[0]!;
   const person = crewLinePerson(line);
   return (
     <View style={styles.crewPersonRow} wrap={false}>
@@ -567,12 +569,12 @@ function CrewPersonRow({ line }: { line: CrewLine }) {
             {person && line.role ? <Text style={styles.crewMuted}>{`  ·  ${line.role}`}</Text> : null}
           </Text>
         )}
-        {line.notes ? <Text style={styles.crewMuted}>{line.notes}</Text> : null}
+        {row.notes ? <Text style={styles.crewMuted}>{row.notes}</Text> : null}
       </View>
       <Text style={[styles.crewMuted, { flex: crewRateFlex, textAlign: "right", fontSize: 8.5 }]}>
-        {describeHoursTimesRate(line)}
+        {row.lines.map(describeHoursTimesRate).join("\n")}
       </Text>
-      <Text style={[styles.td, { flex: crewAmountFlex, textAlign: "right" }]}>{currency(line.amountUsd)}</Text>
+      <Text style={[styles.td, { flex: crewAmountFlex, textAlign: "right" }]}>{currency(row.amountUsd)}</Text>
     </View>
   );
 }
@@ -591,7 +593,7 @@ function CrewSectionBlock({ group }: { group: CrewGroup }) {
         <Text style={[styles.crewSectionTitle, { flex: crewItemFlex, paddingRight: 8 }]}>
           {group.title}
           <Text style={[styles.crewMuted, { fontWeight: 400 }]}>
-            {`   ${describeHeadcount(group.lines)}`}
+            {`   ${describeHeadcount(group.rows)}`}
           </Text>
           {single?.notes ? <Text style={[styles.crewMuted, { fontWeight: 400 }]}>{`\n${single.notes}`}</Text> : null}
         </Text>
@@ -604,7 +606,7 @@ function CrewSectionBlock({ group }: { group: CrewGroup }) {
       </View>
       {single
         ? null
-        : group.lines.map((line) => <CrewPersonRow key={line.id} line={line} />)}
+        : group.rows.map((row) => <CrewPersonRowView key={row.key} row={row} />)}
     </View>
   );
 }
