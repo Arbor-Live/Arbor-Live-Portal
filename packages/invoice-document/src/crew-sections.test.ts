@@ -75,9 +75,9 @@ describe("parseCrewLine", () => {
 
   it("lists a named person once when they bill at two rates", () => {
     const lines = [
-      line("Show — Sound engineer (Ana (Lead))", 6, 35),
-      line("Show — Sound engineer (Ana (Lead))", 2, 40),
-      line("Show — Sound engineer (Ana (Lead)) · OT after 8 hrs", 1.5, 52.5),
+      line("Show — Sound engineer (Ana (Lead))", 6, 35, { notes: "Brings the console" }),
+      line("Show — Sound engineer (Ana (Lead))", 2, 40, { notes: "Brings the console" }),
+      line("Show — Sound engineer (Ana (Lead)) · OT after 8 hrs", 1.5, 52.5, { notes: "Stays for load-out" }),
       line("Show — Stagehand (Jo)", 4, 22),
     ].map(parseCrewLine);
     const [group] = groupCrewBySection(lines)[0]!.groups;
@@ -86,6 +86,7 @@ describe("parseCrewLine", () => {
       ["Jo", 1, 88],
     ]);
     expect(describeHeadcount(group!.rows)).toBe("1 person × 4 hrs + 1 person × 9.5 hrs");
+    expect(group!.rows[0]!.notes).toBe("Brings the console · Stays for load-out");
   });
 
   it("keeps parentheses inside a role", () => {

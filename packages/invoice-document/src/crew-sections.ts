@@ -206,6 +206,8 @@ export type CrewPersonRow = {
   /** Hours each person works, past a full day included. */
   hoursEach: number;
   amountUsd: number;
+  /** Every distinct note on the person's lines. */
+  notes?: string;
 };
 
 export type CrewGroup = {
@@ -247,6 +249,7 @@ export function crewPersonRows(lines: CrewLine[]): CrewPersonRow[] {
     people: rowLines[0]!.people,
     hoursEach: Number(rowLines.reduce((sum, line) => sum + line.hoursEach, 0).toFixed(2)),
     amountUsd: sumCrewAmountUsd(rowLines),
+    notes: [...new Set(rowLines.map((line) => line.notes).filter(Boolean))].join(" · ") || undefined,
   }));
 }
 

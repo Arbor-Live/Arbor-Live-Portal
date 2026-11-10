@@ -538,9 +538,9 @@ const KEEP_TOGETHER_MAX_ROWS = 30;
 const CREW_CHARS_PER_ROW = 60;
 
 function estimatedRows(group: CrewGroup) {
-  return group.rows.reduce((rows, { lines }) => {
+  return group.rows.reduce((rows, { lines, notes }) => {
     const line = lines[0]!;
-    const text = [crewLinePerson(line) ?? line.role, line.role, line.notes].filter(Boolean).join(" · ");
+    const text = [crewLinePerson(line) ?? line.role, line.role, notes].filter(Boolean).join(" · ");
     return rows + Math.max(lines.length, Math.ceil(text.length / CREW_CHARS_PER_ROW));
   }, 1);
 }
@@ -569,7 +569,7 @@ function CrewPersonRowView({ row }: { row: CrewPersonRow }) {
             {person && line.role ? <Text style={styles.crewMuted}>{`  ·  ${line.role}`}</Text> : null}
           </Text>
         )}
-        {line.notes ? <Text style={styles.crewMuted}>{line.notes}</Text> : null}
+        {row.notes ? <Text style={styles.crewMuted}>{row.notes}</Text> : null}
       </View>
       <Text style={[styles.crewMuted, { flex: crewRateFlex, textAlign: "right", fontSize: 8.5 }]}>
         {row.lines.map(describeHoursTimesRate).join("\n")}

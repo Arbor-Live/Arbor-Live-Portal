@@ -38,7 +38,7 @@ function CrewRow({ row }: { row: CrewPersonRow }) {
           </p>
         )}
         {person && line.role ? <p className="text-xs text-muted-foreground">{line.role}</p> : null}
-        {line.notes ? <p className="text-xs text-muted-foreground">{line.notes}</p> : null}
+        {row.notes ? <p className="text-xs text-muted-foreground">{row.notes}</p> : null}
       </div>
       <div className="text-right tabular-nums">
         <p>{formatUsd(row.amountUsd)}</p>
