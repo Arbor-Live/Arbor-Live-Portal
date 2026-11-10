@@ -56,6 +56,10 @@ test.describe("public quote approval", () => {
 
     await page.goto(`${seeded.path}?tab=quote`);
     await expect(page.getByText(/Submit Payment Proof/i).first()).toBeVisible({ timeout: 20_000 });
+    const paymentDetails = page.getByRole("main").getByTestId("public-payment-details");
+    await expect(paymentDetails).toContainText("Arbor Live (5001)");
+    await expect(paymentDetails).toContainText("1056598-1-ZBABS");
+    await expect(page.getByRole("main").getByTestId("public-quote-faq")).toBeVisible();
 
     await page.getByPlaceholder("24278").fill("987654");
     await page.getByRole("button", { name: "Submit payment proof" }).click();

@@ -23,6 +23,7 @@ import { PublicPaymentProofSection } from "@/components/public/public-payment-pr
 import { PublicPaymentContactsSection } from "@/components/public/public-payment-contacts-section";
 import { PublicQuoteApprovalSection } from "@/components/public/public-quote-approval-section";
 import { PublicQuoteChangeRequestSection } from "@/components/public/public-quote-change-request-section";
+import { PublicQuoteFaq } from "@/components/public/public-quote-faq";
 import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf-download";
 import { PublicPostEventSection } from "@/components/public/public-post-event-section";
 import { PublicStaffDashboardLinks } from "@/components/public/public-staff-dashboard-links";
@@ -372,6 +373,8 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
                   submitMutation={submitPaymentProof}
                 />
               ) : null}
+
+              <PublicQuoteFaq />
             </div>
           </div>
         ) : null}

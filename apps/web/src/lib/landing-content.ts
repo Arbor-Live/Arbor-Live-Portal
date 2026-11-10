@@ -27,7 +27,10 @@ export type LandingStat = {
 
 export type LandingFaq = {
   question: string;
+  /** Paragraphs are separated by a blank line. */
   answer: string;
+  /** Clicking `trigger` (a phrase in the answer) reveals `reveal`. */
+  easterEgg?: { trigger: string; reveal: string };
 };
 
 export const landingHero = {
@@ -164,6 +167,17 @@ export const landingEventTypes: string[] = [
   "+ More",
 ];
 
+/** Shown on the landing FAQ and the client quote page. */
+export const whyWeChargeFaq: LandingFaq = {
+  question: "Why does Arbor Live charge for services?",
+  answer: [
+    "We incur a lot of costs to operate! Not only is Arbor Live a paid employment opportunity for our team, but we must maintain one of the most expensive tech inventories on campus. All of our events are “pop-up” events, meaning we must transport, set up, and tear down thousands of dollars of equipment for every event we do—as you can imagine, that's a lot of wear and tear.",
+    "Think of it this way: even a carnival gets weeks to set up, and every show is almost exactly the same. We get a few hours, and we support hundreds of different events per year.",
+    "We work hard to make sure we can provide fair, subsidized pricing to all campus organizations—we want to keep being able to do that!",
+  ].join("\n\n"),
+  easterEgg: { trigger: "carnival", reveal: "And we're not a gaggle of clowns, dammit." },
+};
+
 export const landingFaqs: LandingFaq[] = [
   {
     question: "How can I join Arbor Live?",
@@ -180,6 +194,7 @@ export const landingFaqs: LandingFaq[] = [
     answer:
       "Submit a booking request through our portal. A member of our team will follow up within 1–5 business days with next steps. For urgent requests, email arborlive@stanford.edu.",
   },
+  whyWeChargeFaq,
 ];
 
 export const landingNavLinks: LandingLink[] = [
