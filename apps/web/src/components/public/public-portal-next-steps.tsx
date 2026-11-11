@@ -2,18 +2,21 @@
 
 import {
   ArrowRightIcon,
+  ArrowSquareOutIcon,
   ChatCircleTextIcon,
   CheckCircleIcon,
   ClockIcon,
   ImageSquareIcon,
   ImagesIcon,
   InfoIcon,
+  MegaphoneIcon,
   ReceiptIcon,
   SealCheckIcon,
   SparkleIcon,
   type Icon,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
+import { BRAND_CREDIT_DISCOUNTED_URL } from "@/lib/brand-guidelines";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +29,8 @@ export type PortalStep = {
   body?: string;
   ctaLabel?: string;
   targetTab?: string;
+  /** Opens a page in a new tab instead of switching portal tabs. */
+  href?: string;
   icon?: Icon;
 };
 
@@ -49,6 +54,8 @@ export type PortalNextStepInput = {
   albumShareUrl?: string;
   /** A linked, not-hidden event still needs a poster or description. */
   needsPoster?: boolean;
+  /** The quote's "Discount Terms" are ticked: the host must credit Arbor Live. */
+  sponsorCredit?: boolean;
 };
 
 const STEP_TONE_ORDER: Record<PortalStepTone, number> = {
@@ -157,6 +164,21 @@ export function derivePortalNextSteps(input: PortalNextStepInput): PortalStep[] 
     });
   }
 
+  if (input.sponsorCredit && input.quoteReady && !input.eventEnded) {
+    const approved = input.approvalStatus === "approved";
+    steps.push({
+      key: "sponsor-credit",
+      tone: approved ? "action" : "info",
+      icon: MegaphoneIcon,
+      title: "Credit Arbor Live in your marketing",
+      body: approved
+        ? "Your booking is discounted, so every marketing post needs “Sponsored by Arbor Live” or “[Your group] x Arbor Live presents…”, and a tag or link to us."
+        : "This quote includes a discount. If you approve it, every marketing post will need to credit Arbor Live as a sponsor.",
+      ctaLabel: "Get the wording and badges",
+      href: BRAND_CREDIT_DISCOUNTED_URL,
+    });
+  }
+
   if (input.needsPoster) {
     steps.push({
       key: "poster",
@@ -234,7 +256,7 @@ export function PublicPortalNextSteps({
       {steps.map((step) => {
         const Icon = step.icon ?? TONE_ICON[step.tone];
         const isAction = step.tone === "action";
-        const compact = !step.body && !(isAction && step.ctaLabel);
+        const compact = !step.body && !(isAction && step.ctaLabel) && !step.href;
         return (
           <Card key={step.key} className={cn("px-4 py-4", isAction && "ring-primary/40")}>
             <div className={cn("flex gap-3", compact ? "items-center" : "items-start")}>
@@ -262,7 +284,19 @@ export function PublicPortalNextSteps({
                 {step.body ? (
                   <p className="mt-1 text-sm/relaxed text-muted-foreground">{step.body}</p>
                 ) : null}
-                {isAction && step.ctaLabel && step.targetTab ? (
+                {step.ctaLabel && step.href ? (
+                  <Button
+                    asChild
+                    className="mt-3"
+                    size="sm"
+                    variant={isAction ? "default" : "outline"}
+                  >
+                    <a href={step.href} target="_blank" rel="noopener noreferrer">
+                      {step.ctaLabel}
+                      <ArrowSquareOutIcon data-icon="inline-end" />
+                    </a>
+                  </Button>
+                ) : isAction && step.ctaLabel && step.targetTab ? (
                   <Button className="mt-3" size="sm" onClick={() => onNavigate(step.targetTab!)}>
                     {step.ctaLabel}
                     <ArrowRightIcon data-icon="inline-end" />
