@@ -38,6 +38,15 @@
   /* Media aspect ratios and the focus-ring width, which the UI repeats. */
   --aspect-poster: 4 / 5;
   --aspect-photo: 4 / 3;
+  /* Published brand colors (/brand). Fixed in both themes: they are the
+     guideline's literal values, shown as swatches and asset backdrops. */
+  --color-brand-ink: #001605;
+  --color-brand-green: #4ba152;
+  /* Construction drawings on /brand: labels, dashed guides, shapes, grid. */
+  --color-brand-sketch-label: #9fd8a5;
+  --color-brand-sketch-guide: rgb(255 255 255 / 0.32);
+  --color-brand-sketch-shape: #f4f4f4;
+  --color-brand-sketch-grid: rgb(255 255 255 / 0.045);
   --aspect-logo: 307 / 408;
   --focus-ring-width: 3px;
   /* The 3px radius on small status dots, and the 3px board-card accent bar. */
