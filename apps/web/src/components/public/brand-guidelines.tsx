@@ -42,6 +42,7 @@ const sections = [
 /** Brand ink on a dark surface: the guideline's own dark green. */
 const DARK_SURFACE = "bg-brand-ink";
 
+/** The /brand page body: an on-page nav, then each guideline section. */
 export function BrandGuidelines() {
   return (
     <div className="mx-auto w-full max-w-6xl px-4 pb-24 sm:px-6 lg:px-8">
@@ -73,6 +74,7 @@ export function BrandGuidelines() {
   );
 }
 
+/** A numbered page section with a title and optional intro. */
 function Section({
   id,
   title,
@@ -107,6 +109,7 @@ const requirementLabel: Record<BrandCreditTier["requirement"], string> = {
   optional: "Optional",
 };
 
+/** How to credit Arbor Live: one card per case, required ones first. */
 function CreditSection() {
   return (
     <Section
@@ -152,6 +155,7 @@ function CreditSection() {
   );
 }
 
+/** One crediting case: when it applies, the copyable wording, and its badges. */
 function CreditTierCard({ tier }: { tier: BrandCreditTier }) {
   const required = tier.requirement !== "optional";
   return (
@@ -228,6 +232,7 @@ function CreditTierCard({ tier }: { tier: BrandCreditTier }) {
 
 /* ----------------------------------------------------------------- Names */
 
+/** The names of each part of Arbor and when to use them. */
 function NamesSection() {
   return (
     <Section
@@ -251,6 +256,7 @@ function NamesSection() {
 
 /* --------------------------------------------------------------- Assets */
 
+/** A downloadable logo shown on the surface it is meant for. */
 function AssetTile({ asset, aspect }: { asset: BrandAsset; aspect: string }) {
   const dark = asset.surface === "dark";
   return (
@@ -285,6 +291,7 @@ function AssetTile({ asset, aspect }: { asset: BrandAsset; aspect: string }) {
   );
 }
 
+/** Wordmark downloads, construction, usage rules and examples. */
 function WordmarkSection() {
   return (
     <Section
@@ -349,6 +356,7 @@ function WordmarkSection() {
   );
 }
 
+/** Logomark variants and their construction. */
 function LogomarkSection() {
   return (
     <Section
@@ -369,6 +377,7 @@ function LogomarkSection() {
 
 /* ---------------------------------------------------------------- Color */
 
+/** A brand color swatch with its name and a copyable hex code. */
 function Swatch({ color }: { color: BrandColor }) {
   return (
     <div className="flex flex-col">
@@ -377,7 +386,7 @@ function Swatch({ color }: { color: BrandColor }) {
         style={{ backgroundColor: color.hex }}
         aria-hidden
       />
-      <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-sm">
         <span>{color.name}</span>
         <BrandCopyButton value={color.hex} className="font-mono text-xs text-muted-foreground" />
       </div>
@@ -385,6 +394,7 @@ function Swatch({ color }: { color: BrandColor }) {
   );
 }
 
+/** Brand colors for light and dark backgrounds, gradients and the typeface. */
 function ColorSection() {
   return (
     <Section id="color" title="Color & type">
@@ -441,6 +451,7 @@ function ColorSection() {
 
 /* ------------------------------------------------------------ Wallpaper */
 
+/** The brand wallpaper with a download link. */
 function WallpaperSection() {
   return (
     <Section id="wallpaper" title="Wallpaper">
@@ -462,6 +473,7 @@ function WallpaperSection() {
   );
 }
 
+/** Hero buttons: download the brand kit, open the Figma file. */
 export function BrandHeroActions() {
   return (
     <>

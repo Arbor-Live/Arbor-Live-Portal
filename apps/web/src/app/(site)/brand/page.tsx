@@ -9,6 +9,7 @@ export const metadata: Metadata = {
     "How to credit Arbor Live on your event, plus our logos, badges, colors and wallpaper to download.",
 };
 
+/** Public brand guidelines for partners and sponsored events. */
 export default function BrandPage() {
   return (
     <PublicMarketingLayout>

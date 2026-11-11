@@ -27,6 +27,7 @@ const WORDMARK_PATHS = [
 
 /* ------------------------------------------------------------ primitives */
 
+/** A faint 20-unit grid, like drafting paper. */
 function GridPattern({ id }: { id: string }) {
   return (
     <defs>
@@ -59,10 +60,12 @@ function VDim({ y1, y2, x, tick = 9 }: { y1: number; y2: number; x: number; tick
   );
 }
 
+/** A dashed construction guide line. */
 function Guide(props: { x1: number; y1: number; x2: number; y2: number }) {
   return <line {...props} stroke={GUIDE} strokeWidth="1.5" strokeDasharray="5 5" />;
 }
 
+/** A monospace annotation label. */
 function Label({
   x,
   y,
@@ -81,6 +84,7 @@ function Label({
   );
 }
 
+/** A dark drawing panel with a caption; scrolls sideways on narrow screens. */
 function Panel({
   label,
   caption,
@@ -115,6 +119,7 @@ function Panel({
 
 /* --------------------------------------------------------------- figures */
 
+/** The logomark annotated with its crown, trunk, neck and overall dimensions. */
 export function LogomarkConstruction() {
   // Mark drawn at 1:1 in its own units, offset into the canvas.
   const ox = 205;
@@ -192,6 +197,7 @@ export function LogomarkConstruction() {
   );
 }
 
+/** The wordmark annotated with cap height, baseline, the O circle and LIVE placement. */
 export function WordmarkConstruction() {
   const ox = 170;
   const oy = 92;
