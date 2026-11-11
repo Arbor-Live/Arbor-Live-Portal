@@ -22,6 +22,7 @@ import { PublicQuoteHistory, PublicQuoteUpdatedBanner } from "./public-quote-his
 import { PublicPaymentProofSection } from "@/components/public/public-payment-proof-section";
 import { PublicPaymentContactsSection } from "@/components/public/public-payment-contacts-section";
 import { PublicQuoteApprovalSection } from "@/components/public/public-quote-approval-section";
+import { PublicSponsorCreditNotice } from "@/components/public/public-sponsor-credit-notice";
 import { PublicQuoteChangeRequestSection } from "@/components/public/public-quote-change-request-section";
 import { PublicQuoteFaq } from "@/components/public/public-quote-faq";
 import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf-download";
@@ -140,6 +141,7 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
     feedbackSubmitted,
     albumShareUrl: feedbackStatus?.albumShareUrl,
     needsPoster,
+    sponsorCredit: Boolean(data.invoice.requiresSponsorCredit),
   });
 
   const tabs: PublicPortalTab[] = [{ id: "next", label: "What's next" }];
@@ -343,6 +345,12 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
               ) : null}
 
               <PublicQuoteHistory revisions={data.revisions} />
+
+              {data.invoice.requiresSponsorCredit ? (
+                <PublicSponsorCreditNotice
+                  approved={data.invoice.clientApprovalStatus === "approved"}
+                />
+              ) : null}
 
               <PublicQuoteApprovalSection
                 invoice={data.invoice}

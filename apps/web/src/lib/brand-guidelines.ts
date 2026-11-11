@@ -7,6 +7,8 @@
 export const BRAND_FIGMA_URL =
   "https://www.figma.com/design/nstDrBW0vuop4VkbkcmDn6/Arbor-Live?node-id=0-1";
 export const BRAND_KIT_URL = "/brand/arbor-live-brand-kit.zip";
+/** The required "Discounted crew events" card on /brand. */
+export const BRAND_CREDIT_DISCOUNTED_URL = "/brand#credit-discounted";
 export const BRAND_INSTAGRAM_HANDLE = "@thearborstanford";
 export const BRAND_INSTAGRAM_URL = "https://instagram.com/thearborstanford";
 

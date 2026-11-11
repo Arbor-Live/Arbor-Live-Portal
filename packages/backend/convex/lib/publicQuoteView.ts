@@ -45,6 +45,15 @@ function resolveInvoiceTermsIds(invoice: Doc<"invoices">): Id<"invoiceTerms">[] 
   return [];
 }
 
+/**
+ * The "Discount Terms" template (any version): ticking it on an invoice means
+ * the host got a discount and must credit Arbor Live in their marketing
+ * ("Sponsored by Arbor Live"). The portal links them to `/brand`.
+ */
+export function isDiscountTermsLabel(label: string) {
+  return /\bdiscount\s+terms\b/i.test(label);
+}
+
 function combineTermsMarkdown(terms: Doc<"invoiceTerms">[]) {
   if (!terms.length) return "";
   if (terms.length === 1) return terms[0].markdown;
@@ -61,6 +70,7 @@ export async function loadInvoiceTerms(ctx: QueryCtx | MutationCtx, invoice: Doc
     return {
       markdown: fallbackSettings?.termsAndConditionsMarkdown ?? "",
       version: fallbackSettings?.termsVersion ?? "v1",
+      requiresSponsorCredit: false,
     };
   }
 
@@ -72,12 +82,14 @@ export async function loadInvoiceTerms(ctx: QueryCtx | MutationCtx, invoice: Doc
     return {
       markdown: fallbackSettings?.termsAndConditionsMarkdown ?? "",
       version: fallbackSettings?.termsVersion ?? "v1",
+      requiresSponsorCredit: false,
     };
   }
 
   return {
     markdown: combineTermsMarkdown(selectedTerms),
     version: selectedTerms.map((term) => term.version).join(", "),
+    requiresSponsorCredit: selectedTerms.some((term) => isDiscountTermsLabel(term.label)),
   };
 }
 
@@ -86,7 +98,11 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
     .query("invoiceLineItems")
     .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", invoice._id))
     .take(500);
-  const { markdown: globalTermsMarkdown, version: globalTermsVersion } = await loadInvoiceTerms(ctx, invoice);
+  const {
+    markdown: globalTermsMarkdown,
+    version: globalTermsVersion,
+    requiresSponsorCredit,
+  } = await loadInvoiceTerms(ctx, invoice);
   const combinedTermsMarkdown = invoice.additionalTermsMarkdown
     ? `${globalTermsMarkdown}\n\n---\n\n## Additional Terms\n\n${invoice.additionalTermsMarkdown}`
     : globalTermsMarkdown;
@@ -257,6 +273,8 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
       termsVersionAccepted: invoice.termsVersionAccepted,
       termsAcceptedAt: invoice.termsAcceptedAt,
       termsIds: resolveInvoiceTermsIds(invoice),
+      /** "Discount Terms" is ticked: the host must credit Arbor Live (see /brand). */
+      requiresSponsorCredit,
       additionalTermsMarkdown: invoice.additionalTermsMarkdown,
       approvedTotalUsd: invoice.approvedTotalUsd,
       /** Set once staff settle the estimate into the final invoice (after the event). */
