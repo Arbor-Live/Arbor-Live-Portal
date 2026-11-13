@@ -42,7 +42,8 @@ export function RainBlockTag({ chance }: { chance: number | undefined }) {
       className="mr-1 rounded bg-background/80 px-1 py-px align-middle text-2xs font-medium whitespace-nowrap text-status-sky-800 ring-1 ring-border tabular-nums dark:text-status-sky-300"
       data-testid="rain-event-flag"
     >
-      Rain {chance}%
+      <span className="@max-[6rem]:hidden">Rain </span>
+      {chance}%
     </span>
   );
 }
