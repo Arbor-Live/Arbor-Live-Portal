@@ -17,14 +17,29 @@ export const RAIN_TONE = "bg-status-sky-500/15 text-status-sky-800 dark:text-sta
 export function RainDayChip({
   hours,
   dateKey,
+  compact,
   className,
 }: {
   hours: RainHour[] | undefined;
   dateKey: string;
+  /** Narrow day cells have room for a dot only; the chance moves to its label. */
+  compact?: boolean;
   className?: string;
 }) {
   const rain = dayRain(hours, dateKey);
   if (!rain || rain.chance < RAIN_CHANCE_THRESHOLD) return null;
+  if (compact) {
+    const label = `Rain ${rain.chance}%`;
+    return (
+      <span
+        role="img"
+        aria-label={label}
+        title={label}
+        className={cn("inline-block size-1.5 shrink-0 rounded-full bg-status-sky-500", className)}
+        data-testid="rain-day-chip"
+      />
+    );
+  }
   return (
     <span
       className={cn("shrink-0 rounded-md px-1.5 py-0.5 text-2xs whitespace-nowrap tabular-nums", RAIN_TONE, className)}

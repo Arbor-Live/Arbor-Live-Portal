@@ -309,13 +309,13 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
             return (
               <span className="inline-flex items-center gap-1.5">
                 {info.text}
-                <RainDayChip hours={rainHours} dateKey={calendarDateKey(info.date)} />
+                <RainDayChip hours={rainHours} dateKey={calendarDateKey(info.date)} compact={info.isNarrow} />
               </span>
             );
           }}
           dayCellTopContent={(info) => (
             <span className="inline-flex items-center gap-1">
-              <RainDayChip hours={rainHours} dateKey={calendarDateKey(info.date)} />
+              <RainDayChip hours={rainHours} dateKey={calendarDateKey(info.date)} compact={info.isNarrow} />
               {info.dayNumberText}
             </span>
           )}
@@ -342,7 +342,7 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
               const parentTitle = (arg.event.extendedProps.parentTitle as string | undefined) ?? "Event";
               if (compact) {
                 return (
-                  <p className="@container truncate px-1 py-0.5 text-xs font-semibold leading-tight">
+                  <p className="@container min-w-0 flex-1 truncate px-1 py-0.5 text-xs font-semibold leading-tight">
                     {rainTag}
                     <span className="opacity-80">{parentTitle}</span> {arg.event.title}
                     <span className="font-normal opacity-70"> · {arg.timeText}</span>
@@ -381,7 +381,7 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
               : null;
             if (compact) {
               return (
-                <p className="@container truncate px-1 py-0.5 text-xs font-semibold leading-tight">
+                <p className="@container min-w-0 flex-1 truncate px-1 py-0.5 text-xs font-semibold leading-tight">
                   {rainTag}
                   {arg.event.title}
                   <span className="font-normal opacity-70"> · {arg.timeText}</span>
