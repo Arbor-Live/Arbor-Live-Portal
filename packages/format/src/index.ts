@@ -587,3 +587,5 @@ export {
 export * from "./cartCrew";
 
 export * from "./emailSummaryBlock";
+
+export * from "./rainForecast";
