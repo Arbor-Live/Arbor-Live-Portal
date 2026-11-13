@@ -24,6 +24,9 @@ import {
   useEventWorkspace,
 } from "@/components/events/workspace/event-workspace-provider";
 import { EventWorkspaceHeader } from "@/components/events/workspace/event-workspace-header";
+import { EventRainWarning } from "@/components/events/rain-forecast";
+import { useRainForecast } from "@/lib/rain-forecast";
+import { eventRainRisk } from "@arbor/format";
 import { EventWorkspaceNav } from "@/components/events/workspace/event-workspace-nav";
 import { OverviewTab } from "@/components/events/workspace/tabs/overview-tab";
 import { ScheduleCrewTab } from "@/components/events/workspace/tabs/schedule-crew-tab";
@@ -133,6 +136,21 @@ function WorkspaceSaveBar() {
   );
 }
 
+function WorkspaceRainWarning() {
+  const { eventData } = useEventWorkspace();
+  const { hours, now } = useRainForecast();
+  if (!eventData) return null;
+  return (
+    <EventRainWarning
+      risk={eventRainRisk(
+        { ...eventData.event, venueKind: eventData.venueKind, blocks: eventData.blocks },
+        hours,
+        now,
+      )}
+    />
+  );
+}
+
 function WorkspaceBody() {
   const { eventData, readOnly, activeTab } = useEventWorkspace();
 
@@ -161,6 +179,7 @@ function WorkspaceBody() {
   return (
     <div className="space-y-4 pb-24" data-testid="event-workspace">
       <EventWorkspaceHeader />
+      <WorkspaceRainWarning />
       {readOnly ? (
         <Alert>
           <WarningCircleIcon className="size-4" />

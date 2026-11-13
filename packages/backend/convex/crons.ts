@@ -110,4 +110,11 @@ crons.interval(
   {},
 );
 
+crons.interval(
+  "refresh rain forecast",
+  { hours: 1 },
+  internal.weather.refresh,
+  {},
+);
+
 export default crons;

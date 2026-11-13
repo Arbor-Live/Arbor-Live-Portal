@@ -64,4 +64,5 @@ export const notificationTemplateValue = v.union(
   emailTemplateValue,
   v.literal("app_install"),
   v.literal("booking_email_received"),
+  v.literal("rain_forecast"),
 );

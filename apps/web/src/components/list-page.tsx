@@ -169,6 +169,7 @@ const FLAG_TONE = {
   emerald: "bg-status-emerald-500/15 text-status-emerald-800 dark:text-status-emerald-200",
   amber: "bg-status-amber-500/15 text-status-amber-800 dark:text-status-amber-200",
   rose: "bg-status-rose-500/15 text-status-rose-800 dark:text-status-rose-200",
+  sky: "bg-status-sky-500/15 text-status-sky-800 dark:text-status-sky-300",
   neutral: "bg-muted text-muted-foreground",
 } as const;
 

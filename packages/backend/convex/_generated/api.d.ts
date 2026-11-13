@@ -245,6 +245,7 @@ import type * as lib_marketingLinks from "../lib/marketingLinks.js";
 import type * as lib_myEventActions from "../lib/myEventActions.js";
 import type * as lib_newsletterWeek from "../lib/newsletterWeek.js";
 import type * as lib_normalizeCrewLineLabel from "../lib/normalizeCrewLineLabel.js";
+import type * as lib_nwsForecast from "../lib/nwsForecast.js";
 import type * as lib_onboardingLinks from "../lib/onboardingLinks.js";
 import type * as lib_openMicAddon from "../lib/openMicAddon.js";
 import type * as lib_orgMembership from "../lib/orgMembership.js";
@@ -264,6 +265,7 @@ import type * as lib_publicQuoteView from "../lib/publicQuoteView.js";
 import type * as lib_publicReferenceIds from "../lib/publicReferenceIds.js";
 import type * as lib_publicSlug from "../lib/publicSlug.js";
 import type * as lib_r2Lifecycle from "../lib/r2Lifecycle.js";
+import type * as lib_rainAlerts from "../lib/rainAlerts.js";
 import type * as lib_rentalFulfillment from "../lib/rentalFulfillment.js";
 import type * as lib_requestToken from "../lib/requestToken.js";
 import type * as lib_riderSchema from "../lib/riderSchema.js";
@@ -342,6 +344,7 @@ import type * as userCards from "../userCards.js";
 import type * as userInvites from "../userInvites.js";
 import type * as users from "../users.js";
 import type * as venues from "../venues.js";
+import type * as weather from "../weather.js";
 import type * as weeklyJobs from "../weeklyJobs.js";
 
 import type {
@@ -588,6 +591,7 @@ declare const fullApi: ApiFromModules<{
   "lib/myEventActions": typeof lib_myEventActions;
   "lib/newsletterWeek": typeof lib_newsletterWeek;
   "lib/normalizeCrewLineLabel": typeof lib_normalizeCrewLineLabel;
+  "lib/nwsForecast": typeof lib_nwsForecast;
   "lib/onboardingLinks": typeof lib_onboardingLinks;
   "lib/openMicAddon": typeof lib_openMicAddon;
   "lib/orgMembership": typeof lib_orgMembership;
@@ -607,6 +611,7 @@ declare const fullApi: ApiFromModules<{
   "lib/publicReferenceIds": typeof lib_publicReferenceIds;
   "lib/publicSlug": typeof lib_publicSlug;
   "lib/r2Lifecycle": typeof lib_r2Lifecycle;
+  "lib/rainAlerts": typeof lib_rainAlerts;
   "lib/rentalFulfillment": typeof lib_rentalFulfillment;
   "lib/requestToken": typeof lib_requestToken;
   "lib/riderSchema": typeof lib_riderSchema;
@@ -685,6 +690,7 @@ declare const fullApi: ApiFromModules<{
   userInvites: typeof userInvites;
   users: typeof users;
   venues: typeof venues;
+  weather: typeof weather;
   weeklyJobs: typeof weeklyJobs;
 }>;
 

@@ -9,7 +9,10 @@ import {
   PlusIcon,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
+import { RAIN_TONE, RainDayChip } from "@/components/events/rain-forecast";
+import { useRainForecast } from "@/lib/rain-forecast";
 import { cn } from "@/lib/utils";
+import { eventRainRisk, rainFlagText } from "@arbor/format";
 import { normalizeEventStatus, formatEventStatusLabel } from "@/lib/event-status";
 import {
   PORTAL_TIMEZONE,
@@ -26,6 +29,7 @@ type DashboardEvent = {
   status: string;
   eventType?: string;
   venueName?: string;
+  venueKind?: string;
   teamsInterested?: string[];
   assignedCrewCount?: number;
   startAt: number;
@@ -34,6 +38,7 @@ type DashboardEvent = {
     setupAt?: number;
     showAt?: number;
     strikeAt?: number;
+    blocks?: Array<{ blockType: string; startsAt: number; endsAt: number }>;
   };
 };
 
@@ -201,6 +206,8 @@ function EventBoardCard({
   showTime?: boolean;
 }) {
   const status = normalizeEventStatus(event.status);
+  const { hours, now: rainNow } = useRainForecast();
+  const rain = eventRainRisk({ ...event, blocks: event.scheduleSummary?.blocks }, hours, rainNow);
   const tags = [
     event.eventType,
     ...(event.teamsInterested ?? []).slice(0, 3),
@@ -238,6 +245,14 @@ function EventBoardCard({
             </p>
           ) : null}
           <div className="flex flex-wrap gap-1 pt-0.5">
+            {rain ? (
+              <span
+                className={cn("rounded px-1.5 py-0.5 text-3xs font-medium", RAIN_TONE)}
+                data-testid="rain-event-flag"
+              >
+                {rainFlagText(rain.phases)}
+              </span>
+            ) : null}
             <span className="rounded px-1.5 py-0.5 text-3xs font-medium bg-muted text-muted-foreground">
               {formatEventStatusLabel(status)}
             </span>
@@ -348,6 +363,7 @@ function formatWeekRangeLabel(weekDayKeys: string[]) {
 }
 
 export function EventsBoardView({ events }: { events: DashboardEvent[] }) {
+  const { hours: rainHours } = useRainForecast();
   const [now] = useState(() => Date.now());
   const todayKey = pacificDateKey(now);
   const [weekAnchorKey, setWeekAnchorKey] = useState(() => weekStartKeyFromAnchor(now));
@@ -514,6 +530,7 @@ export function EventsBoardView({ events }: { events: DashboardEvent[] }) {
                         {header.day}
                       </p>
                     </div>
+                    <RainDayChip hours={rainHours} dateKey={key} className="ml-auto" />
                     <Button
                       asChild
                       variant="ghost"

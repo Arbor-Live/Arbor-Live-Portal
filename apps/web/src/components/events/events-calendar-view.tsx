@@ -12,8 +12,16 @@ import type { EventDisplayInfo, EventInput } from "@fullcalendar/react";
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
+import { RainBlockTag, RainDayChip } from "@/components/events/rain-forecast";
 import { normalizeEventStatus } from "@/lib/event-status";
 import { PORTAL_TIMEZONE, quarterWeek } from "@/lib/format";
+import { useRainForecast } from "@/lib/rain-forecast";
+import { blockRainRisk, eventRainRisk } from "@arbor/format";
+
+/** FullCalendar v7 hands out Dates whose UTC fields are the Pacific wall day. */
+function calendarDateKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
 
 type DashboardEvent = {
   _id: string;
@@ -21,6 +29,7 @@ type DashboardEvent = {
   status: string;
   eventType?: string;
   venueName?: string;
+  venueKind?: string;
   assignedCrewCount?: number;
   assignedCrew?: Array<{
     userId: string;
@@ -160,7 +169,10 @@ function quarterWeekLabel(date: Date | undefined, fallback: string) {
 export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
   const router = useRouter();
   const [view, setView] = useState<"timeGridWeek" | "dayGridMonth">("timeGridWeek");
+  const { hours: rainHours, now: rainNow } = useRainForecast();
   const calendarEvents = useMemo<EventInput[]>(() => {
+    const eventRainChance = (row: DashboardEvent) =>
+      eventRainRisk({ ...row, blocks: row.scheduleSummary?.blocks }, rainHours, rainNow)?.chance;
     // Month cells only fit one chip per event; the week view has room to expand
     // each event into its setup/show/strike blocks.
     if (view === "dayGridMonth") {
@@ -179,6 +191,7 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
             assignedCrewCount: row.assignedCrewCount ?? 0,
             assignedCrew: row.assignedCrew ?? [],
             isBlockEvent: false,
+            rainChance: eventRainChance(row),
           },
         };
       });
@@ -205,6 +218,7 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
             strikeAt: row.scheduleSummary?.strikeAt,
             blocks: [],
             isBlockEvent: false,
+            rainChance: eventRainChance(row),
           },
         };
         return [fallbackEvent];
@@ -226,12 +240,13 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
             assignedCrewCount: row.assignedCrewCount ?? 0,
             assignedCrew: row.assignedCrew ?? [],
             isBlockEvent: true,
+            rainChance: blockRainRisk(block, row.venueKind, rainHours, rainNow)?.chance,
           },
         };
         return blockEvent;
       });
     });
-  }, [events, view]);
+  }, [events, view, rainHours, rainNow]);
 
   return (
     <div className="space-y-3">
@@ -289,6 +304,21 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
           slotHeaderClass="text-xs opacity-85"
           height="auto"
           events={calendarEvents}
+          dayHeaderContent={(info) => {
+            if (info.view.type === "dayGridMonth") return info.text;
+            return (
+              <span className="inline-flex items-center gap-1.5">
+                {info.text}
+                <RainDayChip hours={rainHours} dateKey={calendarDateKey(info.date)} compact={info.isNarrow} />
+              </span>
+            );
+          }}
+          dayCellTopContent={(info) => (
+            <span className="inline-flex items-center gap-1">
+              <RainDayChip hours={rainHours} dateKey={calendarDateKey(info.date)} compact={info.isNarrow} />
+              {info.dayNumberText}
+            </span>
+          )}
           eventClick={(arg) =>
             router.push(
               `/dashboard/events/${(arg.event.extendedProps.parentEventId as string | undefined) ?? arg.event.id}`,
@@ -306,12 +336,14 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
             const venueName = (arg.event.extendedProps.venueName as string | undefined) ?? "";
             // Month cells are one line per event; the week view has room for detail.
             const compact = arg.view.type === "dayGridMonth" || Boolean(arg.isShort || arg.isNarrow);
+            const rainTag = <RainBlockTag chance={arg.event.extendedProps.rainChance as number | undefined} />;
 
             if (isBlockEvent) {
               const parentTitle = (arg.event.extendedProps.parentTitle as string | undefined) ?? "Event";
               if (compact) {
                 return (
-                  <p className="truncate px-1 py-0.5 text-xs font-semibold leading-tight">
+                  <p className="@container min-w-0 flex-1 truncate px-1 py-0.5 text-xs font-semibold leading-tight">
+                    {rainTag}
                     <span className="opacity-80">{parentTitle}</span> {arg.event.title}
                     <span className="font-normal opacity-70"> · {arg.timeText}</span>
                   </p>
@@ -320,6 +352,7 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
               return (
                 <div className="@container overflow-hidden space-y-0.5 px-1 py-0.5">
                   <p className="text-xs font-semibold leading-tight break-words whitespace-normal">
+                    {rainTag}
                     <span className="opacity-80">{parentTitle}</span> {arg.event.title}
                   </p>
                   <p className="truncate text-2xs leading-tight opacity-90 @max-[5rem]:hidden">{arg.timeText}</p>
@@ -348,7 +381,8 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
               : null;
             if (compact) {
               return (
-                <p className="truncate px-1 py-0.5 text-xs font-semibold leading-tight">
+                <p className="@container min-w-0 flex-1 truncate px-1 py-0.5 text-xs font-semibold leading-tight">
+                  {rainTag}
                   {arg.event.title}
                   <span className="font-normal opacity-70"> · {arg.timeText}</span>
                 </p>
@@ -356,7 +390,10 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
             }
             return (
               <div className="@container overflow-hidden space-y-0.5 px-1 py-0.5">
-                <p className="line-clamp-2 text-xs font-semibold leading-tight">{arg.event.title}</p>
+                <p className="line-clamp-2 text-xs font-semibold leading-tight">
+                  {rainTag}
+                  {arg.event.title}
+                </p>
                 <p className="truncate text-2xs leading-tight opacity-90 @max-[5rem]:hidden">{arg.timeText}</p>
                 {setup ? (
                   <p className="text-2xs leading-tight opacity-90">

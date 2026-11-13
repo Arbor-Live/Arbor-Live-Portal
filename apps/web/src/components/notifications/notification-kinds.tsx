@@ -4,6 +4,7 @@ import {
   CalendarXIcon,
   ChatCircleIcon,
   ClipboardTextIcon,
+  CloudRainIcon,
   CurrencyDollarIcon,
   DeviceMobileIcon,
   EnvelopeSimpleIcon,
@@ -54,6 +55,7 @@ const TEMPLATE_ICONS: Record<string, Icon> = {
   equipment_borrow_request_decided: PackageIcon,
   damage_report_admin: WarningIcon,
   booking_email_received: EnvelopeSimpleIcon,
+  rain_forecast: CloudRainIcon,
   app_install: DeviceMobileIcon,
 };
 
