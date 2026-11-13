@@ -342,7 +342,7 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
               const parentTitle = (arg.event.extendedProps.parentTitle as string | undefined) ?? "Event";
               if (compact) {
                 return (
-                  <p className="truncate px-1 py-0.5 text-xs font-semibold leading-tight">
+                  <p className="@container truncate px-1 py-0.5 text-xs font-semibold leading-tight">
                     {rainTag}
                     <span className="opacity-80">{parentTitle}</span> {arg.event.title}
                     <span className="font-normal opacity-70"> · {arg.timeText}</span>
@@ -381,7 +381,7 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
               : null;
             if (compact) {
               return (
-                <p className="truncate px-1 py-0.5 text-xs font-semibold leading-tight">
+                <p className="@container truncate px-1 py-0.5 text-xs font-semibold leading-tight">
                   {rainTag}
                   {arg.event.title}
                   <span className="font-normal opacity-70"> · {arg.timeText}</span>
