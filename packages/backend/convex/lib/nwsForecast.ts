@@ -24,7 +24,11 @@ export function parseNwsHourly(body: unknown): ParsedForecast {
     if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
       return fail(`period ${index} has no valid startTime/endTime`);
     }
-    const value = row?.probabilityOfPrecipitation?.value ?? 0;
+    const precipitation = row?.probabilityOfPrecipitation;
+    if (!precipitation || typeof precipitation !== "object" || !("value" in precipitation)) {
+      return fail(`period ${index} has no probabilityOfPrecipitation.value`);
+    }
+    const value = precipitation.value ?? 0;
     if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100) {
       return fail(`period ${index} has probabilityOfPrecipitation ${JSON.stringify(value)}, expected 0-100 or null`);
     }

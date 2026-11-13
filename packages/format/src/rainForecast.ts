@@ -52,16 +52,20 @@ export function rainPhaseOf(blockType: string): RainPhase {
   return "show";
 }
 
-/** Setup and strike count at any venue. Everything else is the show, which only counts outdoors. */
+/**
+ * Setup and strike count at any venue. Everything else is the show, which only counts outdoors.
+ * A finished block carries no risk, and a running one is judged on the hours it has left.
+ */
 export function blockRainRisk(
   block: RainRiskBlock,
   venueKind: string | undefined,
   hours: RainHour[] | undefined,
+  now: number,
 ) {
   const phase = rainPhaseOf(block.blockType);
   if (phase === "show" && venueKind !== "outdoor") return undefined;
-  if (!hours?.length) return undefined;
-  const rain = windowRain(hours, block.startsAt, block.endsAt);
+  if (!hours?.length || block.endsAt <= now) return undefined;
+  const rain = windowRain(hours, Math.max(block.startsAt, now), block.endsAt);
   if (!rain || rain.chance < RAIN_CHANCE_THRESHOLD) return undefined;
   return { phase, ...rain };
 }
@@ -81,7 +85,7 @@ export function eventRainRisk(
 
   const byPhase = new Map<RainPhase, PhaseRisk>();
   for (const block of blocks) {
-    const risk = blockRainRisk(block, event.venueKind, hours);
+    const risk = blockRainRisk(block, event.venueKind, hours, now);
     if (!risk) continue;
     const existing = byPhase.get(risk.phase);
     byPhase.set(risk.phase, {

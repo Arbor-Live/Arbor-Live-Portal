@@ -240,8 +240,7 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
             assignedCrewCount: row.assignedCrewCount ?? 0,
             assignedCrew: row.assignedCrew ?? [],
             isBlockEvent: true,
-            rainChance:
-              block.endsAt >= rainNow ? blockRainRisk(block, row.venueKind, rainHours)?.chance : undefined,
+            rainChance: blockRainRisk(block, row.venueKind, rainHours, rainNow)?.chance,
           },
         };
         return blockEvent;

@@ -277,4 +277,15 @@ describe("parseNwsHourly", () => {
     expect(result).toMatchObject({ ok: false });
     expect(!result.ok && result.reason).toContain("period 0");
   });
+
+  it("rejects a period whose probability container is malformed instead of reading it as dry", () => {
+    const period = { startTime: "2026-11-14T09:00:00-08:00", endTime: "2026-11-14T10:00:00-08:00" };
+    for (const probabilityOfPrecipitation of ["invalid", {}, undefined]) {
+      const result = parseNwsHourly({ properties: { periods: [{ ...period, probabilityOfPrecipitation }] } });
+      expect(result).toEqual({ ok: false, reason: "period 0 has no probabilityOfPrecipitation.value" });
+    }
+    expect(
+      parseNwsHourly({ properties: { periods: [{ ...period, probabilityOfPrecipitation: { value: null } }] } }),
+    ).toMatchObject({ ok: true, hours: [{ chance: 0 }] });
+  });
 });

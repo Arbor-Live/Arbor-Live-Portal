@@ -43,6 +43,20 @@ describe("dayRain", () => {
 describe("eventRainRisk", () => {
   const hours = forecast([0, 0, 0, 0, 35, 61, 20, 0, 0, 0]);
 
+  it("drops a finished phase and judges a running one on its remaining hours", () => {
+    const event = {
+      startAt: at(4),
+      endAt: at(7),
+      venueKind: "indoor",
+      blocks: [block("setup", 4, 6), block("strike", 5, 7)],
+    };
+    expect(eventRainRisk(event, hours, at(5))?.phases.map((p) => [p.phase, p.chance])).toEqual([
+      ["setup", 61],
+      ["strike", 61],
+    ]);
+    expect(eventRainRisk(event, hours, at(6))).toBeNull();
+  });
+
   it("flags setup and strike at any venue", () => {
     const event = {
       startAt: at(4),
