@@ -2743,6 +2743,35 @@ export default defineSchema({
     .index("by_status_and_createdAt", ["status", "createdAt"]),
 
   /**
+   * The latest hourly rain forecast, one row per `source` (`nws_stanford`).
+   * `hours` is NWS's 7-day horizon (about 156 entries), replaced on every
+   * good fetch and left alone when a fetch fails.
+   */
+  weatherForecasts: defineTable({
+    source: v.string(),
+    hours: v.array(
+      v.object({
+        startMs: v.number(),
+        endMs: v.number(),
+        /** NWS probabilityOfPrecipitation, 0-100; null counts as 0. */
+        chance: v.number(),
+      }),
+    ),
+    fetchedAt: v.number(),
+  }).index("by_source", ["source"]),
+
+  /**
+   * A rain alert already sent for an event. One row per event and level, so
+   * the notification can only go out once: the check inserts the row in the
+   * same transaction that records the notifications.
+   */
+  eventRainAlerts: defineTable({
+    eventId: v.id("events"),
+    level: v.union(v.literal("chance"), v.literal("likely")),
+    sentAt: v.number(),
+  }).index("by_eventId_and_level", ["eventId", "level"]),
+
+  /**
    * The Ring account behind the admin camera page (one row). Holds the
    * rotating refresh token, so only internal functions may read it.
    */

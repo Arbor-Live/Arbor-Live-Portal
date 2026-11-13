@@ -248,6 +248,42 @@ export async function recordBookingEmailNotification(
   return notificationId;
 }
 
+/** A rain warning for an event. Keyed by event and level, so a replay is a no-op. */
+export async function recordRainForecastNotification(
+  ctx: MutationCtx,
+  args: {
+    userId: string;
+    eventId: Id<"events">;
+    level: "chance" | "likely";
+    title: string;
+    body: string;
+  },
+) {
+  const sourceKey = `rain_forecast:${args.eventId}:${args.level}`;
+  const existing = await ctx.db
+    .query("notifications")
+    .withIndex("by_userId_and_dedupeKey", (q) =>
+      q.eq("userId", args.userId).eq("dedupeKey", sourceKey),
+    )
+    .first();
+  if (existing) return null;
+  const notificationId = await ctx.db.insert("notifications", {
+    userId: args.userId,
+    template: "rain_forecast",
+    status: "delivered",
+    title: args.title,
+    body: args.body,
+    path: `/dashboard/events/${args.eventId}`,
+    eventId: args.eventId,
+    dedupeKey: sourceKey,
+    sourceKey,
+    generation: 1,
+    createdAt: Date.now(),
+  });
+  await schedulePushForNotification(ctx, args.userId, notificationId, "rain_forecast");
+  return notificationId;
+}
+
 /** Publish a pending row and drop the older delivered row it supersedes. */
 export async function deliverPendingNotification(
   ctx: MutationCtx,
