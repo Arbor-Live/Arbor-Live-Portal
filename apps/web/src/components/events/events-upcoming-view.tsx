@@ -7,6 +7,8 @@ import { ListRow } from "@/components/list-row";
 import { Button } from "@/components/ui/button";
 
 import { formatDateTime } from "@/lib/format";
+import { useRainForecast } from "@/lib/rain-forecast";
+import { eventRainRisk, rainFlagText } from "@arbor/format";
 
 type DashboardEvent = {
   _id: string;
@@ -15,6 +17,7 @@ type DashboardEvent = {
   eventType?: string;
   hashingEnabled?: boolean;
   venueName?: string;
+  venueKind?: string;
   assignedCrewCount?: number;
   startAt: number;
   endAt: number;
@@ -26,10 +29,12 @@ type DashboardEvent = {
     setupAt?: number;
     showAt?: number;
     strikeAt?: number;
+    blocks?: Array<{ blockType: string; startsAt: number; endsAt: number }>;
   };
 };
 
 export function EventsUpcomingView({ events }: { events: DashboardEvent[] }) {
+  const { hours, now } = useRainForecast();
   const upcoming = events
     .filter((row) => {
       const lifecycle = getDerivedLifecycleState({ status: row.status, startAt: row.startAt, endAt: row.endAt });
@@ -43,42 +48,50 @@ export function EventsUpcomingView({ events }: { events: DashboardEvent[] }) {
 
   return (
     <RowList testId="events-upcoming-list">
-      {upcoming.map((row) => (
-        <ListRow
-          key={row._id}
-          href={`/dashboard/events/${row._id}`}
-          data-testid={`events-upcoming-row-${row._id}`}
-          actions={
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/dashboard/events/${row._id}`}>Open</Link>
-            </Button>
-          }
-        >
-          <div className="min-w-0 flex-1 space-y-1">
-            <RowText
-              eyebrow={`${formatDateTime(row.startAt)} → ${formatDateTime(row.endAt)}`}
-              title={row.title}
-              detail={[row.eventType, row.venueName].filter(Boolean).join(" · ")}
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <EventStateBadges status={row.status} startAt={row.startAt} endAt={row.endAt} />
-              {row.hashingEnabled ? <RowFlag tone="neutral">Hash</RowFlag> : null}
-              <RowFlag tone="neutral">Crew {row.assignedCrewCount ?? 0}</RowFlag>
-              {row.pullListSummary && row.pullListSummary.totalLines > 0 ? (
-                <RowFlag tone="neutral">
-                  Pull list {row.pullListSummary.totalLines} · {row.pullListSummary.totalPieces} pcs
-                </RowFlag>
-              ) : null}
-              {row.scheduleSummary?.setupAt ? (
-                <RowFlag tone="neutral">Call {formatDateTime(row.scheduleSummary.setupAt)}</RowFlag>
-              ) : null}
-              {row.scheduleSummary?.showAt && !row.hashingEnabled ? (
-                <RowFlag tone="neutral">Show {formatDateTime(row.scheduleSummary.showAt)}</RowFlag>
-              ) : null}
+      {upcoming.map((row) => {
+        const rain = eventRainRisk({ ...row, blocks: row.scheduleSummary?.blocks }, hours, now);
+        return (
+          <ListRow
+            key={row._id}
+            href={`/dashboard/events/${row._id}`}
+            data-testid={`events-upcoming-row-${row._id}`}
+            actions={
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/dashboard/events/${row._id}`}>Open</Link>
+              </Button>
+            }
+          >
+            <div className="min-w-0 flex-1 space-y-1">
+              <RowText
+                eyebrow={`${formatDateTime(row.startAt)} → ${formatDateTime(row.endAt)}`}
+                title={row.title}
+                detail={[row.eventType, row.venueName].filter(Boolean).join(" · ")}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <EventStateBadges status={row.status} startAt={row.startAt} endAt={row.endAt} />
+                {rain ? (
+                  <span data-testid="rain-event-flag">
+                    <RowFlag tone="sky">{rainFlagText(rain.phases)}</RowFlag>
+                  </span>
+                ) : null}
+                {row.hashingEnabled ? <RowFlag tone="neutral">Hash</RowFlag> : null}
+                <RowFlag tone="neutral">Crew {row.assignedCrewCount ?? 0}</RowFlag>
+                {row.pullListSummary && row.pullListSummary.totalLines > 0 ? (
+                  <RowFlag tone="neutral">
+                    Pull list {row.pullListSummary.totalLines} · {row.pullListSummary.totalPieces} pcs
+                  </RowFlag>
+                ) : null}
+                {row.scheduleSummary?.setupAt ? (
+                  <RowFlag tone="neutral">Call {formatDateTime(row.scheduleSummary.setupAt)}</RowFlag>
+                ) : null}
+                {row.scheduleSummary?.showAt && !row.hashingEnabled ? (
+                  <RowFlag tone="neutral">Show {formatDateTime(row.scheduleSummary.showAt)}</RowFlag>
+                ) : null}
+              </div>
             </div>
-          </div>
-        </ListRow>
-      ))}
+          </ListRow>
+        );
+      })}
     </RowList>
   );
 }
