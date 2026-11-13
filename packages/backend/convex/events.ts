@@ -321,6 +321,16 @@ export const listForDashboard = query({
     const userByKey = await findAuthUsersByIds(ctx, allUserIds);
     const imageByUserId = await buildUserProfileImageByUserId(ctx, allUserIds, userByKey);
 
+    const venueKindById = new Map<Id<"venues">, Doc<"venues">["kind"]>();
+    const venueIds = new Set<Id<"venues">>();
+    for (const row of sortedRows) if (row.venueId) venueIds.add(row.venueId);
+    await Promise.all(
+      [...venueIds].map(async (venueId) => {
+        const venue = await ctx.db.get(venueId);
+        if (venue) venueKindById.set(venueId, venue.kind);
+      }),
+    );
+
     const events = sortedRows.map((row, index) => {
       const blocks = perEventBlocks[index] ?? [];
       const shifts = perEventShifts[index] ?? [];
@@ -358,6 +368,7 @@ export const listForDashboard = query({
         (row.occurrenceIndex !== undefined ? row.occurrenceIndex + 1 : undefined);
       return {
         ...row,
+        venueKind: row.venueId ? venueKindById.get(row.venueId) : undefined,
         seriesTitle: seriesInfo?.title,
         occurrenceLabel:
           seriesInfo && occurrenceNumber !== undefined
@@ -401,9 +412,11 @@ export const get = query({
     const canEdit = await canEditEventForUser(ctx, user, event);
 
     const linkedInvoices = await loadLinkedInvoiceSummaries(ctx, event);
+    const venueKind = event.venueId ? (await ctx.db.get(event.venueId))?.kind : undefined;
 
     if (detail === "schedule") {
       return {
+        venueKind,
         canEdit,
         event: { ...event, status: normalizeEventStatus(event.status) },
         linkedInvoices,
@@ -488,6 +501,7 @@ export const get = query({
       artifacts: enrichedArtifacts,
       expenseReports,
       pullListItems: enrichedPullList,
+      venueKind,
     };
   },
 });
