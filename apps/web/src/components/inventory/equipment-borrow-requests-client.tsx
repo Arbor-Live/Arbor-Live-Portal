@@ -60,6 +60,7 @@ type BorrowRequest = {
   requestNumber: string;
   requesterUserId: string;
   requesterName: string;
+  requesterOrganizationName?: string;
   requesterEmail?: string;
   purpose: string;
   venueName?: string;
@@ -131,9 +132,22 @@ function whenBucket(request: BorrowRequest, nowMs: number) {
   return "now";
 }
 
+function requesterLabel(request: BorrowRequest) {
+  return request.requesterOrganizationName
+    ? `${request.requesterName} · ${request.requesterOrganizationName}`
+    : request.requesterName;
+}
+
 function matchesSearch(request: BorrowRequest, needle: string) {
   if (!needle) return true;
-  return [request.requestNumber, request.purpose, request.requesterName, request.venueName, request.notes]
+  return [
+    request.requestNumber,
+    request.purpose,
+    request.requesterName,
+    request.requesterOrganizationName,
+    request.venueName,
+    request.notes,
+  ]
     .concat(request.lines.map((line) => line.label))
     .some((field) => field?.toLowerCase().includes(needle));
 }
@@ -210,7 +224,9 @@ function useRequestActions(): RequestActions {
 
 export function EquipmentBorrowRequestsClient() {
   const shell = useSessionShell();
-  const canReview = shell?.viewer?.isAdmin ?? false;
+  // Reviewing is Arbor-internal: an admin switched into (or previewing) an artist org borrows like the artist.
+  const canReview =
+    (shell?.viewer?.isAdmin ?? false) && shell?.activeOrganization?.organizationType === "arbor_internal";
   const searchParams = useSearchParams();
   const tab = borrowRequestTabFromParam(searchParams.get("tab"), canReview);
   const [formOpen, setFormOpen] = useState(false);
@@ -611,7 +627,7 @@ function RequestList({
                     title={request.purpose}
                     detail={
                       showRequester
-                        ? `${request.requesterName} · ${equipmentSummary(request.lines)}`
+                        ? `${requesterLabel(request)} · ${equipmentSummary(request.lines)}`
                         : equipmentSummary(request.lines)
                     }
                   />
@@ -681,6 +697,9 @@ function RequestSheetBody({
           <SheetField label="Pickup to return">{formatDateTimeRange(request.startAt, request.endAt)}</SheetField>
           {request.venueName ? <SheetField label="Venue">{request.venueName}</SheetField> : null}
           <SheetField label="Requester">{request.requesterName}</SheetField>
+          {request.requesterOrganizationName ? (
+            <SheetField label="Artist">{request.requesterOrganizationName}</SheetField>
+          ) : null}
           {request.notes ? <SheetField label="Notes">{request.notes}</SheetField> : null}
         </SheetFields>
       </SheetSection>

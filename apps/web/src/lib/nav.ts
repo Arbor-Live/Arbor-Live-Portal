@@ -51,6 +51,8 @@ export const navItems: NavItem[] = [
   },
   { title: "Opportunities", url: "/dashboard/opportunities", icon: MusicNotesIcon, bandOnly: true },
   { title: "Media", url: "/dashboard/media", icon: ImagesIcon, bandOnly: true },
+  // Artists get only this Inventory page, as its own entry.
+  { title: "Borrow gear", url: "/dashboard/inventory/borrow-requests", icon: PackageIcon, bandOnly: true },
   { title: "Inventory", url: "/dashboard/inventory", icon: PackageIcon },
   { title: "Marketing", url: "/dashboard/marketing", icon: MegaphoneIcon, marketingOnly: true },
   { title: "Camera", url: "/dashboard/camera", icon: VideoCameraIcon, adminOnly: true },
@@ -145,6 +147,9 @@ export function sectionLabelForPath(
   { isBandContext = false }: { isBandContext?: boolean } = {},
 ): string {
   const section = navItems
+    // Band-only entries can share a path with a staff section (Borrow gear sits
+    // under Inventory); label each viewer with the entry their sidebar shows.
+    .filter((item) => !item.bandOnly || isBandContext)
     .filter((item) =>
       // Home is the dashboard root itself — every page starts with /dashboard.
       item.url === "/dashboard"
