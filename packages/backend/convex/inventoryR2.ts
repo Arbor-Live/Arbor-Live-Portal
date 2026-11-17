@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
-import { requireAdmin, requireArborInternalContext, requireAuth, requireBandContext, requireAnyVerticalOrAdmin, isStaffAdmin } from "./lib/auth";
+import { requireAdmin, requireArborInternalContext, requireAuth, requireBandContext, requireAnyVerticalOrAdmin, requireVerticalOrAdmin, isStaffAdmin } from "./lib/auth";
 import { requireHashingViewer } from "./lib/hashingData";
 import {
   buildBandHeroObjectKey,
@@ -131,7 +131,7 @@ export const generateR2UploadUrl = mutation({
         uploadId,
       });
     } else if (args.scope === "marketing") {
-      await requireAdmin(ctx);
+      await requireVerticalOrAdmin(ctx, "Marketing");
       validateMarketingHeroUploadRequest({
         fileName: args.fileName,
         contentType: args.contentType,

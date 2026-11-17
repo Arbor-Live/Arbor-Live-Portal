@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatStoredR2Asset } from "@/lib/r2-assets";
 import { compressImageToLimit } from "@/lib/image-processing";
 
@@ -143,9 +144,9 @@ export function useR2FileUpload(uploadArgs: R2UploadArgs) {
         draftUploadIdRef.current = createUploadId();
         return formatStoredR2Asset(key);
       } catch (uploadError) {
-        setError(
-          uploadError instanceof Error ? uploadError.message : "Unable to upload file.",
-        );
+        // Strips Convex's "[CONVEX M(...)] Server Error" wrapper and reports
+        // flagged server failures to Sentry instead of swallowing them.
+        setError(getConvexErrorMessage(uploadError, "Unable to upload file."));
         return null;
       } finally {
         setBusy(false);

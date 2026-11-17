@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalQuery, mutation, query } from "./_generated/server";
-import { getUserId, requireAdmin } from "./lib/auth";
+import { getUserId, requireVerticalOrAdmin } from "./lib/auth";
 import { appError, withReportableErrors } from "./lib/errors";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
@@ -39,11 +39,12 @@ function normalizeContentJson(raw: string | undefined) {
 
 const ADMIN_POST_LIST_LIMIT = 200;
 
-export const assertAdminInternal = internalQuery({
+/** Work posts are Marketing-team work; staff admins pass too. */
+export const assertMarketingAccessInternal = internalQuery({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
-    await requireAdmin(ctx);
+    await requireVerticalOrAdmin(ctx, "Marketing");
     return null;
   },
 });
@@ -56,7 +57,7 @@ export const assertAdminInternal = internalQuery({
 export const listAdmin = query({
   args: {},
   handler: async (ctx) => {
-    await requireAdmin(ctx);
+    await requireVerticalOrAdmin(ctx, "Marketing");
     const posts = await ctx.db
       .query("marketingPosts")
       .withIndex("by_updatedAt")
@@ -81,7 +82,7 @@ export const listAdmin = query({
 export const getById = query({
   args: { id: v.id("marketingPosts") },
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireVerticalOrAdmin(ctx, "Marketing");
     const post = await ctx.db.get(args.id);
     if (!post) return null;
     return {
@@ -115,7 +116,7 @@ export const create = mutation({
     publishedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
+    const user = await requireVerticalOrAdmin(ctx, "Marketing");
     return await withReportableErrors("marketingPosts.create", async () => {
     const now = Date.now();
     const title = args.title.trim();
@@ -144,7 +145,7 @@ export const create = mutation({
       published,
       featured: published ? featured : false,
       publishedAt,
-      updatedByUserId: getUserId(admin) || undefined,
+      updatedByUserId: getUserId(user) || undefined,
       createdAt: now,
       updatedAt: now,
     });
@@ -173,7 +174,7 @@ export const update = mutation({
     publishedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
+    const user = await requireVerticalOrAdmin(ctx, "Marketing");
     return await withReportableErrors("marketingPosts.update", async () => {
     const existing = await ctx.db.get(args.id);
     if (!existing) appError("MARKETING_POST_NOT_FOUND", "Post not found.");
@@ -229,7 +230,7 @@ export const update = mutation({
       published,
       featured: published ? featured : false,
       publishedAt,
-      updatedByUserId: getUserId(admin) || undefined,
+      updatedByUserId: getUserId(user) || undefined,
       updatedAt: now,
     });
 
@@ -253,7 +254,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("marketingPosts") },
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireVerticalOrAdmin(ctx, "Marketing");
     return await withReportableErrors("marketingPosts.remove", async () => {
     const existing = await ctx.db.get(args.id);
     if (!existing) appError("MARKETING_POST_NOT_FOUND", "Post not found.");
