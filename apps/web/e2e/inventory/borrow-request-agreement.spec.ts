@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
-import { adminAuthFile, crewAuthFile } from "../helpers/auth";
+import { adminAuthFile, bandAuthFile, crewAuthFile } from "../helpers/auth";
+import { e2eEnv } from "../helpers/env";
 import { pollConvex, runConvex } from "../helpers/convex";
 import { pickSearchableOption } from "../helpers/select";
 
@@ -9,6 +10,7 @@ type BorrowRequestState = {
   convertedEventId: string | null;
   agreementSignedName: string | null;
   agreementTermKeys: string[];
+  requesterOrganizationName: string | null;
 };
 
 const TERM_COUNT = 9;
@@ -92,6 +94,7 @@ test.describe.serial("borrow request loan agreement", () => {
   const stamp = Date.now();
   const typeName = `E2E Borrow Speaker ${stamp}`;
   const crewPurpose = `E2E crew borrow ${stamp}`;
+  const bandPurpose = `E2E band borrow ${stamp}`;
 
   test.beforeAll(() => {
     runConvex("e2eHelpers:seedBorrowableInventoryType", { name: typeName });
@@ -128,6 +131,39 @@ test.describe.serial("borrow request loan agreement", () => {
     });
   });
 
+  test.describe("band", () => {
+    test.use({ storageState: bandAuthFile });
+
+    test("an artist borrows gear from their own sidebar entry", async ({ page }) => {
+      test.setTimeout(120_000);
+      await page.goto("/dashboard");
+      await page.getByRole("link", { name: "Borrow gear" }).click();
+      await expect(page).toHaveURL(/\/dashboard\/inventory\/borrow-requests/);
+      await expect(page.getByRole("heading", { name: "Borrow requests" })).toBeVisible({
+        timeout: 25_000,
+      });
+      // Artists can't review, so they land on their own requests.
+      await expect(page.getByTestId("borrow-requests-mine")).toBeVisible({ timeout: 25_000 });
+
+      await submitBorrowRequest(page, {
+        purpose: bandPurpose,
+        typeName,
+        signedName: "Bailey Band",
+      });
+      await expect(page.getByTestId("borrow-requests-mine").getByText(bandPurpose)).toBeVisible({
+        timeout: 20_000,
+      });
+
+      const request = await pollConvex<BorrowRequestState>(
+        "e2eHelpers:getLatestBorrowRequestByPurpose",
+        { purpose: bandPurpose },
+        (row) => row?.status === "submitted",
+      );
+      expect(request.agreementSignedName).toBe("Bailey Band");
+      expect(request.requesterOrganizationName).toBe(e2eEnv.bandOrgName);
+    });
+  });
+
   test.describe("admin", () => {
     test.use({ storageState: adminAuthFile });
 
@@ -160,6 +196,22 @@ test.describe.serial("borrow request loan agreement", () => {
         (row) => row?.status === "approved",
       );
       expect(request.convertedEventId).not.toBeNull();
+    });
+
+    test("admin sees which act an artist's request is for", async ({ page }) => {
+      test.setTimeout(120_000);
+      await page.goto("/dashboard/inventory/borrow-requests");
+      const row = page
+        .getByTestId("borrow-requests-review")
+        .locator('[data-testid^="borrow-request-row-"]')
+        .filter({ hasText: bandPurpose })
+        .first();
+      await expect(row).toBeVisible({ timeout: 25_000 });
+      await expect(row).toContainText(e2eEnv.bandOrgName);
+
+      await row.getByText(bandPurpose).click();
+      const sheet = page.getByTestId("borrow-request-sheet");
+      await expect(sheet.getByText(e2eEnv.bandOrgName)).toBeVisible();
     });
   });
 });
