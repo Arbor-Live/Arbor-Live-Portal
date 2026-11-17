@@ -413,7 +413,7 @@ export const assignPosterDesigner = mutation({
   handler: async (ctx, args) => {
     const user = await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
     const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
+    if (!event) appError("MARKETING_DESIGN_EVENT_NOT_FOUND", "This event no longer exists.");
     const assigneeUserId = args.assigneeUserId?.trim() || undefined;
     const designId = await upsertPosterAssignment(ctx, args.eventId, assigneeUserId, getUserId(user));
     return { designId };
@@ -432,7 +432,7 @@ export const upsertForEvent = mutation({
   handler: async (ctx, args) => {
     const user = await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
     const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
+    if (!event) appError("MARKETING_DESIGN_EVENT_NOT_FOUND", "This event no longer exists.");
 
     const hasImage = args.imageUrl !== undefined;
     const hasCaption = args.caption !== undefined;
@@ -440,7 +440,7 @@ export const upsertForEvent = mutation({
     const hasCohost = args.partifulCohostUrl !== undefined;
     const hasAssignee = args.assigneeUserId !== undefined;
     if (!hasImage && !hasCaption && !hasLinks && !hasCohost && !hasAssignee) {
-      throw new Error("Nothing to save.");
+      appError("MARKETING_DESIGN_NOTHING_TO_SAVE", "Nothing to save.");
     }
 
     let nextImageUrl: string | undefined;
@@ -537,10 +537,10 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const user = await requireVerticalOrAdmin(ctx, "Marketing");
     const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
+    if (!event) appError("MARKETING_DESIGN_EVENT_NOT_FOUND", "This event no longer exists.");
     const now = Date.now();
     const imageUrl = normalizeOptionalAssetReference(args.imageUrl);
-    if (!imageUrl) throw new Error("Image is required.");
+    if (!imageUrl) appError("MARKETING_DESIGN_IMAGE_REQUIRED", "Upload a poster image first.");
     const nextLinks = normalizeMarketingLinks(args.additionalLinks);
     const hasPartiful = linksIncludePartiful(nextLinks);
 
@@ -601,9 +601,9 @@ export const update = mutation({
   handler: async (ctx, args) => {
     await requireVerticalOrAdmin(ctx, "Marketing");
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Design not found.");
+    if (!existing) appError("MARKETING_DESIGN_NOT_FOUND", "This poster no longer exists.");
     if (existing.status === "published") {
-      throw new Error("Published designs cannot be edited.");
+      appError("MARKETING_DESIGN_PUBLISHED", "A published poster can't be edited.");
     }
     const nextImageUrl =
       args.imageUrl === undefined
