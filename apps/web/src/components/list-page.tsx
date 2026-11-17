@@ -338,9 +338,19 @@ export function SheetField({ label, children }: { label: string; children: React
 }
 
 /** The panel's bottom bar: destructive actions left, the final action right. */
-export function DetailSheetFooter({ start, children }: { start?: React.ReactNode; children?: React.ReactNode }) {
+export function DetailSheetFooter({
+  start,
+  note,
+  children,
+}: {
+  start?: React.ReactNode;
+  /** A line above the actions, such as why one is disabled. */
+  note?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
   return (
     <SheetFooter className="sticky bottom-0 mt-auto flex-row flex-wrap items-center justify-between border-t bg-popover">
+      {note ? <p className="basis-full text-xs text-muted-foreground">{note}</p> : null}
       {start ?? <span />}
       <div className="flex flex-wrap items-center gap-2">{children}</div>
     </SheetFooter>

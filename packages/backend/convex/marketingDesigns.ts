@@ -3,7 +3,7 @@ import { internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { getUserId, requireAnyVerticalOrAdmin, requireArborInternalContext, requireVerticalOrAdmin, findAuthUsersByIds } from "./lib/auth";
+import { getUserId, hasVerticalOrAdmin, requireAnyVerticalOrAdmin, requireArborInternalContext, requireAuth, requireVerticalOrAdmin, findAuthUsersByIds } from "./lib/auth";
 import { SITE_URL } from "./email/constants";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { normalizeEventVisibility } from "./lib/eventVisibility";
@@ -34,6 +34,7 @@ import { resolveStoredR2AssetUrl } from "./inventoryR2";
 import { getEventArtists } from "./lib/eventArtists";
 import { listFilter, matchesListFilter } from "./lib/listFilters";
 import { resolveEffectiveVenueAddress } from "./lib/venues";
+import { appError } from "./lib/errors";
 
 const MARKETING_POSTER_WINDOW_DAYS = 28;
 
@@ -55,6 +56,29 @@ function isMarketingPosterEligible(event: Doc<"events">, now: number): boolean {
   if (!isMarketingPosterWorkVisibility(event.visibility)) return false;
   if (normalizeEventStatus(event.status) === "cancelled") return false;
   return isWithinDays(event.startAt, now, MARKETING_POSTER_WINDOW_DAYS);
+}
+
+/**
+ * Why this viewer can't publish the poster for this event, or null when they
+ * can. Both screens offer Publish from this, and `markReady` refuses with the
+ * same words, so the button and the server never disagree.
+ */
+function posterPublishBlocker(event: Doc<"events">, viewerMayPublish: boolean): string | null {
+  if (!viewerMayPublish) return "Only the Marketing team can publish posters.";
+  if (!canPublishMarketingDesignVisibility(event.visibility)) {
+    return "The event must be public before its poster can be published.";
+  }
+  if (!isPublicListableEventStatus(event.status)) {
+    return normalizeEventStatus(event.status) === "tentative"
+      ? "The event is still tentative. Its poster can be published once the event is confirmed."
+      : "Only confirmed, non-cancelled events can have their poster published.";
+  }
+  return null;
+}
+
+function publishFields(event: Doc<"events">, viewerMayPublish: boolean) {
+  const publishBlockedReason = posterPublishBlocker(event, viewerMayPublish);
+  return { canPublish: publishBlockedReason === null, publishBlockedReason };
 }
 
 function userDisplayName(userByKey: Map<string, AuthUserRecord>, userId: string | undefined) {
@@ -203,6 +227,7 @@ export const listUpcomingPosterWork = query({
   handler: async (ctx, args) => {
     const user = await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
     const currentUserId = getUserId(user);
+    const viewerMayPublish = await hasVerticalOrAdmin(ctx, user, "Marketing");
     const windowEnd = args.now + MARKETING_POSTER_WINDOW_DAYS * 24 * 60 * 60 * 1000;
     const events = await ctx.db
       .query("events")
@@ -250,7 +275,7 @@ export const listUpcomingPosterWork = query({
           assigneeUserId,
           assigneeName: userDisplayName(userByKey, assigneeUserId ?? undefined),
           posterStatus: posterStatusOf(design),
-          canPublish: canPublishMarketingDesignVisibility(event.visibility),
+          ...publishFields(event, viewerMayPublish),
           design: design
             ? {
                 _id: design._id,
@@ -325,8 +350,10 @@ export const getForEvent = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
+    const user = await requireAuth(ctx);
     const event = await ctx.db.get(args.eventId);
     if (!event) return null;
+    const viewerMayPublish = await hasVerticalOrAdmin(ctx, user, "Marketing");
     const design = (
       await ctx.db
         .query("eventMarketingDesigns")
@@ -352,7 +379,7 @@ export const getForEvent = query({
         publishedAt: null as number | null,
         lastError: null as string | null,
         publicEventUrl: buildPublicEventUrl(String(event._id), SITE_URL),
-        canPublish: canPublishMarketingDesignVisibility(event.visibility),
+        ...publishFields(event, viewerMayPublish),
       };
     }
     const userByKey = await findAuthUsersByIds(
@@ -377,7 +404,7 @@ export const getForEvent = query({
       publishedAt: design.publishedAt ?? null,
       lastError: design.lastError ?? null,
       publicEventUrl: buildPublicEventUrl(String(event._id), SITE_URL),
-      canPublish: canPublishMarketingDesignVisibility(event.visibility),
+      ...publishFields(event, viewerMayPublish),
     };
   },
 });
@@ -390,7 +417,7 @@ export const assignPosterDesigner = mutation({
   handler: async (ctx, args) => {
     const user = await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
     const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
+    if (!event) appError("MARKETING_DESIGN_EVENT_NOT_FOUND", "This event no longer exists.");
     const assigneeUserId = args.assigneeUserId?.trim() || undefined;
     const designId = await upsertPosterAssignment(ctx, args.eventId, assigneeUserId, getUserId(user));
     return { designId };
@@ -409,7 +436,7 @@ export const upsertForEvent = mutation({
   handler: async (ctx, args) => {
     const user = await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
     const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
+    if (!event) appError("MARKETING_DESIGN_EVENT_NOT_FOUND", "This event no longer exists.");
 
     const hasImage = args.imageUrl !== undefined;
     const hasCaption = args.caption !== undefined;
@@ -417,7 +444,7 @@ export const upsertForEvent = mutation({
     const hasCohost = args.partifulCohostUrl !== undefined;
     const hasAssignee = args.assigneeUserId !== undefined;
     if (!hasImage && !hasCaption && !hasLinks && !hasCohost && !hasAssignee) {
-      throw new Error("Nothing to save.");
+      appError("MARKETING_DESIGN_NOTHING_TO_SAVE", "Nothing to save.");
     }
 
     let nextImageUrl: string | undefined;
@@ -514,10 +541,10 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const user = await requireVerticalOrAdmin(ctx, "Marketing");
     const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
+    if (!event) appError("MARKETING_DESIGN_EVENT_NOT_FOUND", "This event no longer exists.");
     const now = Date.now();
     const imageUrl = normalizeOptionalAssetReference(args.imageUrl);
-    if (!imageUrl) throw new Error("Image is required.");
+    if (!imageUrl) appError("MARKETING_DESIGN_IMAGE_REQUIRED", "Upload a poster image first.");
     const nextLinks = normalizeMarketingLinks(args.additionalLinks);
     const hasPartiful = linksIncludePartiful(nextLinks);
 
@@ -578,9 +605,9 @@ export const update = mutation({
   handler: async (ctx, args) => {
     await requireVerticalOrAdmin(ctx, "Marketing");
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Design not found.");
+    if (!existing) appError("MARKETING_DESIGN_NOT_FOUND", "This poster no longer exists.");
     if (existing.status === "published") {
-      throw new Error("Published designs cannot be edited.");
+      appError("MARKETING_DESIGN_PUBLISHED", "A published poster can't be edited.");
     }
     const nextImageUrl =
       args.imageUrl === undefined
@@ -606,18 +633,22 @@ export const update = mutation({
 export const markReady = mutation({
   args: { id: v.id("eventMarketingDesigns") },
   handler: async (ctx, args) => {
-    await requireVerticalOrAdmin(ctx, "Marketing");
+    const user = await requireAuth(ctx);
+    // appError, not Error: production hides a plain Error's message, which
+    // left designers with a bare "Server Error" on Publish.
+    const viewerMayPublish = await hasVerticalOrAdmin(ctx, user, "Marketing");
+    if (!viewerMayPublish) {
+      appError("MARKETING_DESIGN_NOT_PUBLISHABLE", "Only the Marketing team can publish posters.");
+    }
     const design = await ctx.db.get(args.id);
-    if (!design) throw new Error("Design not found.");
-    if (!design.imageUrl?.trim()) throw new Error("Upload a poster image before publishing.");
+    if (!design) appError("MARKETING_DESIGN_NOT_FOUND", "This poster no longer exists.");
+    if (!design.imageUrl?.trim()) {
+      appError("MARKETING_DESIGN_IMAGE_REQUIRED", "Upload a poster image before publishing.");
+    }
     const event = await ctx.db.get(design.eventId);
-    if (!event) throw new Error("Event not found.");
-    if (!canPublishMarketingDesignVisibility(event.visibility)) {
-      throw new Error("Event must be public before publishing marketing designs.");
-    }
-    if (!isPublicListableEventStatus(event.status)) {
-      throw new Error("Only non-tentative, non-cancelled events can be published.");
-    }
+    if (!event) appError("MARKETING_DESIGN_EVENT_NOT_FOUND", "This poster's event no longer exists.");
+    const blocker = posterPublishBlocker(event, viewerMayPublish);
+    if (blocker) appError("MARKETING_DESIGN_NOT_PUBLISHABLE", blocker);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

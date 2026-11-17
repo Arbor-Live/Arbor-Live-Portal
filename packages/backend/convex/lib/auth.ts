@@ -441,6 +441,17 @@ export async function getViewerMembership(ctx: AuthCtx) {
   };
 }
 
+/** Staff admins, or members of `vertical`. The non-throwing form of `requireVerticalOrAdmin`. */
+export async function hasVerticalOrAdmin(
+  ctx: AuthCtx,
+  user: AuthUser,
+  vertical: UserVertical,
+): Promise<boolean> {
+  if (await isStaffAdmin(ctx, user)) return true;
+  const profile = await getUserAdminProfile(ctx, getUserId(user));
+  return hasVertical(resolveProfileMembership(profile ?? {}).verticals, vertical);
+}
+
 export async function requireVerticalOrAdmin(
   ctx: AuthCtx,
   vertical: UserVertical,

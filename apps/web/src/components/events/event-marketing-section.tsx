@@ -242,10 +242,8 @@ export function EventMarketingSection({ eventId }: { eventId: Id<"events"> }) {
                 </Button>
                 <PrintPosterButton designId={design.designId} savedImageUrl={design.imageUrl} />
               </div>
-              {!design.canPublish ? (
-                <p className="text-xs text-muted-foreground">
-                  Event visibility must be public before Instagram publish.
-                </p>
+              {design.publishBlockedReason ? (
+                <p className="text-xs text-muted-foreground">{design.publishBlockedReason}</p>
               ) : null}
             </>
           ) : (
