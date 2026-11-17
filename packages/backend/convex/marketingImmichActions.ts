@@ -68,8 +68,8 @@ async function enrichAssetsWithThumbnails(items: ImmichLibraryAsset[]) {
   );
 }
 
-async function assertMarketingImmichAdmin(ctx: ActionCtx) {
-  await ctx.runQuery(internal.marketingPosts.assertAdminInternal, {});
+async function assertMarketingImmichAccess(ctx: ActionCtx) {
+  await ctx.runQuery(internal.marketingPosts.assertMarketingAccessInternal, {});
   if (!isImmichConfigured()) {
     throw new Error("Immich is not configured.");
   }
@@ -85,7 +85,7 @@ export const listAlbums = action({
     nextPage: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
-    await assertMarketingImmichAdmin(ctx);
+    await assertMarketingImmichAccess(ctx);
 
     const page = Math.max(args.page ?? 1, 1);
     const query = args.query?.trim().toLowerCase() ?? "";
@@ -140,7 +140,7 @@ export const browseLibrary = action({
     nextPage: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
-    await assertMarketingImmichAdmin(ctx);
+    await assertMarketingImmichAccess(ctx);
 
     const page = Math.max(args.page ?? 1, 1);
     const takenFrom = args.takenFrom?.trim();
@@ -170,7 +170,7 @@ export const importImage = action({
   },
   returns: v.string(),
   handler: async (ctx, args) => {
-    await assertMarketingImmichAdmin(ctx);
+    await assertMarketingImmichAccess(ctx);
 
     const assetId = args.immichAssetId.trim();
     if (!assetId) throw new Error("Immich asset id is required.");

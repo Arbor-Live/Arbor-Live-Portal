@@ -8,7 +8,7 @@ export const isLibraryAvailable = query({
   returns: v.boolean(),
   handler: async (ctx) => {
     try {
-      await ctx.runQuery(internal.marketingPosts.assertAdminInternal, {});
+      await ctx.runQuery(internal.marketingPosts.assertMarketingAccessInternal, {});
     } catch {
       return false;
     }
