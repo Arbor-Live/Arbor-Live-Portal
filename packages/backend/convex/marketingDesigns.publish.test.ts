@@ -13,7 +13,7 @@ import {
   type Test,
 } from "./test/setup.helpers";
 
-async function designer(t: Test) {
+async function designer(t: Test, verticals: ("Crew" | "Marketing" | "Operations")[] = ["Crew", "Marketing"]) {
   const arbor = await createOrg(t, { type: "arbor_internal" });
   const user = await createUser(t, {});
   await addMembership(t, user._id, arbor.organizationId, "member", true);
@@ -22,7 +22,7 @@ async function designer(t: Test) {
     await ctx.db.insert("userAdminProfiles", {
       userId: user._id,
       status: "active",
-      verticals: ["Crew", "Marketing"],
+      verticals,
       disciplines: ["Design"],
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -97,5 +97,23 @@ describe("publishing a poster", () => {
     await expect(
       marketer.mutation(api.marketingDesigns.markReady, { id: designId }),
     ).resolves.toEqual({ ok: true });
+  });
+
+  test("Operations can edit the poster but are told only Marketing publishes it", async () => {
+    const t = makeTest();
+    const ops = await designer(t, ["Operations"]);
+    const eventId = await publicEvent(t, "ready");
+
+    const sheet = await ops.query(api.marketingDesigns.getForEvent, { eventId });
+    expect(sheet?.canPublish).toBe(false);
+    expect(sheet?.publishBlockedReason).toBe("Only the Marketing team can publish posters.");
+
+    const { designId } = await ops.mutation(api.marketingDesigns.upsertForEvent, {
+      eventId,
+      imageUrl: "https://example.com/poster.jpg",
+    });
+    const data = await errorOf(ops.mutation(api.marketingDesigns.markReady, { id: designId }));
+    expect(data.code).toBe("MARKETING_DESIGN_NOT_PUBLISHABLE");
+    expect(data.message).toBe(sheet?.publishBlockedReason);
   });
 });
