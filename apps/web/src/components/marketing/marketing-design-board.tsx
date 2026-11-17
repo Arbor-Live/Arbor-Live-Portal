@@ -419,7 +419,10 @@ function PosterWorkPanel({
 
       <EventShortLinks eventId={eventId} eventTitle={design.eventTitle} frame="section" />
 
-      <DetailSheetFooter start={<PrintPosterButton designId={design.designId} savedImageUrl={design.imageUrl} />}>
+      <DetailSheetFooter
+        start={<PrintPosterButton designId={design.designId} savedImageUrl={design.imageUrl} />}
+        note={canEditPoster ? design.publishBlockedReason : null}
+      >
         {canEditPoster ? (
           <>
             <Button type="button" variant="outline" disabled={pending !== null} onClick={() => void handleSaveDraft()}>
@@ -428,7 +431,6 @@ function PosterWorkPanel({
             <Button
               type="button"
               disabled={pending !== null || !design.canPublish}
-              title={design.canPublish ? undefined : "The event must be public before it can be published."}
               onClick={() => void handlePublish()}
             >
               {pending === "publish" ? "Publishing…" : "Publish"}

@@ -34,6 +34,7 @@ import { resolveStoredR2AssetUrl } from "./inventoryR2";
 import { getEventArtists } from "./lib/eventArtists";
 import { listFilter, matchesListFilter } from "./lib/listFilters";
 import { resolveEffectiveVenueAddress } from "./lib/venues";
+import { appError } from "./lib/errors";
 
 const MARKETING_POSTER_WINDOW_DAYS = 28;
 
@@ -55,6 +56,28 @@ function isMarketingPosterEligible(event: Doc<"events">, now: number): boolean {
   if (!isMarketingPosterWorkVisibility(event.visibility)) return false;
   if (normalizeEventStatus(event.status) === "cancelled") return false;
   return isWithinDays(event.startAt, now, MARKETING_POSTER_WINDOW_DAYS);
+}
+
+/**
+ * Why a poster for this event can't go public yet, or null when it can. The
+ * board offers Publish from this, and `markReady` refuses with the same words,
+ * so the button and the server never disagree.
+ */
+function posterPublishBlocker(event: Doc<"events">): string | null {
+  if (!canPublishMarketingDesignVisibility(event.visibility)) {
+    return "The event must be public before its poster can be published.";
+  }
+  if (!isPublicListableEventStatus(event.status)) {
+    return normalizeEventStatus(event.status) === "tentative"
+      ? "The event is still tentative. Its poster can be published once the event is confirmed."
+      : "Only confirmed, non-cancelled events can have their poster published.";
+  }
+  return null;
+}
+
+function publishFields(event: Doc<"events">) {
+  const publishBlockedReason = posterPublishBlocker(event);
+  return { canPublish: publishBlockedReason === null, publishBlockedReason };
 }
 
 function userDisplayName(userByKey: Map<string, AuthUserRecord>, userId: string | undefined) {
@@ -250,7 +273,7 @@ export const listUpcomingPosterWork = query({
           assigneeUserId,
           assigneeName: userDisplayName(userByKey, assigneeUserId ?? undefined),
           posterStatus: posterStatusOf(design),
-          canPublish: canPublishMarketingDesignVisibility(event.visibility),
+          ...publishFields(event),
           design: design
             ? {
                 _id: design._id,
@@ -352,7 +375,7 @@ export const getForEvent = query({
         publishedAt: null as number | null,
         lastError: null as string | null,
         publicEventUrl: buildPublicEventUrl(String(event._id), SITE_URL),
-        canPublish: canPublishMarketingDesignVisibility(event.visibility),
+        ...publishFields(event),
       };
     }
     const userByKey = await findAuthUsersByIds(
@@ -377,7 +400,7 @@ export const getForEvent = query({
       publishedAt: design.publishedAt ?? null,
       lastError: design.lastError ?? null,
       publicEventUrl: buildPublicEventUrl(String(event._id), SITE_URL),
-      canPublish: canPublishMarketingDesignVisibility(event.visibility),
+      ...publishFields(event),
     };
   },
 });
@@ -608,16 +631,16 @@ export const markReady = mutation({
   handler: async (ctx, args) => {
     await requireVerticalOrAdmin(ctx, "Marketing");
     const design = await ctx.db.get(args.id);
-    if (!design) throw new Error("Design not found.");
-    if (!design.imageUrl?.trim()) throw new Error("Upload a poster image before publishing.");
+    // appError, not Error: production hides a plain Error's message, which
+    // left designers with a bare "Server Error" on Publish.
+    if (!design) appError("MARKETING_DESIGN_NOT_FOUND", "This poster no longer exists.");
+    if (!design.imageUrl?.trim()) {
+      appError("MARKETING_DESIGN_IMAGE_REQUIRED", "Upload a poster image before publishing.");
+    }
     const event = await ctx.db.get(design.eventId);
-    if (!event) throw new Error("Event not found.");
-    if (!canPublishMarketingDesignVisibility(event.visibility)) {
-      throw new Error("Event must be public before publishing marketing designs.");
-    }
-    if (!isPublicListableEventStatus(event.status)) {
-      throw new Error("Only non-tentative, non-cancelled events can be published.");
-    }
+    if (!event) appError("MARKETING_DESIGN_EVENT_NOT_FOUND", "This poster's event no longer exists.");
+    const blocker = posterPublishBlocker(event);
+    if (blocker) appError("MARKETING_DESIGN_NOT_PUBLISHABLE", blocker);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {
