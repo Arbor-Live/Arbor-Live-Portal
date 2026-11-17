@@ -2360,10 +2360,15 @@ export default defineSchema({
     requesterUserId: v.string(),
     requesterName: v.string(),
     requesterEmail: v.string(),
+    /** The artist org (band / DJ) the request was made for; unset for Arbor staff. */
+    requesterOrganizationId: v.optional(v.string()),
+    requesterOrganizationName: v.optional(v.string()),
     purpose: v.string(),
     /** Venue where the equipment will be used (snapshot of the venue path). */
     venueId: v.optional(v.id("venues")),
     venueName: v.optional(v.string()),
+    /** The requester's answer to "Will the gear be used off campus?"; missing on older rows. */
+    usedOffCampus: v.optional(v.boolean()),
     notes: v.optional(v.string()),
     startAt: v.number(),
     endAt: v.number(),
@@ -2402,6 +2407,14 @@ export default defineSchema({
     .index("by_createdAt", ["createdAt"])
     .index("by_requestNumber", ["requestNumber"])
     .index("by_requesterUserId_and_createdAt", ["requesterUserId", "createdAt"]),
+
+  /** An artist's one-time agreement to the borrowing courtesy terms (`@arbor/format` borrowAgreement). */
+  borrowCourtesyAcceptances: defineTable({
+    userId: v.string(),
+    version: v.string(),
+    organizationId: v.string(),
+    acceptedAt: v.number(),
+  }).index("by_userId_and_version", ["userId", "version"]),
 
   eventMarketingDesigns: defineTable({
     eventId: v.id("events"),

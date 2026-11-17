@@ -12,6 +12,8 @@ type BorrowRequestSummary = Pick<
   | "purpose"
   | "requesterName"
   | "requesterEmail"
+  | "requesterOrganizationName"
+  | "usedOffCampus"
   | "startAt"
   | "endAt"
   | "lines"
@@ -40,6 +42,8 @@ export async function scheduleEquipmentBorrowRequestSubmittedEmail(
       payload: {
         requesterName: request.requesterName,
         requesterEmail: request.requesterEmail,
+        requesterOrganizationName: request.requesterOrganizationName,
+        usedOffCampus: request.usedOffCampus,
         requestNumber: request.requestNumber,
         purpose: request.purpose,
         dateRangeLabel,

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useMutation } from "convex/react";
+import { RadioGroup } from "radix-ui";
 import { ArrowLeftIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,8 @@ import { notify } from "@/lib/notify";
 import { BORROW_AGREEMENT_VERSION, pacificDateTimeInputToMs } from "@/lib/format";
 
 type LineKind = "type" | "package";
+
+const OFF_CAMPUS_REQUIRED = "Say whether the gear will be used off campus.";
 
 type DraftLine = {
   key: string;
@@ -65,6 +68,7 @@ export function EquipmentBorrowRequestForm({
   const [step, setStep] = useState<"details" | "agreement">("details");
   const [purpose, setPurpose] = useState("");
   const [venueId, setVenueId] = useState("");
+  const [usedOffCampus, setUsedOffCampus] = useState<boolean | null>(null);
   const [notes, setNotes] = useState("");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
@@ -80,6 +84,7 @@ export function EquipmentBorrowRequestForm({
     setSignedName("");
     setPurpose("");
     setVenueId("");
+    setUsedOffCampus(null);
     setNotes("");
     setWindowStart("");
     setWindowEnd("");
@@ -108,6 +113,7 @@ export function EquipmentBorrowRequestForm({
     if (startAt == null) return "Pick a pickup date and time.";
     if (endAt == null) return "Pick a return date and time.";
     if (endAt <= startAt) return "Return time must be after the pickup time.";
+    if (usedOffCampus === null) return OFF_CAMPUS_REQUIRED;
     if (lines.length === 0) return "Add at least one piece of equipment.";
     for (const line of lines) {
       if (line.lineKind === "package" && !line.packageId) {
@@ -132,7 +138,7 @@ export function EquipmentBorrowRequestForm({
     const problem = detailsError();
     const startAt = pacificDateTimeInputToMs(windowStart);
     const endAt = pacificDateTimeInputToMs(windowEnd);
-    if (problem || startAt == null || endAt == null) {
+    if (problem || startAt == null || endAt == null || usedOffCampus === null) {
       setError(problem);
       setStep("details");
       return;
@@ -163,6 +169,7 @@ export function EquipmentBorrowRequestForm({
       await submit({
         purpose: purpose.trim(),
         venueId: venueId ? (venueId as Id<"venues">) : undefined,
+        usedOffCampus,
         notes: notes.trim() || undefined,
         startAt,
         endAt,
@@ -253,6 +260,34 @@ export function EquipmentBorrowRequestForm({
                 emptyLabel="No venue"
                 placeholder="Type to search venues…"
               />
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium" id="borrow-off-campus-label">
+                Will the gear be used off campus?
+              </p>
+              <RadioGroup.Root
+                className="inline-flex rounded-md border p-0.5"
+                aria-labelledby="borrow-off-campus-label"
+                value={usedOffCampus === null ? "" : usedOffCampus ? "yes" : "no"}
+                onValueChange={(value) => {
+                  setUsedOffCampus(value === "yes");
+                  setError((current) => (current === OFF_CAMPUS_REQUIRED ? null : current));
+                }}
+              >
+                {[
+                  { value: "no", label: "No, on campus" },
+                  { value: "yes", label: "Yes, off campus" },
+                ].map((option) => (
+                  <RadioGroup.Item
+                    key={option.value}
+                    value={option.value}
+                    className="h-7 rounded-sm px-3 text-xs font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring data-[state=checked]:bg-secondary data-[state=checked]:text-secondary-foreground"
+                  >
+                    {option.label}
+                  </RadioGroup.Item>
+                ))}
+              </RadioGroup.Root>
             </div>
 
             <div className="space-y-2">

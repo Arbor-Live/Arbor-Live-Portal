@@ -3,13 +3,24 @@ import {
   BORROW_AGREEMENT_TERM_KEYS,
   BORROW_AGREEMENT_TERMS,
   BORROW_AGREEMENT_VERSION,
+  BORROW_COURTESY_TERM_KEYS,
+  BORROW_COURTESY_VERSION,
   pacificDateKey,
   PORTAL_TIMEZONE,
 } from "@arbor/format";
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { getUserId, isStaffAdmin, requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
+import {
+  getUserId,
+  isStaffAdmin,
+  requireActiveOrganizationContext,
+  requireAdmin,
+  requireArborInternalContext,
+  requireAuth,
+  type ActiveOrganizationContext,
+} from "./lib/auth";
+import { isArtistOrganizationType } from "./lib/organizationType";
 import { insertPullListItemsFromLines } from "./eventPullLists";
 import { allocateBorrowRequestNumber } from "./lib/publicReferenceIds";
 import { resolveVenueLink } from "./lib/venues";
@@ -44,6 +55,26 @@ export const borrowRequestStatusValue = v.union(
   v.literal("rejected"),
   v.literal("cancelled"),
 );
+
+/**
+ * Arbor staff and artists (bands / DJs) can both ask to borrow gear and follow
+ * their own requests. Reviewing stays Arbor-internal and admin-only.
+ */
+async function requireBorrowerContext(ctx: QueryCtx | MutationCtx): Promise<ActiveOrganizationContext> {
+  const context = await requireActiveOrganizationContext(ctx);
+  if (context.organizationType !== "arbor_internal" && !isArtistOrganizationType(context.organizationType)) {
+    throw new Error("Borrow requests aren't available in this organization.");
+  }
+  return context;
+}
+
+async function hasAcceptedCourtesy(ctx: QueryCtx | MutationCtx, userId: string) {
+  const row = await ctx.db
+    .query("borrowCourtesyAcceptances")
+    .withIndex("by_userId_and_version", (q) => q.eq("userId", userId).eq("version", BORROW_COURTESY_VERSION))
+    .first();
+  return row !== null;
+}
 
 type ResolvedLine = Doc<"equipmentBorrowRequests">["lines"][number];
 
@@ -94,11 +125,17 @@ async function resolveLine(
 }
 
 function buildEventNotes(request: Doc<"equipmentBorrowRequests">) {
-  const parts = [`Borrow request ${request.requestNumber} from ${request.requesterName}.`];
+  const requester = request.requesterOrganizationName
+    ? `${request.requesterName} (${request.requesterOrganizationName})`
+    : request.requesterName;
+  const parts = [`Borrow request ${request.requestNumber} from ${requester}.`];
   if (request.agreement) {
     parts.push(
       `Loan agreement e-signed by ${request.agreement.signedName} (${request.agreement.signedEmail}) — no Arbor Live support; borrower is fully liable for the equipment.`,
     );
+  }
+  if (request.usedOffCampus !== undefined) {
+    parts.push(`Used off campus: ${request.usedOffCampus ? "Yes" : "No"}.`);
   }
   if (request.notes?.trim()) parts.push(request.notes.trim());
   return parts.join("\n");
@@ -108,6 +145,7 @@ export const submit = mutation({
   args: {
     purpose: v.string(),
     venueId: v.optional(v.id("venues")),
+    usedOffCampus: v.boolean(),
     notes: v.optional(v.string()),
     startAt: v.number(),
     endAt: v.number(),
@@ -120,7 +158,14 @@ export const submit = mutation({
   }),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
+    const context = await requireBorrowerContext(ctx);
+    if (context.isAdminPreview) {
+      throw new Error("Switch back to Arbor Live to request gear; you're previewing this artist.");
+    }
+    const artistOrganization = isArtistOrganizationType(context.organizationType) ? context : null;
+    if (artistOrganization && !(await hasAcceptedCourtesy(ctx, getUserId(user)))) {
+      throw new Error("Agree to the borrowing courtesy terms before you send a request.");
+    }
 
     const purpose = args.purpose.trim();
     if (!purpose) throw new Error("Add a short purpose for the borrow.");
@@ -158,9 +203,12 @@ export const submit = mutation({
       requesterUserId: getUserId(user),
       requesterName: displayNameForUser(user),
       requesterEmail,
+      requesterOrganizationId: artistOrganization?.organizationId,
+      requesterOrganizationName: artistOrganization?.organizationName,
       purpose,
       venueId: venueLink.venueId,
       venueName: venueLink.venueName,
+      usedOffCampus: args.usedOffCampus,
       notes: args.notes?.trim() || undefined,
       startAt: args.startAt,
       endAt: args.endAt,
@@ -184,11 +232,53 @@ export const submit = mutation({
   },
 });
 
+/** Whether the viewer still has to agree to the courtesy terms. Only artists do, once per terms version. */
+export const courtesyStatus = query({
+  args: {},
+  returns: v.object({ mustAccept: v.boolean() }),
+  handler: async (ctx) => {
+    const user = await requireAuth(ctx);
+    const context = await requireBorrowerContext(ctx);
+    if (!isArtistOrganizationType(context.organizationType) || context.isAdminPreview) {
+      return { mustAccept: false };
+    }
+    return { mustAccept: !(await hasAcceptedCourtesy(ctx, getUserId(user))) };
+  },
+});
+
+export const acceptCourtesy = mutation({
+  args: { version: v.string(), acceptedTermKeys: v.array(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    const context = await requireBorrowerContext(ctx);
+    if (!isArtistOrganizationType(context.organizationType) || context.isAdminPreview) {
+      throw new Error("Only artists agree to the borrowing courtesy terms.");
+    }
+    if (args.version !== BORROW_COURTESY_VERSION) {
+      throw new Error("The borrowing terms were updated. Reload the page and review them again.");
+    }
+    const accepted = new Set(args.acceptedTermKeys);
+    if (BORROW_COURTESY_TERM_KEYS.some((key) => !accepted.has(key))) {
+      throw new Error("Tick both boxes to agree.");
+    }
+    const userId = getUserId(user);
+    if (await hasAcceptedCourtesy(ctx, userId)) return null;
+    await ctx.db.insert("borrowCourtesyAcceptances", {
+      userId,
+      version: BORROW_COURTESY_VERSION,
+      organizationId: context.organizationId,
+      acceptedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const listMine = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
+    await requireBorrowerContext(ctx);
     const rows = await ctx.db
       .query("equipmentBorrowRequests")
       .withIndex("by_requesterUserId_and_createdAt", (q) => q.eq("requesterUserId", getUserId(user)))
@@ -230,7 +320,7 @@ export const get = query({
   args: { id: v.string() },
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
+    await requireBorrowerContext(ctx);
     const id = ctx.db.normalizeId("equipmentBorrowRequests", args.id);
     if (!id) return null;
     const request = await ctx.db.get(id);
@@ -351,7 +441,7 @@ export const cancel = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
+    await requireBorrowerContext(ctx);
     const request = await ctx.db.get(args.id);
     if (!request) throw new Error("Borrow request not found.");
     if (request.requesterUserId !== getUserId(user)) {

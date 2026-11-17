@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
-import { adminAuthFile, crewAuthFile } from "../helpers/auth";
+import { adminAuthFile, bandAuthFile, crewAuthFile } from "../helpers/auth";
+import { e2eEnv } from "../helpers/env";
 import { pollConvex, runConvex } from "../helpers/convex";
 import { pickSearchableOption } from "../helpers/select";
 
@@ -9,6 +10,8 @@ type BorrowRequestState = {
   convertedEventId: string | null;
   agreementSignedName: string | null;
   agreementTermKeys: string[];
+  requesterOrganizationName: string | null;
+  usedOffCampus: boolean | null;
 };
 
 const TERM_COUNT = 9;
@@ -42,7 +45,7 @@ async function fillBorrowWindow(page: Page) {
 /** Step 1 (details) → step 2 (agreement) → tick every term → e-sign → submit. */
 async function submitBorrowRequest(
   page: Page,
-  args: { purpose: string; typeName: string; signedName: string },
+  args: { purpose: string; typeName: string; signedName: string; offCampus?: boolean },
 ) {
   // The header's button; an empty Mine list has a second one in its empty state.
   await page
@@ -55,6 +58,23 @@ async function submitBorrowRequest(
 
   await sheet.getByLabel("Purpose").fill(args.purpose);
   await fillBorrowWindow(page);
+  await sheet.getByRole("button", { name: "Continue to agreement" }).click();
+  await expect(sheet.getByText("Say whether the gear will be used off campus.")).toBeVisible();
+  await sheet.getByRole("radio", { name: "No, on campus" }).click();
+  await expect(sheet.getByText("Say whether the gear will be used off campus.")).toBeHidden();
+  if (args.offCampus) {
+    await sheet.getByRole("button", { name: "Continue to agreement" }).click();
+    const lineError = sheet.getByText("Select a type for every equipment line.");
+    await expect(lineError).toBeVisible();
+    await sheet.getByRole("radio", { name: "No, on campus" }).focus();
+    // Radix selects on the focus move, which lands while the key is still held.
+    await page.keyboard.down("ArrowDown");
+    await page.waitForTimeout(50);
+    await page.keyboard.up("ArrowDown");
+    await expect(sheet.getByRole("radio", { name: "Yes, off campus" })).toHaveAttribute("aria-checked", "true");
+    // Changing the answer clears only the off-campus error.
+    await expect(lineError).toBeVisible();
+  }
   await pickSearchableOption(
     page,
     sheet.getByTestId("searchable-select-trigger").last(),
@@ -92,9 +112,11 @@ test.describe.serial("borrow request loan agreement", () => {
   const stamp = Date.now();
   const typeName = `E2E Borrow Speaker ${stamp}`;
   const crewPurpose = `E2E crew borrow ${stamp}`;
+  const bandPurpose = `E2E band borrow ${stamp}`;
 
   test.beforeAll(() => {
     runConvex("e2eHelpers:seedBorrowableInventoryType", { name: typeName });
+    runConvex("e2eHelpers:resetBorrowCourtesyAcceptances", {});
   });
 
   test.describe("crew", () => {
@@ -128,6 +150,55 @@ test.describe.serial("borrow request loan agreement", () => {
     });
   });
 
+  test.describe("band", () => {
+    test.use({ storageState: bandAuthFile });
+
+    test("an artist borrows gear from their own sidebar entry", async ({ page }) => {
+      test.setTimeout(120_000);
+      await page.goto("/dashboard");
+      await page.getByRole("link", { name: "Borrow gear" }).click();
+      await expect(page).toHaveURL(/\/dashboard\/inventory\/borrow-requests/);
+
+      const courtesy = page.getByTestId("borrow-courtesy-dialog");
+      await expect(courtesy).toBeVisible({ timeout: 25_000 });
+      const agree = courtesy.getByRole("button", { name: "I agree" });
+      await expect(agree).toBeDisabled();
+      await courtesy.getByRole("checkbox").first().click();
+      await expect(agree).toBeDisabled();
+      await courtesy.getByRole("checkbox").nth(1).click();
+      await agree.click();
+      await expect(courtesy).toBeHidden({ timeout: 15_000 });
+      await page.reload();
+      await expect(page.getByRole("heading", { name: "Borrow requests" })).toBeVisible({
+        timeout: 25_000,
+      });
+      await expect(page.getByTestId("borrow-requests-mine")).toBeVisible({ timeout: 25_000 });
+      await expect(courtesy).toBeHidden();
+
+      // Artists can't review, so they land on their own requests.
+      await expect(page.getByTestId("borrow-requests-mine")).toBeVisible({ timeout: 25_000 });
+
+      await submitBorrowRequest(page, {
+        purpose: bandPurpose,
+        typeName,
+        signedName: "Bailey Band",
+        offCampus: true,
+      });
+      await expect(page.getByTestId("borrow-requests-mine").getByText(bandPurpose)).toBeVisible({
+        timeout: 20_000,
+      });
+
+      const request = await pollConvex<BorrowRequestState>(
+        "e2eHelpers:getLatestBorrowRequestByPurpose",
+        { purpose: bandPurpose },
+        (row) => row?.status === "submitted",
+      );
+      expect(request.agreementSignedName).toBe("Bailey Band");
+      expect(request.requesterOrganizationName).toBe(e2eEnv.bandOrgName);
+      expect(request.usedOffCampus).toBe(true);
+    });
+  });
+
   test.describe("admin", () => {
     test.use({ storageState: adminAuthFile });
 
@@ -136,6 +207,7 @@ test.describe.serial("borrow request loan agreement", () => {
       await page.goto("/dashboard/inventory/borrow-requests");
       // Reviewers land on To review, filtered to pending requests.
       const row = page
+        .getByRole("main")
         .getByTestId("borrow-requests-review")
         .locator('[data-testid^="borrow-request-row-"]')
         .filter({ hasText: crewPurpose })
@@ -160,6 +232,24 @@ test.describe.serial("borrow request loan agreement", () => {
         (row) => row?.status === "approved",
       );
       expect(request.convertedEventId).not.toBeNull();
+    });
+
+    test("admin sees which act an artist's request is for", async ({ page }) => {
+      test.setTimeout(120_000);
+      await page.goto("/dashboard/inventory/borrow-requests");
+      const row = page
+        .getByRole("main")
+        .getByTestId("borrow-requests-review")
+        .locator('[data-testid^="borrow-request-row-"]')
+        .filter({ hasText: bandPurpose })
+        .first();
+      await expect(row).toBeVisible({ timeout: 25_000 });
+      await expect(row).toContainText(e2eEnv.bandOrgName);
+
+      await row.getByText(bandPurpose).click();
+      const sheet = page.getByTestId("borrow-request-sheet");
+      await expect(sheet.getByText(e2eEnv.bandOrgName)).toBeVisible();
+      await expect(sheet.getByText("Off campus")).toBeVisible();
     });
   });
 });

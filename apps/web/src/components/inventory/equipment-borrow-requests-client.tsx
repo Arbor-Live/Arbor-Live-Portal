@@ -27,6 +27,7 @@ import {
 } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 import { PageHeader, PageTabs, StatusPill, type Tone } from "@/components/page-header";
+import { BorrowCourtesyDialog } from "@/components/inventory/borrow-courtesy-dialog";
 import { EquipmentBorrowRequestForm } from "@/components/inventory/equipment-borrow-request-form";
 import { useSessionShell } from "@/components/session-shell-provider";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -60,9 +61,11 @@ type BorrowRequest = {
   requestNumber: string;
   requesterUserId: string;
   requesterName: string;
+  requesterOrganizationName?: string;
   requesterEmail?: string;
   purpose: string;
   venueName?: string;
+  usedOffCampus?: boolean;
   notes?: string;
   startAt: number;
   endAt: number;
@@ -131,9 +134,22 @@ function whenBucket(request: BorrowRequest, nowMs: number) {
   return "now";
 }
 
+function requesterLabel(request: BorrowRequest) {
+  return request.requesterOrganizationName
+    ? `${request.requesterName} · ${request.requesterOrganizationName}`
+    : request.requesterName;
+}
+
 function matchesSearch(request: BorrowRequest, needle: string) {
   if (!needle) return true;
-  return [request.requestNumber, request.purpose, request.requesterName, request.venueName, request.notes]
+  return [
+    request.requestNumber,
+    request.purpose,
+    request.requesterName,
+    request.requesterOrganizationName,
+    request.venueName,
+    request.notes,
+  ]
     .concat(request.lines.map((line) => line.label))
     .some((field) => field?.toLowerCase().includes(needle));
 }
@@ -210,7 +226,9 @@ function useRequestActions(): RequestActions {
 
 export function EquipmentBorrowRequestsClient() {
   const shell = useSessionShell();
-  const canReview = shell?.viewer?.isAdmin ?? false;
+  // Reviewing is Arbor-internal: an admin switched into (or previewing) an artist org borrows like the artist.
+  const canReview =
+    (shell?.viewer?.isAdmin ?? false) && shell?.activeOrganization?.organizationType === "arbor_internal";
   const searchParams = useSearchParams();
   const tab = borrowRequestTabFromParam(searchParams.get("tab"), canReview);
   const [formOpen, setFormOpen] = useState(false);
@@ -222,6 +240,7 @@ export function EquipmentBorrowRequestsClient() {
   const pending = useQuery(api.equipmentBorrowRequests.list, canReview ? { status: "submitted" } : "skip");
   const pendingCount = pending?.length ?? 0;
   const detail = useQuery(api.equipmentBorrowRequests.get, requestParam ? { id: requestParam } : "skip");
+  const courtesy = useQuery(api.equipmentBorrowRequests.courtesyStatus);
   const panelRequest = detail?.request ?? (clicked && clicked._id === requestParam ? clicked : null);
 
   // A `?request=` link to a request that's gone or isn't the viewer's: say so and drop the param.
@@ -323,6 +342,8 @@ export function EquipmentBorrowRequestsClient() {
           />
         ) : null}
       </DetailSheet>
+
+      <BorrowCourtesyDialog open={courtesy?.mustAccept === true} />
 
       <EquipmentBorrowRequestForm
         open={formOpen}
@@ -607,11 +628,13 @@ function RequestList({
                   }
                 >
                   <RowText
-                    eyebrow={request.venueName ? `${request.requestNumber} · ${request.venueName}` : request.requestNumber}
+                    eyebrow={[request.requestNumber, request.venueName, request.usedOffCampus ? "Off campus" : null]
+                      .filter(Boolean)
+                      .join(" · ")}
                     title={request.purpose}
                     detail={
                       showRequester
-                        ? `${request.requesterName} · ${equipmentSummary(request.lines)}`
+                        ? `${requesterLabel(request)} · ${equipmentSummary(request.lines)}`
                         : equipmentSummary(request.lines)
                     }
                   />
@@ -680,7 +703,13 @@ function RequestSheetBody({
         <SheetFields>
           <SheetField label="Pickup to return">{formatDateTimeRange(request.startAt, request.endAt)}</SheetField>
           {request.venueName ? <SheetField label="Venue">{request.venueName}</SheetField> : null}
+          {request.usedOffCampus !== undefined ? (
+            <SheetField label="Off campus">{request.usedOffCampus ? "Yes" : "No"}</SheetField>
+          ) : null}
           <SheetField label="Requester">{request.requesterName}</SheetField>
+          {request.requesterOrganizationName ? (
+            <SheetField label="Artist">{request.requesterOrganizationName}</SheetField>
+          ) : null}
           {request.notes ? <SheetField label="Notes">{request.notes}</SheetField> : null}
         </SheetFields>
       </SheetSection>

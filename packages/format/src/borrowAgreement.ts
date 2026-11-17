@@ -61,3 +61,23 @@ export const BORROW_AGREEMENT_TERMS: readonly BorrowAgreementTerm[] = [
 ];
 
 export const BORROW_AGREEMENT_TERM_KEYS = BORROW_AGREEMENT_TERMS.map((term) => term.key);
+
+/**
+ * One-time courtesy terms an artist accepts before their first borrow request.
+ * Acceptance is stored per person and version, so bump
+ * `BORROW_COURTESY_VERSION` to ask everyone again after a wording change.
+ */
+export const BORROW_COURTESY_VERSION = "2026-11-16";
+
+export const BORROW_COURTESY_TERMS: readonly { key: string; text: string }[] = [
+  {
+    key: "allowed_uses",
+    text: "I'll borrow gear only for practices and rehearsals, or for events outside Stanford that aren't on campus.",
+  },
+  {
+    key: "book_arbor_on_campus",
+    text: "For a Stanford or on-campus gig, I'll book Arbor Live's sound, lighting, or crew instead of borrowing gear.",
+  },
+];
+
+export const BORROW_COURTESY_TERM_KEYS = BORROW_COURTESY_TERMS.map((term) => term.key);
