@@ -134,7 +134,9 @@ function buildEventNotes(request: Doc<"equipmentBorrowRequests">) {
       `Loan agreement e-signed by ${request.agreement.signedName} (${request.agreement.signedEmail}) — no Arbor Live support; borrower is fully liable for the equipment.`,
     );
   }
-  if (request.usedOffCampus) parts.push("The gear will be used off campus.");
+  if (request.usedOffCampus !== undefined) {
+    parts.push(`Used off campus: ${request.usedOffCampus ? "Yes" : "No"}.`);
+  }
   if (request.notes?.trim()) parts.push(request.notes.trim());
   return parts.join("\n");
 }

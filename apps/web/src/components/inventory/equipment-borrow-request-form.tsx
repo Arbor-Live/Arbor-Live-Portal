@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useMutation } from "convex/react";
+import { RadioGroup } from "radix-ui";
 import { ArrowLeftIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
@@ -263,26 +264,29 @@ export function EquipmentBorrowRequestForm({
               <p className="text-sm font-medium" id="borrow-off-campus-label">
                 Will the gear be used off campus?
               </p>
-              <div
+              <RadioGroup.Root
                 className="inline-flex rounded-md border p-0.5"
-                role="radiogroup"
                 aria-labelledby="borrow-off-campus-label"
+                orientation="horizontal"
+                value={usedOffCampus === null ? "" : usedOffCampus ? "yes" : "no"}
+                onValueChange={(value) => {
+                  setUsedOffCampus(value === "yes");
+                  setError(null);
+                }}
               >
-                {([false, true] as const).map((value) => (
-                  <Button
-                    key={String(value)}
-                    type="button"
-                    size="sm"
-                    role="radio"
-                    aria-checked={usedOffCampus === value}
-                    variant={usedOffCampus === value ? "secondary" : "ghost"}
-                    className="h-7 px-3 text-xs"
-                    onClick={() => setUsedOffCampus(value)}
+                {[
+                  { value: "no", label: "No, on campus" },
+                  { value: "yes", label: "Yes, off campus" },
+                ].map((option) => (
+                  <RadioGroup.Item
+                    key={option.value}
+                    value={option.value}
+                    className="h-7 rounded-sm px-3 text-xs font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring data-[state=checked]:bg-secondary data-[state=checked]:text-secondary-foreground"
                   >
-                    {value ? "Yes, off campus" : "No, on campus"}
-                  </Button>
+                    {option.label}
+                  </RadioGroup.Item>
                 ))}
-              </div>
+              </RadioGroup.Root>
             </div>
 
             <div className="space-y-2">

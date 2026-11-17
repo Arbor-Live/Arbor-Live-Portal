@@ -60,7 +60,15 @@ async function submitBorrowRequest(
   await fillBorrowWindow(page);
   await sheet.getByRole("button", { name: "Continue to agreement" }).click();
   await expect(sheet.getByText("Say whether the gear will be used off campus.")).toBeVisible();
-  await sheet.getByRole("radio", { name: args.offCampus ? "Yes, off campus" : "No, on campus" }).click();
+  await sheet.getByRole("radio", { name: "No, on campus" }).click();
+  await expect(sheet.getByText("Say whether the gear will be used off campus.")).toBeHidden();
+  if (args.offCampus) {
+    // Radix selects on the focus move, which lands while the key is still held.
+    await page.keyboard.down("ArrowRight");
+    await page.waitForTimeout(50);
+    await page.keyboard.up("ArrowRight");
+    await expect(sheet.getByRole("radio", { name: "Yes, off campus" })).toHaveAttribute("aria-checked", "true");
+  }
   await pickSearchableOption(
     page,
     sheet.getByTestId("searchable-select-trigger").last(),
@@ -193,6 +201,7 @@ test.describe.serial("borrow request loan agreement", () => {
       await page.goto("/dashboard/inventory/borrow-requests");
       // Reviewers land on To review, filtered to pending requests.
       const row = page
+        .getByRole("main")
         .getByTestId("borrow-requests-review")
         .locator('[data-testid^="borrow-request-row-"]')
         .filter({ hasText: crewPurpose })
@@ -223,6 +232,7 @@ test.describe.serial("borrow request loan agreement", () => {
       test.setTimeout(120_000);
       await page.goto("/dashboard/inventory/borrow-requests");
       const row = page
+        .getByRole("main")
         .getByTestId("borrow-requests-review")
         .locator('[data-testid^="borrow-request-row-"]')
         .filter({ hasText: bandPurpose })

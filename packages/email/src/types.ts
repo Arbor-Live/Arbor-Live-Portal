@@ -502,6 +502,8 @@ export type EquipmentBorrowRequestAdminEmailProps = {
   requesterEmail: string;
   /** Set when an artist (band / DJ) asked on behalf of their act. */
   requesterOrganizationName?: string;
+  /** Missing on requests made before the form asked. */
+  usedOffCampus?: boolean;
   requestNumber: string;
   purpose: string;
   dateRangeLabel: string;
