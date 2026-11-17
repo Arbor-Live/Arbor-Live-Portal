@@ -27,6 +27,7 @@ import {
 } from "@/components/list-page";
 import { ListRow } from "@/components/list-row";
 import { PageHeader, PageTabs, StatusPill, type Tone } from "@/components/page-header";
+import { BorrowCourtesyDialog } from "@/components/inventory/borrow-courtesy-dialog";
 import { EquipmentBorrowRequestForm } from "@/components/inventory/equipment-borrow-request-form";
 import { useSessionShell } from "@/components/session-shell-provider";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -64,6 +65,7 @@ type BorrowRequest = {
   requesterEmail?: string;
   purpose: string;
   venueName?: string;
+  usedOffCampus?: boolean;
   notes?: string;
   startAt: number;
   endAt: number;
@@ -238,6 +240,7 @@ export function EquipmentBorrowRequestsClient() {
   const pending = useQuery(api.equipmentBorrowRequests.list, canReview ? { status: "submitted" } : "skip");
   const pendingCount = pending?.length ?? 0;
   const detail = useQuery(api.equipmentBorrowRequests.get, requestParam ? { id: requestParam } : "skip");
+  const courtesy = useQuery(api.equipmentBorrowRequests.courtesyStatus);
   const panelRequest = detail?.request ?? (clicked && clicked._id === requestParam ? clicked : null);
 
   // A `?request=` link to a request that's gone or isn't the viewer's: say so and drop the param.
@@ -339,6 +342,8 @@ export function EquipmentBorrowRequestsClient() {
           />
         ) : null}
       </DetailSheet>
+
+      <BorrowCourtesyDialog open={courtesy?.mustAccept === true} />
 
       <EquipmentBorrowRequestForm
         open={formOpen}
@@ -623,7 +628,9 @@ function RequestList({
                   }
                 >
                   <RowText
-                    eyebrow={request.venueName ? `${request.requestNumber} · ${request.venueName}` : request.requestNumber}
+                    eyebrow={[request.requestNumber, request.venueName, request.usedOffCampus ? "Off campus" : null]
+                      .filter(Boolean)
+                      .join(" · ")}
                     title={request.purpose}
                     detail={
                       showRequester
@@ -696,6 +703,9 @@ function RequestSheetBody({
         <SheetFields>
           <SheetField label="Pickup to return">{formatDateTimeRange(request.startAt, request.endAt)}</SheetField>
           {request.venueName ? <SheetField label="Venue">{request.venueName}</SheetField> : null}
+          {request.usedOffCampus !== undefined ? (
+            <SheetField label="Off campus">{request.usedOffCampus ? "Yes" : "No"}</SheetField>
+          ) : null}
           <SheetField label="Requester">{request.requesterName}</SheetField>
           {request.requesterOrganizationName ? (
             <SheetField label="Artist">{request.requesterOrganizationName}</SheetField>

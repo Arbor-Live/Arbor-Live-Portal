@@ -65,6 +65,7 @@ export function EquipmentBorrowRequestForm({
   const [step, setStep] = useState<"details" | "agreement">("details");
   const [purpose, setPurpose] = useState("");
   const [venueId, setVenueId] = useState("");
+  const [usedOffCampus, setUsedOffCampus] = useState<boolean | null>(null);
   const [notes, setNotes] = useState("");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
@@ -80,6 +81,7 @@ export function EquipmentBorrowRequestForm({
     setSignedName("");
     setPurpose("");
     setVenueId("");
+    setUsedOffCampus(null);
     setNotes("");
     setWindowStart("");
     setWindowEnd("");
@@ -108,6 +110,7 @@ export function EquipmentBorrowRequestForm({
     if (startAt == null) return "Pick a pickup date and time.";
     if (endAt == null) return "Pick a return date and time.";
     if (endAt <= startAt) return "Return time must be after the pickup time.";
+    if (usedOffCampus === null) return "Say whether the gear will be used off campus.";
     if (lines.length === 0) return "Add at least one piece of equipment.";
     for (const line of lines) {
       if (line.lineKind === "package" && !line.packageId) {
@@ -132,7 +135,7 @@ export function EquipmentBorrowRequestForm({
     const problem = detailsError();
     const startAt = pacificDateTimeInputToMs(windowStart);
     const endAt = pacificDateTimeInputToMs(windowEnd);
-    if (problem || startAt == null || endAt == null) {
+    if (problem || startAt == null || endAt == null || usedOffCampus === null) {
       setError(problem);
       setStep("details");
       return;
@@ -163,6 +166,7 @@ export function EquipmentBorrowRequestForm({
       await submit({
         purpose: purpose.trim(),
         venueId: venueId ? (venueId as Id<"venues">) : undefined,
+        usedOffCampus,
         notes: notes.trim() || undefined,
         startAt,
         endAt,
@@ -253,6 +257,32 @@ export function EquipmentBorrowRequestForm({
                 emptyLabel="No venue"
                 placeholder="Type to search venues…"
               />
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium" id="borrow-off-campus-label">
+                Will the gear be used off campus?
+              </p>
+              <div
+                className="inline-flex rounded-md border p-0.5"
+                role="radiogroup"
+                aria-labelledby="borrow-off-campus-label"
+              >
+                {([false, true] as const).map((value) => (
+                  <Button
+                    key={String(value)}
+                    type="button"
+                    size="sm"
+                    role="radio"
+                    aria-checked={usedOffCampus === value}
+                    variant={usedOffCampus === value ? "secondary" : "ghost"}
+                    className="h-7 px-3 text-xs"
+                    onClick={() => setUsedOffCampus(value)}
+                  >
+                    {value ? "Yes, off campus" : "No, on campus"}
+                  </Button>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-2">

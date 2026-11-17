@@ -3,6 +3,8 @@ import {
   BORROW_AGREEMENT_TERM_KEYS,
   BORROW_AGREEMENT_TERMS,
   BORROW_AGREEMENT_VERSION,
+  BORROW_COURTESY_TERM_KEYS,
+  BORROW_COURTESY_VERSION,
   pacificDateKey,
   PORTAL_TIMEZONE,
 } from "@arbor/format";
@@ -66,6 +68,14 @@ async function requireBorrowerContext(ctx: QueryCtx | MutationCtx): Promise<Acti
   return context;
 }
 
+async function hasAcceptedCourtesy(ctx: QueryCtx | MutationCtx, userId: string) {
+  const row = await ctx.db
+    .query("borrowCourtesyAcceptances")
+    .withIndex("by_userId_and_version", (q) => q.eq("userId", userId).eq("version", BORROW_COURTESY_VERSION))
+    .first();
+  return row !== null;
+}
+
 type ResolvedLine = Doc<"equipmentBorrowRequests">["lines"][number];
 
 function displayNameForUser(user: { name?: string | null; email?: string | null }) {
@@ -124,6 +134,7 @@ function buildEventNotes(request: Doc<"equipmentBorrowRequests">) {
       `Loan agreement e-signed by ${request.agreement.signedName} (${request.agreement.signedEmail}) — no Arbor Live support; borrower is fully liable for the equipment.`,
     );
   }
+  if (request.usedOffCampus) parts.push("The gear will be used off campus.");
   if (request.notes?.trim()) parts.push(request.notes.trim());
   return parts.join("\n");
 }
@@ -132,6 +143,7 @@ export const submit = mutation({
   args: {
     purpose: v.string(),
     venueId: v.optional(v.id("venues")),
+    usedOffCampus: v.boolean(),
     notes: v.optional(v.string()),
     startAt: v.number(),
     endAt: v.number(),
@@ -149,6 +161,9 @@ export const submit = mutation({
       throw new Error("Switch back to Arbor Live to request gear; you're previewing this artist.");
     }
     const artistOrganization = isArtistOrganizationType(context.organizationType) ? context : null;
+    if (artistOrganization && !(await hasAcceptedCourtesy(ctx, getUserId(user)))) {
+      throw new Error("Agree to the borrowing courtesy terms before you send a request.");
+    }
 
     const purpose = args.purpose.trim();
     if (!purpose) throw new Error("Add a short purpose for the borrow.");
@@ -191,6 +206,7 @@ export const submit = mutation({
       purpose,
       venueId: venueLink.venueId,
       venueName: venueLink.venueName,
+      usedOffCampus: args.usedOffCampus,
       notes: args.notes?.trim() || undefined,
       startAt: args.startAt,
       endAt: args.endAt,
@@ -211,6 +227,48 @@ export const submit = mutation({
     if (inserted) await scheduleEquipmentBorrowRequestSubmittedEmail(ctx, inserted);
 
     return { id, requestNumber };
+  },
+});
+
+/** Whether the viewer still has to agree to the courtesy terms. Only artists do, once per terms version. */
+export const courtesyStatus = query({
+  args: {},
+  returns: v.object({ mustAccept: v.boolean() }),
+  handler: async (ctx) => {
+    const user = await requireAuth(ctx);
+    const context = await requireBorrowerContext(ctx);
+    if (!isArtistOrganizationType(context.organizationType) || context.isAdminPreview) {
+      return { mustAccept: false };
+    }
+    return { mustAccept: !(await hasAcceptedCourtesy(ctx, getUserId(user))) };
+  },
+});
+
+export const acceptCourtesy = mutation({
+  args: { version: v.string(), acceptedTermKeys: v.array(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    const context = await requireBorrowerContext(ctx);
+    if (!isArtistOrganizationType(context.organizationType) || context.isAdminPreview) {
+      throw new Error("Only artists agree to the borrowing courtesy terms.");
+    }
+    if (args.version !== BORROW_COURTESY_VERSION) {
+      throw new Error("The borrowing terms were updated. Reload the page and review them again.");
+    }
+    const accepted = new Set(args.acceptedTermKeys);
+    if (BORROW_COURTESY_TERM_KEYS.some((key) => !accepted.has(key))) {
+      throw new Error("Tick both boxes to agree.");
+    }
+    const userId = getUserId(user);
+    if (await hasAcceptedCourtesy(ctx, userId)) return null;
+    await ctx.db.insert("borrowCourtesyAcceptances", {
+      userId,
+      version: BORROW_COURTESY_VERSION,
+      organizationId: context.organizationId,
+      acceptedAt: Date.now(),
+    });
+    return null;
   },
 });
 

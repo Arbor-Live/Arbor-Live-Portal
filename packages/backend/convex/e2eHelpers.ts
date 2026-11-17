@@ -7885,6 +7885,18 @@ export const seedBorrowableInventoryType = mutation({
   },
 });
 
+/** Clears every borrowing courtesy acceptance so a spec sees the first-visit gate. */
+export const resetBorrowCourtesyAcceptances = mutation({
+  args: {},
+  returns: v.object({ deleted: v.number() }),
+  handler: async (ctx) => {
+    assertE2eHelpersEnabled();
+    const rows = await ctx.db.query("borrowCourtesyAcceptances").take(500);
+    for (const row of rows) await ctx.db.delete(row._id);
+    return { deleted: rows.length };
+  },
+});
+
 export const getLatestBorrowRequestByPurpose = query({
   args: { purpose: v.string() },
   returns: v.union(
@@ -7896,6 +7908,7 @@ export const getLatestBorrowRequestByPurpose = query({
       agreementSignedName: v.union(v.string(), v.null()),
       agreementTermKeys: v.array(v.string()),
       requesterOrganizationName: v.union(v.string(), v.null()),
+      usedOffCampus: v.union(v.boolean(), v.null()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -7914,6 +7927,7 @@ export const getLatestBorrowRequestByPurpose = query({
       agreementSignedName: match.agreement?.signedName ?? null,
       agreementTermKeys: match.agreement?.terms.map((term) => term.key) ?? [],
       requesterOrganizationName: match.requesterOrganizationName ?? null,
+      usedOffCampus: match.usedOffCampus ?? null,
     };
   },
 });
