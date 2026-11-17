@@ -34,6 +34,8 @@ import { BORROW_AGREEMENT_VERSION, pacificDateTimeInputToMs } from "@/lib/format
 
 type LineKind = "type" | "package";
 
+const OFF_CAMPUS_REQUIRED = "Say whether the gear will be used off campus.";
+
 type DraftLine = {
   key: string;
   lineKind: LineKind;
@@ -111,7 +113,7 @@ export function EquipmentBorrowRequestForm({
     if (startAt == null) return "Pick a pickup date and time.";
     if (endAt == null) return "Pick a return date and time.";
     if (endAt <= startAt) return "Return time must be after the pickup time.";
-    if (usedOffCampus === null) return "Say whether the gear will be used off campus.";
+    if (usedOffCampus === null) return OFF_CAMPUS_REQUIRED;
     if (lines.length === 0) return "Add at least one piece of equipment.";
     for (const line of lines) {
       if (line.lineKind === "package" && !line.packageId) {
@@ -267,11 +269,10 @@ export function EquipmentBorrowRequestForm({
               <RadioGroup.Root
                 className="inline-flex rounded-md border p-0.5"
                 aria-labelledby="borrow-off-campus-label"
-                orientation="horizontal"
                 value={usedOffCampus === null ? "" : usedOffCampus ? "yes" : "no"}
                 onValueChange={(value) => {
                   setUsedOffCampus(value === "yes");
-                  setError(null);
+                  setError((current) => (current === OFF_CAMPUS_REQUIRED ? null : current));
                 }}
               >
                 {[

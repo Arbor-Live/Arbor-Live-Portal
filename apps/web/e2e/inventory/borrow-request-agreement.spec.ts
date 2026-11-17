@@ -63,11 +63,17 @@ async function submitBorrowRequest(
   await sheet.getByRole("radio", { name: "No, on campus" }).click();
   await expect(sheet.getByText("Say whether the gear will be used off campus.")).toBeHidden();
   if (args.offCampus) {
+    await sheet.getByRole("button", { name: "Continue to agreement" }).click();
+    const lineError = sheet.getByText("Select a type for every equipment line.");
+    await expect(lineError).toBeVisible();
+    await sheet.getByRole("radio", { name: "No, on campus" }).focus();
     // Radix selects on the focus move, which lands while the key is still held.
-    await page.keyboard.down("ArrowRight");
+    await page.keyboard.down("ArrowDown");
     await page.waitForTimeout(50);
-    await page.keyboard.up("ArrowRight");
+    await page.keyboard.up("ArrowDown");
     await expect(sheet.getByRole("radio", { name: "Yes, off campus" })).toHaveAttribute("aria-checked", "true");
+    // Changing the answer clears only the off-campus error.
+    await expect(lineError).toBeVisible();
   }
   await pickSearchableOption(
     page,
