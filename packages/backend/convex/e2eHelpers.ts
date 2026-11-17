@@ -3990,6 +3990,7 @@ export const seedPosterWork = mutation({
     /** Optional variety for local demos; defaults match the e2e spec. */
     daysOut: v.optional(v.number()),
     visibility: v.optional(v.union(v.literal("public"), v.literal("internal"))),
+    status: v.optional(v.union(v.literal("tentative"), v.literal("ready"))),
     venueName: v.optional(v.string()),
     design: v.optional(
       v.object({
@@ -4007,7 +4008,7 @@ export const seedPosterWork = mutation({
     const startAt = now + (args.daysOut ?? 3) * 24 * hour;
     const eventId = await ctx.db.insert("events", {
       title: args.eventTitle,
-      status: "ready",
+      status: args.status ?? "ready",
       visibility: args.visibility ?? "internal",
       publicToken: makeToken(),
       startAt,
