@@ -2360,6 +2360,9 @@ export default defineSchema({
     requesterUserId: v.string(),
     requesterName: v.string(),
     requesterEmail: v.string(),
+    /** The artist org (band / DJ) the request was made for; unset for Arbor staff. */
+    requesterOrganizationId: v.optional(v.string()),
+    requesterOrganizationName: v.optional(v.string()),
     purpose: v.string(),
     /** Venue where the equipment will be used (snapshot of the venue path). */
     venueId: v.optional(v.id("venues")),

@@ -7895,6 +7895,7 @@ export const getLatestBorrowRequestByPurpose = query({
       convertedEventId: v.union(v.id("events"), v.null()),
       agreementSignedName: v.union(v.string(), v.null()),
       agreementTermKeys: v.array(v.string()),
+      requesterOrganizationName: v.union(v.string(), v.null()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -7912,6 +7913,7 @@ export const getLatestBorrowRequestByPurpose = query({
       convertedEventId: match.convertedEventId ?? null,
       agreementSignedName: match.agreement?.signedName ?? null,
       agreementTermKeys: match.agreement?.terms.map((term) => term.key) ?? [],
+      requesterOrganizationName: match.requesterOrganizationName ?? null,
     };
   },
 });

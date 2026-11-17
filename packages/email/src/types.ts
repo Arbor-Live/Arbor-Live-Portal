@@ -500,6 +500,8 @@ export type CommentMentionEmailProps = {
 export type EquipmentBorrowRequestAdminEmailProps = {
   requesterName: string;
   requesterEmail: string;
+  /** Set when an artist (band / DJ) asked on behalf of their act. */
+  requesterOrganizationName?: string;
   requestNumber: string;
   purpose: string;
   dateRangeLabel: string;

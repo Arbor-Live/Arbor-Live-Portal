@@ -11,6 +11,7 @@ import type { EquipmentBorrowRequestAdminEmailProps } from "../src/types";
 export function EquipmentBorrowRequestAdminEmail({
   requesterName,
   requesterEmail,
+  requesterOrganizationName,
   requestNumber,
   purpose,
   dateRangeLabel,
@@ -20,7 +21,14 @@ export function EquipmentBorrowRequestAdminEmail({
   return (
     <EmailLayout preview={`New borrow request: ${purpose}`} heading="New equipment borrow request">
       <BodyCopy>
-        <strong>{requesterName}</strong> ({requesterEmail}) requested equipment.
+        <strong>{requesterName}</strong> ({requesterEmail}) requested equipment
+        {requesterOrganizationName ? (
+          <>
+            {" "}
+            for <strong>{requesterOrganizationName}</strong>
+          </>
+        ) : null}
+        .
       </BodyCopy>
       <DataCard title="Request Summary">
         <DetailRow label="Request" value={requestNumber} />
