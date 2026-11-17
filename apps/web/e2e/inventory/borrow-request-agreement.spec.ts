@@ -11,6 +11,7 @@ type BorrowRequestState = {
   agreementSignedName: string | null;
   agreementTermKeys: string[];
   requesterOrganizationName: string | null;
+  usedOffCampus: boolean | null;
 };
 
 const TERM_COUNT = 9;
@@ -44,7 +45,7 @@ async function fillBorrowWindow(page: Page) {
 /** Step 1 (details) → step 2 (agreement) → tick every term → e-sign → submit. */
 async function submitBorrowRequest(
   page: Page,
-  args: { purpose: string; typeName: string; signedName: string },
+  args: { purpose: string; typeName: string; signedName: string; offCampus?: boolean },
 ) {
   // The header's button; an empty Mine list has a second one in its empty state.
   await page
@@ -57,6 +58,9 @@ async function submitBorrowRequest(
 
   await sheet.getByLabel("Purpose").fill(args.purpose);
   await fillBorrowWindow(page);
+  await sheet.getByRole("button", { name: "Continue to agreement" }).click();
+  await expect(sheet.getByText("Say whether the gear will be used off campus.")).toBeVisible();
+  await sheet.getByRole("radio", { name: args.offCampus ? "Yes, off campus" : "No, on campus" }).click();
   await pickSearchableOption(
     page,
     sheet.getByTestId("searchable-select-trigger").last(),
@@ -98,6 +102,7 @@ test.describe.serial("borrow request loan agreement", () => {
 
   test.beforeAll(() => {
     runConvex("e2eHelpers:seedBorrowableInventoryType", { name: typeName });
+    runConvex("e2eHelpers:resetBorrowCourtesyAcceptances", {});
   });
 
   test.describe("crew", () => {
@@ -139,9 +144,23 @@ test.describe.serial("borrow request loan agreement", () => {
       await page.goto("/dashboard");
       await page.getByRole("link", { name: "Borrow gear" }).click();
       await expect(page).toHaveURL(/\/dashboard\/inventory\/borrow-requests/);
+
+      const courtesy = page.getByTestId("borrow-courtesy-dialog");
+      await expect(courtesy).toBeVisible({ timeout: 25_000 });
+      const agree = courtesy.getByRole("button", { name: "I agree" });
+      await expect(agree).toBeDisabled();
+      await courtesy.getByRole("checkbox").first().click();
+      await expect(agree).toBeDisabled();
+      await courtesy.getByRole("checkbox").nth(1).click();
+      await agree.click();
+      await expect(courtesy).toBeHidden({ timeout: 15_000 });
+      await page.reload();
       await expect(page.getByRole("heading", { name: "Borrow requests" })).toBeVisible({
         timeout: 25_000,
       });
+      await expect(page.getByTestId("borrow-requests-mine")).toBeVisible({ timeout: 25_000 });
+      await expect(courtesy).toBeHidden();
+
       // Artists can't review, so they land on their own requests.
       await expect(page.getByTestId("borrow-requests-mine")).toBeVisible({ timeout: 25_000 });
 
@@ -149,6 +168,7 @@ test.describe.serial("borrow request loan agreement", () => {
         purpose: bandPurpose,
         typeName,
         signedName: "Bailey Band",
+        offCampus: true,
       });
       await expect(page.getByTestId("borrow-requests-mine").getByText(bandPurpose)).toBeVisible({
         timeout: 20_000,
@@ -161,6 +181,7 @@ test.describe.serial("borrow request loan agreement", () => {
       );
       expect(request.agreementSignedName).toBe("Bailey Band");
       expect(request.requesterOrganizationName).toBe(e2eEnv.bandOrgName);
+      expect(request.usedOffCampus).toBe(true);
     });
   });
 
@@ -212,6 +233,7 @@ test.describe.serial("borrow request loan agreement", () => {
       await row.getByText(bandPurpose).click();
       const sheet = page.getByTestId("borrow-request-sheet");
       await expect(sheet.getByText(e2eEnv.bandOrgName)).toBeVisible();
+      await expect(sheet.getByText("Off campus")).toBeVisible();
     });
   });
 });
