@@ -1,4 +1,10 @@
-import { payPeriodForDate, addPacificCalendarDays, pacificDateAndTimeToMs, pacificDateKey } from "@arbor/format";
+import {
+  addDaysToDateKey,
+  addPacificCalendarDays,
+  pacificDateAndTimeToMs,
+  pacificDateKey,
+  payPeriodForDate,
+} from "@arbor/format";
 import { v } from "convex/values";
 import { customAlphabet } from "nanoid";
 import { hashPassword } from "better-auth/crypto";
@@ -1047,6 +1053,8 @@ export const seedCrewedEventWithSchedule = mutation({
     endTime: v.optional(v.string()),
     /** Adds a one-hour "Early setup" section before setup. */
     earlySetup: v.optional(v.boolean()),
+    /** Adds a 3:00–4:30 PM setup section this many days before the event, on another night. */
+    setupDaysBefore: v.optional(v.number()),
     /** Marks the event as overtime (crew paid 1.5×, then double time). */
     otPremium: v.optional(v.boolean()),
   },
@@ -1107,6 +1115,16 @@ export const seedCrewedEventWithSchedule = mutation({
       { blockType: "setup" as const, label: "Setup", startsAt: setupStart, endsAt: setupEnd },
       { blockType: "show" as const, label: "Show", startsAt: showStart, endsAt: showEnd },
       { blockType: "strike" as const, label: "Strike", startsAt: strikeStart, endsAt: strikeEnd },
+      ...(args.setupDaysBefore
+        ? [
+            {
+              blockType: "setup" as const,
+              label: "Setup",
+              startsAt: pacificDateAndTimeToMs(addDaysToDateKey(window.dateKey, -args.setupDaysBefore), "15:00")!,
+              endsAt: pacificDateAndTimeToMs(addDaysToDateKey(window.dateKey, -args.setupDaysBefore), "16:30")!,
+            },
+          ]
+        : []),
     ];
     const blockIds: Id<"eventScheduleBlocks">[] = [];
     for (const block of blocks) {
