@@ -192,24 +192,22 @@ export function nightBounds(nightKey: string): TimeWindow {
 }
 
 /**
- * True when a window sits on the night itself. The "Only part" times are
- * clock times on the night, so a section on another day (a load-in the day
- * before, a block left on an old date) can't be written as one.
+ * True when a window starts on the night itself, like an event's night. The
+ * "Only part" times are clock times on the night, so a section starting on
+ * another day (a load-in the day before, a block left on an old date) can't be
+ * written as one. An end past 6 AM is fine: an "until" before "from" runs on.
  */
 export function isOnNight(nightKey: string, window: TimeWindow) {
   const bounds = nightBounds(nightKey);
-  return window.startsAt >= bounds.startsAt && window.endsAt <= bounds.endsAt;
+  return window.startsAt >= bounds.startsAt && window.startsAt < bounds.endsAt;
 }
 
-/** Windows cut down to the night itself; whatever falls on another day drops. */
+/** Windows moved to start no earlier than the night; whatever falls on another day drops. */
 export function clipToNight(nightKey: string, windows: TimeWindow[]): TimeWindow[] {
   const bounds = nightBounds(nightKey);
   return windows
-    .map((window) => ({
-      startsAt: Math.max(window.startsAt, bounds.startsAt),
-      endsAt: Math.min(window.endsAt, bounds.endsAt),
-    }))
-    .filter((window) => window.endsAt > window.startsAt);
+    .map((window) => ({ startsAt: Math.max(window.startsAt, bounds.startsAt), endsAt: window.endsAt }))
+    .filter((window) => window.endsAt > window.startsAt && window.startsAt < bounds.endsAt);
 }
 
 /** Sorted, non-overlapping union. */

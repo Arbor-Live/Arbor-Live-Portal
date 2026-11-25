@@ -82,14 +82,28 @@ describe("sections on another day", () => {
   const lateStrike = { startsAt: at("22:30"), endsAt: pacificDateAndTimeToMs("2026-10-17", "00:30")! };
   const loadInDayBefore = { startsAt: before("17:30"), endsAt: before("19:00") };
 
-  it("keeps the night's own sections, past midnight included, and leaves out other days", () => {
+  const NEXT = "2026-10-17";
+  const overnightStrike = {
+    startsAt: pacificDateAndTimeToMs(NEXT, "02:00")!,
+    endsAt: pacificDateAndTimeToMs(NEXT, "07:00")!,
+  };
+
+  it("keeps the night's own sections, past midnight and 6 AM included, and leaves out other days", () => {
     expect(isOnNight(NIGHT, setup)).toBe(true);
     expect(isOnNight(NIGHT, lateStrike)).toBe(true);
+    expect(isOnNight(NIGHT, overnightStrike)).toBe(true);
     expect(isOnNight(NIGHT, loadInDayBefore)).toBe(false);
+    expect(isOnNight(NIGHT, { startsAt: pacificDateAndTimeToMs(NEXT, "06:00")!, endsAt: pacificDateAndTimeToMs(NEXT, "08:00")! })).toBe(false);
+  });
+
+  it("an overnight strike past 6 AM round-trips through the times", () => {
+    const draft = partDraftFromWindows([overnightStrike])!;
+    expect(draft).toEqual({ from: "02:00", to: "07:00", busy: [] });
+    expect(partFreeWindows(NIGHT, draft.from, draft.to, draft.busy)).toMatchObject({ free: [overnightStrike] });
   });
 
   it("clips saved windows to the night", () => {
-    expect(clipToNight(NIGHT, [loadInDayBefore, setup])).toEqual([setup]);
+    expect(clipToNight(NIGHT, [loadInDayBefore, setup, overnightStrike])).toEqual([setup, overnightStrike]);
     expect(clipToNight(NIGHT, [{ startsAt: before("20:00"), endsAt: at("19:00") }])).toEqual([
       { startsAt: pacificDateAndTimeToMs(NIGHT, "06:00")!, endsAt: at("19:00") },
     ]);
