@@ -7,6 +7,7 @@ import {
   mergeBusyNotes,
   mergeWindows,
   nightAnswerArgs,
+  nightPartSpan,
   partDraftFromWindows,
   partFreeWindows,
 } from "./crew-nights";
@@ -94,6 +95,39 @@ describe("sections on another day", () => {
     expect(isOnNight(NIGHT, overnightStrike)).toBe(true);
     expect(isOnNight(NIGHT, loadInDayBefore)).toBe(false);
     expect(isOnNight(NIGHT, { startsAt: pacificDateAndTimeToMs(NEXT, "06:00")!, endsAt: pacificDateAndTimeToMs(NEXT, "08:00")! })).toBe(false);
+  });
+
+  it("leaves out a section lasting over a day, which no from–until can say", () => {
+    expect(isOnNight(NIGHT, { startsAt: at("08:00"), endsAt: pacificDateAndTimeToMs(NEXT, "10:00")! })).toBe(false);
+  });
+
+  it("a saved window running past both ends of the night comes back as the whole night", () => {
+    const sixAm = pacificDateAndTimeToMs(NIGHT, "06:00")!;
+    const nextSixAm = pacificDateAndTimeToMs(NEXT, "06:00")!;
+    const clipped = clipToNight(NIGHT, [{ startsAt: before("17:30"), endsAt: pacificDateAndTimeToMs(NEXT, "07:00")! }]);
+    const draft = partDraftFromWindows(clipped)!;
+    expect(partFreeWindows(NIGHT, draft.from, draft.to, draft.busy)).toMatchObject({
+      free: [{ startsAt: sixAm, endsAt: nextSixAm }],
+    });
+  });
+
+  it("the default times stop at a day from the night's first start", () => {
+    const loadIn = { startsAt: at("07:00"), endsAt: at("10:00") };
+    const lateOvernight = { startsAt: overnightStrike.startsAt, endsAt: pacificDateAndTimeToMs(NEXT, "07:30")! };
+    expect(nightPartSpan(NIGHT, [loadIn, setup, lateOvernight])).toEqual({
+      startsAt: at("07:00"),
+      endsAt: pacificDateAndTimeToMs(NEXT, "07:00")!,
+    });
+    expect(nightPartSpan(NIGHT, [loadInDayBefore])).toBeNull();
+  });
+
+  it("parts more than a day apart keep the first day instead of collapsing to an hour", () => {
+    const earlySetup = { startsAt: at("06:30"), endsAt: at("08:00") };
+    const lateOvernight = { startsAt: overnightStrike.startsAt, endsAt: pacificDateAndTimeToMs(NEXT, "07:30")! };
+    const draft = partDraftFromWindows([earlySetup, lateOvernight])!;
+    expect(partFreeWindows(NIGHT, draft.from, draft.to, draft.busy)).toMatchObject({
+      free: [earlySetup, { startsAt: overnightStrike.startsAt, endsAt: pacificDateAndTimeToMs(NEXT, "06:30")! }],
+    });
   });
 
   it("an overnight strike past 6 AM round-trips through the times", () => {

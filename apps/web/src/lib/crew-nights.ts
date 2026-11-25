@@ -1,5 +1,6 @@
 import {
   addDaysToDateKey,
+  addPacificCalendarDays,
   formatDate,
   formatTime,
   pacificDateAndTimeToMs,
@@ -192,14 +193,19 @@ export function nightBounds(nightKey: string): TimeWindow {
 }
 
 /**
- * True when a window starts on the night itself, like an event's night. The
- * "Only part" times are clock times on the night, so a section starting on
- * another day (a load-in the day before, a block left on an old date) can't be
- * written as one. An end past 6 AM is fine: an "until" before "from" runs on.
+ * True when a window starts on the night itself, like an event's night, and
+ * lasts at most a day. The "Only part" times are clock times on the night, so
+ * a section starting on another day (a load-in the day before, a block left on
+ * an old date) can't be written as one. An end past 6 AM is fine: an "until"
+ * before "from" runs on, and one equal to "from" means a full day.
  */
 export function isOnNight(nightKey: string, window: TimeWindow) {
   const bounds = nightBounds(nightKey);
-  return window.startsAt >= bounds.startsAt && window.startsAt < bounds.endsAt;
+  return (
+    window.startsAt >= bounds.startsAt &&
+    window.startsAt < bounds.endsAt &&
+    window.endsAt <= addPacificCalendarDays(window.startsAt, 1)
+  );
 }
 
 /** Windows moved to start no earlier than the night; whatever falls on another day drops. */
@@ -208,6 +214,15 @@ export function clipToNight(nightKey: string, windows: TimeWindow[]): TimeWindow
   return windows
     .map((window) => ({ startsAt: Math.max(window.startsAt, bounds.startsAt), endsAt: window.endsAt }))
     .filter((window) => window.endsAt > window.startsAt && window.startsAt < bounds.endsAt);
+}
+
+/** From the first start on the night to the last end, at most a day, which is all one from–until can say. */
+export function nightPartSpan(nightKey: string, windows: TimeWindow[]): TimeWindow | null {
+  const clipped = clipToNight(nightKey, windows);
+  if (clipped.length === 0) return null;
+  const startsAt = Math.min(...clipped.map((window) => window.startsAt));
+  const endsAt = Math.max(...clipped.map((window) => window.endsAt));
+  return { startsAt, endsAt: Math.min(endsAt, addPacificCalendarDays(startsAt, 1)) };
 }
 
 /** Sorted, non-overlapping union. */
@@ -257,9 +272,16 @@ export function partFreeWindows(
   return { free, busy: mergeWindows(busyWindows) };
 }
 
-/** Saved free windows back as from–to plus the gaps between them as busy blocks. */
+/**
+ * Saved free windows back as from–to plus the gaps between them as busy
+ * blocks. A from–to says at most a day, so anything past a day from the first
+ * start is cut.
+ */
 export function partDraftFromWindows(windows: TimeWindow[]) {
-  const sorted = mergeWindows(windows);
+  const firstStart = Math.min(...windows.map((window) => window.startsAt));
+  if (!Number.isFinite(firstStart)) return null;
+  const dayEnd = addPacificCalendarDays(firstStart, 1);
+  const sorted = mergeWindows(windows.map((window) => ({ ...window, endsAt: Math.min(window.endsAt, dayEnd) })));
   const first = sorted[0];
   const last = sorted.at(-1);
   if (!first || !last) return null;

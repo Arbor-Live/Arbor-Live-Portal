@@ -12,6 +12,7 @@ import {
   formatWindowList,
   isOnNight,
   mergeWindows,
+  nightPartSpan,
   partDraftFromWindows,
   partFreeWindows,
   timeOf,
@@ -57,17 +58,14 @@ export function NightPartForm({
       });
   }, [night.events, night.nightKey]);
   // The night as these times can describe it: the events and their parts on the night.
-  const span: TimeWindow = useMemo(() => {
-    const windows = clipToNight(night.nightKey, [
-      ...night.events.map((event) => ({ startsAt: event.startAt, endsAt: event.endAt })),
-      ...sections,
-    ]);
-    if (windows.length === 0) return { startsAt: night.startsAt, endsAt: night.endsAt };
-    return {
-      startsAt: Math.min(...windows.map((window) => window.startsAt)),
-      endsAt: Math.max(...windows.map((window) => window.endsAt)),
-    };
-  }, [night.events, night.nightKey, night.startsAt, night.endsAt, sections]);
+  const span: TimeWindow = useMemo(
+    () =>
+      nightPartSpan(night.nightKey, [
+        ...night.events.map((event) => ({ startsAt: event.startAt, endsAt: event.endAt })),
+        ...sections,
+      ]) ?? { startsAt: night.startsAt, endsAt: night.endsAt },
+    [night.events, night.nightKey, night.startsAt, night.endsAt, sections],
+  );
   const restored = partDraftFromWindows(clipToNight(night.nightKey, savedWindows));
   const [from, setFrom] = useState(restored?.from ?? timeOf(span.startsAt));
   const [to, setTo] = useState(restored?.to ?? timeOf(span.endsAt));
