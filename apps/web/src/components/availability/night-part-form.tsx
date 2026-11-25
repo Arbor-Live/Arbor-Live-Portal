@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { TimeWindow } from "@/lib/crew-availability";
 import {
+  clipToNight,
   formatWindow,
   formatWindowList,
+  isOnNight,
   mergeWindows,
   partDraftFromWindows,
   partFreeWindows,
@@ -45,6 +47,7 @@ export function NightPartForm({
     const seen = new Set<string>();
     return night.events
       .flatMap((event) => event.sections.map((section) => ({ ...section, eventTitle: event.title })))
+      .filter((section) => isOnNight(night.nightKey, section))
       .sort((a, b) => a.startsAt - b.startsAt)
       .filter((section) => {
         const key = `${section.label || section.blockType}|${section.startsAt}|${section.endsAt}`;
@@ -52,10 +55,22 @@ export function NightPartForm({
         seen.add(key);
         return true;
       });
-  }, [night.events]);
-  const restored = partDraftFromWindows(savedWindows);
-  const [from, setFrom] = useState(restored?.from ?? timeOf(night.startsAt));
-  const [to, setTo] = useState(restored?.to ?? timeOf(night.endsAt));
+  }, [night.events, night.nightKey]);
+  // The night as these times can describe it: the events and their parts on the night.
+  const span: TimeWindow = useMemo(() => {
+    const windows = clipToNight(night.nightKey, [
+      ...night.events.map((event) => ({ startsAt: event.startAt, endsAt: event.endAt })),
+      ...sections,
+    ]);
+    if (windows.length === 0) return { startsAt: night.startsAt, endsAt: night.endsAt };
+    return {
+      startsAt: Math.min(...windows.map((window) => window.startsAt)),
+      endsAt: Math.max(...windows.map((window) => window.endsAt)),
+    };
+  }, [night.events, night.nightKey, night.startsAt, night.endsAt, sections]);
+  const restored = partDraftFromWindows(clipToNight(night.nightKey, savedWindows));
+  const [from, setFrom] = useState(restored?.from ?? timeOf(span.startsAt));
+  const [to, setTo] = useState(restored?.to ?? timeOf(span.endsAt));
   const [busy, setBusy] = useState<BusyRow[]>(
     () => restored?.busy.map((row, key) => ({ ...row, key, notes: "" })) ?? [],
   );
@@ -200,7 +215,7 @@ export function NightPartForm({
         </Button>
       </div>
 
-      <NightBar night={night} sections={sections} free={free} busy={"busy" in result ? result.busy : []} />
+      <NightBar span={span} sections={sections} free={free} busy={"busy" in result ? result.busy : []} />
 
       <p className="text-sm" aria-live="polite">
         {"error" in result ? (
@@ -235,22 +250,22 @@ function TimeField({ id, value, onChange }: { id: string; value: string; onChang
 
 /** The night as a bar: its sections on top, the time you're free (or busy) below. */
 function NightBar({
-  night,
+  span,
   sections,
   free,
   busy,
 }: {
-  night: Night;
+  span: TimeWindow;
   sections: Section[];
   free: TimeWindow[];
   busy: TimeWindow[];
 }) {
-  const start = Math.min(night.startsAt, ...free.map((window) => window.startsAt));
-  const end = Math.max(night.endsAt, ...free.map((window) => window.endsAt));
-  const span = Math.max(end - start, HOUR);
+  const start = Math.min(span.startsAt, ...free.map((window) => window.startsAt));
+  const end = Math.max(span.endsAt, ...free.map((window) => window.endsAt));
+  const length = Math.max(end - start, HOUR);
   const place = (window: TimeWindow) => ({
-    left: `${((Math.max(window.startsAt, start) - start) / span) * 100}%`,
-    width: `${((Math.min(window.endsAt, end) - Math.max(window.startsAt, start)) / span) * 100}%`,
+    left: `${((Math.max(window.startsAt, start) - start) / length) * 100}%`,
+    width: `${((Math.min(window.endsAt, end) - Math.max(window.startsAt, start)) / length) * 100}%`,
   });
   const firstTick = Math.ceil(start / (2 * HOUR)) * 2 * HOUR;
   const ticks: number[] = [];
@@ -283,7 +298,7 @@ function NightBar({
       </div>
       <div className="relative h-3.5 text-3xs text-muted-foreground tabular-nums">
         {ticks.map((tick) => (
-          <span key={tick} className="absolute -translate-x-1/2" style={{ left: `${((tick - start) / span) * 100}%` }}>
+          <span key={tick} className="absolute -translate-x-1/2" style={{ left: `${((tick - start) / length) * 100}%` }}>
             {formatTime(tick).replace(":00", "")}
           </span>
         ))}

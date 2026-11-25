@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { pacificDateAndTimeToMs } from "@/lib/format";
-import { formatWindowList, mergeBusyNotes, nightAnswerArgs, partDraftFromWindows, partFreeWindows } from "./crew-nights";
+import {
+  clipToNight,
+  formatWindowList,
+  isOnNight,
+  mergeBusyNotes,
+  mergeWindows,
+  nightAnswerArgs,
+  partDraftFromWindows,
+  partFreeWindows,
+} from "./crew-nights";
 
 const NIGHT = "2026-10-16";
 const at = (time: string) => pacificDateAndTimeToMs(NIGHT, time)!;
@@ -62,6 +71,34 @@ describe("partDraftFromWindows", () => {
       ]),
     ).toEqual({ from: "14:30", to: "23:00", busy: [{ start: "16:00", end: "17:00" }] });
     expect(partDraftFromWindows([])).toBeNull();
+  });
+});
+
+describe("sections on another day", () => {
+  const DAY_BEFORE = "2026-10-15";
+  const before = (time: string) => pacificDateAndTimeToMs(DAY_BEFORE, time)!;
+  const setup = { startsAt: at("17:30"), endsAt: at("19:00") };
+  const strike = { startsAt: at("21:00"), endsAt: at("21:30") };
+  const lateStrike = { startsAt: at("22:30"), endsAt: pacificDateAndTimeToMs("2026-10-17", "00:30")! };
+  const loadInDayBefore = { startsAt: before("17:30"), endsAt: before("19:00") };
+
+  it("keeps the night's own sections, past midnight included, and leaves out other days", () => {
+    expect(isOnNight(NIGHT, setup)).toBe(true);
+    expect(isOnNight(NIGHT, lateStrike)).toBe(true);
+    expect(isOnNight(NIGHT, loadInDayBefore)).toBe(false);
+  });
+
+  it("clips saved windows to the night", () => {
+    expect(clipToNight(NIGHT, [loadInDayBefore, setup])).toEqual([setup]);
+    expect(clipToNight(NIGHT, [{ startsAt: before("20:00"), endsAt: at("19:00") }])).toEqual([
+      { startsAt: pacificDateAndTimeToMs(NIGHT, "06:00")!, endsAt: at("19:00") },
+    ]);
+  });
+
+  it("setup 5:30–7 plus strike 9–9:30 round-trips through the times", () => {
+    const draft = partDraftFromWindows(mergeWindows([setup, strike]))!;
+    expect(draft).toEqual({ from: "17:30", to: "21:30", busy: [{ start: "19:00", end: "21:00" }] });
+    expect(partFreeWindows(NIGHT, draft.from, draft.to, draft.busy)).toMatchObject({ free: [setup, strike] });
   });
 });
 

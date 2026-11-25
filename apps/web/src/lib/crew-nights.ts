@@ -1,4 +1,10 @@
-import { formatDate, formatTime, pacificDateAndTimeToMs, toPacificDateTimeInput } from "@/lib/format";
+import {
+  addDaysToDateKey,
+  formatDate,
+  formatTime,
+  pacificDateAndTimeToMs,
+  toPacificDateTimeInput,
+} from "@/lib/format";
 import { freeWindowsAround, type TimeWindow } from "@/lib/crew-availability";
 import { timeWindowToMs } from "@/lib/performance-times";
 
@@ -175,6 +181,35 @@ export function nightTimesToWindow(nightKey: string, start: string, end: string)
   if (!start || !end) return null;
   const range = timeWindowToMs(nightKey, start, end);
   return range ? { startsAt: range[0], endsAt: range[1] } : null;
+}
+
+/** The instants a night key covers: 6 AM that day to 6 AM the next. */
+export function nightBounds(nightKey: string): TimeWindow {
+  return {
+    startsAt: pacificDateAndTimeToMs(nightKey, "06:00") ?? 0,
+    endsAt: pacificDateAndTimeToMs(addDaysToDateKey(nightKey, 1), "06:00") ?? 0,
+  };
+}
+
+/**
+ * True when a window sits on the night itself. The "Only part" times are
+ * clock times on the night, so a section on another day (a load-in the day
+ * before, a block left on an old date) can't be written as one.
+ */
+export function isOnNight(nightKey: string, window: TimeWindow) {
+  const bounds = nightBounds(nightKey);
+  return window.startsAt >= bounds.startsAt && window.endsAt <= bounds.endsAt;
+}
+
+/** Windows cut down to the night itself; whatever falls on another day drops. */
+export function clipToNight(nightKey: string, windows: TimeWindow[]): TimeWindow[] {
+  const bounds = nightBounds(nightKey);
+  return windows
+    .map((window) => ({
+      startsAt: Math.max(window.startsAt, bounds.startsAt),
+      endsAt: Math.min(window.endsAt, bounds.endsAt),
+    }))
+    .filter((window) => window.endsAt > window.startsAt);
 }
 
 /** Sorted, non-overlapping union. */
